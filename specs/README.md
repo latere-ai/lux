@@ -49,7 +49,7 @@ later.
 | # | Spec | Effort | Status | Builds on |
 |---|---|---|---|---|
 | [001](001-architecture.md) | Architecture: two planes, the kinds, the packages, extension points, invariants | medium | drafted | - |
-| [002](002-repository-scaffold.md) | Repository scaffold: module, binary, configuration, quality gate, images, workflows | small | in-progress | 001 |
+| [002](002-repository-scaffold.md) | Repository scaffold: module, binary, configuration, quality gate, images, workflows | small | complete | 001 |
 | [003](003-manifest-contract.md) | Manifest contract: the four kinds, decoding, validation, defaulting, resolve | large | drafted | 001 |
 | [004](004-request-path.md) | Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors | large | drafted | 001, 003 |
 | [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | drafted | 001, 003 |
