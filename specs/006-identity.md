@@ -44,6 +44,12 @@ issuer's organization and role claims to decide who is an
 administrator, and keeps a browser session for its dashboard. Every
 one of those is what this spec moves out of the gateway.
 
+Amended on 2026-09-13 by the family decision "one platform over open
+cores" (latere-ai/specs, `decisions/2026-09-13-one-platform-open-cores.md`):
+the claims forwarded, the cache and retry rules, the verifier, the
+subject string and the probe id are one contract shared by the three
+open cores, Cella, Lux and Origo, so one authorizer serves all three.
+
 ## Design
 
 ### Subjects
@@ -69,9 +75,11 @@ fails, so an issuer that goes away later degrades to refusing new keys
 rather than every request. A request's bearer is accepted when it is a
 JWS signed by a listed issuer's key, `iss` matches, `aud` contains
 `LUX_OIDC_AUDIENCE` (default `lux`), `exp` is in the future, and `nbf`
-if present is past. `email`, `name`, and `groups` are read when present
-and handed to the authorizer verbatim, never interpreted by the
-gateway. An `http://` issuer is refused unless it is on a loopback
+if present is past. Every claim of the verified token is handed to the
+authorizer verbatim in `claims`, and none is interpreted by the
+gateway: an issuer's organisation, role, or group claims mean something
+to the authorizer that reads them and nothing to `luxd`. An `http://`
+issuer is refused unless it is on a loopback
 address or in `LUX_OIDC_INSECURE_ISSUERS`.
 
 A control plane request without a bearer is `unauthenticated`, 401. A
@@ -101,7 +109,7 @@ Content-Type: application/json
   "subject":  "https://login.example.com|alice",
   "issuer":   "https://login.example.com",
   "sub":      "alice",
-  "claims":   {"email": "alice@example.com", "name": "Alice", "groups": ["research"]},
+  "claims":   {"email": "alice@example.com", "name": "Alice", "groups": ["research"], "org_id": "…", "roles": ["owner"]},
   "action":   "key.create",
   "resource": {"kind": "Key", "name": "run-42", "owner": "https://login.example.com|alice",
                "labels": {"run": "r_42"}, "models": ["gpt-5", "anthropic/*"], "budget": "team-research"},
@@ -109,7 +117,9 @@ Content-Type: application/json
 }
 ```
 
-`resource` per action:
+`claims` is every claim of the token; the example shows three an
+issuer commonly stamps beside two a platform's issuer adds. `resource`
+per action:
 
 | Action | `resource` |
 |---|---|
@@ -135,6 +145,7 @@ Response, 200:
 {
   "allow": true,
   "reason": "",
+  "ttl": 60,
   "limits": {"requests_per_minute": 1200, "max_key_requests_per_minute": 600,
              "max_key_tokens_per_minute": 1000000, "max_key_spend": "50", "max_key_ttl": "720h",
              "max_keys": 100},
@@ -142,8 +153,10 @@ Response, 200:
 }
 ```
 
-`limits` is optional and every field in it is optional: an absent field
-means the configured value or no limit. `requests_per_minute` overrides
+`ttl` is optional, the seconds this allow may be cached, default
+`LUX_AUTHORIZER_CACHE`, capped at `600`. `limits` is optional and every
+field in it is optional: an absent field means the configured value or
+no limit. `requests_per_minute` overrides
 `LUX_REQUESTS_PER_MINUTE` for this subject on the control plane
 ([[011-api]]); the four `max_key_*` fields reach `Resolve` as `Limits`
 ([[003-manifest-contract]]) and cap what a Key this subject applies may
@@ -158,7 +171,10 @@ Rules:
   `authorizer_unavailable`, 503, and never an allow: connection
   refused, a TLS failure, a non-200 status, a body that does not parse,
   a body without `allow`, and a timeout of `LUX_AUTHORIZER_TIMEOUT`
-  (default `3s`). There is no retry. An `http://` authorizer URL is
+  (default `5s`). The call is retried once when the connection failed
+  before a response line arrived, a refused or reset connection or a
+  dial timeout, and never on a non-200, a timeout after the request
+  was sent, or a body that does not parse. An `http://` authorizer URL is
   refused at start unless it is on a loopback address.
   `LUX_AUTHORIZER_URL` without `LUX_AUTHORIZER_TOKEN` is a start-up
   failure. Availability is not a readiness check: a flapping endpoint
@@ -172,17 +188,29 @@ Rules:
   ([[003-manifest-contract]], [[016-security-and-threat-model]]).
 - The API constructs `Lookup` per request from the caller's subject and
   the cache below; an importer constructs its own.
-- Decisions are cached per replica for `LUX_AUTHORIZER_CACHE` (default
-  `10s`) under the key of subject, action, and resource id (empty for
-  `create` and `list`; the selector string for `model.use`), with the
-  `limits` and `filter` that came with them; allows and denies are
-  cached, unavailability never. A revocation at the authorizer
-  therefore takes effect on the control plane within the cache window.
-  It takes effect on the data plane only through the Keys: a platform
+- An allow is cached per replica for the answer's `ttl`,
+  `LUX_AUTHORIZER_CACHE` (default `60s`) when the answer names none,
+  capped at `600s`; a deny for `5s`; unavailability never; under the
+  key of subject, action, and resource id (empty for `create` and
+  `list`; the selector string for `model.use`), with the `limits` and
+  `filter` that came with them. A revocation at the authorizer
+  therefore takes effect on the control plane within the allow's
+  `ttl`, which the authorizer chooses. It takes effect on the data
+  plane only through the Keys: a platform
   that revokes a subject deletes or disables its Keys, and the gateway
   stops serving them within `LUX_KEY_CACHE` ([[007-keys-and-limits]]).
   The authorizer is never asked about a data plane request, by design
   and by test ([[001-architecture]], `TestHotPathDialsNoWebhook`).
+- The resource id `key_00000000000000000000000000` is reserved as a
+  probe: every authorizer denies it for every subject and every action,
+  and `luxd check` ([[017-release-and-installation]]) sends it and
+  reads an allow as an endpoint that does not read the request. The
+  owner policy denies it too.
+- The envelope, the client, the cache, the retry, the owner policy's
+  frame, the stub authorizer, and the conformance test an authorizer
+  passes are `latere.ai/x/pkg/authz`, shared with the sibling open
+  cores; `luxd` adds its action vocabulary and its `resource` shapes
+  and nothing else.
 
 ### The owner policy
 
@@ -238,7 +266,7 @@ reaches desired state.
 | `LUX_OIDC_AUDIENCE` | no | `lux` | the audience a caller token must contain |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure |
-| `LUX_AUTHORIZER_TIMEOUT`, `LUX_AUTHORIZER_CACHE` | no | `3s`, `10s` | one decision's deadline; how long a decision is cached per subject, action, and resource |
+| `LUX_AUTHORIZER_TIMEOUT`, `LUX_AUTHORIZER_CACHE` | no | `5s`, `60s` | one decision's deadline; the `ttl` of an allow whose answer names none, capped at `600s`; a deny is held `5s` |
 | `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set |
 
 ### What the gateway never does
@@ -268,12 +296,13 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 | A token from a listed issuer with the audience is accepted; one with another issuer, another audience, an expired `exp`, a future `nbf`, or a bad signature is `unauthenticated` | `TestBearerAcceptance`, table-driven | not built |
 | A Key value on `/v1` and an issuer token on a door are each `unauthenticated` | `TestPlanesRefuseEachOthersCredential` | not built |
 | An issuer whose keys become unreachable after start keeps verifying tokens signed by the cached keys and refuses one with an unknown `kid` | `TestStaleKeySetServesUntilRefresh` | not built |
-| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and the claims verbatim | `TestAuthorizerRequestShapes`, table-driven over every action | not built |
-| Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestDataPlaneServesWhileAuthorizerIsDown` | not built |
+| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action | not built |
+| Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a connection failure before a response line is retried once and nothing else is; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestAuthorizerRetriesOnlyBeforeAResponseLine`, `TestDataPlaneServesWhileAuthorizerIsDown` | not built |
 | A `deny` on `model.use`, `budget.draw`, or a target's `provider.read` at resolve is `not_found` naming the field; a `deny` on the request's own action is `forbidden` with the reason in the developer detail only | `TestLookupDenyIsNotFound`, `TestDenyReasonStaysOutOfTheUserSentence` | not built |
 | Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers` | not built |
 | `filter` narrows `list` and `usage.read` to the owners and labels named | `TestAuthorizerFilter` | not built |
-| An allow and a deny are cached for the window and unavailability is not; a revoked subject is refused on the control plane within `LUX_AUTHORIZER_CACHE` | `TestDecisionCache` | not built |
+| An allow is cached for the answer's `ttl` and at the `600s` cap, a deny for `5s`, unavailability never; a revoked subject is refused on the control plane within the allow's `ttl` | `TestDecisionCache` | not built |
+| The probe id is denied by the stub authorizer and by the owner policy for every subject and action, and `luxd check` reports an authorizer that allows it | `TestProbeIdIsAlwaysDenied` | not built |
 | The owner policy: an admin declares a Provider and a Model and a non-admin cannot; every subject reads the catalog and uses every Model in a Key; an owner reads, updates, deletes, and draws its own objects and no other subject's; `list` returns only the subject's own Keys and Budgets; no `Limits` are granted | `TestOwnerPolicy`, table-driven over every action and both roles | not built |
 | During one thousand data plane requests with the stub authorizer and issuer wired, both receive zero calls | [[001-architecture]]'s `TestHotPathDialsNoWebhook` | not built |
 | A read of a Provider through any route or event returns no credential value | [[005-providers]]'s `TestProviderCredentialNeverLeavesTheGateway` | not built |

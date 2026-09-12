@@ -7,7 +7,7 @@ depends_on:
   - specs/004-request-path.md
   - specs/006-identity.md
   - specs/018-conformance-suite.md
-affects: [docs/plane.md, manifest/, gateway/, metering/, examples/plane/]
+affects: []
 effort: small
 created: 2026-09-13
 updated: 2026-09-13
@@ -18,239 +18,24 @@ author: changkun
 
 ## Overview
 
-A platform that sells model access with accounts, plans, a console, and
-its own catalog builds on Lux in one of two ways, or both in sequence:
-run `luxd` and write the webhooks, or import `manifest`, `gateway`, and
-`metering` into its own binary with its own identity and store. This
-spec is the guide for that platform, and it fixes what the gateway
-promises one and what it does not. The first platform to follow it is
-the hosted plane this design was extracted from, which is one consumer
-among any.
-
-It also answers the question a platform asks once and then builds on:
-how a sandbox running untrusted code calls a model without holding a
-credential. The answer composes two gateways and needs no mechanism in
-either that is not already there.
+How a platform builds on Lux without a fork: run `luxd` and write the webhooks, or import the packages; and the composition that gives a sandbox model access through a Key and a Cella Secret. The first platform to do it is the hosted plane this core was extracted from.
 
 ## Current state
 
-Nothing is built. The hosted plane runs today as one binary with
-accounts, a dashboard, funded grants, and the proxy in one process, so
-its permission model is compiled into the request path and its catalog
-is a table nobody outside it can read. Its migration onto these two
-doors is its own work in its own repository; this spec is what it
-migrates against.
+Not written. This file carries the title and the scope the index names
+so the index and the dependency graph resolve; the design is still to
+be written.
 
 ## Design
 
-### Two doors
-
-| Door | The platform runs | The platform writes | It gets |
-|---|---|---|---|
-| webhooks | `luxd` as a service | an authorizer, an event sink, and an OIDC issuer it already has | the whole gateway, upgraded by image tag; its own logic in its own service in any language |
-| packages | its own binary importing `manifest`, `gateway`, `metering` | a server around them, its own identity, its own store | the contract and the data plane in-process, with no HTTP hop and its own API shape |
-
-Both reach one `manifest.Resolve` and one `gateway.Handler`, so a
-manifest means the same thing on either and a request is answered the
-same way ([[001-architecture]], invariant 1). A platform that starts
-with the webhooks and later splits into its own binary is not
-rewriting: the packages are what `luxd` is made of.
-
-### Where each platform concern goes
-
-| Concern | Door: webhooks | Door: packages |
-|---|---|---|
-| accounts, organizations, teams | claims in the issuer's token, read by the authorizer; the gateway reads none of them | the platform's middleware before `Resolve` sets `Options.Actor` |
-| roles and permissions | the authorizer's `allow` per action ([[006-identity]]) | the platform's own check before it calls `Resolve` |
-| plans and quotas | the authorizer's `limits`, which cap what a Key may ask for, plus `Budget` objects the platform applies | `Options.Limits` and the same Budgets |
-| a shared catalog | `Provider` and `Model` objects the platform declares as an admin subject; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
-| per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows | `Options.Lookup.Models` answers for the tenant |
-| funded credits | a `Budget` per grant with `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
-| a console | reads `/v1` with the user's own token and its own session in front | reads the platform's API |
-| billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` implementation |
-| audit | the signed event sink ([[012-request-log-and-events]]) | the platform's own sink implementation |
-| multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one handler per region |
-| a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` ([[013-tunnelled-runtimes]]) | the same |
-
-Every row on the left is an endpoint the platform writes or an object
-it applies. There is no row that needs a fork, which is the property
-this table exists to make checkable.
-
-### The minimal authorizer
-
-Twenty lines is enough to run an installation where every subject owns
-what it applied and administrators declare the catalog, which is what
-the built-in owner policy does ([[006-identity]]) and what a platform
-replaces first. The payload is 006's exactly.
-
-```go
-// POST from luxd; the request and response shapes are 006's.
-type req struct {
-	Subject  string            `json:"subject"`
-	Claims   map[string]any    `json:"claims"`
-	Action   string            `json:"action"`
-	Resource map[string]any    `json:"resource"`
-}
-type resp struct {
-	Allow  bool           `json:"allow"`
-	Reason string         `json:"reason,omitempty"`
-	Limits map[string]any `json:"limits,omitempty"`
-	Filter map[string]any `json:"filter,omitempty"`
-}
-
-func decide(r req) resp {
-	plan, _ := r.Claims["plan"].(string)
-	switch {
-	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
-		if r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list") {
-			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
-		}
-		return resp{Allow: plan == "admin", Reason: "the catalogue is declared by the platform"}
-	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
-		return resp{Allow: false, Reason: "not yours"}
-	default:
-		return resp{Allow: true,
-			Limits: map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100},
-			Filter: map[string]any{"owners": []string{r.Subject}}}
-	}
-}
-```
-
-Three properties to keep when it grows. A refusal on a reference,
-`model.use`, `budget.draw`, or a target's `provider.read`, reads to the
-caller as `not_found` rather than `forbidden`, so a manifest cannot
-probe for objects another tenant owns ([[006-identity]]); the endpoint
-answers or does not, and anything that is not a parseable decision is
-`authorizer_unavailable` and never an allow; and `limits` is a cap on
-what a Key may ask for rather than a grant, so raising a plan raises
-the ceiling and changes no existing object.
-
-### Giving a sandbox model access
-
-A platform that runs untrusted code in a sandbox and wants that code to
-call a model has a problem with one obvious wrong answer: put a
-credential in the sandbox. Composing a sandbox control plane such as
-[Cella](https://github.com/latere-ai/cella) with Lux avoids it without
-either side learning anything about the other.
-
-```mermaid
-sequenceDiagram
-  participant P as the platform
-  participant L as lux /v1
-  participant C as the sandbox control plane
-  participant E as the sandbox egress gateway
-  participant S as the sandbox
-  participant U as a provider
-  P->>L: PUT /v1/keys/run-42 (models, limits, budget, ttl), service token, aud lux
-  L-->>P: 201, status.value once
-  P->>C: apply a Secret whose value is that Key, scope the gateway's host
-  P->>C: apply the Sandbox naming that Secret
-  C->>E: push the value to the egress gateway for this sandbox
-  C->>S: start, with a per-sandbox placeholder in the environment
-  S->>E: POST https://lux.example.com/openai/v1/chat/completions, Authorization: Bearer <placeholder>
-  E->>L: the same request with the Key substituted, toward the scoped host only
-  L->>U: the same request with the provider credential injected
-  U-->>L: the answer
-  L-->>E: the answer, metered against run-42
-  E-->>S: the answer
-  P->>L: DELETE /v1/keys/run-42 at the end of the run
-```
-
-The sandbox holds a placeholder and never a credential. The egress
-gateway substitutes the Key toward the host the Secret scopes and
-leaves it verbatim and inert anywhere else. Lux injects the provider
-credential toward that Provider's `baseURL` and nowhere else
-([[001-architecture]], invariant 2). Two gateways, two substitutions,
-and neither credential is ever inside the sandbox: reading the
-sandbox's environment, its file system, and its memory yields a
-placeholder and a string that is a placeholder somewhere else.
-
-What the platform spends at the end of the run is `DELETE /v1/keys/run-42`,
-after which the value is refused within `LUX_KEY_CACHE` on every
-replica ([[007-keys-and-limits]]), and the usage stays readable by the
-Key's id through `GET /v1/usage`, which is the ledger line for that
-run.
-
-The composition needs no token exchange, no delegation claim, and no
-signing key shared between the two planes, because each hop carries one
-credential kind that the next hop verifies on its own terms:
-
-| Hop | Credential | Verified by |
-|---|---|---|
-| platform to Lux `/v1` | a service token from the platform's issuer with `aud: lux` | Lux, against the issuers it lists ([[006-identity]]) |
-| platform to the sandbox control plane | that plane's own credential | that plane |
-| sandbox to its egress gateway | a placeholder scoped to one sandbox | the egress gateway |
-| egress gateway to a Lux door | the Key | Lux, by the hash of its value ([[007-keys-and-limits]]) |
-| Lux to a provider | the Provider's credential | the provider |
-
-A design with token exchange would have to make one of these hops carry
-a credential minted for another, which means one plane signing for the
-other and a key both hold. Here no plane verifies a credential it did
-not accept in the first place, so a compromise on one hop stops at the
-next.
-
-### The conformance command
-
-A platform that runs its own front is serving the contract or is not,
-and the answer is a command rather than a review:
-
-```sh
-LUX_TEST_URL=https://api.example.com go test ./test/conformance/... -run TestContract
-```
-
-`TestContract` is [[018-conformance-suite]]'s, importable as a package,
-and runs against whatever `LUX_TEST_URL` names: `luxd` on loopback, a
-release image in a cluster, or a platform's own binary built from the
-packages. A platform that passes it serves the same manifest contract,
-the same doors, the same error table, and the same usage surface as
-`luxd` does.
-
-### Promises and non-promises
-
-To a platform, the gateway promises:
-
-- the manifest contract's evolution rules, so a manifest a platform's
-  users write today is accepted by every later `v1beta1` build and
-  resolves to the same object ([[003-manifest-contract]]);
-- the compatibility of `manifest`, `gateway`, and `metering`: additive
-  within a module major, with a break named in the CHANGELOG
-  ([[001-architecture]], [[017-release-and-installation]]);
-- that the conformance suite passes against `luxd` on every release, so
-  the suite is a bar the reference implementation actually clears
-  ([[017-release-and-installation]]);
-- that a platform passing the suite against its own front serves the
-  same contract.
-
-It promises nothing about `internal/`, which is the gateway's own and
-changes without notice; nor about the stub binaries of
-[[015-test-stubs-and-tiers]], which exist for tests and for `make run`
-and are not a runtime; nor about the deploy manifests beyond the
-archive a release publishes.
-
-### The document
-
-`docs/plane.md` is this spec in the user register: the two doors, the
-concerns table, the minimal authorizer, the sandbox composition, and
-the conformance command, written for a platform engineer rather than
-for a contributor to this repository. It is owed by this spec and is
-not written yet.
+To be written.
 
 ## Not in this spec
 
-Any platform's own migration plan; the authorizer's payload and the
-owner policy it replaces ([[006-identity]]); the packages' interfaces
-([[004-request-path]], [[009-usage-and-metering]]); the suite itself
-and its variables ([[018-conformance-suite]]); the sandbox control
-plane's own design, which is that project's.
+To be settled with the design.
 
 ## Acceptance criteria
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, passes the conformance suite's identity and resolve groups | `TestPlaneDocAuthorizerConforms`, running the document's code block | not built |
-| A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | not built |
-| Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | not built |
-| A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestSandboxCompositionEndToEnd` in the e2e tier | not built |
-| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestRunKeyDeletionLeavesTheLedger` | not built |
-| Every hop in the credential table carries the credential kind named and no other; no plane verifies a credential another plane minted | `TestOneCredentialKindPerHop`, over the e2e capture | not built |
-| `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent` | not built |
+| To be written with the design | | not built |

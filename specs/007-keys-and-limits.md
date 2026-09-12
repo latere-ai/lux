@@ -73,6 +73,29 @@ once; a request with the old value is `unauthenticated` within
 `LUX_KEY_CACHE` on every replica. There is no grace period: a caller
 that needs one creates a second Key and deletes the first.
 
+### A supplied value
+
+A `PUT` that creates a Key may carry `spec.value`, a value the caller
+chose instead of one the gateway mints. It exists for one composition:
+a platform that gives a developer one credential registers that
+credential here, so the same string the developer presents to every
+control plane as a token opens the doors as a Key, under the models
+and the budget the platform attached, and the hot path stays a hash
+lookup ([[001-architecture]], invariant 3; the family record is
+`decisions/2026-09-13-one-platform-open-cores.md` in latere-ai/specs).
+
+The rules are the minted value's with three differences. `spec.value`
+is write-once: set on the creating `PUT`, refused with
+`invalid_request` on an update, and returned by no read, list, event,
+record, or log line, so the resolved manifest a caller reads back
+carries the field absent. It is at least 32 bytes, and the gateway
+stores `SHA-256(value)` and nothing else, as for a minted value.
+`status.prefix` is `sup_` and the first eight hex characters of that
+hash, because a supplied value has no `lux_` prefix to show. Rotation
+mints a `lux_` value and replaces the hash, so a supplied value stops
+working at rotate; a platform that wants the same string again
+recreates the Key.
+
 ### Verification and the cache
 
 ```mermaid
@@ -255,6 +278,7 @@ create a Key ([[006-identity]]).
 | A minted value matches `^lux_[A-Za-z0-9_-]{40}$`, ten thousand mints are distinct, and `status.prefix` is its first twelve characters | `TestKeyValueShape`, `TestKeyValuesAreDistinct` | not built |
 | The value appears in the create response and the rotate response and in no other read, list, event, record, or log line, with a canary run through every path | `TestKeyValueShownOnce`, `TestKeyValueNeverAppearsInLogs` | not built |
 | A rotated Key keeps its id, name, spec, owner, and windows; the old value is `unauthenticated` on a second replica within `LUX_KEY_CACHE` | `TestRotateReplacesTheValue` | not built |
+| A Key created with `spec.value` authenticates by that value, returns it in no read, list, event, record, or log line, refuses `spec.value` on an update, shows `sup_` and eight hex characters as its handle, and stops accepting the supplied value at rotate | `TestSuppliedKeyValue` | not built |
 | A Key looked up once is served from the cache for the window with one store call; a negative entry holds an unknown value to one store call per window; the cache evicts at 100 000 entries | `TestKeyCache`, `TestNegativeCache`, `TestCacheBound` | not built |
 | A deleted or disabled Key is refused at the next request on a replica consuming the journal and within the window on one that is not | `TestRevocationPropagates` | not built |
 | Each state is decided from the facts: `Disabled` from the spec, `Expired` from the clock on every replica at once, `Exhausted` from the current window and cleared by its reset without a write | `TestKeyStates`, table-driven with a fake clock | not built |
