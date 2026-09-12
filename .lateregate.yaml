@@ -1,0 +1,59 @@
+# The shared quality bar, read by `go tool lateregate`. The gates live in
+# latere.ai/x/ci-gate, pinned in go.mod; only repository-specific values are
+# here.
+
+cover:
+  trim_prefix: latere.ai/x/lux/
+
+spec:
+  status:
+    - vague
+    - drafted
+    - validated
+    - dispatched
+    - in-progress
+    - testing
+    - complete
+    - stale
+    - superseded
+  require: [title, status, track, depends_on, affects, effort, created, updated, author]
+  wikilinks: true
+  numbered: true
+  started: [dispatched, in-progress, testing, complete]
+  settled: [complete, superseded]
+  require_section:
+    - Overview
+    - Design
+    - Acceptance criteria
+  require_section_by_status:
+    complete: [Outcome]
+
+# The suite runs with only the Go toolchain on PATH. luxd forks no binary
+# of its own: it speaks HTTP to the providers, the issuers, and the
+# authorizer, and the stubs of spec 015 are Go processes the suite starts
+# itself.
+hermetic:
+  allow: []
+
+tempdir:
+  allow: {}
+
+# Spec 001's dependency rule: the build list of ./cmd/luxd reaches the
+# standard library, latere.ai/x/pkg, the Postgres driver of spec 010, and
+# the OpenTelemetry SDK, and no provider SDK; a dialect is translated by
+# latere.ai/x/pkg/llmdialect rather than by a vendor client. Until those
+# specs land the list is the standard library and pkg, so a new dependency
+# is a decision recorded here, one row per role package as the roles land.
+depcheck:
+  packages:
+    latere.ai/x/lux/cmd/luxd:
+      decision: >-
+        the gateway reaches latere.ai/x/pkg and the standard library; the
+        Postgres driver joins with spec 010 and the OpenTelemetry SDK with
+        spec 019, and nothing else does without a row here (spec 001)
+      allow:
+        latere.ai/x/pkg: the shared library every Latere service is built on (spec 002)
+
+license:
+  spdx: Apache-2.0
+  holder: Latere AI
