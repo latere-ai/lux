@@ -10,7 +10,7 @@ depends_on:
 affects: [docs/plane.md, manifest/, gateway/, metering/, examples/plane/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -66,7 +66,9 @@ rewriting: the packages are what `luxd` is made of.
 | a shared catalog | `Provider` and `Model` objects the platform declares as an admin subject; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
 | per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows | `Options.Lookup.Models` answers for the tenant |
 | funded credits | a `Budget` per grant with `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
-| a console | reads `/v1` with the user's own token and its own session in front | reads the platform's API |
+| a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, `aud` the gateway's audience, so the object's `owner` is the person ([[006-identity]]); the gateway never sees a cookie | reads the platform's API |
+| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's prefix | the platform's own service identity in `Options.Actor` |
+| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` implementation |
 | audit | the signed event sink ([[012-request-log-and-events]]) | the platform's own sink implementation |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one handler per region |
@@ -81,15 +83,19 @@ this table exists to make checkable.
 Twenty lines is enough to run an installation where every subject owns
 what it applied and administrators declare the catalog, which is what
 the built-in owner policy does ([[006-identity]]) and what a platform
-replaces first. The payload is 006's exactly.
+replaces first. The payload is 006's exactly; a Go authorizer may
+decode it into `authz.Request` from `latere.ai/x/pkg/authz`, and one in
+any language reads the fields below. The endpoint answers from its
+bearer and its own state alone: it needs no session and calls neither
+the gateway nor the issuer while deciding ([[006-identity]]).
 
 ```go
 // POST from luxd; the request and response shapes are 006's.
 type req struct {
-	Subject  string            `json:"subject"`
-	Claims   map[string]any    `json:"claims"`
-	Action   string            `json:"action"`
-	Resource map[string]any    `json:"resource"`
+	Subject  string         `json:"subject"`
+	Claims   map[string]any `json:"claims"`
+	Action   string         `json:"action"`
+	Resource map[string]any `json:"resource"`
 }
 type resp struct {
 	Allow  bool           `json:"allow"`
@@ -98,9 +104,17 @@ type resp struct {
 	Filter map[string]any `json:"filter,omitempty"`
 }
 
+// probeID is authz.ProbeID: every authorizer denies it, so luxd check
+// can tell an endpoint that reads the request from one that does not.
+const probeID = "00000000-0000-0000-0000-000000000001"
+
+var spendCap = map[string]string{"free": "5", "team": "50", "admin": "500"}
+
 func decide(r req) resp {
 	plan, _ := r.Claims["plan"].(string)
 	switch {
+	case r.Resource["id"] == probeID:
+		return resp{Allow: false, Reason: "the probe id is reserved"}
 	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
 		if r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list") {
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
@@ -116,14 +130,19 @@ func decide(r req) resp {
 }
 ```
 
-Three properties to keep when it grows. A refusal on a reference,
+Four properties to keep when it grows. A refusal on a reference,
 `model.use`, `budget.draw`, or a target's `provider.read`, reads to the
 caller as `not_found` rather than `forbidden`, so a manifest cannot
 probe for objects another tenant owns ([[006-identity]]); the endpoint
 answers or does not, and anything that is not a parseable decision is
-`authorizer_unavailable` and never an allow; and `limits` is a cap on
+`authorizer_unavailable` and never an allow; `limits` is a cap on
 what a Key may ask for rather than a grant, so raising a plan raises
-the ceiling and changes no existing object.
+the ceiling and changes no existing object; and the probe id is denied
+before any other rule, whatever the subject. A platform whose
+authorizer and `/v1` caller are one process keeps the two paths off
+each other's locks: the gateway waits on the authorizer inside the very
+request the platform is waiting on, and a lock shared between them is
+a five second stall ending in `authorizer_unavailable`.
 
 ### Giving a sandbox model access
 
@@ -141,7 +160,7 @@ sequenceDiagram
   participant E as the sandbox egress gateway
   participant S as the sandbox
   participant U as a provider
-  P->>L: PUT /v1/keys/run-42 (models, limits, budget, ttl), service token, aud lux
+  P->>L: PUT /v1/keys/run-42 (models, limits, budget, ttl), a service token, or an actor token for the person who started the run
   L-->>P: 201, status.value once
   P->>C: apply a Secret whose value is that Key, scope the gateway's host
   P->>C: apply the Sandbox naming that Secret
@@ -177,17 +196,39 @@ credential kind that the next hop verifies on its own terms:
 
 | Hop | Credential | Verified by |
 |---|---|---|
-| platform to Lux `/v1` | a service token from the platform's issuer with `aud: lux` | Lux, against the issuers it lists ([[006-identity]]) |
+| platform to Lux `/v1`, unattended | a service token from the platform's issuer, `client_credentials`, `aud` the gateway's audience; the Key's `owner` is the service account | Lux, against the issuers it lists ([[006-identity]]) |
+| platform to Lux `/v1`, for a signed-in person | an actor token the platform's issuer mints for that person, `aud` the gateway's audience; the Key's `owner` is the person | the same |
 | platform to the sandbox control plane | that plane's own credential | that plane |
 | sandbox to its egress gateway | a placeholder scoped to one sandbox | the egress gateway |
 | egress gateway to a Lux door | the Key | Lux, by the hash of its value ([[007-keys-and-limits]]) |
 | Lux to a provider | the Provider's credential | the provider |
 
+A platform that gives its developers one credential for everything
+adds two hops for the same string, and they do not change the rule:
+
+| Hop | Credential | Verified by |
+|---|---|---|
+| developer to the platform's own control plane | the platform's credential, a token its issuer signed | the platform, as a token, with its issuer's revocation list |
+| developer to a Lux door | the same string, registered by the platform as a Key's `spec.value` ([[007-keys-and-limits]]) | Lux, by the hash of its bytes; it decodes nothing, reads no expiry inside it, and fetches no revocation list ([[001-architecture]], invariant 3) |
+
+The consequences are the platform's to carry, and this spec names them
+so its `docs/plane.md` does. The Key's `expiresAt` is the only expiry
+the door knows, so a credential without one inside it still expires
+here when the platform sets `ttl`. Revoking the credential is two
+writes in two systems, the issuer's revocation and `DELETE /v1/keys/{id}`
+here, and the platform orders them, deletes the Key first because the
+door is where the string spends money, and retries a failed `DELETE`
+until it answers `204` or `not_found`; the door stops serving within
+`LUX_KEY_CACHE` of the delete and never before. The Key's handle is the
+supplied value's prefix rule of [[007-keys-and-limits]], because a
+token's first characters are the same for every token.
+
 A design with token exchange would have to make one of these hops carry
 a credential minted for another, which means one plane signing for the
 other and a key both hold. Here no plane verifies a credential it did
-not accept in the first place, so a compromise on one hop stops at the
-next.
+not accept in the first place, the gateway included, which accepted the
+supplied value as a Key through `/v1` before any door saw it, so a
+compromise on one hop stops at the next.
 
 ### The conformance command
 
@@ -195,13 +236,16 @@ A platform that runs its own front is serving the contract or is not,
 and the answer is a command rather than a review:
 
 ```sh
-LUX_TEST_URL=https://api.example.com go test ./test/conformance/... -run TestContract
+LUX_TEST_URL=https://api.example.com LUX_TEST_TOKEN=$(platform-token) \
+  go test latere.ai/x/lux/test/conformance -run TestContract -v
 ```
 
 `TestContract` is [[018-conformance-suite]]'s, importable as a package,
-and runs against whatever `LUX_TEST_URL` names: `luxd` on loopback, a
-release image in a cluster, or a platform's own binary built from the
-packages. A platform that passes it serves the same manifest contract,
+and runs against whatever `LUX_TEST_URL` names with a token the server
+accepts in `LUX_TEST_TOKEN`: `luxd` on loopback, a release image in a
+cluster, or a platform's own binary built from the packages; a
+platform that imports the package calls `Run` with a `Config` whose
+`Token` mints through its own issuer. A platform that passes it serves the same manifest contract,
 the same doors, the same error table, and the same usage surface as
 `luxd` does.
 
@@ -238,7 +282,9 @@ not written yet.
 ## Not in this spec
 
 Any platform's own migration plan; the authorizer's payload and the
-owner policy it replaces ([[006-identity]]); the packages' interfaces
+owner policy it replaces ([[006-identity]]); the supplied value's
+rules, its prefix, and its write-once field ([[007-keys-and-limits]]);
+the packages' interfaces
 ([[004-request-path]], [[009-usage-and-metering]]); the suite itself
 and its variables ([[018-conformance-suite]]); the sandbox control
 plane's own design, which is that project's.
@@ -247,10 +293,12 @@ plane's own design, which is that project's.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, passes the conformance suite's identity and resolve groups | `TestPlaneDocAuthorizerConforms`, running the document's code block | not built |
+| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, denies the probe id and passes the conformance suite's `identity` and `manifest` groups | `TestPlaneDocAuthorizerConforms`, running the document's code block | not built |
 | A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | not built |
 | Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | not built |
 | A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestSandboxCompositionEndToEnd` in the e2e tier | not built |
+| A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestOwnerFollowsTheToken` | not built |
+| A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestPlatformCredentialAsKey` in the e2e tier | not built |
 | Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestRunKeyDeletionLeavesTheLedger` | not built |
-| Every hop in the credential table carries the credential kind named and no other; no plane verifies a credential another plane minted | `TestOneCredentialKindPerHop`, over the e2e capture | not built |
+| Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestOneCredentialKindPerHop`, over the e2e capture | not built |
 | `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent` | not built |

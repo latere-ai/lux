@@ -6,7 +6,7 @@ depends_on: []
 affects: [manifest/, gateway/, metering/, internal/, cmd/luxd/, cmd/lux/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -180,7 +180,7 @@ request is answered the same on both.
 |---|---|---|
 | `Provider` | one upstream: the dialect it speaks, its base URL, the credential Lux holds for it encrypted and never returns, how its model list is discovered and its health probed | [[005-providers]] |
 | `Model` | one routable name: the targets it reaches on which providers with which upstream names, weights and fallback order, pricing, modalities; declared by an operator, or discovered from a Provider and named `<provider>/<upstream name>` | [[008-routing-and-models]] |
-| `Key` | the credential a workload holds: which Models it may name, its rate and spend limits, the Budget it draws from, when it expires; the value is minted by the server, shown once, and stored as a hash | [[007-keys-and-limits]] |
+| `Key` | the credential a workload holds: which Models it may name, its rate and spend limits, the Budget it draws from, when it expires; the value is minted by the server, or supplied once by a platform that registers its own credential as a Key, shown once, and stored as a hash | [[007-keys-and-limits]] |
 | `Budget` | a spend window several Keys draw from, hard or soft, with what is spent and when it resets in `status` | [[007-keys-and-limits]] |
 
 Every kind is one object under `apiVersion: lux.latere.ai/v1beta1`
@@ -312,15 +312,22 @@ below says so.
 
 Every object has a stable id, a ULID with a kind prefix: `prv_` for a
 provider, `mdl_` a model, `key_` a key, `bud_` a budget, `req_` a
-request, `evt_` an event. The id is the key of every `/v1/<kind>/{id}`
-path and the `lux.latere.ai/id` label; a name may be reused after
-delete, an id never. A Key's value is `lux_` followed by 40 characters
-from a URL-safe alphabet; the first twelve are its `status.prefix`, the
-only part ever shown again.
+request, `evt_` an event. The id is the `lux.latere.ai/id` label and
+is accepted beside the name on every item route, `PUT` addressing by
+name alone ([[011-api]]); a name may be reused after delete, an id
+never. A Key's value the server mints is `lux_` followed by 40
+characters from a URL-safe alphabet; the first twelve are its
+`status.prefix`, the only part ever shown again. A value a platform
+supplies has no `lux_` prefix and its own prefix rule
+([[007-keys-and-limits]]); the doors treat every presented value as
+opaque bytes and look up its hash, so the prefix is a convention for
+people and never a check.
 
 The dialect doors are `/openai`, `/anthropic`, `/gemini`, and `/lux`,
 each followed by the path shape of that dialect's own API, so an SDK's
-base URL is the door. The control plane is `/v1`. Labels and
+base URL is the door. `llmdialect` carries no Gemini dialect, so the
+`/gemini` door reaches a `gemini` Provider unchanged and is never
+translated ([[004-request-path]]). The control plane is `/v1`. Labels and
 annotations under `lux.latere.ai/` are the gateway's and a manifest
 that sets one is refused; a platform picks its own prefix. Variables the
 server reads are `LUX_*`.
@@ -392,18 +399,33 @@ packages and the webhooks ([[020-building-a-plane]]).
 
 ## Acceptance criteria
 
+This spec owns three tests, each writable against the scaffold as the
+first commit of phase 1, and is `complete` when they pass; the
+invariants above that only a built component can prove are held by the
+specs that build it and are indexed in the table that follows, which is
+not this spec's acceptance. Without this split nothing is dispatchable:
+every spec depends on this one, the dispatch gate waits for it to reach
+`testing`, and its tests would have waited for theirs.
+
 | Criterion | Test that proves it | State |
 |---|---|---|
-| `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package | not built |
+| Every package at the module root is `manifest`, `gateway`, or `metering` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package | not built |
 | Each role package's and each binary's build list matches its `depcheck` allow list | the `depcheck` gate | passing for the scaffold's list |
-| No released artifact, deploy manifest, inherited default, or documentation page names a Latere hostname or namespace outside an example or the API group | `TestNoLatereCoordinatesInReleasedArtifacts` over `deploy/`, `docs/`, the workflows' image references, and every default in `internal/config`; [[017-release-and-installation]]'s `TestReleasePublishesUnderTheOwnersNamespace` | not built |
-| A manifest applied through the API and one handed to `manifest.Resolve` by an importer with the same options produce byte-identical resolved manifests | `TestAPIAndImporterResolveAgree`, comparing the `PUT` response body with `Resolve`'s output | not built |
-| A canary provider credential appears in no response body, event, log line, or request log record across the e2e tier, and appears in the stub provider's received headers only for requests routed to that provider | `TestProviderCredentialNeverLeavesTheGateway` | not built, [[005-providers]] |
-| During one thousand data plane requests the stub authorizer and the stub issuer receive zero calls | `TestHotPathDialsNoWebhook` | not built, [[004-request-path]] |
-| A request through the `/openai` door to a Model whose target is an `openai` Provider arrives at the stub provider with a body byte-identical to the one sent and only the credential and hop-by-hop headers changed | `TestSameDialectSameBytes` | not built, [[004-request-path]] |
-| A request through the `/anthropic` door to an `openai` target arrives translated, and a field the target cannot represent is named in the response's loss report | `TestTranslationReportsLoss` | not built, [[004-request-path]] |
-| `luxd` refuses to start with no issuer configured and no manifest directory | `TestServeRefusesToStartWithoutAnIssuer` | not built, [[006-identity]] |
-| With the authorizer URL set and the endpoint down, every control plane request is refused with `authorizer_unavailable` and every data plane request with a valid Key is served | conformance case | not built, [[006-identity]] |
-| Every data plane request in the e2e tier, refused, failed, or successful, has exactly one usage record and the record carries no request or response content | `TestEveryRequestHasOneUsageRecord` | not built, [[009-usage-and-metering]] |
-| A Key under a hard Budget naming an unpriced Model is refused with `model_unpriced` before any bytes reach a provider | `TestUnpricedModelRefusedUnderABudget` | not built, [[007-keys-and-limits]] |
-| After `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | e2e tier of [[015-test-stubs-and-tiers]] | not built, [[010-state]] |
+| No file under `deploy/`, `docs/`, or `.github/workflows/`, and no default in `internal/config`, names a Latere hostname or namespace outside an example or the API group; a directory that does not exist yet is skipped by name | `TestNoLatereCoordinatesInReleasedArtifacts` | not built |
+
+### Held by other specs
+
+Each row is an invariant of this spec proven by the test of the spec
+that builds the component; the row is complete when that spec's is.
+
+| Invariant | Held by | Test |
+|---|---|---|
+| 1, one resolver: a manifest applied through the API and one handed to `manifest.Resolve` by an importer with the same options produce byte-identical resolved manifests | [[011-api]], [[018-conformance-suite]] | `TestAPIAndImporterResolveAgree`, comparing the `PUT` response body with `Resolve`'s output; the suite's `manifest` group |
+| 2, a provider credential never leaves the gateway: a canary credential appears in no response body, event, log line, or request log record across the e2e tier, and in the stub provider's received headers only for requests routed to that provider | [[005-providers]] | `TestProviderCredentialNeverLeavesTheGateway` |
+| 3, the hot path dials no webhook and no issuer: during one thousand data plane requests the stub authorizer and the stub issuer receive zero calls | [[004-request-path]] | `TestHotPathDialsNoWebhook` |
+| 6, same dialect, same bytes: a request through the `/openai` door to an `openai` target arrives at the stub provider byte-identical but for the credential and hop-by-hop headers; a request through the `/anthropic` door to an `openai` target arrives translated and a field the target cannot represent is named in the loss report | [[004-request-path]] | `TestSameDialectSameBytes`, `TestTranslationReportsLoss` |
+| 4 and 5, identity verified and permission from outside: `luxd` refuses to start with no issuer configured and no manifest directory; with the authorizer URL set and the endpoint down every control plane request is `authorizer_unavailable` and every data plane request with a valid Key is served | [[006-identity]] | `TestServeRefusesToStartWithoutAnIssuer`; the conformance suite's `identity` group |
+| 7, one usage record per request: every data plane request in the e2e tier, refused, failed, or successful, has exactly one usage record and the record carries no request or response content | [[009-usage-and-metering]] | `TestEveryRequestHasOneUsageRecord` |
+| 7, money that cannot be counted is not spent: a Key under a hard Budget naming an unpriced Model is refused with `model_unpriced` before any bytes reach a provider | [[007-keys-and-limits]] | `TestUnpricedModelRefusedUnderABudget` |
+| 8, a fork publishes under its own namespace | [[017-release-and-installation]] | `TestReleasePublishesUnderTheOwnersNamespace` |
+| 10, desired state survives: after `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | [[010-state]], [[015-test-stubs-and-tiers]] | the postgres tier's `TestPostgresTwoReplicas` |
