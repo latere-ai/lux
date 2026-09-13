@@ -9,7 +9,7 @@ depends_on:
 affects: [metering/, gateway/, internal/store/, internal/api/, internal/reqlog/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -37,10 +37,22 @@ year after it was written.
 
 ## Current state
 
-Nothing is built. The hosted gateway writes a row per request into the
-same table it bills from, computes cost in floating point from a price
-map compiled into the binary, and enforces spend by reading that table
-on the request path.
+Nothing is built. The hosted gateway this design is extracted from
+prices a call in floating point USD per million tokens from a rate card
+compiled into the binary and a live snapshot of one provider's price
+list (`internal/rates`), rounds to USD micro-units, and marks a model
+the card does not know with `-1` and a `model_unknown` flag while
+serving the call; keeps its running totals in Redis, one day bucket
+per key and per principal and one calendar-month bucket per funded
+principal (`internal/store/redisusage`), and reads a rolling sum of the
+day buckets on every request to enforce a cap; writes the per-call
+record to a Redis stream drained to an S3 bucket as NDJSON
+(`internal/store/reqlog`); and answers its usage routes by folding the
+recent stream window. Its earlier Postgres usage table was retired. This
+design keeps the micro-unit integer and the archive, moves the price
+onto the `Model` an operator declares so the gateway ships no card,
+replaces the day buckets with fixed windows every replica computes from
+the clock, and takes the per-request store read off the hot path.
 
 ## Design
 
@@ -65,21 +77,24 @@ finished or refused.
 | `loss` | []string | `ir.Loss.Strings()` of the translation, empty otherwise |
 | `attempts` | []object | one per target tried: `{provider, upstreamModel, status, httpStatus, error, durationMs}`, in order |
 | `status` | enum | `ok`, `refused`, `failed` |
-| `error` | string | the data plane error code of [[004-request-path]]; empty when `ok` |
+| `error` | string | the data plane error code of [[004-request-path]] that answered the caller, or `client_closed` when the caller disconnected first, which is that spec's record-only code; empty when `ok` |
 | `upstreamStatus` | int | the HTTP status the upstream returned; `0` when none did |
 | `latencyMs` | int | `endedAt` minus `at` |
 | `ttfbMs` | int | to the first response byte written to the caller; `0` when none was |
-| `tokens` | object | `{input, output, cachedInput, cacheWrite, reasoning, estimated}` |
-| `cost` | object | `{amount, currency, priced}`: `amount` in micro-units of `currency` |
+| `tokens` | object | `{input, output, cachedInput, cacheWrite, reasoning, estimated}`, every count an `int64` |
+| `cost` | object | `{amount, currency, priced}`: `amount` an `int64` count of micro-units of `currency`, so `1250000` is `1.25`; the money strings of [[003-manifest-contract]] are what people write in a manifest and what `status` renders, and a record and a usage row carry the integer, never the string |
 | `stream` | bool | the caller asked for a stream |
 | `labels` | map | a copy of the Key's `metadata.labels` at request time |
+| `requestLabels` | map | the accepted pairs of the request's `Lux-Labels` header ([[007-keys-and-limits]]), at most eight; empty when none; never an aggregate dimension |
 
-`Record` is a struct of scalars, slices of scalars, and one string map.
-It has no `any` member and no field that could carry a body, which is
-what makes invariant 7's second half checkable rather than promised:
-never a prompt, a completion, a tool argument, a system text, a request
-or response header, a provider credential, a Key value, or the caller's
-address.
+`Record` is a struct of scalars, slices of scalars, and two string
+maps. It has no `any` member and no field that could carry a body,
+which is what makes invariant 7's second half checkable rather than
+promised: never a prompt, a completion, a tool argument, a system text,
+a request or response header, a provider credential, a Key value, or
+the caller's address. `requestLabels` is bounded by its syntax to eight
+pairs of at most 64 and 128 characters, so it cannot smuggle a body
+either.
 
 A refused request has a record: `status` `refused`, `error` set,
 `attempts` empty, zero tokens, zero cost. This is the record an
@@ -107,18 +122,20 @@ passthrough the gateway reads the same members itself:
 `tokens.input` is the count billed at the input price and excludes
 cached input, on every dialect. OpenAI and Gemini report a prompt total
 that includes their cache reads and Anthropic reports them apart, so
-the subtraction above is the one place that difference is handled;
-`llmdialect` applies the same subtraction on a translated route, so the
-two paths agree. `tokens.reasoning` is reported by the upstream inside
-its output count and is carried for reporting only; it is not a term in
-the cost.
+the subtraction above, floored at zero, is the one place that
+difference is handled; `llmdialect`'s `openaichat` and `openairesp`
+codecs apply the same floored subtraction when they fill
+`ir.Usage.InputTokens` on a translated route, so the two paths agree.
+`tokens.reasoning` is `ir.Usage.ReasoningTokens`, which the upstream
+reports inside its output count, and is carried for reporting only; it
+is not a term in the cost.
 
 When the upstream reports nothing, `tokens.input` is
-`llmdialect/tokencount.Estimate` over the intermediate request and
-`tokens.output` is `0`, because no exported estimator counts a
-response and inventing one would put a number nobody can audit into a
-bill. `tokencount`'s own documentation says metering uses the
-upstream's reported usage and never the estimate, which is why the
+`llmdialect/tokencount.Estimate(*ir.Request)` over the intermediate
+request and `tokens.output` is `0`, because no exported estimator
+counts a response and inventing one would put a number nobody can
+audit into a bill. `tokencount`'s own documentation says metering uses
+the upstream's reported usage and never the estimate, which is why the
 record marks the whole token block `estimated` rather than pretending
 the two are the same number. An opaque route names no Model and has no
 intermediate request: it records zero tokens with `estimated: true` and
@@ -178,21 +195,30 @@ a window began.
 
 | Counter | Key | Window | Counts | Kept |
 |---|---|---|---|---|
-| key requests | `key:<key id>:requests:<start>` | `1m` | one per admitted request | per replica |
-| key tokens | `key:<key id>:tokens:<start>` | `1m` | input plus output | per replica |
 | key spend | `key:<key id>:spend:<start>` | `limits.spend.window` | cost in micro-units | the store |
+| key requests | `key:<key id>:requests:<start>` | `limits.spend.window` | one per admitted request | the store |
+| key tokens | `key:<key id>:tokens:<start>` | `limits.spend.window` | input plus output | the store |
+| key totals | the three above with window `none` | `none` | the same three over the Key's lifetime | the store |
 | budget spend | `budget:<budget id>:spend:<start>` | `Budget.spec.window` | cost in micro-units | the store |
+| exhausted marker | `key:<key id>:exhausted:<start>`, `budget:<budget id>:exhausted:<start>` | the object's spend window | `1`, added by a replica that observes the window at or over its amount; the add that returns `1` is the one that emits the event ([[007-keys-and-limits]], [[012-request-log-and-events]]) | the store |
 
 `<start>` is the window start as Unix seconds, so a key names exactly
 one window and a finished window's row is prunable by its own name.
+The spend counter is what the limit of [[007-keys-and-limits]] reads;
+the requests and tokens counters, and the three totals, are what
+`status.usage` renders, and the window rows exist only for a Key with
+a spend limit. The per-minute rate limits are not counters here at all:
+they are that spec's per-replica buckets and never reach the store,
+which is the multi-replica rule below.
 
 ### The multi-replica rule
 
-Rate windows are per replica, through `latere.ai/x/pkg/ratelimit`
-keyed by the Key's id. A shared rate counter would put a store round
-trip on the hot path, which is the latency the gateway exists not to
-add, and a rate limit is a bound on abuse rather than an account. The
-overshoot is therefore exact and documented:
+Rate windows are per replica, the buckets of [[007-keys-and-limits]]
+over `latere.ai/x/pkg/ratelimit` keyed by the Key's id. A shared rate
+counter would put a store round trip on the hot path, which is the
+latency the gateway exists not to add, and a rate limit is a bound on
+abuse rather than an account. The overshoot is therefore exact and
+documented:
 
 ```
 effective rate ceiling = limits.requestsPerMinute * replicas
@@ -212,10 +238,11 @@ refuse when spent + costOfThisRequest > limit
 
 which reads a replica's own spending immediately and every other
 replica's within one flush. The worst case is one flush interval of
-every replica's spending arriving at once:
+every other replica's spending arriving at once, plus the one request
+of this replica's that crossed:
 
 ```
-overshoot <= R * F * T * C
+overshoot <= (R - 1) * F * T * C + C
 
 R = replicas
 F = LUX_METERING_FLUSH in seconds
@@ -225,21 +252,32 @@ C = the greatest cost of one request under that Key's models
 
 This is an upper bound, not a tight one: a replica refuses on its own
 view as soon as it crosses, so only the spending the other replicas had
-not yet flushed can exceed the limit. With the default flush of one
-second, three replicas, ten requests a second each, and a one-cent
-request, the bound is thirty cents. An operator who needs it smaller
+not yet flushed, and the request that crossed, can exceed the limit.
+With the default flush of one second, three replicas, ten requests a
+second each, and a one-cent request, the bound is twenty-one cents;
+with one replica it is one request. [[007-keys-and-limits]] states the
+same formula in the same symbols. An operator who needs it smaller
 lowers `LUX_METERING_FLUSH` and pays one store write per counter per
 interval for it.
 
-A soft Budget, `hard: false`, never refuses: it records, emits
-`budget.exhausted` once per window ([[012-request-log-and-events]]),
-and continues.
+A soft Budget, `hard: false`, never refuses for its amount: it records,
+emits `budget.exhausted` once per window through the marker counter
+above ([[007-keys-and-limits]], [[012-request-log-and-events]]), and
+continues.
+
+Three metrics of [[019-observability]] are this spec's, recorded at
+settle and at flush: `lux_tokens_total{direction}` adds each record's
+`input`, `output`, `cachedInput`, and `cacheWrite`;
+`lux_spend_microunits_total{currency}` adds each priced record's
+`cost.amount`; `lux_metering_flush_lag_seconds` is the seconds since
+this replica's last successful `Flush`, so a stalled store shows as a
+growing gauge before any limit is wrong by more than the bound.
 
 ### Configuration
 
 | Variable | Default | Rule |
 |---|---|---|
-| `LUX_METERING_FLUSH` | `1s` | at least `100ms`, at most `1m`; the flush interval of every spend counter and of the aggregates |
+| `LUX_METERING_FLUSH` | `1s` | at least `100ms`, at most `1m`; the flush interval of every spend counter and of the aggregates; listed with its owner in [[002-repository-scaffold]]'s table |
 
 ### The usage API
 
@@ -253,14 +291,26 @@ are this spec's.
 | `from`, `to` | RFC 3339 | `to` now, `from` 24 hours before | `to` after `from`; the range at most 90 days |
 | `by` | csv | none, one total row | `key`, `model`, `provider`, `owner`, `door`, `status`, `label:<name>`; at most three |
 | `interval` | enum | `none` | `hour`, `day`, `month`, `none` |
-| `key`, `model`, `provider`, `owner` | repeatable | none | names or ids; a filter, not a grouping |
-| `label` | repeatable | none | `<name>=<value>` |
+| `key`, `model`, `provider`, `owner` | repeatable | none | names or ids; a filter, not a grouping; a name is resolved to the ids it names now, and a Key's `key_` id keeps working after the Key is deleted, which is how a run's ledger line stays readable ([[020-building-a-plane]]) |
+| `label` | repeatable | none | `<name>=<value>` over the Key's labels |
+
+The API asks the authorizer `usage.read` with the resolved `keys` and
+the `owners` of the query in the `resource` ([[006-identity]]), and the
+answer's `filter` is intersected with the query: an `owners` list
+narrows the rows to those Keys' owners and a `labels` map to Keys
+carrying every pair, so a caller outside the filter reads an empty
+result and never a 403 ([[011-api]]). Under the owner policy the filter
+is the caller's own subject.
 
 A response row is `{bucket, dimensions, requests, ok, refused, failed,
 inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens,
-cost, currency, unpricedRequests}`. `currency` is a dimension of every
-row whether or not it is named in `by`, because two currencies are
-never summed. `cost` is micro-units, as everywhere.
+cost, currency, unpricedRequests}`. `bucket` is the interval's start,
+RFC 3339 UTC, or absent for `interval` `none`; `dimensions` is a map of
+each `by` name to its value; `ok`, `refused`, and `failed` sum the
+`status` dimension of the aggregate rows. `currency` is a dimension of
+every row whether or not it is named in `by`, because two currencies
+are never summed. `cost` is an `int64` of micro-units, as in the
+record.
 
 `GET /v1/requests` answers records, newest first, with `from`, `to`,
 the same filters, plus `status`, `error`, and `stream`, a `cursor`, and
@@ -314,14 +364,17 @@ func Window(w v1.Window, at, createdAt time.Time) (start, resetsAt time.Time)
 type Scope string
 
 const (
-	ScopeKeyRequests  Scope = "requests"
-	ScopeKeyTokens    Scope = "tokens"
-	ScopeKeySpend     Scope = "spend"
-	ScopeBudgetSpend  Scope = "budget"
+	ScopeKeyRequests     Scope = "key:requests"
+	ScopeKeyTokens       Scope = "key:tokens"
+	ScopeKeySpend        Scope = "key:spend"
+	ScopeKeyExhausted    Scope = "key:exhausted"
+	ScopeBudgetSpend     Scope = "budget:spend"
+	ScopeBudgetExhausted Scope = "budget:exhausted"
 )
 
 // CounterKey renders the key of the counter table: one key names one
-// window of one object.
+// window of one object. For ScopeKeySpend under a Key with no spend
+// limit, and for the totals, w is WindowNone and start is createdAt.
 func CounterKey(s Scope, id string, w v1.Window, at, createdAt time.Time) string
 
 // CounterStore is what the store satisfies (010).
@@ -389,12 +442,14 @@ DDL ([[010-state]]); which target a request reached
 | Cached input tokens are billed once, at the cached price, on each of the four dialects and on both a translated route and a passthrough | `TestCachedInputIsNotBilledTwice` | not built |
 | Reasoning tokens are recorded and are not a term in the cost | `TestReasoningIsNotBilled` | not built |
 | An upstream that reports no usage yields `estimated: true`, an input count from the estimator, and an output count of zero; an opaque route yields zero tokens, `estimated: true`, and `priced: false` | `TestEstimatedTokensAreMarked`, `TestOpaqueRouteIsUnpriced` | not built |
-| A duration window's key is the same for every instant inside it and differs across the boundary; `month` resets on the first UTC; `none` never resets | `TestWindowBoundaries` | not built |
-| Two replicas spending against one hard limit overshoot by no more than the bound, over a hundred runs of the formula's inputs | `TestTwoReplicaOvershootIsBounded` | not built |
+| A duration window's key is the same for every instant inside it and differs across the boundary; `month` resets on the first UTC; `none` never resets; the totals' key is the Key's `createdAt` | `TestWindowBoundaries` | not built |
+| Three replicas spending against one hard limit at ten requests a second each with a one-cent request and a one-second flush overshoot by no more than `(R − 1) × F × T × C + C`, twenty-one cents, over a hundred runs; one replica by no more than one request | `TestTwoReplicaOvershootIsBounded` | not built |
 | A rate limit admits `replicas` times its value across replicas and its value on one | `TestRateWindowIsPerReplica` | not built |
 | A replica's local delta refuses before any flush, and a flush makes it visible to the other replica within one interval | `TestLocalDeltaRefusesImmediately` | not built |
-| A soft Budget past its amount continues and emits `budget.exhausted` once per window | `TestSoftBudgetContinues` | not built |
-| Aggregates folded from the records equal the store's rows for every grouping; no row sums two currencies | `TestAggregatesMatchTheRecords`, `TestNoCurrencyIsSummed` | not built |
-| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension | `TestUsageQueryValidation` | not built |
+| A soft Budget past its amount continues and emits `budget.exhausted` once per window; the marker counter's first add returns `1` on exactly one of six replicas | `TestSoftBudgetContinues`, `TestExhaustedMarkerIsClaimedOnce` | not built |
+| The three counters under a Key's spend window and under `none` carry the requests, tokens, and spend the Key's records sum to, and no window row exists for a Key without a spend limit | `TestKeyCountersFollowTheRecords` | not built |
+| Aggregates folded from the records equal the store's rows for every grouping; no row sums two currencies; `requestLabels` is no dimension and appears in no aggregate row | `TestAggregatesMatchTheRecords`, `TestNoCurrencyIsSummed`, `TestRequestLabelsAreNotAggregated` | not built |
+| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension; a `cost` in a row is an integer; the authorizer's `filter` of one owner leaves a query naming another owner's Key an empty result | `TestUsageQueryValidation`, `TestUsageFilterNarrows` | not built |
+| `lux_tokens_total`, `lux_spend_microunits_total`, and `lux_metering_flush_lag_seconds` follow a run's records and a stalled store | `TestMeteringMetrics` with [[019-observability]]'s `TestMetricsTable` | not built |
 | `GET /v1/requests` reports `source` `archive` with the exporter configured and `memory` without it | `TestRequestsSource` | not built |
 | `metering` imports `manifest/v1` and the standard library and nothing else | [[001-architecture]]'s `TestRootPackagesDialNothing` | not built |
