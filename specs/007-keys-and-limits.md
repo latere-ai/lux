@@ -312,9 +312,10 @@ adjust   = reserve - settle        (a refund when positive, a further debit when
 ```
 
 `estimate` is `latere.ai/x/pkg/llmdialect/tokencount.Estimate` over
-the decoded request on translated routes, and the upstream's own count
-when a model route reports one before the response; an opaque route
-reserves one request and no tokens. A bucket that cannot cover the
+the decoded request on translated routes, and, on a passthrough model
+route, the body's length in bytes divided by four, because no upstream
+reports a count before it answers; an opaque route reserves one request
+and no tokens. The settle uses the measured count either way. A bucket that cannot cover the
 reservation refuses with `rate_limited` and `Retry-After` of the
 seconds until it can, `Allowance.Retry` rounded up and at least `1`;
 nothing is debited on a refusal, and a request refused at a later
@@ -328,6 +329,11 @@ minutes' worth at a boundary and an unsettled under-estimate lets a
 Key exceed its tokens per minute by the estimate's error every minute.
 
 ### Spend windows
+
+A Key that names no spend limit and draws from no Budget spends without
+bound: the core has no default cap, where the hosted plane applied one
+of 100 USD over 30 days to every key, because a default that is money
+belongs to the operator's manifest or to the authorizer's `limits`.
 
 A Key's `limits.spend` and a Budget are both a spend window: an
 amount, a currency, and a window under the window rule of

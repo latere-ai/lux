@@ -91,7 +91,7 @@ status:                                # written by the server, ignored on apply
   id: prv_01J9ZK2P7Q8R9S0T1U2V3W4X5Y
   version: 3                           # the store's row version; the ETag of 011
   owner: https://login.example.com|alice
-  credential: {set: true, version: 2, prefix: "sk-live-", updatedAt: 2026-09-13T10:00:00Z}
+  credential: {set: true, version: 2, updatedAt: 2026-09-13T10:00:00Z}
   health: {state: Healthy, since: 2026-09-13T10:00:05Z, lastProbeAt: 2026-09-13T10:41:00Z, lastError: ""}
   discovered: {count: 34, at: 2026-09-13T10:00:05Z}
   tunnel: null                         # the block of 013 when spec.tunnel is true
@@ -227,9 +227,10 @@ acceptance criteria hold them to that.
 
 Name rules. A `Provider`, `Key`, or `Budget` name is a DNS-1123 label
 of at most 63 characters. A `Model` name is one or two segments joined
-by `/`, each segment `[a-z0-9]([a-z0-9._-]*[a-z0-9])?`, at most 128
-characters in all, because model names carry dots (`gpt-4.1`) and a
-discovered model is named `<provider>/<upstream name>`, the form callers
+by `/`, each segment `[a-z0-9]([a-z0-9._:-]*[a-z0-9])?`, at most 128
+characters in all, because model names carry dots (`gpt-4.1`), a local
+runtime's carry a colon tag (`llama3.1:8b`, [[013-tunnelled-runtimes]]),
+and a discovered model is named `<provider>/<upstream name>`, the form callers
 already write. A declared Model may use either form. No name of any
 kind begins with one of the id prefixes `prv_`, `mdl_`, `key_`,
 `bud_`; one that does is `reserved_prefix`, so a path segment that
@@ -248,11 +249,11 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | `dialect` | enum | none, required | no | `openai`, `anthropic`, `gemini`, `lux`; the wire API the upstream speaks, per the dialect table below |
 | `tunnel` | bool | `false` | no | `true` makes the upstream whichever agent connects through the tunnel rather than an address the gateway holds ([[013-tunnelled-runtimes]]); `exclusive_fields` with `baseURL` and with `credential`; `invalid_field` when `Options.TunnelEnabled` is false |
 | `baseURL` | string | none, required unless `tunnel` | yes | `https://`, a host under the upstream host rule below, an optional path, no userinfo, query, or fragment; `http://` and a loopback, link-local, or private host only when `Options.AllowPrivateUpstreams` is set, and then with a warning; the host of `Options.PublicURL` is `invalid_field`, because a provider that is this gateway is a loop |
-| `credential.value` | string | none | yes; bumps `status.credential.version` | write-only; required in server mode unless `valueFrom` is set in file mode or `tunnel` is true; 1 to 4096 bytes; returned by no read, carried by no event or log |
+| `credential.value` | string | none | yes; bumps `status.credential.version` | write-only; optional: a Provider with neither `value` nor `valueFrom` injects no credential header, which is what a runtime on the operator's own network needs ([[005-providers]]); 1 to 4096 bytes when set; returned by no read, carried by no event or log |
 | `credential.valueFrom.env` | string | none | no | a POSIX variable name the file mode reads at start; `exclusive_fields` with `value`; `invalid_field` in server mode |
 | `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini` |
 | `credential.scheme` | enum | per dialect | yes | `bearer` prefixes `Bearer `; `raw` writes the value verbatim; `bearer` on `Authorization`, `raw` elsewhere |
-| `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB; `credential.header`, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix` |
+| `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB of visible ASCII and space with no CR or LF (`invalid_field`); `credential.header`, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix` |
 | `discovery.mode` | enum | `auto` | yes | `auto` lists the upstream's models on the discovery interval and declares each as a discovered Model ([[005-providers]]); `none` declares nothing |
 | `discovery.include`, `.exclude` | []string | empty | yes | globs under the glob rule below over upstream names; `include` empty is everything; `exclude` wins |
 | `health.mode` | enum | `probe` | yes | `probe` calls the upstream's model list on the health interval; `passive` infers health from traffic; `none` reports `Unknown` and never marks a target unavailable |
@@ -318,7 +319,7 @@ the discovered one.
 | `passthrough` | bool | `false` | yes | admits routes the gateway does not translate, embeddings, files, batches, toward a provider one of the selectors reaches ([[004-request-path]]) |
 | `disabled` | bool | `false` | yes | refuses every request with `key_disabled` while true; the value is kept |
 | `value` | string | none | no | server mode only: a value the caller supplies instead of one the gateway mints, the composition [[007-keys-and-limits]] owns; 32 to 4096 bytes; write-only, decoded into the encoder-skipped field the credential rule below describes, so it is returned by no response, event, record, or log line and the resolved manifest carries the field absent; present on an update, whatever its value, is `immutable_field`; `exclusive_fields` with `valueFrom.env`; `invalid_field` in file mode, because a credential in a file is what `valueFrom` exists to avoid; `status.prefix` is then `sup_` and the first eight lower-case hex characters of `SHA-256(value)`, computed by the surface that stores the hash, since a supplied value has no `lux_` prefix to show; a rotate mints a `lux_` value and the supplied one stops working |
-| `valueFrom.env` | string | none | no | file mode only ([[010-state]]): a POSIX variable name whose value is the Key's, matching `^lux_[A-Za-z0-9_-]{40}$` ([[007-keys-and-limits]]); `invalid_field` in server mode, where the server mints the value |
+| `valueFrom.env` | string | none | no | file mode only ([[010-state]]): a POSIX variable name whose value is the Key's, matching `^lux_[A-Za-z0-9_-]{40}$` ([[007-keys-and-limits]]); `invalid_field` in server mode, where the server mints the value or the caller supplies one |
 
 `Budget.spec`:
 
@@ -581,6 +582,13 @@ set of files:
 | `manifest/testdata/v1/refused/<code>/<case>.yaml` | one manifest refused with `<code>`, one case per row of the code's `When` column that stage 1 or 2 can reach |
 | `manifest/testdata/v1/refused/<code>/<case>.golden.json` | `{"code": "...", "paths": ["..."]}`: the code and the JSON paths the error names |
 | `manifest/testdata/v1/options.json` | the fixed options, below, so a reader can reproduce a golden file by hand |
+
+The directory is embedded by the `manifest` package and exported as
+`manifest.Corpus`, an `embed.FS` rooted at `testdata/v1`, so the
+`manifest` group of [[018-conformance-suite]] reads the same files
+through the import from any module and never by a relative path;
+`//go:embed` cannot reach another package's directory, and a copy would
+drift.
 
 The fixed options: `Now` is `2026-09-13T10:00:00Z`; `NewName` returns
 `fixed-name-0000`; `Defaults` is `{0, 0, 10m}`; `Limits` is zero;

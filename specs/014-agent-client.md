@@ -95,7 +95,7 @@ addresses it, so a Model's two-segment name works unescaped.
 |---|---|---|
 | `lux apply -f <file>... [--credential-from-env NAME] [--if-match <version>]` | `PUT /v1/{kind}s/{name}` per document | the kind and the name come from the document; several files and several YAML documents apply in file order, and the first refusal stops the run |
 | `lux get <kind> <name>` | `GET /v1/{kind}s/{name}` | one object with its `status` |
-| `lux list <kind> [-l k=v]... [--owner s] [--source s] [--provider p] [--limit n]` | `GET /v1/{kind}s` | the selectors are [[011-api]]'s; the command follows `next` to the end and prints one envelope, stopping after `--limit` items, which is a count of items and not the page size the route takes |
+| `lux list <kind> [-l k=v]... [--owner s] [--source s] [--provider p] [--limit n]` | `GET /v1/{kind}s` | the selectors are [[011-api]]'s; the command follows `next_cursor` to the end and prints one envelope, stopping after `--limit` items, which is a count of items and not the page size the route takes |
 | `lux delete <kind> <name> [--if-match <version>]` | `DELETE /v1/{kind}s/{name}` | prints nothing on success |
 | `lux keys rotate <name>` | `POST /v1/keys/{name}/rotate` | prints the new value once |
 | `lux usage [--key k]... [--model m]... [--provider p]... [--owner s]... [--since d] [--from t] [--to t] [--by d]... [--interval i] [--label k=v]...` | `GET /v1/usage` | `--since 24h` is `--from now-24h`; the parameters are [[009-usage-and-metering]]'s |
@@ -178,8 +178,13 @@ into a file a repository might hold. The rules:
 `lux serve` runs until it is stopped, reconnecting with backoff from 1
 second to 30 seconds with full jitter while the gateway is reachable
 and the token verifies, and exiting 1 when the session is closed for a
-reason a retry cannot fix (`token_expired`, `provider_deleted`,
-`forbidden`). `SIGINT` and `SIGTERM` close the session cleanly, so the
+reason a retry cannot fix: `superseded`, because another agent holds
+the Provider; `provider_deleted`; and `token_expired` after one retry
+with a fresh token from `--token-file`, terminal only when none is
+available. `draining` reconnects at once, and a `forbidden` answer is a
+refusal to connect, not a close reason ([[013-tunnelled-runtimes]]).
+When the file behind `--token-file` changes, `lux serve` sends the
+fresh token in a heartbeat frame rather than reconnecting. `SIGINT` and `SIGTERM` close the session cleanly, so the
 Provider is `Unreachable` at once rather than at the registry TTL.
 
 ### Output
@@ -187,7 +192,7 @@ Provider is `Unreachable` at once rather than at the registry TTL.
 `-o json` is the default and is the response body as received, never
 decoded and re-encoded, so field order and bytes are the server's. For
 a list that spanned pages, the items of every page are concatenated
-into one envelope with `next` empty and each item's bytes unchanged.
+into one envelope with `next_cursor` empty and each item's bytes unchanged.
 
 `-o yaml` renders the same value locally, because the server serves
 JSON only ([[011-api]]). `-o table` renders the columns below; a field
@@ -305,11 +310,12 @@ command, `lux models`, is a `GET` this client already makes.
 
 The build list of `./cmd/lux` is the standard library,
 `latere.ai/x/pkg/httpjson` for the error envelope, and this module's
-own `manifest` and `manifest/v1`, which reach only the standard library
-([[003-manifest-contract]]). [[001-architecture]]'s dependency
-paragraph names the first two; the schema packages are this module's
-own and pull in nothing, so the binary still carries exactly one
-third-party dependency, and this spec is where that row is written
+own `manifest` and `manifest/v1`, which reach the standard library and
+the one YAML decoder [[003-manifest-contract]] names.
+[[001-architecture]]'s dependency paragraph says the same; the schema
+packages are this module's own and pull in that decoder alone, so the
+binary carries one first-party module, `latere.ai/x/pkg`, and one
+third-party one, and this spec is where those two rows are written
 down. No HTTP client library, no command line framework, no YAML
 library of the command's own, no multiplexer and no WebSocket codec for
 `lux serve`, whose transport is `net/http`'s HTTP/2
@@ -372,7 +378,7 @@ this command speaks to ([[018-conformance-suite]]).
 | The built binary carries the three exit codes through the process | `TestBinaryExitCodes`, running `out/lux` as a subprocess for one case of each code | not built |
 | The four codes in the extra-line table print their extra line and no other code does | `TestRefusalExtraLines` | not built |
 | `LUX_TOKEN`, a token file's contents, a `--credential-from-env` value, and a Key value reach no stderr byte, `-v` included; a Key value reaches stdout exactly once per create and per rotate | `TestSecretsGoOneWay` with canaries | not built |
-| `-o json` for one object is byte-identical to the response; a two-page list is one envelope with every item's bytes unchanged and `next` empty; `-o yaml` round-trips to the same value | `TestOutputFidelity` | not built |
+| `-o json` for one object is byte-identical to the response; a two-page list is one envelope with every item's bytes unchanged and `next_cursor` empty; `-o yaml` round-trips to the same value | `TestOutputFidelity` | not built |
 | Every column in the table renders for each kind, a tunnelled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | not built |
 | A `/v1` command with only `LUX_KEY`, a door command with only `LUX_TOKEN`, and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | not built |
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | not built |
@@ -384,4 +390,4 @@ this command speaks to ([[018-conformance-suite]]).
 | `skills/lux/SKILL.md` parses with frontmatter of exactly `name` and `description`, and every command and flag it names is in the table above | `TestSkillFrontmatter`, `TestSkillNamesOnlyRealCommands` | not built |
 | An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | not built |
 | `docs/cli.md` equals the binary's `-help` output for every command in the table, and `lux -help` and `lux -version` each exit 0 | `TestCLIDocIsCurrent`, `TestHelpAndVersionExitZero` | not built |
-| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, and this module's `manifest` and `manifest/v1`, `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | not built |
+| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, this module's `manifest` and `manifest/v1`, and the YAML decoder they use ([[003-manifest-contract]]), `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | not built |

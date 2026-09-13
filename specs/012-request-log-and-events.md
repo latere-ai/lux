@@ -92,7 +92,7 @@ sink can key on it without parsing `data`.
 | `model.created`, `.updated`, `.deleted` | the API applied or deleted a declared `Model` | the changed paths on an update; `{targets, priced}` on a create |
 | `model.discovered` | discovery declared a Model that did not exist | `{provider, upstreamModel}` |
 | `model.removed` | discovery deleted a discovered Model the upstream dropped | `{provider, upstreamModel}` |
-| `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, expiresAt}` |
+| `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, expiresAt}`; `prefix` is the minted `lux_` prefix or a supplied value's `sup_` handle ([[007-keys-and-limits]]) |
 | `key.updated` | a `Key`'s spec changed | the changed paths |
 | `key.rotated` | `POST /v1/keys/{id}/rotate` | `{prefix, previousPrefix}` |
 | `key.deleted` | a `Key` was deleted | `{prefix}` |
@@ -104,7 +104,9 @@ sink can key on it without parsing `data`.
 Those are the four state changes worth an event: `key.exhausted`,
 `budget.exhausted`, `provider.unreachable`, `provider.healthy`. Each is
 raised once per transition, so an installation of six replicas emits
-one event and not six, by two mechanisms. The health transitions are
+one event and not six, by two mechanisms, both of which need the
+store; in file mode each replica raises its own, because nothing is
+shared ([[010-state]]). The health transitions are
 observed by the one replica holding the `health` lease of
 [[010-state]], which is the replica that writes `status.health`
 ([[005-providers]]). The exhaustions have no lease: every replica may

@@ -258,8 +258,9 @@ sequenceDiagram
   D->>G: request, dialect openai
   G->>S: key by hash (cached), its resolved manifest
   G->>G: expired? disabled? model allowed by the selectors?
-  G->>S: rate window, spend window, budget (local delta over the store's last value)
-  G->>G: Model by name, target by weight and health, translate if the target's dialect differs
+  G->>G: Model by name, target by weight and health
+  G->>S: rate window, spend window, budget (local delta over the store's last value; the spend estimate needs the Model's pricing)
+  G->>G: translate if the target's dialect differs
   G->>P: request with the provider's credential, toward its base URL only
   P-->>G: response or stream
   G-->>W: response or stream in the door's dialect
@@ -272,7 +273,9 @@ counters, so the hot path dials no webhook and no issuer. A refusal
 happens before any bytes reach a provider and is a fixed error code
 ([[004-request-path]]). When the door's dialect and the target's are
 the same, the body reaches the provider byte for byte, with only the
-credential and the hop-by-hop headers changed; when they differ, the
+credential, the hop-by-hop headers, and on an `openai` chat completion
+stream the `stream_options.include_usage` flag changed, so the usage
+reaches the record; when they differ, the
 translation is `llmdialect`'s, and every field the target dialect cannot
 represent is reported, never silently dropped.
 
@@ -312,7 +315,7 @@ below says so.
 
 Every object has a stable id, a ULID with a kind prefix: `prv_` for a
 provider, `mdl_` a model, `key_` a key, `bud_` a budget, `req_` a
-request, `evt_` an event. The id is the `lux.latere.ai/id` label and
+request, `evt_` an event. The id is `status.id` and
 is accepted beside the name on every item route, `PUT` addressing by
 name alone ([[011-api]]); a name may be reused after delete, an id
 never. A Key's value the server mints is `lux_` followed by 40
@@ -335,10 +338,13 @@ server reads are `LUX_*`.
 ### Dependencies
 
 The build list of `./cmd/luxd` reaches the standard library,
-`latere.ai/x/pkg`, the Postgres driver for the store, and the
-OpenTelemetry SDK, and nothing else: no cloud SDK, no web framework, no
-ORM, no Redis client. `./cmd/lux` reaches the standard library and the
-error envelope. The `depcheck` gate holds each list, and a new entry is
+`latere.ai/x/pkg`, the YAML decoder `manifest` uses
+([[003-manifest-contract]]), the Postgres driver and the migration
+library of the store ([[010-state]]), and the OpenTelemetry SDK, and
+nothing else: no cloud SDK, no web framework, no ORM, no Redis client.
+`./cmd/lux` reaches the standard library, the error envelope, and this
+module's `manifest` and `manifest/v1` with the YAML decoder they use
+([[014-agent-client]]). The `depcheck` gate holds each list, and a new entry is
 a row with a reason. Multi-replica counters are the store's, not a
 cache's, which is why there is no Redis: the lag that costs is stated
 and bounded rather than bought with a dependency.
@@ -365,9 +371,10 @@ and bounded rather than bought with a dependency.
    refusal. The built-in owner policy is a policy, not an allow-all.
 6. Same dialect, same bytes. A request whose door and target speak one
    dialect reaches the provider unchanged but for the credential, the
-   hop-by-hop headers, and the model name when the Model's name differs
-   from the target's upstream name; a translated request reports every
-   field the target cannot represent.
+   hop-by-hop headers, the model name when the Model's name differs
+   from the target's upstream name, and `stream_options.include_usage`
+   on an `openai` chat completion stream ([[004-request-path]]); a
+   translated request reports every field the target cannot represent.
 7. Every data plane request produces exactly one usage record, whether
    it was refused, failed, or succeeded; the record names the key, the
    model, the provider, the tokens, the cost, the latency, and the

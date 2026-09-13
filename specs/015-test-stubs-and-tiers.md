@@ -101,7 +101,7 @@ One handler, parameterised by dialect, serving the upstream paths of
 routes, the model list discovery and the health probe read, and a
 catch-all that records an opaque request and answers `200 {}`. The
 `openai` instance therefore serves `/v1/chat/completions`,
-`/v1/responses`, `/v1/embeddings`, and `/models`, because
+`/v1/responses`, `/v1/embeddings`, and `/v1/models`, because
 [[004-request-path]] translates the first two through two different
 codecs. A door's own `GET /v1/models` never reaches a stub: the gateway
 answers it from the catalogue ([[004-request-path]]), so the stub's
@@ -153,6 +153,9 @@ these gets that behaviour:
 | `fail-stream-mid` | streams two content events, then closes the connection with no usage event |
 | `fail-body` | `200` with a body that is not the dialect's shape |
 | `redirect` | `302` to another host, which the upstream client of [[005-providers]] must not follow |
+| `fail-400` | `400` with that dialect's error body, the `upstream_rejected` case of [[004-request-path]] |
+| `fail-529` | `529` with an overloaded body, the status [[008-routing-and-models]] retries |
+| `fail-html` | `200` with `Content-Type: text/html` and an HTML body, which [[004-request-path]] relays as an octet stream |
 | `tokens-<in>-<out>`, as `tokens-1000-500` | the deterministic answer with those two usage numbers, which is how a cost test fixes the figures it is computing against |
 | `events-<n>` | a streamed answer of `n` content events instead of five |
 | anything else | the deterministic answer above |

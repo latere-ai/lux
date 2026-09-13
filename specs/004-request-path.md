@@ -259,11 +259,18 @@ flowchart TD
 The outbound request toward the target's `baseURL`:
 
 - The path is the target dialect's for the operation: on passthrough
-  the caller's path relative to the door, joined to `baseURL`'s path;
+  the caller's path relative to the door with the dialect's own version
+  prefix removed (`/v1` for `openai` and `anthropic`, `/v1beta` for
+  `gemini`), joined to `baseURL`'s path, so `/openai/v1/chat/completions`
+  against `https://api.openai.com/v1` reaches `/v1/chat/completions`
+  once and not twice;
   on translation the target dialect's route for the same operation
   (`/v1/messages` becomes `/chat/completions` under an `openai` base
   URL). A `gemini` model route has the upstream model name substituted
   into the path.
+- Every request header that begins with `Lux-` is removed before
+  forwarding, `Lux-Labels` and `Lux-Provider` among them: they are the
+  gateway's and mean nothing to a provider ([[007-keys-and-limits]]).
 - The body's model name is rewritten to the target's upstream name;
   the response's model field carries the Model's name back, so a
   caller sees the name it asked for whatever served it.
@@ -474,7 +481,7 @@ type Options struct {
 	Router      Router           // target selection and the per-target circuits (008)
 	Limiter     Limiter          // the windows: reserve before, settle after (007)
 	Recorder    Recorder         // one record per request (009)
-	Clients     ClientSource     // the upstream client per Provider (005)
+	Clients     ClientSource     // the upstream client per Provider, built by NewClientSource (005)
 	Health      HealthObserver   // outcomes per Provider for passive health (005)
 	Version     string           // the User-Agent
 	MaxBodyBytes int64
@@ -496,7 +503,7 @@ constructs toward the providers ([[001-architecture]], invariant 9).
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `LUX_UPSTREAM_TIMEOUT` | no | `10m` | the `Defaults.Timeout` a Provider without `spec.timeout` gets: one request including its stream |
-| `LUX_MAX_BODY_BYTES` | no | `64Mi` | the largest data plane request body accepted |
+| `LUX_MAX_BODY_BYTES` | no | `64Mi` | the largest data plane request body accepted, and the cap on an upstream body read whole ([[005-providers]]) |
 
 ## Not in this spec
 

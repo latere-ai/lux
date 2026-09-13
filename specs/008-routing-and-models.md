@@ -181,6 +181,10 @@ and driven with `Admits`, `Allow`, `RecordSuccess`, and
 configuration, because a value an operator would tune per upstream
 belongs on the Provider and no field for it exists yet.
 
+The breaker's state is the `lux_circuit_open` gauge, labelled by
+provider and Model ([[019-observability]]), so an open circuit is
+visible without a request.
+
 | Parameter | Value |
 |---|---|
 | threshold | 5 consecutive retryable failures |

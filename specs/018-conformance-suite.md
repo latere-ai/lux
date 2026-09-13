@@ -133,18 +133,16 @@ rather than a search.
 | `api` | the four routes per kind; apply as create then update; the preconditions and `conflict`; percent-encoded and two-segment Model names; rotate; `budget_in_use`; pagination and the list filters; the error envelope and `request_id`; the rate limit headers; `read_only` in file mode; every response validating against `GET /v1/openapi.json` | [[011-api]] | no |
 | `doors` | every row of the door route table through its door; same-dialect same-bytes; a translated request's `Lux-Loss`; the error envelope in each dialect's own shape; a streamed response's event sequence and final usage; `GET /v1/models` as the Key's view | [[004-request-path]] | yes |
 | `keys` | rotate invalidates the old value; each Key state refuses with its code; a rate refusal carries `Retry-After`; a spend refusal and a hard Budget refusal carry theirs; an unpriced Model under a Budget is `model_unpriced` | [[007-keys-and-limits]] | yes |
-| `identity` | a Key on `/v1` and an issuer token on a door are each `unauthenticated`; an unauthenticated control plane request is 401; with the authorizer down every control plane request is `authorizer_unavailable` and every data plane request with a valid Key is served | [[006-identity]] | yes |
+| `identity` | a Key on `/v1` is `unauthenticated`, and so is an issuer token on a door unless a Key's `spec.value` is that exact string ([[007-keys-and-limits]]); an unauthenticated control plane request is 401; with the authorizer down every control plane request is `authorizer_unavailable` and every data plane request with a valid Key is served | [[006-identity]] | yes |
 | `usage` | one request through a door produces exactly one record at `GET /v1/requests` with the tokens, the cost, the model, the provider, and no content; `GET /v1/usage` aggregates it under every dimension and window the parameters admit; a refused request has a record too | [[009-usage-and-metering]] | yes |
 | `fixture` | the previous release's manifests and records still read back, below | [[003-manifest-contract]], [[009-usage-and-metering]] | no |
 
 The `manifest` group's inputs are [[003-manifest-contract]]'s golden
 corpus and not a second set written here, so one corpus proves `Resolve`
 in process and over HTTP and the two cannot drift. That corpus is
-`manifest/testdata/v1/` today, which `//go:embed` cannot reach from
-another package; this spec needs it exported as an `embed.FS` from a
-package of its own, and [[003-manifest-contract]] owns where. Until it
-is, the `manifest` group reads the directory by relative path and is
-skipped when the suite runs outside a checkout.
+`manifest.Corpus`, the `embed.FS` the `manifest` package exports over
+`manifest/testdata/v1/` ([[003-manifest-contract]]), so the group reads
+it through the import from any module and never by a relative path.
 
 Every case cleans up what it created, and the suite runs in under five
 minutes against a local `luxd`, which is a `-timeout 5m` on the run

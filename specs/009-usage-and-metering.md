@@ -106,6 +106,7 @@ refusing without one would hide the most useful case.
 | Source | When | Marks |
 |---|---|---|
 | the upstream's own usage | the response carries the dialect's usage members | `estimated: false` |
+| a stream's own usage | the members are read as the last value of each across the stream; an `/openai` chat completion stream carries them because [[004-request-path]] sets `stream_options.include_usage` on the way out | `estimated: false` |
 | an estimate | the response carries none, or a stream ended before its usage frame | `estimated: true` |
 
 On a translated route the counts come from `ir.Usage`, which
@@ -143,6 +144,12 @@ intermediate request: it records zero tokens with `estimated: true` and
 request it cannot price.
 
 ### Cost
+
+The core ships no price card. Every price is the operator's
+`Model.spec.pricing` ([[003-manifest-contract]]), a discovered Model is
+unpriced until an operator declares it, and the hosted plane's compiled
+rate card and its provider price snapshot are the platform's to keep
+as Models it applies.
 
 ```go
 // Pricing quotes money per Per tokens, with Per one of 1, 1000,

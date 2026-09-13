@@ -86,6 +86,7 @@ table is the reference: a metric not in it does not exist, and
 | `lux_requests_total` | counter | `door`, `model`, `provider`, `status`, `code` | [[004-request-path]] |
 | `lux_request_duration_seconds` | histogram | `door`, `model`, `status` | [[004-request-path]] |
 | `lux_time_to_first_byte_seconds` | histogram | `door`, `model` | [[004-request-path]] |
+| `lux_output_tokens_per_second` | histogram | `provider`, `model` | [[009-usage-and-metering]] |
 | `lux_tokens_total` | counter | `direction` | [[009-usage-and-metering]] |
 | `lux_spend_microunits_total` | counter | `currency` | [[009-usage-and-metering]] |
 | `lux_refusals_total` | counter | `code` | [[011-api]] |
@@ -101,6 +102,11 @@ table is the reference: a metric not in it does not exist, and
 | `lux_store_operations_total` | counter | `op`, `result` | [[010-state]] |
 | `lux_circuit_open` | gauge | `provider`, `model` | [[008-routing-and-models]] |
 | `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]] |
+
+`lux_output_tokens_per_second` is a stream's output tokens over the time
+from its first byte to its last, and a non-stream's over its upstream
+duration; it is the figure an operator of a model server watches, and
+the one hosted metric this spec carries over by name.
 
 Label values, each from a closed set:
 
@@ -147,9 +153,10 @@ takes the boundaries per metric and defaults to none.
 |---|---|
 | `lux_request_duration_seconds`, `lux_upstream_duration_seconds` | `0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600` |
 | `lux_time_to_first_byte_seconds` | `0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 60` |
+| `lux_output_tokens_per_second`, in tokens per second | `1, 2, 5, 10, 20, 50, 100, 200, 500, 1000` |
 | `lux_authorizer_duration_seconds` | `latere.ai/x/pkg/metrics.DefaultDurationBuckets` |
 
-Thirteen and ten boundaries, so the three request histograms cost
+Thirteen, ten, and ten boundaries, so the four request histograms cost
 `doors × models × statuses` series times fifteen and eleven lines
 rather than a quantile per series. `LuxTimeToFirstByteSlow`'s 10 second
 threshold is a boundary in the second row, so the alert's
@@ -262,6 +269,12 @@ becomes its own prefix. No request body, response body, event body,
 prompt, completion, or header value is ever a log argument, and no
 Provider credential can be one: the credential reaches the upstream
 client and nothing else ([[005-providers]]).
+
+The credential a door was presented is hashed and discarded before any
+handler runs and is never a log argument in any shape
+([[007-keys-and-limits]]); the `lux_` redaction above is a second line
+for a minted value a deliberate caller writes, and a supplied value has
+no pattern to redact, which is why it never reaches a logger at all.
 
 ### Alerts
 

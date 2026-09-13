@@ -91,7 +91,7 @@ The rules the field carries:
 - `tunnel` is immutable after create. Flipping it would change where
   both the address and the credential come from while Models keep
   naming the Provider.
-- `tunnel: true` with `Options.TunnelEnabled` false is `invalid_field`
+- `tunnel: true` with `Options.TunnelEnabled` false, or in file mode where no session can be opened ([[010-state]]), is `invalid_field`
   at `spec.tunnel`, with `LUX_TUNNEL_ENABLED` in the developer detail.
 
 `dialect`, `discovery`, `health`, `headers`, `timeout`, and
@@ -305,6 +305,9 @@ the runtime, so [[004-request-path]]'s rule that a disconnect cancels
 the upstream request holds through the tunnel.
 
 ### The registry
+
+The open sessions a replica holds are the `lux_tunnel_sessions` gauge
+([[019-observability]]).
 
 One row per tunnelled Provider, in the store, so every replica reads the
 same answer.

@@ -7,7 +7,7 @@ depends_on:
 affects: [cmd/luxd/, internal/config/, internal/version/, Makefile, .lateregate.yaml, Dockerfile, .github/workflows/, .githooks/, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -57,12 +57,14 @@ metering/               the usage record, costing from a Model's prices, the per
 internal/config/        typed configuration from the environment; every problem in one message
 internal/version/       build identity set by -ldflags
 internal/auth/          the verifier over the issuers, the authorizer client, the owner policy (006)
+internal/secrets/       envelope encryption of a Provider's credential under LUX_SECRETS_KEK (005)
 internal/api/           the /v1 control plane handlers and the OpenAPI document (011)
 internal/events/        the signed sink client and the journal (012)
 internal/reqlog/        the request log, what it redacts, and the archive exporter (012)
 internal/store/         manifests, key material, budgets, usage, and the journal; memory, Postgres, and the read-only file mode (010)
 internal/serve/         the serve role of luxd: wiring of the API, the gateway, the store, and the webhook clients (011)
 internal/check/         the check role of luxd (017)
+internal/rewrap/        the rewrap role of luxd (005)
 internal/tunnel/        the reverse tunnel a local runtime connects out over, and the registry of serving nodes (013)
 internal/luxcli/        the lux command: flags, defaults, exit codes (014)
 internal/luxclient/     the client of the /v1 API the command speaks (014)
@@ -70,7 +72,7 @@ test/e2e/               luxd as a process against the stubs (integration build t
 test/conformance/       the contract as an importable test package (018)
 test/stubs/             the stub providers, issuer, authorizer, and sink (015)
 tools/                  generators and release scripts (002, 017)
-deploy/                 kustomize base, examples, bootstrap (017)
+deploy/                 kustomize base, overlays, components, bootstrap (017); examples (015)
 skills/lux/             the skill that teaches an agent the lux command (014)
 docs/                   for people who run luxd or build against it
 specs/                  this deck
@@ -131,7 +133,7 @@ role by its args. Each role is a package under `internal/` with its own
 dependency allow list in the gate, so the binary carrying every role
 does not loosen what any one role may reach. An unknown subcommand is a
 usage error, exit 2. `check` and `rewrap` are unknown subcommands until their specs
-lands.
+land.
 
 ### Configuration
 
@@ -140,38 +142,39 @@ which collects every problem and fails with one message
 `configuration: <problem>; <problem>; ...` sorted by variable name. A
 blank value is unset. An unknown variable is never an error, so a
 deployment that sets one before its spec lands is not refused. Variables
-the test suites read, `LUX_TEST_URL`, `LUX_TEST_TOKEN`, and
-`LUX_TEST_STUBS_URL`, and the `lux` command's own, are not the
-server's and live in the tables of [[018-conformance-suite]] and
-[[014-agent-client]].
+the test suites read, the `LUX_TEST_*` family, the ones a CI job
+reads, the `LUX_INSTALL_*` family, and the `lux` command's own, are
+not the server's and live in the tables of [[018-conformance-suite]],
+[[017-release-and-installation]], and [[014-agent-client]].
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `LUX_PUBLIC_ADDR`, `LUX_INTERNAL_ADDR` | no | `:8080`, `:8081` | listen addresses; a test binds `127.0.0.1:0`; the two must differ unless both ask for port 0 |
-| `LUX_PUBLIC_URL` | yes, from 006 | none | the absolute URL callers reach the public listener at; the base of every URL in a response |
+| `LUX_PUBLIC_URL` | yes, from 011 | none | the absolute URL callers reach the public listener at; the base of every URL in a response |
 | `LUX_MANIFEST_DIR` | 010 | unset | a directory of manifests read at start: file mode, where desired state comes from disk and the kinds it declares are read-only through the API |
+| the variables a file-mode manifest names in `credential.valueFrom.env` or `Key.spec.valueFrom.env` | 003, 010 | none | the operator's own names, outside the `LUX_` namespace, read once at start in file mode and refused in server mode |
 | `LUX_DB_URL`, `LUX_DB_MAX_CONNS` | 010 | unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory |
-| `LUX_SECRETS_KEK` | yes when a Provider credential is stored, from 005 | none | one or more 32-byte keys, base64, comma separated; the first wraps every new data key, every key is tried to open one, so rotation is prepending a key and running `luxd rewrap` |
+| `LUX_SECRETS_KEK` | yes for `serve` and `rewrap`, except in file mode, from 005 | none | one to eight 32-byte keys, standard base64, comma separated; the first wraps every new data key, every key is tried to open one, so rotation is prepending a key and running `luxd rewrap` |
 | `LUX_OIDC_ISSUERS` | yes, from 006 | none | comma separated issuer URLs whose tokens are accepted on the control plane |
 | `LUX_OIDC_AUDIENCE` | 006 | `lux` | the audience a caller token must contain |
 | `LUX_OIDC_INSECURE_ISSUERS` | 006 | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | 006 | unset | the operator's authorization endpoint and the bearer luxd sends it; unset selects the built-in owner policy; the URL without the token is a start-up failure |
-| `LUX_AUTHORIZER_TIMEOUT`, `LUX_AUTHORIZER_CACHE` | 006 | `3s`, `10s` | one decision's deadline and how long it is cached per subject, action, and resource |
+| `LUX_AUTHORIZER_TIMEOUT` | 006 | `5s` | one decision's deadline, the retry included; the cache times are the shared contract's (`latere.ai/x/pkg/authz`): an allow for the answer's `ttl`, default 60 s and at most 600 s, a deny for 5 s, and no variable changes them |
 | `LUX_ADMIN_SUBJECTS` | 006 | unset | comma separated subjects the built-in owner policy lets act on every object; read and unused when an authorizer is set |
 | `LUX_KEY_CACHE` | 007 | `10s` | how long a Key lookup is cached per replica on the data plane |
 | `LUX_DEFAULT_REQUESTS_PER_MINUTE`, `LUX_DEFAULT_TOKENS_PER_MINUTE` | 007 | `0`, `0` | the limits a Key gets when it names none; `0` is no limit |
 | `LUX_UPSTREAM_TIMEOUT` | 004 | `10m` | the deadline of one upstream request including its stream |
 | `LUX_UPSTREAM_ALLOW_PRIVATE` | 005 | unset | `1` lets a Provider base URL name a loopback or private address, for a model served on the operator's own machine |
-| `LUX_MAX_BODY_BYTES` | 004 | `64Mi` | the largest data-plane request body accepted |
+| `LUX_MAX_BODY_BYTES` | 004 | `64Mi` | the largest data-plane request body accepted, and the cap on an upstream body the gateway reads whole (005) |
 | `LUX_DISCOVERY_INTERVAL`, `LUX_HEALTH_INTERVAL` | 005 | `1h`, `30s` | how often a Provider's model list is refreshed and its health probed |
 | `LUX_METERING_FLUSH` | 009 | `1s` | how often a replica's usage deltas are written to the store |
 | `LUX_EVENTS_URL`, `LUX_EVENTS_SECRET` | 012 | unset | the event sink and the HMAC key; events are off when the URL is unset; the URL without the secret is a start-up failure |
 | `LUX_REQUESTLOG_EXPORTER` | 012 | `none` | where the request log is archived: `none` or `s3` |
-| `LUX_S3_ENDPOINT`, `LUX_S3_REGION`, `LUX_S3_BUCKET`, `LUX_S3_ACCESS_KEY`, `LUX_S3_SECRET_KEY`, `LUX_S3_PREFIX` | 012 | unset, prefix `lux/` | the request-log archive; the bucket is required when the exporter is `s3` |
+| `LUX_S3_ENDPOINT`, `LUX_S3_REGION`, `LUX_S3_BUCKET`, `LUX_S3_ACCESS_KEY`, `LUX_S3_SECRET_KEY`, `LUX_S3_PREFIX` | 012 | unset; region `us-east-1`, prefix `lux/` | the request-log archive; the endpoint, the bucket, the access key, and the secret key are required when the exporter is `s3`, and there is no default endpoint and no credential chain |
 | `LUX_REQUESTS_PER_MINUTE`, `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` | 011 | `600`, `60` | control-plane requests one subject, and one client address before authentication, may send in a minute |
 | `LUX_MAX_MANIFEST_BYTES` | 011 | `65536` | the largest manifest or JSON body accepted on the control plane |
 | `LUX_TUNNEL_ENABLED`, `LUX_TUNNEL_REGISTRY_TTL` | 013 | unset, `30s` | the reverse tunnel for local runtimes, and the liveness window of a serving node in the registry |
-| `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearer on the forward route; unset serves a tunnelled Provider on the holding replica only; the address without the secret is a start-up failure |
+| `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearers on the forward route, a comma separated list of which the first is sent and every one is accepted, so a rotation is prepending; unset serves a tunnelled Provider on the holding replica only; the address without the secret is a start-up failure |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_*` | 019 | unset | the standard OpenTelemetry exporter variables, read by `latere.ai/x/pkg/otel`; telemetry is off without the endpoint |
 
 ### The gate
@@ -198,8 +201,9 @@ markers, checked by a test in that spec.
 
 ### Workflows
 
-`verify.yml` runs on every push to `main`, every pull request, every
-tag, and on demand: the `gate` job calls
+`verify.yml` runs on every push to `main`, every pull request, and on
+demand; on a tag it triggers and every job skips, because the release
+pipeline of [[017-release-and-installation]] owns tags: the `gate` job calls
 `latere-ai/ci/.github/workflows/lateregate.yml@v1` on hosted runners,
 `tidy` checks `go mod tidy -diff`, and `image` builds the developer
 image and asks it for its version. The tiers that need a provider

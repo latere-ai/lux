@@ -43,6 +43,16 @@ paths. Credentials sit in a column encrypted under one process-wide key
 with no rotation path. Health is inferred from a counter that no
 request path reads.
 
+Env-sourced credentials, which the hosted plane reads at request time
+in every mode so that a rotation is a restart and no database write,
+exist here in file mode only (`credential.valueFrom.env`,
+[[003-manifest-contract]]); in server mode a rotation is one `PUT`
+carrying the new value, and `luxd rewrap` covers the key that wraps it.
+The hosted plane's credential check at create, one request against the
+provider before the row is written, becomes the first health probe,
+whose `credential refused` result is visible within
+`LUX_HEALTH_INTERVAL`.
+
 ## Design
 
 ### Dialects and the routes they serve
@@ -105,6 +115,13 @@ through a translating proxy of its own declared as the `baseURL`, and
 a dialect for one of them is a new row in the dialect table with its
 own spec, not a new `scheme`. The core's `scheme` set is therefore
 `bearer` and `raw` and nothing else, on purpose.
+
+A Provider with no credential, neither `value` nor `valueFrom`, is
+valid ([[003-manifest-contract]]): the gateway injects no header toward
+it and strips a caller's copy of the dialect's credential header all
+the same, which is what a runtime on the operator's own network, an
+Ollama or a vLLM behind `LUX_UPSTREAM_ALLOW_PRIVATE`, needs.
+`status.credential.set` is then `false`.
 
 ### Credential custody
 
@@ -246,7 +263,7 @@ any request is.
 |---|---|---|---|
 | `openai` | `GET {baseURL}/models` | `data[].id` | none |
 | `anthropic` | `GET {baseURL}/models?limit=1000` | `data[].id` | while `has_more` is true, repeat with `after_id` set to `last_id` |
-| `gemini` | `GET {baseURL}/models?pageSize=1000` | `models[].name`, with the leading `models/` removed | while `nextPageToken` is present, repeat with `pageToken` |
+| `gemini` | `GET {baseURL}/models?pageSize=1000` | `models[].name`, with the leading `models/` removed, for an entry whose `supportedGenerationMethods` names `generateContent` or `embedContent`; an `embedContent`-only entry is discovered with `modalities.output: [embedding]`, and every other entry is skipped | while `nextPageToken` is present, repeat with `pageToken` |
 | `lux` | `GET {baseURL}/models` | `data[].id` | none |
 
 A list follows at most 20 pages; a longer one is a failed list. Every
@@ -337,7 +354,10 @@ What the signal means:
 - `Model.status.available` is true when at least one of the Model's
   targets names a Provider that is not `Unreachable`, and
   `Model.status.targets[].health` is that Provider's published state.
-  Both are written by the replica holding the `health` lease.
+  Both are written by the replica holding the `health` lease, which
+  also raises `provider.unreachable` and `provider.healthy` at the two
+  transitions, once per transition across replicas
+  ([[012-request-log-and-events]]).
 - `health.mode: none` never makes a target unavailable, which is what
   an upstream with no model list and no error convention needs.
 

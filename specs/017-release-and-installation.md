@@ -338,7 +338,7 @@ a colleague gets.
 | event types and payloads ([[012-request-log-and-events]]) | nothing | add a type or a `data` member | remove a type or a member |
 | the usage record ([[009-usage-and-metering]]) | nothing | add a field | remove or repurpose a field |
 | the exported packages ([[001-architecture]]) | nothing | add a function, a type, or a field | break a call site |
-| the store schema ([[010-state]]) | nothing | add a migration that an older binary in the same minor can still read | add one that it cannot |
+| the store schema ([[010-state]]) | nothing | add a migration that an older binary in the same major can still read | add one that it cannot |
 
 A cost computed from one pricing is computed the same by every later
 build, at every level, because a bill that changes under a patch is not
@@ -354,9 +354,10 @@ must be readable by the previous minor's binary: a rollback inside a
 minor series is `kubectl rollout undo` and nothing else.
 
 Across a major, `docs/upgrades/<major>.md` says what to verify, in what
-order, and what cannot be undone. A binary that finds a schema version
-above its own refuses to start naming both ([[010-state]]), rather than
-running against a schema it does not know.
+order, and what cannot be undone. A binary that finds a schema of
+another major refuses to start naming both ([[010-state]]); one that
+finds a newer schema of its own major warns and serves, which is what
+lets `kubectl rollout undo` work.
 
 A KEK rotation is not an upgrade and has its own sequence: deploy with
 `LUX_SECRETS_KEK=new,old`, run `luxd rewrap`, deploy with

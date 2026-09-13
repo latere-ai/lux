@@ -195,7 +195,9 @@ type Page struct {
 // The value itself is never stored in any form but this hash, the
 // SHA-256 of the value's exact bytes as 64 lower-case hex characters
 // (007), whether the value was minted or supplied. Put on a key id
-// that already has a hash replaces it, which is a rotation.
+// that already has a hash replaces it, which is a rotation; a hash
+// registered to another key id is ErrHashTaken, and the API calls Put
+// inside the Transact that writes the Key, so a create is atomic (007).
 type Keys interface {
 	Put(ctx context.Context, keyID, hash string) error
 	ByHash(ctx context.Context, hash string) (keyID string, err error) // ErrNotFound
@@ -309,8 +311,10 @@ other's members.
 | `Budget` | | `state`, `spent`, `remaining`, `resetsAt`, `keys` ([[007-keys-and-limits]]) |
 
 Errors the interface names: `ErrNotFound`, `ErrVersionConflict`,
-`ErrNameTaken`, `ErrReadOnly`, `ErrInvalidCursor`, `ErrNested`. The
-first four are the ones [[011-api]] maps to a code; `ErrInvalidCursor`
+`ErrNameTaken`, `ErrHashTaken`, `ErrReadOnly`, `ErrInvalidCursor`,
+`ErrNested`. The first five are the ones [[011-api]] maps to a code,
+`ErrHashTaken` to `invalid_field` at `spec.value` with a detail that
+names no Key ([[007-keys-and-limits]]); `ErrInvalidCursor`
 is `invalid_field` at `cursor` there, and `ErrNested` is a programming
 error a test catches. A name is unique per kind in one installation
 among objects that are not deleted ([[003-manifest-contract]]), which
@@ -556,7 +560,7 @@ The mode's other rules:
 | Variable | Default | Rule |
 |---|---|---|
 | `LUX_MANIFEST_DIR` | none | a readable directory; sets the file mode; a configuration error with `LUX_DB_URL` |
-| `LUX_DB_URL` | none | a `postgres://` URL; absent is the memory store |
+| `LUX_DB_URL` | none | a `postgres://` URL, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store |
 | `LUX_DB_MAX_CONNS` | `8` | an integer, at least 1, at most 100; read only with `LUX_DB_URL` |
 
 The three are in [[002-repository-scaffold]]'s table with this spec as

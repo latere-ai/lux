@@ -179,7 +179,7 @@ and `luxd` never sends it, because a data plane request asks nothing.
 | `budget.read`, `.update`, `.delete` | `{"kind": "Budget", "id", "name", "owner", "labels"}` |
 | `budget.list` | `{"kind": "Budget"}`; `filter` applies |
 | `budget.draw` | the Budget as above; asked at Key resolve through `Lookup.Budget` |
-| `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query; the response's `filter` narrows the aggregation ([[009-usage-and-metering]]) |
+| `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
 
 Response, 200:
 
@@ -419,3 +419,4 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 | `LUX_AUTHORIZER_TOKEN` is sent as the bearer of every authorizer call and never as a bearer to any other endpoint; the issuer's and the sink's requests carry other credentials | `TestAuthorizerTokenStaysOnItsEndpoint`, over the e2e capture | not built |
 | During one thousand data plane requests with the stub authorizer and issuer wired, both receive zero calls | [[001-architecture]]'s `TestHotPathDialsNoWebhook` | not built |
 | A read of a Provider through any route or event returns no credential value | [[005-providers]]'s `TestProviderCredentialNeverLeavesTheGateway` | not built |
+| With an authorizer set, a subject listed in `LUX_ADMIN_SUBJECTS` receives no allow the authorizer did not give: the variable is read, reported as unused at start, and consulted by no decision | `TestAdminSubjectsIgnoredUnderAnAuthorizer` | not built |
