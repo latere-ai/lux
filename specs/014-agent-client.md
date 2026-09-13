@@ -8,7 +8,7 @@ depends_on:
 affects: [cmd/lux/, internal/luxcli/, internal/luxclient/, skills/lux/, docs/cli.md, .lateregate.yaml]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -56,12 +56,27 @@ API in one file.
 | `LUX_TOKEN_FILE` | `--token-file` | a file holding the same, read per request rather than once, so a token a process refreshes on disk is picked up by a long `lux serve` |
 | `LUX_KEY` | `--key` | a Key value; the credential of the door commands, `lux models` today |
 
-Nothing else is read from the environment: no configuration file, no
-login, no cached credential. A token comes from the caller's issuer,
-which is the one place [[006-identity]] says a person's credential
-comes from, and this command mints none. `LUX_TOKEN` and
-`LUX_TOKEN_FILE` together is a usage error; neither, on a `/v1`
-command, is a usage error naming both.
+`LUX_BASE_URL` and `LUX_API_KEY` are read as fallbacks for `LUX_URL`
+and `LUX_KEY` on a door command, and for nothing else. They are
+`latere.ai/x/pkg/luxsdk`'s own `EnvBaseURL` and `EnvAPIKey`, the two
+variables a program that already calls a door through that client has
+set; a shell that exported them for an SDK does not export two more for
+this command. `LUX_URL` and `LUX_KEY` win where both are set. Nothing
+else is read from the environment: no configuration file, no cached
+credential, no profile.
+
+There is no `lux login` and no device grant. A token comes from the
+caller's own issuer, which is the one place [[006-identity]] says a
+person's credential comes from, and this command mints none, so the
+binary embeds no issuer URL, no client id, and no audience, which is
+[[001-architecture]]'s invariant 8 applied to the one artifact a person
+downloads. A person gets a token the way that issuer gives one out, an
+`oidc` helper, a platform's own command, or a client credentials grant
+in a script, and puts it in `LUX_TOKEN`; a token that a helper
+refreshes on disk goes in `LUX_TOKEN_FILE`, which is read per request
+so a long `lux serve` picks the new one up without a restart.
+`LUX_TOKEN` and `LUX_TOKEN_FILE` together is a usage error; neither, on
+a `/v1` command, is a usage error naming both.
 
 The two credentials never cross planes. A `/v1` command with `LUX_KEY`
 and no token is a usage error rather than a request, because the
@@ -80,7 +95,7 @@ addresses it, so a Model's two-segment name works unescaped.
 |---|---|---|
 | `lux apply -f <file>... [--credential-from-env NAME] [--if-match <version>]` | `PUT /v1/{kind}s/{name}` per document | the kind and the name come from the document; several files and several YAML documents apply in file order, and the first refusal stops the run |
 | `lux get <kind> <name>` | `GET /v1/{kind}s/{name}` | one object with its `status` |
-| `lux list <kind> [-l k=v]... [--owner s] [--source s] [--provider p] [--limit n]` | `GET /v1/{kind}s` | follows `next` to the end unless `--limit` stops it |
+| `lux list <kind> [-l k=v]... [--owner s] [--source s] [--provider p] [--limit n]` | `GET /v1/{kind}s` | the selectors are [[011-api]]'s; the command follows `next` to the end and prints one envelope, stopping after `--limit` items, which is a count of items and not the page size the route takes |
 | `lux delete <kind> <name> [--if-match <version>]` | `DELETE /v1/{kind}s/{name}` | prints nothing on success |
 | `lux keys rotate <name>` | `POST /v1/keys/{name}/rotate` | prints the new value once |
 | `lux usage [--key k]... [--model m]... [--provider p]... [--owner s]... [--since d] [--from t] [--to t] [--by d]... [--interval i] [--label k=v]...` | `GET /v1/usage` | `--since 24h` is `--from now-24h`; the parameters are [[009-usage-and-metering]]'s |
@@ -90,14 +105,28 @@ addresses it, so a Model's two-segment name works unescaped.
 | `lux whoami` | `GET /v1/self` | the subject, the claims, the policy, and the limits this server holds |
 
 `lux -version` prints `lux <version> (<commit>, <date>)` and exits 0,
-the shape `luxd -version` prints ([[002-repository-scaffold]]). The
-first argument without a leading dash selects the command; an unknown
-one is a usage error.
+the shape `luxd -version` prints ([[002-repository-scaffold]]), and
+`lux -help`, with no command or after one, prints that command's usage
+and exits 0. Flags are the standard library's, one dash or two, because
+the binary carries no command line framework. The first argument
+without a leading dash selects the command; an unknown one is a usage
+error.
 
 There is no `lux create`, no `lux edit`, and no `lux patch`. Apply is
 create-or-update on the server ([[011-api]]), so one verb covers both,
 and the loop for a change is `lux get`, edit the file, `lux apply`,
 which closes because `status` in an applied manifest is ignored.
+
+There is no `lux check` either: verifying an installation is the
+server's own `luxd check`, which reaches the store, the KEK, and the
+operator's endpoints that no client can see
+([[017-release-and-installation]]). There is no `lux env` printing an
+SDK's variables and no `lux invoke` sending a prompt: a door **is** an
+SDK base URL and a Key **is** its api key, so the two variables a
+caller exports are its SDK's own, and the program that sends the prompt
+is the caller's SDK or `latere.ai/x/pkg/luxsdk`. A command that wrapped
+either would be a second, smaller client of the doors that the
+conformance suite would then have to prove.
 
 #### Flag forms
 
@@ -259,22 +288,36 @@ decoded value so `-o json` can print what arrived.
 
 `internal/luxclient` is not exported, for one reason that has a
 timeline attached. `latere.ai/x/pkg/luxsdk` is the data plane client a
-program already has: it speaks the lux dialect against a door with a
-Key, which is what a workload needs. The control plane client has one
-consumer, this command, and [[011-api]] serves an OpenAPI document a
-platform generates its own client from. A package with one consumer
-inside the repository belongs in `internal/` ([`CONTRIBUTING.md`]); it
-moves to the module root when a second consumer appears, which is the
-same rule every other package here follows.
+program already has: it `POST`s the lux dialect to `/lux/v1/generate`
+with a Key in `Authorization: Bearer`, which is exactly what a workload
+needs and is a door of [[004-request-path]], not a `/v1` route. The two
+clients therefore do not overlap: that one holds a Key and speaks one
+door, this one holds an issuer token and speaks the whole control
+plane, and neither can do the other's work, which is the plane boundary
+[[006-identity]] draws expressed as two packages. The control plane
+client has one consumer, this command, and [[011-api]] serves an
+OpenAPI document a platform generates its own client from. A package
+with one consumer inside the repository belongs in `internal/`
+([`CONTRIBUTING.md`]); it moves to the module root when a second
+consumer appears, which is the same rule every other package here
+follows. `luxsdk` is not in this command's build list: the one door
+command, `lux models`, is a `GET` this client already makes.
 
 The build list of `./cmd/lux` is the standard library,
 `latere.ai/x/pkg/httpjson` for the error envelope, and this module's
 own `manifest` and `manifest/v1`, which reach only the standard library
-([[003-manifest-contract]]). No HTTP client library, no command line
-framework, no YAML library of the command's own, no store driver, no
-identity library, no provider SDK. The `depcheck` gate holds the list
-as a row for `./cmd/lux` beside the one for `./cmd/luxd`
-([[002-repository-scaffold]]).
+([[003-manifest-contract]]). [[001-architecture]]'s dependency
+paragraph names the first two; the schema packages are this module's
+own and pull in nothing, so the binary still carries exactly one
+third-party dependency, and this spec is where that row is written
+down. No HTTP client library, no command line framework, no YAML
+library of the command's own, no multiplexer and no WebSocket codec for
+`lux serve`, whose transport is `net/http`'s HTTP/2
+([[013-tunnelled-runtimes]]), no store driver, no identity library, no
+provider SDK, and no OpenTelemetry SDK: the command is a person's
+process and exports nothing. The `depcheck` gate holds the list as a
+row for `./cmd/lux` in `.lateregate.yaml` beside the one for
+`./cmd/luxd` ([[002-repository-scaffold]]).
 
 `lux apply` decodes with `manifest.Decode`, the same function the
 server decodes with. A second decoder in the client would be a second
@@ -286,10 +329,15 @@ to the server as written and the resolved object comes back.
 
 ### The skill and the document
 
-`skills/lux/SKILL.md` carries `name` and `description` frontmatter, the
-resident cost, and a body that teaches an agent: the two variables, a
-minimal manifest per kind, `apply`, `get`, `list`, `models`, `usage`,
-the three exit codes, and how to read a refusal with and without `-v`.
+`skills/lux/SKILL.md` is one file at `skills/<name>/SKILL.md` whose
+frontmatter is exactly two keys, `name: lux` and one `description`
+sentence saying what the command is for. Nothing else is in the
+frontmatter, because an agent harness reads those two keys to decide
+whether to load the file at all, and what it costs to keep resident is
+then the file's own length, which stays under 200 lines. The body teaches an agent: the two
+variables, a minimal manifest per kind, `apply`, `get`, `list`,
+`models`, `usage`, the three exit codes, and how to read a refusal with
+and without `-v`.
 It says in one sentence that `LUX_TOKEN` opens `/v1` and `LUX_KEY`
 opens a door, and that neither works on the other side, because that is
 the mistake an agent makes first.
@@ -300,7 +348,8 @@ and sends a request through a door, which is the agent case of
 [[018-conformance-suite]].
 
 `docs/cli.md` is the command table above in the user register, and a
-test holds it equal to the binary's `--help` output.
+test holds it equal to the binary's `-help` output, command by
+command.
 
 ## Not in this spec
 
@@ -327,9 +376,12 @@ this command speaks to ([[018-conformance-suite]]).
 | Every column in the table renders for each kind, a tunnelled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | not built |
 | A `/v1` command with only `LUX_KEY`, a door command with only `LUX_TOKEN`, and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | not built |
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | not built |
+| A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command | `TestSDKVariableFallbacks` | not built |
+| The binary contains no issuer URL, no OAuth client id, and no audience string, and no command performs a token exchange of any kind | `TestClientEmbedsNoIssuer`, over `go list -deps` and the string table of `out/lux` | not built |
 | With `HTTPS_PROXY` set to a refusing address the command fails to reach the server and exits 1, and with it unset it reaches it | `TestClientHonoursProxyVariables` | not built |
 | Each `create` flag form builds the manifest the table says, applies it through `PUT`, and prints it under `--dry-run` without a request; the manifest `lux keys create` builds resolves identically to the equivalent file | `TestFlagFormsBuildTheManifest`, `TestDryRunAppliesNothing` | not built |
 | `lux serve` applies the Provider its flags describe, reconnects with backoff across a gateway restart, exits 1 on a close reason a retry cannot fix, and closes cleanly on `SIGTERM` | `TestServeFlags`, `TestServeReconnects`, [[013-tunnelled-runtimes]]'s `TestCleanDisconnectIsImmediate` | not built |
+| `skills/lux/SKILL.md` parses with frontmatter of exactly `name` and `description`, and every command and flag it names is in the table above | `TestSkillFrontmatter`, `TestSkillNamesOnlyRealCommands` | not built |
 | An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | not built |
-| `docs/cli.md` equals the binary's `--help` for every command | `TestCLIDocIsCurrent` | not built |
-| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, and this module's `manifest` and `manifest/v1` | the `depcheck` gate | not built |
+| `docs/cli.md` equals the binary's `-help` output for every command in the table, and `lux -help` and `lux -version` each exit 0 | `TestCLIDocIsCurrent`, `TestHelpAndVersionExitZero` | not built |
+| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, and this module's `manifest` and `manifest/v1`, `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | not built |
