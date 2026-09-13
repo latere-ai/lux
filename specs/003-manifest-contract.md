@@ -319,8 +319,11 @@ Shared rules:
 
 ### Decoding
 
-`Decode(body []byte, contentType string) (v1.Object, error)`, shared by
-every kind.
+`Decode(body []byte, contentType string, hint Hint) (v1.Object, error)`,
+shared by every kind. `Hint{APIVersion, Kind, Name string}` is what the
+surface already knows: the API fills it from the route (`PUT
+/v1/keys/run-42` means `lux.latere.ai/v1beta1`, `Key`, `run-42`), the
+file mode and the `lux` command leave it empty.
 
 - Content types: `application/json`; `application/yaml`,
   `application/x-yaml`, `text/yaml`. Anything else is
@@ -328,6 +331,13 @@ every kind.
   type is decoded as JSON.
 - YAML is one document. A second document is `multi_document`.
 - Unknown fields anywhere are `unknown_field` with the path.
+- `apiVersion`, `kind`, and `metadata.name` absent from the body take
+  the hint's values, so a body of `{"spec": {...}}` on a kind's route is
+  a complete manifest and the ceremony of the envelope is the route's,
+  not the caller's. A field present in the body and different from the
+  hint is refused: `unsupported_version`, `unsupported_kind`, or
+  `invalid_field` at `metadata.name`. Without a hint all three are
+  required, `apiVersion` and `kind` by `missing_field`.
 - `apiVersion` other than `lux.latere.ai/v1beta1` is
   `unsupported_version`; an unknown `kind` is `unsupported_kind`. Both
   are checked before anything else, so a caller learns the version
@@ -520,6 +530,7 @@ where `Defaults` come from ([[002-repository-scaffold]]) and `Limits`
 | The four examples above decode from YAML and from their JSON forms to equal objects, and resolve without error under options where the actor sees the providers and the budget they name | `TestDecodeYAMLAndJSONAgree`, `TestTheExamplesResolve` | not built |
 | Every unknown field, at any depth in every kind, is refused with its path | `TestUnknownFieldNamesThePath`, table-driven over twenty paths | not built |
 | A second YAML document, a wrong version, a wrong kind, and an unsupported content type are refused with their codes, version before kind | `TestDecodeRefusals` | not built |
+| A body of `spec` alone decodes under a hint to the hinted version, kind, and name, byte-identical to the full envelope's result; a body whose envelope disagrees with the hint is refused with the field's code; without a hint the envelope is required | `TestHintFillsTheEnvelope`, `TestHintDisagreementIsRefused` | not built |
 | An alias chain past 1 MiB and nesting past 64 levels are each refused in under 100 ms | `TestYAMLLimits` | not built |
 | Every syntax rule in the field tables has a refusing case: the three name rules, money, window, glob, duration, RFC 3339, ISO 4217, header names, ranges of weight, priority, per, concurrency, timeout | `TestFieldSyntax`, table-driven | not built |
 | Every default in the tables is applied and returned; a field the caller set is never overwritten; the credential header and scheme follow the dialect; `expiresAt` is `Now` plus `ttl`; an absent name comes from `NewName` | `TestDefaultsFillOnlyAbsentFields`, `TestDialectDefaults`, `TestNameGeneration` | not built |
