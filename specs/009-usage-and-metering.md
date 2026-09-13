@@ -1,6 +1,6 @@
 ---
 title: "Usage and metering: the record, cost, windows, the usage API, the multi-replica rule"
-status: drafted
+status: validated
 track: core
 depends_on:
   - specs/003-manifest-contract.md

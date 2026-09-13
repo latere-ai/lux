@@ -48,26 +48,26 @@ later.
 
 | # | Spec | Effort | Status | Builds on |
 |---|---|---|---|---|
-| [001](001-architecture.md) | Architecture: two planes, the kinds, the packages, extension points, invariants | medium | drafted | - |
+| [001](001-architecture.md) | Architecture: two planes, the kinds, the packages, extension points, invariants | medium | validated | - |
 | [002](002-repository-scaffold.md) | Repository scaffold: module, binary, configuration, quality gate, images, workflows | small | complete | 001 |
-| [003](003-manifest-contract.md) | Manifest contract: the four kinds, decoding, validation, defaulting, resolve | large | drafted | 001 |
-| [004](004-request-path.md) | Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors | large | drafted | 001, 003 |
-| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | drafted | 001, 003 |
-| [006](006-identity.md) | Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy | medium | drafted | 001, 002, 003 |
-| [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | drafted | 003, 004, 006 |
-| [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | drafted | 003, 005 |
-| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | drafted | 003, 007, 008 |
-| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | drafted | 003, 005, 007, 009 |
-| [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | drafted | 003, 004, 006, 007, 010 |
-| [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | drafted | 006, 009, 010 |
-| [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | drafted | 004, 005 |
-| [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | drafted | 003, 011 |
-| [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | drafted | 002, 005, 006, 012 |
-| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | drafted | 001, 004, 006, 007 |
-| [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | drafted | 002, 015, 018 |
-| [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | drafted | 003, 004, 011 |
-| [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | drafted | 002, 004, 009 |
-| [020](020-building-a-plane.md) | Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access | small | drafted | 001, 004, 006, 018 |
+| [003](003-manifest-contract.md) | Manifest contract: the four kinds, decoding, validation, defaulting, resolve | large | validated | 001 |
+| [004](004-request-path.md) | Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors | large | validated | 001, 003 |
+| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | validated | 001, 003 |
+| [006](006-identity.md) | Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy | medium | validated | 001, 002, 003 |
+| [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | validated | 003, 004, 006 |
+| [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | validated | 003, 005 |
+| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | validated | 003, 007, 008 |
+| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | validated | 003, 005, 007, 009 |
+| [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | validated | 003, 004, 006, 007, 010 |
+| [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | validated | 006, 009, 010 |
+| [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | validated | 004, 005 |
+| [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | validated | 003, 011 |
+| [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | validated | 002, 005, 006, 012 |
+| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | validated | 001, 004, 006, 007 |
+| [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | validated | 002, 015, 018 |
+| [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | validated | 003, 004, 011 |
+| [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | validated | 002, 004, 009 |
+| [020](020-building-a-plane.md) | Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access | small | validated | 001, 004, 006, 018 |
 
 ## Dependency graph
 

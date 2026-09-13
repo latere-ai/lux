@@ -1,6 +1,6 @@
 ---
 title: "Observability: metrics, traces, logs, alerts"
-status: drafted
+status: validated
 track: core
 depends_on:
   - specs/002-repository-scaffold.md

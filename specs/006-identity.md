@@ -1,6 +1,6 @@
 ---
 title: "Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy"
-status: drafted
+status: validated
 track: core
 depends_on:
   - specs/001-architecture.md

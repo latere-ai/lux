@@ -1,6 +1,6 @@
 ---
 title: "Architecture: two planes, the kinds, the packages, extension points, invariants"
-status: drafted
+status: validated
 track: core
 depends_on: []
 affects: [manifest/, gateway/, metering/, internal/, cmd/luxd/, cmd/lux/, docs/]

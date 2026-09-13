@@ -1,6 +1,6 @@
 ---
 title: "Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades"
-status: drafted
+status: validated
 track: core
 depends_on:
   - specs/002-repository-scaffold.md

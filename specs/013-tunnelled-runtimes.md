@@ -1,6 +1,6 @@
 ---
 title: "Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel"
-status: drafted
+status: validated
 track: core
 depends_on:
   - specs/004-request-path.md
