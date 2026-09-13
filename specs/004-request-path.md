@@ -8,7 +8,7 @@ depends_on:
 affects: [gateway/, internal/serve/, docs/]
 effort: large
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -41,9 +41,22 @@ interface to what surrounds it. Target selection is
 Nothing is built. The hosted gateway this design is extracted from has
 a per-provider passthrough route where the path names the provider,
 and a separate compatibility surface where the path names the dialect
-and the body's model decides the provider, with two code paths, two
-error shapes, and two ways of reading usage. This design has one path
-and the door names the dialect only.
+and the body's model decides the provider, with two code paths, three
+error shapes, and two ways of reading usage. Its eight providers speak
+three wire dialects, so this design's four cover them: every provider
+that is not Anthropic or Gemini is an `openai` dialect Provider with its
+own base URL. What this design keeps from it is named where it applies:
+the three credential headers a Key is read from, the header set removed
+before forwarding, the injection of `stream_options.include_usage` on
+an OpenAI-dialect stream, the retry set, the loss report as a response
+header, and the estimate that answers a token count no upstream can.
+What it changes deliberately: one path where the door names the dialect
+only; the upstream's status and body never become the caller's; the
+gateway's own request id, `User-Agent`, and upstream timeout; no
+redirect is followed on any route; and a Gemini model reaches other
+doors through Google's OpenAI-compatible endpoint declared as an
+`openai` Provider rather than through a codec the translation library
+does not have.
 
 ## Design
 
@@ -71,13 +84,14 @@ what the gateway does with each path. Three route classes:
 | `/openai` | `GET /v1/models`, `GET /v1/models/{model}` | served by the gateway: the Models the Key may use, in this dialect's list shape; never forwarded | path |
 | `/openai` | any other path under `/v1/` | opaque | none |
 | `/anthropic` | `POST /v1/messages` | translated, `anthropic` | body `model` |
-| `/anthropic` | `POST /v1/messages/count_tokens` | model | body `model` |
+| `/anthropic` | `POST /v1/messages/count_tokens` | model toward an `anthropic` target; toward any other dialect, served by the gateway from the estimate below | body `model` |
 | `/anthropic` | `GET /v1/models`, `GET /v1/models/{model}` | served by the gateway | path |
 | `/anthropic` | any other path under `/v1/` | opaque | none |
 | `/gemini` | `POST /v1beta/models/{model}:generateContent`, `:streamGenerateContent`, `:countTokens`, `:embedContent` | model | path |
 | `/gemini` | `GET /v1beta/models`, `GET /v1beta/models/{model}` | served by the gateway | path |
 | `/gemini` | any other path under `/v1beta/` or `/v1/` | opaque | none |
 | `/lux` | `POST /v1/generate` | translated, `lux` | body `model` |
+| `/lux` | `POST /v1/count_tokens` | served by the gateway: the lux body is decoded and forwarded to an `anthropic` target's count route re-encoded, or answered from the estimate below | body `model` |
 | `/lux` | `GET /v1/models`, `GET /v1/models/{model}` | served by the gateway | path |
 
 A path under a door that is not under the dialect's version prefix, a
@@ -86,7 +100,29 @@ anything outside the four doors is `not_found`, 404, in the door's
 envelope. `GET /v1/models` on a door lists the Models whose names match
 one of the Key's selectors now and whose `status.available` is true,
 so an SDK's model picker shows what the Key can call; a declared and a
-discovered Model appear the same way.
+discovered Model appear the same way. The list is in the dialect's own
+shape, exactly:
+
+| Door | List body |
+|---|---|
+| `/openai`, `/lux` | `{"object": "list", "data": [{"id": "<name>", "object": "model", "created": 0, "owned_by": "lux"}]}` |
+| `/anthropic` | `{"data": [{"type": "model", "id": "<name>", "display_name": "<name>", "created_at": "1970-01-01T00:00:00Z"}], "has_more": false, "first_id": "<first>", "last_id": "<last>"}` |
+| `/gemini` | `{"models": [{"name": "models/<name>", "displayName": "<name>", "supportedGenerationMethods": ["generateContent", "countTokens"]}]}` |
+
+`GET .../models/{model}` is the one entry, or `model_not_found`;
+`model_not_allowed` when the Key's selectors do not match, so the list
+and the read agree. Names are sorted.
+
+A token count that no upstream answers, the `/anthropic` count route
+toward a non-`anthropic` target and the `/lux` count route toward one,
+is `{"input_tokens": <n>}` with `n` from
+`latere.ai/x/pkg/llmdialect/tokencount.Estimate` over the decoded
+request and the response header `Lux-Estimated: true`, so a caller can
+tell a heuristic from a tokenizer's answer. A count runs stages 1 to 7
+of the pipeline with a token reservation of zero, so it costs the Key
+one request from its rate window and nothing from its spend, then
+answers from the estimate or forwards as the table says; its record
+says `ok` with zero tokens and `priced: false`.
 
 ### The Key on a door
 
@@ -94,17 +130,24 @@ The credential is read from the first of these that is present, in
 this order: `Authorization: Bearer <value>`, `x-api-key`,
 `x-goog-api-key`, the query parameter `key`. Every door accepts every
 form, because each SDK has its own habit and a caller should not have
-to know which door likes which header. A value that does not begin
-with `lux_` is `unauthenticated`, 401, whatever it is: a provider's own
-key pasted by mistake, or an issuer token, never falls through to
-anything ([[006-identity]]). The query parameter and every credential
-header the caller sent are removed before forwarding; the provider sees
-only its own credential.
+to know which door likes which header. The query parameter and every
+credential header the caller sent are removed before forwarding; the
+provider sees only its own credential.
 
-The Key is looked up by the SHA-256 of its value, through the cache of
-[[007-keys-and-limits]]; an unknown hash is `unauthenticated`. The
-gateway never compares values, never stores one, and never logs one:
-the record and every log line carry `status.prefix` only.
+The Key is looked up by the SHA-256 of the value, whatever its shape,
+through the cache of [[007-keys-and-limits]]; an unknown hash is
+`unauthenticated`, 401. Nothing else is inspected: a minted value
+begins with `lux_`, a supplied value ([[007-keys-and-limits]]) is
+whatever string a platform registered, and the door cannot tell them
+apart and does not try. A provider's own key pasted by mistake, or an
+issuer token no platform registered as a Key, is an unknown hash and
+falls through to nothing ([[006-identity]]); an issuer token a platform
+did register opens the doors as that Key and as nothing more, which is
+the composition [[001-architecture]] describes. Unknown values are
+bounded per client address by `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE`
+([[011-api]]) before the store is asked. The gateway never compares
+values, never stores one, and never logs one: the record and every log
+line carry `status.prefix` only.
 
 ### The pipeline
 
@@ -127,29 +170,42 @@ flowchart TD
   B -. body_too_large .-> J
   C -. unauthenticated, key_disabled, key_expired .-> J
   D -. route_not_allowed .-> J
-  E -. model_not_found, model_not_allowed .-> J
+  E -. invalid_request, model_not_found, model_not_allowed .-> J
   F -. provider_unavailable, dialect_unsupported, provider_required .-> J
   G -. rate_limited, spend_exceeded, budget_exhausted, model_unpriced, currency_mismatch .-> J
-  H -. upstream_error, upstream_timeout .-> J
+  H -. invalid_request, provider_unavailable, upstream_error, upstream_rejected, upstream_timeout .-> J
 ```
 
 1. Route: the door, the class, and where the model name comes from,
    from the table. An unknown route is `not_found`.
 2. Body: a request body above `LUX_MAX_BODY_BYTES` (default `64Mi`) is
-   `body_too_large`, 413, read no further. A translated or model route
-   reads the whole body before forwarding, because it decodes it or
-   reads `model` from it; an opaque route streams the body through.
+   `body_too_large`, 413. A translated or model route reads the whole
+   body into memory before forwarding, because it decodes it or reads
+   `model` from it and may replay it to a second target, so the
+   variable also bounds what one such request holds; a body whose
+   `Content-Length` is above the limit is refused before a byte is
+   read, and one without a length is refused at the byte that crosses
+   it. An opaque route streams the body through and refuses the same
+   two ways, except that a chunked body crossing the limit after the
+   upstream has begun answering aborts the upstream request and ends
+   the response, because the refusal can no longer be written.
 3. Key: extracted and looked up as above. `status.state` `Disabled` is
    `key_disabled`; `Expired` is `key_expired`; both 403. `Exhausted` is
-   decided at stage 6 with the current window, not from the cached
+   decided at stage 7 with the current window, not from the cached
    state, so a window that has reset serves again at once.
 4. Class: an opaque route for a Key without `passthrough` is
    `route_not_allowed`, 403.
-5. Model: the name from the body or the path is resolved against the
-   catalog by exact name; an unknown name is `model_not_found`, 404. A
-   name that matches none of the Key's selectors under
-   `manifest.Match` is `model_not_allowed`, 403. An opaque route skips
-   this stage.
+5. Model: the name is read from the path, or from the body by a JSON
+   probe of its top-level `model` and `stream` members and the
+   dialect's output-token member, `max_tokens`,
+   `max_completion_tokens`, `max_output_tokens`, or
+   `generationConfig.maxOutputTokens`, which is also what
+   [[007-keys-and-limits]]'s reservation reads. A body that is not a
+   JSON object or has no string `model` is `invalid_request`, 400. The
+   name is resolved against the catalog by exact name; an unknown name
+   is `model_not_found`, 404. A name that matches none of the Key's
+   selectors under `manifest.Match` is `model_not_allowed`, 403. An
+   opaque route skips this stage.
 6. Target: [[008-routing-and-models]] selects a target, or answers
    `provider_unavailable`, 503, when none is reachable. The door's
    dialect against the target's decides the mode: equal is passthrough;
@@ -159,7 +215,10 @@ flowchart TD
    provider from the `Lux-Provider` header, by name, a Provider of the
    door's dialect that one of the Key's selectors reaches through some
    Model; without the header, the one such Provider when there is
-   exactly one; otherwise `provider_required`, 400.
+   exactly one; otherwise `provider_required`, 400. This stage precedes
+   the limits so that a refusal no retry can fix, and one that needs no
+   counter, is answered without touching a window: the counters are
+   debited only for a request that has somewhere to go.
 7. Limits: [[007-keys-and-limits]] answers in this order: the Key's
    rate windows, `rate_limited`, 429 with `Retry-After`; the Model's
    pricing against the Key's `allowUnpriced` under a spend limit or a
@@ -167,14 +226,28 @@ flowchart TD
    which is unpriced by construction; the Budget's currency against the
    Model's, `currency_mismatch`, 400; the Key's spend window,
    `spend_exceeded`, 429; the Budget's window, `budget_exhausted`, 429;
-   each with `Retry-After` naming the window's reset.
-8. Forward: the outbound request is built as below and sent through the
-   provider's client ([[005-providers]]) within the Provider's
-   `timeout`. A retryable failure before any response byte reached the
-   caller hands the request to the next target ([[008-routing-and-models]]).
-   The last failure is `upstream_error`, 502, with the upstream status
-   and its body's first 1 KiB in the developer detail, or
-   `upstream_timeout`, 504.
+   each with `Retry-After` naming the window's reset. The spend
+   estimate needs the Model's pricing, which is why this stage follows
+   stage 5 and not the reverse order [[001-architecture]]'s sketch
+   draws.
+8. Forward: on translation the body is decoded with the door's
+   `Frontend` and encoded with the target's `Backend`; a decode error
+   is `invalid_request`, 400, with the codec's message as the developer
+   detail, whatever its `RefusalScope`, because on this path the body
+   is only ever sent translated. On passthrough the body the probe read
+   is forwarded as below, undecoded, so a request the codec could not
+   read reaches a same-dialect target untouched and the target answers
+   for itself. The outbound request is sent through the provider's
+   client ([[005-providers]]) within the Provider's `timeout`. A
+   retryable failure before any response byte reached the caller hands
+   the request to the next target ([[008-routing-and-models]]). The
+   last attempt's failure is the answer: a transport failure is
+   `provider_unavailable`, 503; an upstream status the retry table does
+   not retry and that is a `4xx` is `upstream_rejected`, 400; any other
+   upstream status, a `3xx` or a retryable one on the last attempt, is
+   `upstream_error`, 502; the Provider's `timeout` passing is
+   `upstream_timeout`, 504. Each carries the upstream status and its
+   body's first 1 KiB in the developer detail.
 9. Respond: headers, then the body or the stream, in the door's
    dialect.
 10. Settle: the windows are debited with the measured tokens and cost,
@@ -213,51 +286,111 @@ The outbound request toward the target's `baseURL`:
   `anthropic-beta`, `OpenAI-Beta`, `OpenAI-Organization`,
   `OpenAI-Project`, and `x-goog-api-client`, are forwarded on
   passthrough and dropped on translation with a loss entry naming the
-  header; a translated request toward an `anthropic` target carries
-  the `anthropic-version` the codec targets.
+  header. The Messages API requires `anthropic-version`, and the codec
+  sets none, so a translated request toward an `anthropic` target
+  carries `anthropic-version: 2023-06-01`, the constant
+  `gateway.AnthropicVersion`, unless the Provider's `headers` names
+  that header, which wins.
 - `Lux-Request-Id` is set on the outbound request and on the response
   to the caller: `req_` and a ULID, the id of the record. A caller's
   `Lux-Request-Id` is ignored, never trusted as an identifier.
 - Redirects are not followed ([[005-providers]]).
+- Response headers are relayed to the caller except the hop-by-hop
+  set, `Set-Cookie`, `Content-Length`, and `Content-Encoding`, which
+  the gateway reframes; on translation the upstream's own dialect
+  headers, `anthropic-*`, `openai-*`, `x-ratelimit-*`, and
+  `x-request-id`, are dropped too, because they describe a response
+  the caller did not receive. A response whose upstream `Content-Type`
+  is `text/html`, with any parameters, is relayed as
+  `application/octet-stream`, and every door response carries
+  `X-Content-Type-Options: nosniff`, so no door ever serves markup a
+  browser would render ([[016-security-and-threat-model]]).
 
 Translation is `latere.ai/x/pkg/llmdialect`'s: the door's dialect is
 the `Frontend`, the target's the `Backend`, one `Translator` per
-request. Every field the target cannot represent is in the request's
-loss report; the gateway returns it as the `Lux-Loss` response header,
-a comma separated list of field paths, and in the `lux` dialect's body
-where that dialect has a member for it. Nothing is dropped silently
+request, `Translator.Request` and `Translator.Response` for a body and
+`Translator.Stream` for a stream. Every field the target cannot
+represent is in `ir.Request.Loss`, filled by both codecs; the gateway
+returns `Loss.Strings()` as the `Lux-Loss` response header, a comma
+separated list of field paths, and writes the same list to the record
+([[009-usage-and-metering]]). The header is the only carrier, because
+no dialect's body, the lux dialect's included, has a member for it, and
+it is absent when nothing was lost. Nothing is dropped silently
 ([[001-architecture]], invariant 6). A `lux` door is translated toward
 every target, because the lux dialect is the intermediate
 representation on the wire; a `gemini` door is never translated,
 because there is no codec, and the table above says so.
 
+The codecs take options, and each is set from the manifest where it has
+a member and from a constant otherwise: `anthropic.BackendOptions.
+DefaultMaxTokens` is `Model.spec.maxOutputTokens` when set and the
+codec's `4096` otherwise, because the Messages API requires
+`max_tokens`; `anthropic.BackendOptions.DropSampling` is `false`, so a
+sampling parameter reaches an upstream that rejects it and comes back
+as `upstream_rejected`, since the gateway carries no table of which
+models do; `openaichat.BackendOptions.UseMaxCompletionTokens` is
+`gateway.OpenAIReasoningFamily(upstream name)`, the predicate of
+[[008-routing-and-models]], because those models refuse `max_tokens`
+and every other `openai` dialect upstream accepts it; `openairesp` and
+`lux` take none.
+
 Passthrough is byte for byte: the request body the caller sent, minus
-nothing, plus nothing, except the model name rewrite when the Model's
-name and the target's upstream name differ, which is a JSON field
-replacement on a body the gateway has already read; when the two names
-are equal the body is not touched at all. `TestSameDialectSameBytes`
-holds a same-name passthrough to identity.
+nothing, plus nothing, with two exceptions, both JSON member edits on a
+body the gateway has already read and both admitted by invariant 6 of
+[[001-architecture]]. The model name is rewritten when the Model's
+name and the target's upstream name differ. And on the `/openai` door's
+`POST /v1/chat/completions` with `stream` true toward an `openai`
+target, `stream_options.include_usage` is set to `true`, because the
+Chat Completions stream carries no usage otherwise, and a request
+whose tokens cannot be read is a request whose spend cannot be
+counted ([[009-usage-and-metering]]); the upstream then ends the stream
+with one chunk whose `choices` is empty and whose `usage` is set, which
+every OpenAI client tolerates and which is relayed to the caller as
+received. When neither edit applies the body is not touched at all.
+`TestSameDialectSameBytes` holds a same-name, non-streaming passthrough
+to identity.
 
 ### Streaming
 
-A request whose dialect marks it streaming (`stream: true`, the
-`:streamGenerateContent` path, `Accept: text/event-stream` on the lux
-door) is answered with `Content-Type: text/event-stream`, headers
-flushed as soon as the upstream's headers arrive, and every event
-flushed as it is received. On passthrough the bytes are relayed as
+A request whose dialect marks it streaming, the body member `stream`
+set to `true` on the `openai`, `anthropic`, and `lux` doors and the
+`:streamGenerateContent` path on the `gemini` door, is answered with
+headers flushed as soon as the upstream's headers arrive and every
+event flushed as it is received. On passthrough the upstream's
+`Content-Type` is relayed as it is, `text/event-stream` for an SSE
+stream and `application/json` for a `:streamGenerateContent` without
+`alt=sse`, whose body is a JSON array, and the bytes are relayed as
 read, in chunks of at most 64 KiB, without waiting for event
-boundaries. On translation each upstream event is decoded with the
-target dialect's `EventDecoder` and encoded with the door's
-`EventEncoder`; the final usage event of each dialect is what the
-record's tokens come from ([[009-usage-and-metering]]).
+boundaries. On translation the response is `Content-Type:
+text/event-stream` and `Translator.Stream` decodes each upstream event
+with the target dialect's `EventDecoder` and encodes it with the door's
+`EventEncoder`, flushing per event; a target that answers a stream
+request with one JSON body is decoded whole and re-emitted as the
+door's event sequence, so the caller sees a stream either way. The
+record's tokens come from the stream's usage members, the last value
+of each member winning: Anthropic reports input on `message_start` and
+output on `message_delta`, OpenAI on the final chunk or on
+`response.completed`, Gemini on the last `usageMetadata` of the array
+or the SSE stream, and `ir.Event.Usage` on translation carries the
+same ([[009-usage-and-metering]]).
 
 The caller disconnecting cancels the upstream request at once; the
-record says `failed` with `client_closed` and the tokens counted up to
-that event. An upstream failure after the first response byte is never
-retried on another target, because the caller has already seen part of
-one answer; the stream ends with the dialect's error event and the
-record says `failed` with `upstream_error`. A non-streaming response is
-read whole, up to the Provider's `timeout`, then written.
+record says `failed` with `error` `client_closed` and the tokens
+counted up to that event. `client_closed` is a value of the record's
+`error` and never an HTTP answer, because there is nobody left to
+answer. An upstream failure after the first response byte is never
+retried on another target, because the caller has already seen part
+of one answer; the record says `failed` with `upstream_error`, and the
+stream ends with one error frame in the door's dialect:
+
+| Door | Error frame |
+|---|---|
+| `/openai` | `data: {"error": {"message": "<user sentence>", "type": "<lux code>", "code": "<lux code>", "param": null}}`, and no `data: [DONE]` |
+| `/anthropic`, `/lux` | `event: error` then `data:` the door's error envelope below |
+| `/gemini` | none: the relay ends where the upstream's bytes ended, because the door is passthrough only and the gateway writes nothing of its own into a stream it did not decode |
+
+A non-streaming response is read whole, up to the Provider's
+`timeout`, then written.
 
 `Content-Length` is set when the gateway holds the whole body and
 omitted, with chunked encoding, when it streams.
@@ -272,30 +405,41 @@ response header always:
 | Door | Body |
 |---|---|
 | `/openai` | `{"error": {"message": "<user sentence>", "type": "<lux code>", "code": "<lux code>", "param": null}}` |
-| `/anthropic` | `{"type": "error", "error": {"type": "<lux code>", "message": "<user sentence>"}}` |
-| `/gemini` | `{"error": {"code": <http status>, "message": "<user sentence>", "status": "<lux code>"}}` |
-| `/lux` | the envelope of `latere.ai/x/pkg/httpjson`: `{"code", "message", "details"}` |
+| `/anthropic` | `{"type": "error", "error": {"type": "<lux code>", "message": "<user sentence>"}, "request_id": "<req_ id>"}` |
+| `/gemini` | `{"error": {"code": <http status>, "message": "<user sentence>", "status": "<google.rpc.Code name>", "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "<lux code>", "domain": "lux"}]}}` |
+| `/lux` | the envelope of `latere.ai/x/pkg/httpjson`, as on `/v1` ([[011-api]]): `{"error": {"code": "<lux code>", "message": "<user sentence>", "details": {"request_id": "<req_ id>", "detail": "<developer detail>"}}}` |
+
+The Gemini shape keeps Google's `status` vocabulary, because that
+member is an enum a client may switch on, and carries the lux code in
+`details[0].reason` as Google's own `ErrorInfo` does: `400` is
+`INVALID_ARGUMENT`, `401` `UNAUTHENTICATED`, `403` `PERMISSION_DENIED`,
+`404` `NOT_FOUND`, `413` `INVALID_ARGUMENT`, `429` `RESOURCE_EXHAUSTED`,
+`502` and `503` `UNAVAILABLE`, `504` `DEADLINE_EXCEEDED`.
 
 `message` is the fixed user sentence of the code, one per code, owned
 with the HTTP status by [[011-api]]'s error table; the developer detail
 (the upstream status and body excerpt, the window's reset time, the
 selector that did not match) is in `Lux-Error-Detail` on every door and
-in `details` on the lux door, never in `message`. An upstream's own
-error body on `upstream_error` is not relayed as the caller's body,
-because it names the provider and may name the upstream model; it is
-the developer detail, truncated.
+in `details.detail` on the lux door, never in `message`. The header
+value is one line of at most 1 KiB: bytes outside printable ASCII are
+percent-encoded and anything past the limit is cut, so an upstream body
+cannot break the response framing. An upstream's own error body on
+`upstream_error` and `upstream_rejected` is not relayed as the caller's
+body, because it names the provider and may name the upstream model; it
+is the developer detail, truncated.
 
 | Code | Status | When |
 |---|---|---|
 | `not_found` | 404 | a path or method not in the route table |
 | `body_too_large` | 413 | the body exceeds `LUX_MAX_BODY_BYTES` |
-| `unauthenticated` | 401 | no credential, a credential not beginning with `lux_`, or an unknown hash |
+| `unauthenticated` | 401 | no credential, or a credential whose hash names no Key |
 | `key_disabled` | 403 | `spec.disabled` |
 | `key_expired` | 403 | `status.expiresAt` has passed |
 | `route_not_allowed` | 403 | an opaque route without `passthrough` |
+| `invalid_request` | 400 | a body that is not a JSON object or names no `model`; on translation, a body the door's codec cannot decode |
 | `model_not_found` | 404 | no Model of that name |
 | `model_not_allowed` | 403 | no selector matches |
-| `provider_unavailable` | 503 | no reachable target, or every target failed before a response byte |
+| `provider_unavailable` | 503 | no admitted target, or the last attempt failed at the transport before a response line |
 | `dialect_unsupported` | 400 | the door and the target cannot be bridged |
 | `provider_required` | 400 | an opaque route with no `Lux-Provider` and more than one candidate |
 | `rate_limited` | 429 | a rate window is full; `Retry-After` |
@@ -303,8 +447,14 @@ the developer detail, truncated.
 | `currency_mismatch` | 400 | the Budget's currency is not the Model's pricing currency |
 | `spend_exceeded` | 429 | the Key's spend window is full; `Retry-After` |
 | `budget_exhausted` | 429 | a hard Budget's window is full; `Retry-After` |
-| `upstream_error` | 502 | the last target answered an error, or a stream failed after its first byte |
+| `upstream_rejected` | 400 | the last attempt was answered with a `4xx` the retry table of [[008-routing-and-models]] does not retry: the request as forwarded, or the Provider's credential or upstream name, is what the upstream refused |
+| `upstream_error` | 502 | the last attempt was answered with any other error status, a `3xx`, or a retryable status; or a stream failed after its first byte |
 | `upstream_timeout` | 504 | the Provider's `timeout` passed |
+
+Two more strings appear in a record's `error` and never in a response:
+`client_closed`, above, and nothing else; [[011-api]]'s table carries
+every code a caller can receive and [[009-usage-and-metering]] names
+`client_closed` as the one record-only value.
 
 ### The gateway package
 
@@ -364,15 +514,21 @@ tunnel that makes a local runtime a Provider ([[013-tunnelled-runtimes]]).
 |---|---|---|
 | Every row of the route table dispatches to its class and reads the model from where the table says; every path outside the table is `not_found` in the door's envelope | `TestRouteTable`, table-driven over every row and ten off-table paths | not built |
 | A request through the `/openai` door to an `openai` target with equal names arrives at the stub provider byte-identical, with only the credential, `Host`, `User-Agent`, `Lux-Request-Id`, and the hop-by-hop and `Accept-Encoding` headers changed | `TestSameDialectSameBytes` | not built |
-| A request through the `/anthropic` door to an `openai` target is translated, and a field the target cannot represent appears in `Lux-Loss` and in the record | `TestTranslationReportsLoss` | not built |
+| A request through the `/anthropic` door to an `openai` target is translated, a field the target cannot represent appears in `Lux-Loss` and in the record, the header is absent when nothing was lost, and the outbound request carries `anthropic-version` when the target is `anthropic` | `TestTranslationReportsLoss`, `TestNoLossNoHeader`, `TestAnthropicVersionInjected` | not built |
 | A `gemini` door to a non-gemini target and a model route across dialects are `dialect_unsupported`; a `lux` door reaches every dialect | `TestDialectBridging`, table-driven over the door and target matrix | not built |
-| Each credential form is accepted on each door in the stated order; the query parameter and every caller credential header are absent from the outbound request; a non-`lux_` value and an issuer token are `unauthenticated` | `TestKeyExtractionOrder`, `TestCallerCredentialsNeverForwarded`, `TestDoorsTakeKeysOnly` | not built |
+| Each credential form is accepted on each door in the stated order; the query parameter and every caller credential header are absent from the outbound request; a provider key and an issuer token no Key was registered with are `unauthenticated`, and an issuer token registered as a supplied Key value is served as that Key | `TestKeyExtractionOrder`, `TestCallerCredentialsNeverForwarded`, `TestDoorsTakeKeysOnly`, `TestSuppliedValueOpensTheDoor` | not built |
+| A body that is not a JSON object, one without `model`, and on translation one the codec refuses are each `invalid_request` with the codec's message in the detail; the same undecodable body on a same-dialect passthrough reaches the stub provider untouched | `TestInvalidRequestBodies`, `TestPassthroughForwardsWhatTheCodecCannotRead` | not built |
+| The last attempt's `400`, `404`, and `422` are `upstream_rejected`; its `401`, `403`, `302`, and `529` are `upstream_error`; a refused connection is `provider_unavailable`; a timeout is `upstream_timeout`; each carries the upstream status and body excerpt in `Lux-Error-Detail` and never in the body | `TestUpstreamStatusMapping`, table-driven | not built |
+| A count-tokens request toward an `anthropic` target is forwarded and its answer relayed; toward an `openai` target and on the `/lux` door it is answered from the estimate with `Lux-Estimated: true`, the stub provider sees nothing, and the record says `ok` with zero tokens | `TestCountTokensEmulation` | not built |
+| `GET /v1/models` on each door renders the list shape in the table byte-exactly for a fixed catalog | `TestModelsListShapes`, golden files per door | not built |
+| A streamed `/openai` chat completion toward an `openai` target carries `stream_options.include_usage: true` upstream and the usage chunk reaches the caller; a non-streamed one is byte-identical; the record's tokens are the chunk's | `TestIncludeUsageInjected` | not built |
+| An upstream `text/html` response reaches the caller as `application/octet-stream`, and every door response carries `X-Content-Type-Options: nosniff` | `TestNoHTMLIsEverServed` | not built |
 | Each stage's refusal fires with its code and status before the stub provider sees a request, and in the pipeline's order when two conditions hold at once | `TestRefusalOrder`, table-driven over every code | not built |
 | An opaque route is `route_not_allowed` without `passthrough`, reaches the named `Lux-Provider` with it, picks the sole candidate without the header, and is `provider_required` with two candidates | `TestOpaqueRoutes` | not built |
 | `GET /v1/models` on each door lists exactly the available Models the Key's selectors match, in that dialect's shape, and forwards nothing | `TestModelsListIsTheKeysView` | not built |
 | The body's model name is rewritten to the upstream name on the way out and the Model's name comes back in the response, for each dialect | `TestModelNameRewrite` | not built |
-| A streamed passthrough relays events as they arrive with headers flushed before the first event; a streamed translation re-encodes each event; the record's tokens come from the final usage event | `TestStreamingPassthrough`, `TestStreamingTranslation` | not built |
-| A caller disconnect cancels the upstream request within 100 ms and the record says `client_closed`; an upstream failure after the first byte is not retried and ends the stream with the dialect's error event | `TestClientDisconnectCancelsUpstream`, `TestNoRetryAfterFirstByte` | not built |
+| A streamed passthrough relays events as they arrive with headers flushed before the first event and the upstream's `Content-Type` kept, a `:streamGenerateContent` JSON array included; a streamed translation re-encodes each event and a JSON answer to a stream request is re-emitted as events; the record's tokens are the last value of each usage member across the stream | `TestStreamingPassthrough`, `TestStreamingTranslation`, `TestStreamUsageIsTheLastValue` | not built |
+| A caller disconnect cancels the upstream request within 100 ms and the record says `client_closed`; an upstream failure after the first byte is not retried and ends the stream with the door's error frame from the table, and with nothing of the gateway's on the `/gemini` door | `TestClientDisconnectCancelsUpstream`, `TestNoRetryAfterFirstByte`, `TestStreamErrorFramePerDoor` | not built |
 | Every code renders in each door's envelope with the fixed sentence, the code in the shape's code member and in `Lux-Error`, and the detail only in `Lux-Error-Detail`; an upstream error body never appears in a caller's body | `TestErrorEnvelopePerDialect`, `TestUpstreamBodyIsDetailOnly` | not built |
 | A body one byte over the limit is `body_too_large` with nothing forwarded | `TestBodyLimit` | not built |
 | Every response, refused or served, carries `Lux-Request-Id` matching its record's id | `TestRequestIDOnEveryResponse` | not built |

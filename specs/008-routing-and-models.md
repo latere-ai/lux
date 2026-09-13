@@ -8,7 +8,7 @@ depends_on:
 affects: [gateway/, manifest/, internal/serve/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -31,10 +31,20 @@ which target a Model reaches.
 
 ## Current state
 
-Nothing is built. The hosted gateway routes a model name to one
-hardcoded upstream per prefix, with no weights, no priorities, no
-fallback, and no circuit; an upstream outage is an outage for every
-caller of every model it serves.
+Nothing is built. The hosted gateway this design is extracted from
+routes through a per-key binding document: a model name maps to a list
+of targets under one of four strategies, `fallback`, `round-robin`,
+`weighted`, or `least-latency`, where only `fallback` walks past the
+first target, on a `429`, any `5xx`, or a transport error, with no
+backoff and never after the first response byte. On its dialect
+surfaces a bare name is looked up in a catalog and a `provider/model`
+name has its prefix stripped. There is no priority tier, no circuit,
+and no per-target health beyond a latency average that only successes
+feed, so a target that fails fast is retried on every request. This
+design keeps the fallback walk and its retry set, replaces the four
+strategies with weights and priorities on the Model, and adds the
+circuit; the `provider/model` form survives as the name of a discovered
+Model rather than as a parsing rule.
 
 ## Design
 
@@ -63,7 +73,9 @@ The targets of a Model are put in one attempt order, computed per
 request. Every decision below is this ordering; nothing else selects.
 
 1. A target is a candidate unless its Provider is `Unreachable` on this
-   replica or its circuit is open.
+   replica or its circuit does not admit work, read with the breaker's
+   side-effect-free `Admits()`, so ordering takes no probe slot for a
+   target that may never be tried.
 2. Candidates are grouped by `priority`, ascending, and the groups are
    concatenated in that order.
 3. Inside a group, the targets with `weight` above `0` come first, in
@@ -97,11 +109,14 @@ flowchart TD
 ```
 
 An open circuit admits one half-open attempt after its open duration,
-so a target is retried by traffic rather than by a timer. When step 1
-leaves no candidate and no open circuit admits a probe, the request is
-refused `provider_unavailable` without a dial, which is the cheapest
-correct answer and the one that does not add load to an upstream that
-is already failing.
+so a target is retried by traffic rather than by a timer. Immediately
+before an attempt the breaker's `Allow()` is called; it answers false
+when another request took the probe slot in the meantime, and the
+target is then skipped for the next in the order as if it had not been
+a candidate. When step 1 leaves no candidate and no open circuit admits
+a probe, the request is refused `provider_unavailable` without a dial,
+which is the cheapest correct answer and the one that does not add
+load to an upstream that is already failing.
 
 ### Fallback and retries
 
@@ -112,9 +127,9 @@ used at all: `onError` walks it, `never` fails on the first attempt.
 |---|---|---|
 | connection refused, reset, DNS failure, TLS handshake failure | yes | nothing of the request was served |
 | a timeout before response headers | yes | as above |
-| upstream `408`, `429`, `500`, `502`, `503`, `504` | yes | the upstream declined this attempt, not the request |
+| upstream `408`, `429`, or any `5xx`, Anthropic's `529` among them | yes | the upstream declined this attempt, not the request |
 | upstream `3xx` | no | a redirect is not followed ([[005-providers]]) and another target would answer the same |
-| any other upstream `4xx` | no | the request is wrong; every target would say so |
+| any other upstream `4xx` | no | the request is wrong, or the Provider's credential or upstream name is; every target of this Provider would say so, and another Provider's answer would not make this one right |
 | a body the target dialect refuses to encode | no | the same encode fails on every target of that dialect |
 | the caller's context cancelled | no | there is nobody to answer |
 | anything at all after the first response byte reached the caller | no | below |
@@ -126,13 +141,21 @@ The rules around the order:
   waiting, another target is available, and a delay would turn one
   upstream's slowness into every caller's. `latere.ai/x/pkg/retry` is
   therefore not on this path, and a `Retry-After` header from an
-  upstream is recorded and not honoured.
-- Each attempt gets the remaining request deadline, so the order is
-  also bounded by `Provider.spec.timeout` and the caller's own budget.
+  upstream is neither honoured nor relayed; the only `Retry-After` a
+  caller sees is the gateway's own on a rate, spend, or budget refusal
+  ([[007-keys-and-limits]]).
+- An attempt's deadline is its target's Provider `timeout`
+  ([[005-providers]]), and the caller's own context bounds the order as
+  a whole. A walk over several targets that each hang until their
+  timeout therefore waits the sum, which is why an operator whose
+  upstream fails by hanging sets a short `timeout` on that Provider
+  rather than relying on the walk.
 - The last attempt's failure is the response, in the codes of
-  [[004-request-path]]: a 5xx is `upstream_error` carrying the upstream
-  status, a deadline reached against an upstream is `upstream_timeout`,
-  and an order exhausted before any target answered at all is
+  [[004-request-path]]: an upstream status is `upstream_error`, or
+  `upstream_rejected` when that status was a `4xx` the table above does
+  not retry, both carrying the upstream status in the developer detail;
+  a deadline reached against an upstream is `upstream_timeout`; a
+  transport failure, or an order with no candidate at all, is
   `provider_unavailable`.
 
 A streaming response that fails mid-stream is not retried. Once the
@@ -151,14 +174,21 @@ the body.
 One `latere.ai/x/pkg/circuitbreaker.Breaker` per target, keyed by
 `(provider id, upstream model)` rather than by the Model, so two Models
 naming one upstream model share the circuit that failure belongs to.
+The breaker is constructed with `circuitbreaker.New(5, 30*time.Second)`
+and driven with `Admits`, `Allow`, `RecordSuccess`, and
+`RecordFailure`; the two numbers are the constants
+`gateway.CircuitThreshold` and `gateway.CircuitOpen` of this spec, not
+configuration, because a value an operator would tune per upstream
+belongs on the Provider and no field for it exists yet.
 
 | Parameter | Value |
 |---|---|
 | threshold | 5 consecutive retryable failures |
 | open duration | 30s |
-| half-open | one attempt admitted; a success closes, a failure reopens for another 30s |
-| counted | only the retryable failures of the table above |
-| not counted | a 4xx, an encode refusal, a caller cancellation |
+| half-open | one attempt admitted after the open duration; `RecordSuccess` closes, `RecordFailure` reopens for another 30s |
+| `RecordFailure` | every retryable failure of the table above, and nothing else |
+| `RecordSuccess` | every complete HTTP response the table does not retry, a `2xx`, a `3xx`, or a non-retryable `4xx` alike, because the target answered |
+| neither | an encode refusal, which never reached the target, and a caller cancellation, which says nothing about it |
 
 The circuit is per replica and is never written to an object's status:
 it is one replica's opinion of one target, formed in milliseconds and
@@ -197,7 +227,13 @@ Two consequences worth naming:
   Model whose targets are all `gemini` is reachable from that door
   alone, and a Model named through another door with only `gemini`
   targets is `dialect_unsupported` rather than `model_not_found`, so
-  the caller learns which of the two problems it has.
+  the caller learns which of the two problems it has. An operator who
+  wants Google's models behind every door declares a second Provider
+  with `dialect: openai` at Google's OpenAI-compatible base URL
+  (`https://generativelanguage.googleapis.com/v1beta/openai`, bearer
+  credential), which is how the hosted plane reaches them on its
+  translated surfaces; that Provider is an `openai` target like any
+  other and the matrix needs no Gemini codec for it.
 - A `lux` door is translated toward every other dialect, because the
   lux dialect is the intermediate representation itself and its
   frontend leg is lossless by construction. Every representational
@@ -207,13 +243,21 @@ Two consequences worth naming:
 
 One rule applies only to a translated request, never to a passthrough.
 An `openai` target serves two translated routes, so a request arriving
-from another door has to be encoded toward one of them: it is
-`/chat/completions`, except when the intermediate request carries both
-`Reasoning` and `Tools`, which Chat Completions refuses, and is then
-`/responses`. A request that arrived on an `openai` door toward an
-`openai` target is a passthrough on the route it arrived on, and this
-rule never touches it. A Model that always needs one of the two routes
-has no way to say so today.
+from another door has to be encoded toward one of them. It is
+`/chat/completions`, which every `openai` dialect upstream serves,
+except when the target's upstream name is in OpenAI's reasoning
+family, `gateway.OpenAIReasoningFamily(name)`: the name begins with
+`o1`, `o3`, or `o4`, or with `gpt-` followed by an integer of `5` or
+more, compared case-insensitively on the part before any `/`. Those
+models are served by OpenAI on `/responses`, which carries their
+reasoning items across turns where Chat Completions drops them into the
+loss report, and the predicate is the one the hosted plane applies.
+[[004-request-path]] uses the same predicate to choose
+`max_completion_tokens` over `max_tokens`. A request that arrived on an
+`openai` door toward an `openai` target is a passthrough on the route
+it arrived on, and this rule never touches it. A Model that always
+needs one of the two routes has no way to say so today; a field on the
+target for it is a later addition to [[003-manifest-contract]].
 
 ### The model name on the wire
 
@@ -274,15 +318,15 @@ cost ([[009-usage-and-metering]]); the target schema and its defaults
 | An exact name, a discovered `<provider>/<upstream>` name, an unknown name, and a `mdl_` id resolve as the table says | `TestModelResolution`, table-driven | not built |
 | The attempt order is priority ascending, then weighted entries, then weight-`0` entries in manifest order; the case of priority 0 with its only weighted target `Unreachable`, a weight-`0` target at priority 0, and a weighted target at priority 1 puts the weight-`0` target first | `TestAttemptOrder`, table-driven | not built |
 | Over ten thousand requests the share each target of one priority receives is within two percent of its weight | `TestWeightedShareMatchesWeights` | not built |
-| A target whose Provider is `Unreachable` and a target whose circuit is open are both out of the order; when neither is admitted the request is refused `provider_unavailable` with no dial | `TestExcludedTargets` | not built |
+| A target whose Provider is `Unreachable` and a target whose circuit is open are both out of the order; when neither is admitted the request is refused `provider_unavailable` with no dial; two concurrent requests against one half-open target make one attempt, and the other moves to the next target | `TestExcludedTargets`, `TestHalfOpenAdmitsOne` | not built |
 | `fallback: onError` tries each target at most once in order and stops at the first success; `fallback: never` fails on the first attempt | `TestFallbackWalksTheOrderOnce`, `TestFallbackNever` | not built |
-| Every retryable row of the failure table moves to the next target and every non-retryable row does not | `TestRetryableFailures`, table-driven | not built |
+| Every retryable row of the failure table moves to the next target, `529` among them, and every non-retryable row does not; the last attempt's failure maps to `provider_unavailable`, `upstream_error`, `upstream_rejected`, or `upstream_timeout` as the rules say | `TestRetryableFailures`, `TestLastFailureCode`, table-driven | not built |
 | A stream that fails after its first byte is not retried, ends, and is recorded `failed` with the tokens counted to the cut | `TestMidStreamFailureIsNotRetried` | not built |
 | No attempt sleeps: an order of three failing targets completes within the transport failures' own duration | `TestNoBackoffBetweenAttempts` | not built |
-| Five consecutive retryable failures open a target's circuit, one half-open attempt is admitted after the open duration, a success closes it, a 4xx never opens it, and two Models on one target share it | `TestCircuitPerTarget` | not built |
+| Five consecutive retryable failures open a target's circuit, one half-open attempt is admitted after the open duration, a success closes it, a `4xx` resets the failure count and never opens it, an encode refusal and a caller cancellation leave the count unchanged, and two Models on one target share it | `TestCircuitPerTarget` | not built |
 | Every cell of the dialect matrix behaves as the table says on a translated route; a model route across dialects is `dialect_unsupported` whatever the Key allows | `TestDialectMatrix`, table-driven | not built |
 | A `gemini` door to a non-`gemini` target and another door to a `gemini`-only Model are both `dialect_unsupported`, not `model_not_found` | `TestGeminiIsDoorBound` | not built |
-| A translated request carrying reasoning and tools toward an `openai` target arrives on `/responses`, and one without them on `/chat/completions` | `TestOpenAITargetRoute` | not built |
+| A translated request toward an `openai` target named `gpt-5`, `o3-mini`, or `GPT-6-turbo` arrives on `/responses`, and one named `gpt-4.1`, `llama3.1`, or `o-ring` on `/chat/completions`; a passthrough arrives on the route it was sent to whatever the name | `TestOpenAITargetRoute`, `TestOpenAIReasoningFamily`, table-driven | not built |
 | The outbound body carries the target's upstream name and the response carries the Model's name, on a translated route, a passthrough with equal names, and a passthrough with differing names | `TestModelNameOnTheWire` | not built |
 | A passthrough request with equal names is byte-identical upstream | [[001-architecture]]'s `TestSameDialectSameBytes` | not built |
 | `status.available` and `status.targets[].health` follow the Providers' published health | `TestModelStatusFollowsHealth` | not built |

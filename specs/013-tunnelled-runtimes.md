@@ -8,7 +8,7 @@ depends_on:
 affects: [internal/tunnel/, internal/luxcli/, internal/api/, internal/serve/, internal/store/, internal/config/, manifest/, manifest/v1/, cmd/lux/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 author: changkun
 ---
 
@@ -48,12 +48,21 @@ are [[004-request-path]]'s.
 
 Nothing is built. The hosted gateway this design is extracted from has a
 reverse tunnel for local runtimes built on `github.com/hashicorp/yamux`
-over a WebSocket upgrade, with the serving node kept in a process-local
-map, so a request that reached the wrong replica failed and the feature
-was usable on a single-replica deployment only. The tunnel was also its
-own routing path beside the provider adapters, with its own credential
-handling and no metering. This design makes it a Provider instead: one
-field on the kind, one transport, and every other rule already written.
+over a WebSocket upgrade at one route on the public listener, opened
+with a short-lived issuer token that the agent re-mints and carries on
+every heartbeat so the session outlives any one token. The serving
+node is a row in Redis with a liveness TTL, and a replica that does not
+hold the session forwards to the one that does over a pod-to-pod route
+behind a shared secret; without Redis the feature is single-replica.
+The agent probes its runtime once, at connect, and pushes the model
+list in its first frame, so a model pulled later appears only after a
+reconnect. A tunnelled model is private to the subject that attached it
+unless that subject shares it with its organisation, is addressed as
+`local/<name>`, is served by its own proxy path beside the provider
+adapters, and is metered at zero cost with no rate or spend gate. This
+design makes it a Provider instead: one field on the kind, one
+transport, and every other rule already written. What it keeps, drops,
+and changes from the hosted plane is stated section by section below.
 
 ## Design
 
@@ -167,20 +176,39 @@ The session route is a `/v1` route in every respect of [[011-api]]: a
 bearer from a listed issuer, an authorizer decision, the request id
 header, the error envelope. Its action is `provider.tunnel`, and the
 `resource` [[006-identity]] sends carries `tunnel: true`, so a platform
-decides whether this subject may attach this machine.
+decides whether this subject may attach this machine. The bearer is an
+ordinary issuer token with `aud` `LUX_OIDC_AUDIENCE`: a person's token
+when a person attaches a laptop, a service token from
+`client_credentials` when a machine attaches unattended. The gateway
+mints nothing for this seam; the family's identity rules permit a
+product-local token here and this design does not need one.
 
-A carrier asks the authorizer nothing. It carries the same issuer bearer
-and a `Lux-Tunnel-Session` header, and is accepted when the bearer
-verifies against the issuers, the session is live on this replica, and
-the bearer's subject equals the session's subject. Verification is a
+A carrier asks the authorizer nothing. It carries a bearer from a
+listed issuer and a `Lux-Tunnel-Session` header, and is accepted when
+the bearer verifies against the issuers, the session is live on this
+replica, and the bearer's subject equals the session's subject; the
+bearer need not be the very token that opened the session, because the
+agent's token source may have rotated it since. Verification is a
 signature check against a cached key set, so a carrier costs no webhook
 call and the hot path stays free of one ([[001-architecture]],
 invariant 3). The decision at connect binds the session rather than a
 cache window: a platform revokes a tunnel by closing the session, which
 `DELETE /v1/providers/{id}` and an authorizer that starts denying
-`provider.tunnel` on the next connect both do. A session whose bearer's
-`exp` has passed is closed with `token_expired`, so a tunnel never
-outlives the token that opened it and a reconnect re-verifies.
+`provider.tunnel` on the next connect both do.
+
+A session never outlives a token. Its expiry is the `exp` of the
+bearer that opened it, and a heartbeat frame may carry a fresh bearer
+in `token`, which the gateway verifies exactly as at connect and, when
+it verifies and names the session's subject, makes the session's new
+bearer and expiry. A `token` that does not verify or names another
+subject is ignored, logged with its developer detail, and leaves the
+previous expiry in place. When the expiry passes with no fresh token
+the session is closed with `token_expired` and every in-flight carrier
+is cancelled. Issuer tokens are short-lived by the family's rules, so
+the agent's loop sends a fresh token on the first heartbeat after its
+token source yields one ([[014-agent-client]]'s `--token-file` is read
+per request for this reason), and a session runs for as long as the
+agent can obtain tokens.
 
 `LUX_TUNNEL_ENABLED` unset makes all three routes `not_found`, the
 answer [[011-api]] gives any path outside the route table.
@@ -225,13 +253,25 @@ no request bytes.
 | Direction | Frame | Meaning |
 |---|---|---|
 | gateway to agent | `{"type":"ready","session":"tun_...","ttl":"30s","carriers":4}` | the session is registered; park this many carriers and heartbeat within this window |
-| agent to gateway | `{"type":"heartbeat"}` | the agent and its runtime are alive; sent every `ttl/3` |
+| agent to gateway | `{"type":"heartbeat"}` or `{"type":"heartbeat","token":"<bearer>"}` | the agent and its runtime are alive; sent every `ttl/3`; `token` is a fresh bearer for the session, verified as above |
 | gateway to agent | `{"type":"heartbeat"}` | the registry row was renewed |
 | gateway to agent | `{"type":"close","reason":"..."}` | the session ends; `superseded`, `token_expired`, `provider_deleted`, or `draining` |
 
+A `close` reason tells the agent what to do next, and [[014-agent-client]]
+owns the exit codes that follow: `superseded` means another agent holds
+this Provider now and a retry would fight it, so the agent stops;
+`token_expired` means the agent's token source stopped yielding a
+fresh token, so it reconnects once with a fresh one and stops when it
+has none; `provider_deleted` means the object is gone, so it stops;
+`draining` means this replica is shutting down, so it reconnects at
+once and lands on another.
+
 A carrier is one `POST` the agent opens and the gateway holds until it
 has work. The framing is one line each way, then bytes to the end of the
-stream, so nothing is buffered and no length is known in advance.
+stream, so nothing is buffered and no length is known in advance. A
+parked carrier receives one empty line every `ttl/3` until it is given
+work, so an ingress idle timeout between the agent and the gateway does
+not cut it; the agent skips empty lines before the header line.
 
 ```
 gateway to agent, on the carrier's response body:
@@ -325,11 +365,20 @@ it, as it writes `status.health`. Loss and return of a tunnel raise
 
 ### Discovery, routing, and metering
 
-Nothing is special. Discovery calls `GET /models` over a carrier on the
-discovery interval and declares one Model per surviving upstream name,
+Nothing is special. Discovery calls the dialect's models route
+([[005-providers]]) over a carrier on the discovery interval, and once
+at connect, and declares one Model per surviving upstream name,
 `my-laptop/llama3.1` and its siblings, under the Provider's owner,
-through the same `manifest.Resolve` ([[005-providers]]). Target
-selection, the circuit per target, fallback, and the dialect matrix are
+through the same `manifest.Resolve`. The runtime is therefore expected
+to serve its dialect's models route at `--upstream`: Ollama, vLLM,
+llama.cpp, LM Studio, and MLX all answer `GET /v1/models` in the
+`openai` shape. The hosted plane's agent probed the runtime itself,
+with an Ollama-specific list route, and pushed the names once at
+connect; this design pulls through the same job every other Provider
+gets, so a model pulled after the agent started appears on the next
+interval rather than after a reconnect. A runtime with no models route
+runs with `discovery.mode: none` and declared Models. Target selection,
+the circuit per target, fallback, and the dialect matrix are
 [[008-routing-and-models]]'s unchanged: a tunnelled Provider is one more
 provider in the order, and a Model may name a tunnelled target and a
 hosted one together, which is how a laptop serves a model until it
@@ -345,7 +394,11 @@ Metering is unchanged: one record per request with the Provider, the
 upstream model, the tokens read from the runtime's own usage members,
 and the cost ([[009-usage-and-metering]]). Nothing marks a record as
 having crossed a tunnel; the Provider's name is what an operator groups
-by.
+by, because one Provider is one machine. The hosted plane recorded a
+tunnelled call at zero cost with a flag naming the serving node and ran
+no rate or spend gate for it; here the Key's rate windows apply as for
+any Provider, and the cost is the Model's pricing or unpriced, as
+above.
 
 ### The upstream client of a tunnelled Provider
 
@@ -410,7 +463,12 @@ The rules that keep it bounded:
   only thing that route accepts. It is an installation-internal bearer,
   not an identity: the internal listener is not reachable from outside
   the cluster, and the secret is the second lock on a route that would
-  otherwise let anything on the Pod network reach a runtime.
+  otherwise let anything on the Pod network reach a runtime. The
+  variable is a comma separated list, shaped like `LUX_SECRETS_KEK`
+  ([[005-providers]]): a replica sends the first entry and accepts any
+  entry, so a rotation is a rolling deploy with `new,old`, then one
+  with `new`, and no forward fails in between. Every replica of one
+  installation carries the same list.
 - `LUX_TUNNEL_ENABLED` set without `LUX_TUNNEL_FORWARD_ADDR` is not a
   start-up failure, because the memory store is single-replica by
   construction ([[010-state]]). It is a start-up line and a `luxd check`
@@ -444,9 +502,19 @@ The consequence to state rather than discover: under the owner policy
 every subject may `use` every Model, so the Models discovered on one
 person's laptop are callable by every subject the issuer admits, through
 any Key whose selectors match. That is the owner policy working as
-written, the catalog being the installation's; an installation where it
-is wrong runs an authorizer, which is the remedy for every other case
-where the built-in policy is too open.
+written, the catalog being the installation's. The hosted plane kept a
+tunnelled model private to the subject that attached it unless that
+subject shared it with its organisation; this design drops that
+default deliberately, because the data plane carries no subject and
+the owner policy is one rule for every Model ([[006-identity]]). The
+exposure is bounded: no Model an administrator declared routes to a
+tunnelled Provider unless the administrator targeted it, so a caller
+reaches another subject's machine only by writing that Provider's name
+in the model it asks for, and only while `LUX_TUNNEL_ENABLED` is set,
+which it is not by default. An installation where even that is wrong
+runs an authorizer and denies `model.use` on Models whose Provider is
+`tunnel: true` to every subject but the Provider's owner, which is the
+remedy for every other case where the built-in policy is too open.
 
 Who may call a tunnelled Provider is otherwise the ordinary rule: a Key
 whose selectors match a Model on it, with `model.use` decided at the
@@ -488,10 +556,11 @@ the rest of the design depends on.
 | `LUX_TUNNEL_ENABLED` | no | unset | `1` serves the three routes and admits `spec.tunnel`; unset makes them `not_found` and the field `invalid_field` |
 | `LUX_TUNNEL_REGISTRY_TTL` | no | `30s` | the liveness window of a registry row; at least `5s`, at most `5m`; the agent heartbeats at a third of it |
 | `LUX_TUNNEL_FORWARD_ADDR` | no | unset | the address other replicas reach this one's internal listener at, `host:port`; unset serves tunnelled Providers on the holding replica only |
-| `LUX_TUNNEL_FORWARD_SECRET` | with the address | unset | the bearer on `/internal/tunnel/{id}`; at least 32 bytes; the address without it is a start-up failure |
+| `LUX_TUNNEL_FORWARD_SECRET` | with the address | unset | one or more bearers for `/internal/tunnel/{id}`, comma separated, each at least 32 bytes; the first is sent, every one is accepted, so rotation is prepending; the address without it is a start-up failure |
 
-[[002-repository-scaffold]] owns the variable table and carries the
-first two already; the last two are this spec's and join it.
+[[002-repository-scaffold]] owns the variable table and carries all
+four with this spec as their owner; the meanings above are the ones its
+rows point to.
 
 ### `luxd check`
 
@@ -510,7 +579,7 @@ pool per session, and the `http.RoundTripper` that `gateway`'s
 which is `lux serve`'s loop. It imports the standard library and
 `latere.ai/x/pkg/httpjson` and nothing else, so `./cmd/lux` importing
 its agent half leaves that binary's build list what
-[[001-architecture]] says it is.
+[[014-agent-client]] says it is.
 
 ## Not in this spec
 
@@ -535,7 +604,10 @@ authorizer payload and the owner policy the exception amends
 | The carrier framing is one header line then the body in each direction, headers flushed before the body, and a streamed response reaches the caller event by event with no buffering | `TestCarrierFraming`, `TestTunnelStreamsWithoutBuffering` | not built |
 | A connect negotiating HTTP/1.1 is refused with `not_found` and the HTTP/2 detail; over plaintext h2c the same connect succeeds | `TestTunnelRequiresHTTP2` | not built |
 | A second session for one Provider supersedes the first, the first is closed with `superseded` within one heartbeat, and the second serves | `TestNewestSessionWins` | not built |
-| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a session whose bearer expires is closed with `token_expired` | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | not built |
+| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a carrier with a newer token of the session's subject is accepted; a session whose bearer expires with no fresh token is closed with `token_expired` and its in-flight carriers are cancelled | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | not built |
+| A heartbeat carrying a fresh bearer of the session's subject moves the session's expiry to the new `exp` and the session serves past the old one; a bearer of another subject or one that fails to verify is ignored and the old expiry stands | `TestSessionTokenRefresh`, with the stub issuer minting a 2 s and then a 60 s token | not built |
+| A carrier parked for three times `ttl` with no work receives an empty line every `ttl/3` and is still given work afterwards | `TestParkedCarrierKeepalive` | not built |
+| With `LUX_TUNNEL_FORWARD_SECRET` `new,old` on one replica and `old` on another, forwards succeed in both directions; with `new` alone against `old` alone they are refused | `TestForwardSecretRotation` | not built |
 | Killing the agent makes the Provider `Unreachable` and `status.tunnel.state` `Disconnected` within `LUX_TUNNEL_REGISTRY_TTL`, every target leaves selection, and `provider.unreachable` is emitted once | `TestTunnelLossIsUnreachableWithinTheTTL` | not built |
 | A clean `lux serve` shutdown unregisters at once, so the Provider is `Unreachable` before the TTL lapses | `TestCleanDisconnectIsImmediate` | not built |
 | With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas`, `TestForwardIsOneHop` | not built |
