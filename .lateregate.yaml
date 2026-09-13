@@ -74,4 +74,4 @@ identity:
       reason: spec 006 builds identity in phase 2 through authkit/jwt
     authorizer:
       until: 2026-12-31
-      reason: pkg/authz lands with the family's id-03 and spec 006 adopts it in phase 2
+      reason: pkg/authz is in pkg v0.65.0 and spec 006 adopts it in phase 2
