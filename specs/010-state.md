@@ -162,7 +162,8 @@ type Objects interface {
 	// discovered one without a delete (005). A create over an id already
 	// used, live or deleted, is ErrVersionConflict; an update of an id
 	// with no live row is ErrNotFound. Put never touches the observed
-	// members.
+	// members, and drops a Key's status.value, which is the create
+	// response's alone and never a row.
 	Put(ctx context.Context, obj v1.Object, ifVersion int64) (version int64, err error)
 	// Get and ByName return the object with both halves of status
 	// merged and its version; a deleted row is ErrNotFound.
