@@ -280,3 +280,13 @@ refused before it is pushed.
   bucket boundaries, and the span and log field sets are the spec's, and
   `deploy/base/prometheusrule.yaml` carries the ten alerts an
   installation starts with.
+- `lux serve` attaches a model runtime on your own machine to a
+  gateway: it applies a `Provider` with `spec.tunnel: true` from
+  `--dialect`, `--as`, `--include`, `--exclude`, and `--label`, then
+  holds one outbound session open and serves what the gateway sends
+  against `--upstream`, whose address never leaves the machine. It
+  reconnects with backoff from one second to thirty while the gateway
+  can be reached, sends a token the `--token-file` gains in a
+  heartbeat rather than reconnecting, exits 0 on `SIGINT` and
+  `SIGTERM` with the session closed cleanly, and exits 1 when the
+  gateway ends the session for good.

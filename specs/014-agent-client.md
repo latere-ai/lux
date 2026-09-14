@@ -1,6 +1,6 @@
 ---
 title: "Agent client: the lux command and the skill"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -39,19 +39,16 @@ sends is [[003-manifest-contract]]'s; `lux serve`'s protocol is
 
 ## Current state
 
-Built but for `lux serve`: `cmd/lux` is the wiring, `internal/luxcli`
-the command tree, the flag forms, the output renderers, the exit codes,
-and the error rendering, and `internal/luxclient` the `/v1` client with
-`next_cursor` paging and the token source. `skills/lux/SKILL.md` and
-`docs/cli.md` are in the tree, the `depcheck` row for `./cmd/lux` is in
-`.lateregate.yaml`, and every acceptance row but the `lux serve` rows
-has its test. `lux serve` is a command the tree does not have: the
-agent half of [[013-tunnelled-runtimes]] is on its own branch, and
-until it lands `lux serve` is an unknown command, exit 2, with no stub
-and no placeholder. Once `internal/tunnel`'s agent package exists,
-`lux serve` is one more row of the command table calling it with the
-flags below, the `controlClient` of this package for the `PUT` of the
-Provider, and the same token source for the session's heartbeats.
+Built: `cmd/lux` is the wiring, `internal/luxcli` the command tree, the
+flag forms, the output renderers, the exit codes, the error rendering,
+and the `lux serve` loop, and `internal/luxclient` the `/v1` client
+with `next_cursor` paging and the token source. `skills/lux/SKILL.md`
+and `docs/cli.md` are in the tree, the `depcheck` row for `./cmd/lux`
+is in `.lateregate.yaml`, and every acceptance row has its test.
+`lux serve` is one row of the command table over
+[[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: the `PUT` of the
+Provider goes through this package's own client, and the same token
+source serves the session's requests and its heartbeats.
 
 ## Design
 
@@ -224,6 +221,15 @@ When the file behind `--token-file` changes, `lux serve` sends the
 fresh token in a heartbeat frame rather than reconnecting. `SIGINT` and `SIGTERM` close the session cleanly, so the
 Provider is `Unreachable` at once rather than at the registry TTL.
 
+What `lux serve` prints is what every other command prints: the
+applied Provider, the server's own bytes, on stdout, and one refusal
+on stderr at the end. A close reason a retry cannot fix is rendered as
+a refusal is: the reason is the code, so the word the close frame
+carried is the word `-v` prints, and each of the three has one fixed
+sentence. The session's own lines, a reconnect and a broken stream, go
+to stderr through a log handler, at warning normally and at info under
+`-v`, because they are the developer's register and not the answer.
+
 ### Output
 
 `-o json` is the default and is the response body as received, never
@@ -310,7 +316,8 @@ deadline, is exit 1 with the client's own fixed sentence and the code
 envelope, or a 2xx list whose body is not a list, is exit 1 with the
 code `unreadable_response`, the sentence saying to check that `LUX_URL`
 names a Lux gateway, and the status and an excerpt under `-v`. Those
-two codes are the command's own and are the only sentences it builds.
+two codes are the command's own, and the only other sentences it
+builds are the close reasons of `lux serve` above, one per reason.
 A token file that cannot be read or is empty is exit 2 naming
 `LUX_TOKEN_FILE`, since no request was made.
 
@@ -450,8 +457,61 @@ this command speaks to ([[018-conformance-suite]]).
 | The binary contains no issuer URL, no OAuth client id, and no audience string, and no command performs a token exchange of any kind | `TestClientEmbedsNoIssuer`, over `go list -deps` and the string table of the built binary | passing, `cmd/lux`; the claim and parameter names are matched quoted, since a bare `id_token` is a substring of a libc symbol, and `login.example.com` is not among the canaries because `manifest` embeds its golden corpus, whose example owners carry it, into every importer |
 | With `HTTPS_PROXY` set to a refusing address the command fails to reach the server and exits 1, and with it unset it reaches it | `TestClientHonoursProxyVariables` | passing, `cmd/lux`, as a subprocess with `HTTP_PROXY`, because the standard transport reads the proxy variables once per process and never proxies loopback, so the target is a name off loopback the proxy answers for |
 | Each `create` flag form builds the manifest the table says, applies it through `PUT`, and prints it under `--dry-run` without a request; the manifest `lux keys create` builds resolves identically to the equivalent file | `TestFlagFormsBuildTheManifest`, `TestDryRunAppliesNothing` | passing, `internal/luxcli`; the built body and the equivalent file decode to equal objects, and the Budget pair resolves equally without a Lookup |
-| `lux serve` applies the Provider its flags describe, reconnects with backoff across a gateway restart, exits 1 on a close reason a retry cannot fix, and closes cleanly on `SIGTERM` | `TestServeFlags`, `TestServeReconnects`, [[013-tunnelled-runtimes]]'s `TestCleanDisconnectIsImmediate` | not built, 013: `lux serve` is an unknown command until that spec's agent package lands |
+| `lux serve` applies the Provider its flags describe, reconnects with backoff across a gateway restart, exits 1 on a close reason a retry cannot fix, and closes cleanly on `SIGTERM` | `TestServeFlags`, `TestServeReconnects`, `TestServeExitsOnACloseReason`, `TestServeTokenExpiryIsTerminalAfterOneRetry`, `TestServeSendsAFreshTokenInAHeartbeat`, [[013-tunnelled-runtimes]]'s `TestCleanDisconnectIsImmediate` | passing, `internal/luxcli`, against a gateway with the tunnel on assembled in process and a fake runtime on loopback, the listener closed and opened again at one address for the restart |
 | `skills/lux/SKILL.md` parses with frontmatter of exactly `name` and `description`, and every command and flag it names is in the table above | `TestSkillFrontmatter`, `TestSkillNamesOnlyRealCommands` | passing, `internal/luxcli`; every `lux` line in the skill's shell blocks and prose resolves to a command and its flags, and every code it names is in 011's table |
-| An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | passing, `internal/luxcli`, against the gateway assembled in process with an `httptest` stub provider; the run against 015's stub binaries waits for 015 |
+| An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | passing, `internal/luxcli`, against the gateway assembled in process with an `httptest` stub provider; the same run against the stub binaries is owned by [[015-test-stubs-and-tiers]] |
 | `docs/cli.md` equals the binary's `-help` output for every command in the table, and `lux -help` and `lux -version` each exit 0 | `TestCLIDocIsCurrent`, `TestHelpAndVersionExitZero` | passing, `internal/luxcli` |
-| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, this module's `manifest` and `manifest/v1`, and the YAML decoder they use ([[003-manifest-contract]]), `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | passing: the row admits `latere.ai/x/pkg/httpjson`, `github.com/google/uuid` through it, and `github.com/goccy/go-yaml` through `manifest` |
+| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, this module's `manifest`, `manifest/v1`, `internal/tunnel/wire`, and `internal/tunnel/agent`, and the YAML decoder they use ([[003-manifest-contract]]), `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | passing: the row admits `latere.ai/x/pkg/httpjson`, `github.com/google/uuid` through it, and `github.com/goccy/go-yaml` through `manifest`, and the two tunnel packages add no third-party module of their own |
+
+## Outcome
+
+2026-09-14. Built as `internal/luxcli` behind `cmd/lux`, with
+`internal/luxclient` for the `/v1` routes, `skills/lux/SKILL.md`,
+`docs/cli.md`, and the `./cmd/lux` row of `.lateregate.yaml`. The last
+command the table lacked, `lux serve`, is `internal/luxcli/serve.go`
+over [[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: it applies
+the tunnelled Provider its flags describe, holds the session, and
+reconnects with full jitter from one second to thirty while the
+gateway can be dialled. Every acceptance row of this spec's own
+passes; the one row with a second half, the skill's manifests run
+against stub binaries rather than an in-process gateway, names
+[[015-test-stubs-and-tiers]] as its owner. The gate passes whole, with
+`internal/luxcli` at 93.2%.
+
+What was built differs from the first writing in these points, each
+carried in the Design above:
+
+- A close reason a retry cannot fix earns a sentence of its own, so
+  the command builds four more sentences than the two the exit-code
+  section first allowed. The reason itself is the code, which keeps
+  one code to one fixed sentence: `superseded`, `provider_deleted`,
+  `token_expired`, and one sentence for a reason a newer gateway sent
+  and this command does not know.
+- A refused connect is terminal whatever the status, not only
+  `forbidden`. The spec's reconnect holds "while the gateway is
+  reachable and the token verifies", and a refusal says one of those
+  is false; a gateway that cannot be dialled at all is the reconnect's
+  case. So a 503 met at the connect during a restart is exit 1 rather
+  than a wait, and an installation that wants it waited out restarts
+  the command.
+- `lux serve` prints the applied Provider on stdout, which the spec
+  did not say, and its session's lines on stderr through a log
+  handler, at warning normally and at info under `-v`. Without that a
+  command that runs for days would say nothing when it reconnects.
+- `--carriers` is held to one or more, which the spec gave only a
+  default for; zero would park nothing and the session would serve no
+  request.
+- The Provider the flags build carries no `discovery.mode`, so the
+  server's own default stands; the spec named only the globs.
+- `token_expired`'s one retry reads the token file again, and when the
+  file's bytes did not change the retry meets `unauthenticated` at the
+  connect rather than a second `token_expired`. Both endings are exit
+  1, and the second close being terminal is proved against a gateway
+  that closes every session with the reason.
+- The backoff bounds are package variables rather than constants, so a
+  test drives several reconnects in a moment; the defaults are the
+  spec's second and thirty seconds.
+- The bearer of a `/v1` command moved into one `bearerSource`, which
+  `controlClient` and `lux serve` share, because the serve loop has to
+  know whether the source can be read again before it decides that
+  `token_expired` is terminal.
