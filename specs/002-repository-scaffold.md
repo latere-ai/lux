@@ -162,7 +162,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_AUTHORIZER_TIMEOUT` | 006 | `5s` | one decision's deadline, the retry included; the cache times are the shared contract's (`latere.ai/x/pkg/authz`): an allow for the answer's `ttl`, default 60 s and at most 600 s, a deny for 5 s, and no variable changes them |
 | `LUX_ADMIN_SUBJECTS` | 006 | unset | comma separated subjects the built-in owner policy lets act on every object; read and unused when an authorizer is set |
 | `LUX_KEY_CACHE` | 007 | `10s` | how long a Key lookup is cached per replica on the data plane |
-| `LUX_DEFAULT_REQUESTS_PER_MINUTE`, `LUX_DEFAULT_TOKENS_PER_MINUTE` | 007 | `0`, `0` | the limits a Key gets when it names none; `0` is no limit |
+| `LUX_DEFAULT_REQUESTS_PER_MINUTE`, `LUX_DEFAULT_TOKENS_PER_MINUTE` | 007 | `0`, `0` | the limits a Key gets when it names none; `0` is no limit, and under an authorizer ceiling a Key with no limit is refused (003), so an installation with ceilings sets these or its callers name limits |
 | `LUX_UPSTREAM_TIMEOUT` | 004 | `10m` | the deadline of one upstream request including its stream |
 | `LUX_UPSTREAM_ALLOW_PRIVATE` | 005 | unset | `1` lets a Provider base URL name a loopback or private address, for a model served on the operator's own machine |
 | `LUX_MAX_BODY_BYTES` | 004 | `64Mi` | the largest data-plane request body accepted, and the cap on an upstream body the gateway reads whole (005) |

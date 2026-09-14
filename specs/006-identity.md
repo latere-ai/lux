@@ -191,7 +191,11 @@ no limit. `requests_per_minute` overrides
 ([[011-api]]); the four `max_key_*` fields reach `Resolve` as `Limits`
 ([[003-manifest-contract]]) and cap what a Key this subject applies may
 ask for; `max_keys` caps the subject's live Keys, checked by the API at
-`key.create` and refused with `ceiling_exceeded`. `filter`, on a
+`key.create` and refused with `ceiling_exceeded`. A Key that names no
+limit under a ceiling is refused the same way, because no limit exceeds
+every cap; a platform under ceilings sets the limits it wants
+explicitly, and the refusal's detail names the ceiling so a client can
+retry with it ([[003-manifest-contract]]). `filter`, on a
 `list` action or `usage.read`, narrows the result to the owners and
 labels named.
 

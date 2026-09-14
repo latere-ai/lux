@@ -134,9 +134,13 @@ rather than a search.
 The `manifest` group's inputs are [[003-manifest-contract]]'s golden
 corpus and not a second set written here, so one corpus proves `Resolve`
 in process and over HTTP and the two cannot drift. That corpus is
-`manifest.Corpus`, the `embed.FS` the `manifest` package exports over
+`manifest.Corpus`, the `fs.FS` the `manifest` package exports over
 `manifest/testdata/v1/` ([[003-manifest-contract]]), so the group reads
 it through the import from any module and never by a relative path.
+The suite applies the accepted cases in kind order, Provider, Budget,
+Model, Key, so every reference resolves; the nameless Key case is `PUT`
+to `fixed-name-0000`, the corpus's `NewName`; and the `platform-dev` Key
+carries a supplied value, so its response carries no `status.value`.
 
 Every case cleans up what it created, and the suite runs in under five
 minutes against a local `luxd`, which is a `-timeout 5m` on the run

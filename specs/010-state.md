@@ -4,9 +4,6 @@ status: validated
 track: core
 depends_on:
   - specs/003-manifest-contract.md
-  - specs/005-providers.md
-  - specs/007-keys-and-limits.md
-  - specs/009-usage-and-metering.md
 affects: [internal/store/, internal/store/postgres/, internal/store/postgres/migrations/, internal/store/filemode/, internal/store/storetest/, internal/serve/, internal/check/, internal/config/]
 effort: large
 created: 2026-09-13

@@ -6,6 +6,7 @@ depends_on:
   - specs/003-manifest-contract.md
   - specs/007-keys-and-limits.md
   - specs/008-routing-and-models.md
+  - specs/010-state.md
 affects: [metering/, gateway/, internal/store/, internal/api/, internal/reqlog/]
 effort: medium
 created: 2026-09-13

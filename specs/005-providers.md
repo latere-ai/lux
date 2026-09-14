@@ -5,6 +5,7 @@ track: core
 depends_on:
   - specs/001-architecture.md
   - specs/003-manifest-contract.md
+  - specs/010-state.md
 affects: [gateway/, internal/store/, internal/secrets/, internal/serve/, internal/check/, internal/config/]
 effort: medium
 created: 2026-09-13

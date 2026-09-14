@@ -52,12 +52,12 @@ later.
 | [002](002-repository-scaffold.md) | Repository scaffold: module, binary, configuration, quality gate, images, workflows | small | complete | 001 |
 | [003](003-manifest-contract.md) | Manifest contract: the four kinds, decoding, validation, defaulting, resolve | large | complete | 001 |
 | [004](004-request-path.md) | Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors | large | validated | 001, 003 |
-| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | validated | 001, 003 |
+| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | validated | 001, 003, 010 |
 | [006](006-identity.md) | Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy | medium | validated | 001, 002, 003 |
-| [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | validated | 003, 004, 006 |
+| [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | validated | 003, 004, 006, 010 |
 | [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | validated | 003, 005 |
-| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | validated | 003, 007, 008 |
-| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | validated | 003, 005, 007, 009 |
+| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | validated | 003, 007, 008, 010 |
+| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | validated | 003 |
 | [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | validated | 003, 004, 006, 007, 010 |
 | [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | validated | 006, 009, 010 |
 | [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | validated | 004, 005 |
@@ -101,15 +101,16 @@ flowchart BT
   S002 --> S001
   S003 --> S001
   S004 --> S003
-  S005 --> S003
+  S005 --> S010
   S006 --> S002
   S006 --> S003
   S007 --> S004
   S007 --> S006
+  S007 --> S010
   S008 --> S005
   S009 --> S007
   S009 --> S008
-  S010 --> S009
+  S010 --> S003
   S011 --> S010
   S012 --> S010
   S013 --> S004

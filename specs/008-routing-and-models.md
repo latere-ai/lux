@@ -46,7 +46,7 @@ the body on the `openai`, `anthropic`, and `lux` doors, and the
 | Name | Resolves to |
 |---|---|
 | an exact `Model` name, declared or discovered | that Model |
-| `<provider>/<upstream>` | the discovered Model of that name, which is an object like any other |
+| `<provider>/<upstream>` | the discovered Model of that name, looked up exactly and never split; the upstream name may itself contain `/` ([[003-manifest-contract]]) |
 | anything else | `model_not_found` |
 
 There is no prefix stripping, no alias table, and no nearest match: a

@@ -6,6 +6,7 @@ depends_on:
   - specs/003-manifest-contract.md
   - specs/004-request-path.md
   - specs/006-identity.md
+  - specs/010-state.md
 affects: [gateway/, metering/, internal/store/, internal/api/, docs/]
 effort: medium
 created: 2026-09-13
