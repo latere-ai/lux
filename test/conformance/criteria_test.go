@@ -157,6 +157,7 @@ func specTests(t *testing.T, dir, prefix string) []string {
 	}
 	in := false
 	var names []string
+	testName := regexp.MustCompile(`Test[A-Za-z0-9_]+`)
 	for line := range strings.SplitSeq(string(data), "\n") {
 		switch {
 		case strings.HasPrefix(line, "## Acceptance criteria"):
@@ -166,9 +167,7 @@ func specTests(t *testing.T, dir, prefix string) []string {
 			in = false
 		}
 		if in && strings.HasPrefix(line, "| ") {
-			for _, m := range regexp.MustCompile(`Test[A-Za-z0-9_]+`).FindAllString(line, -1) {
-				names = append(names, m)
-			}
+			names = append(names, testName.FindAllString(line, -1)...)
 		}
 	}
 	slices.Sort(names)

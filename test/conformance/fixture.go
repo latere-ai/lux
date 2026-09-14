@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -96,8 +97,8 @@ func case003PreviousReleaseManifests(t testing.TB, c *client) {
 				golden, read map[string]any
 			}{name, kind, golden, back})
 		}
-		for i := len(applied) - 1; i >= 0; i-- {
-			c.mustDelete(t, applied[i].kind, str(applied[i].read, "status.id"))
+		for _, a := range slices.Backward(applied) {
+			c.mustDelete(t, a.kind, str(a.read, "status.id"))
 		}
 	}
 }

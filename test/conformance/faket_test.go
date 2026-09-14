@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -113,8 +114,8 @@ func drive(t testing.TB, name string, fn func(t testing.TB)) *fakeT {
 			f.mu.Lock()
 			cleanups := f.cleanups
 			f.mu.Unlock()
-			for i := len(cleanups) - 1; i >= 0; i-- {
-				cleanups[i]()
+			for _, cleanup := range slices.Backward(cleanups) {
+				cleanup()
 			}
 		}()
 		fn(f)

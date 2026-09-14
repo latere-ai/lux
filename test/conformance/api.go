@@ -228,8 +228,8 @@ func case011GrammarPerKind(t testing.TB, c *client) {
 	specs := map[string]map[string]any{
 		v1.KindProvider: phantomProvider("grammar." + c.run),
 		v1.KindBudget:   budgetSpec("1"),
-		v1.KindModel:    map[string]any{"targets": []map[string]any{{"provider": c.name("grammar")}}},
-		v1.KindKey:      map[string]any{"models": []string{c.name("grammar")}},
+		v1.KindModel:    {"targets": []map[string]any{{"provider": c.name("grammar")}}},
+		v1.KindKey:      {"models": []string{c.name("grammar")}},
 	}
 	ids := map[string]string{}
 	for _, kind := range kindOrder {
@@ -267,8 +267,7 @@ func case011GrammarPerKind(t testing.TB, c *client) {
 			t.Errorf("GET /%s?label=%s does not list %s", plurals[kind], c.label, ids[kind])
 		}
 	}
-	for i := len(kindOrder) - 1; i >= 0; i-- {
-		kind := kindOrder[i]
+	for _, kind := range slices.Backward(kindOrder) {
 		if resp := c.del(t, kind, ids[kind]); resp.Status != http.StatusNoContent || len(resp.Body) != 0 {
 			t.Errorf("DELETE /%s/%s: %d %s", plurals[kind], ids[kind], resp.Status, excerpt(resp.Body))
 		}

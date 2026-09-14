@@ -367,7 +367,7 @@ func (c *client) sendRefused(t testing.TB, rc refusedCase) {
 		return
 	}
 	e := c.expect(t, resp, rc.code)
-	if !slices.Equal(e.paths, rc.paths) && !(len(e.paths) == 0 && len(rc.paths) == 0) {
+	if !slices.Equal(e.paths, rc.paths) && (len(e.paths) != 0 || len(rc.paths) != 0) {
 		t.Errorf("%s: paths %v, want %v", rc.name, e.paths, rc.paths)
 	}
 }
@@ -418,8 +418,7 @@ func case003AcceptedCorpusDeletes(t testing.TB, c *client) {
 	if len(c.corpus) == 0 {
 		c.skip(t, "case003AcceptedCorpus applied nothing")
 	}
-	for i := len(c.corpus) - 1; i >= 0; i-- {
-		a := c.corpus[i]
+	for _, a := range slices.Backward(c.corpus) {
 		id := str(a.read, "status.id")
 		if resp := c.del(t, a.kind, id); resp.Status != http.StatusNoContent {
 			t.Errorf("%s: DELETE %s answered %d: %s", a.name, id, resp.Status, excerpt(resp.Body))

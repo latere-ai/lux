@@ -6,6 +6,7 @@ package conformance
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -43,9 +44,7 @@ func (c *client) suiteSelectors() []string { return []string{c.name("*")} }
 // keySpec is a Key spec over the suite's Models with extra members.
 func (c *client) keySpec(extra map[string]any) map[string]any {
 	spec := map[string]any{"models": c.suiteSelectors()}
-	for k, v := range extra {
-		spec[k] = v
-	}
+	maps.Copy(spec, extra)
 	return spec
 }
 

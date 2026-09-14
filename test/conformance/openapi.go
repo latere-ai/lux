@@ -157,7 +157,7 @@ func (d *document) validateResponse(resp map[string]any, status int, contentType
 
 // resolve follows a $ref into the components.
 func (d *document) resolve(schema map[string]any) map[string]any {
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		ref, ok := schema["$ref"].(string)
 		if !ok {
 			return schema

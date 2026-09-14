@@ -6,7 +6,6 @@ package conformance
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -148,7 +147,7 @@ func startServer(t testing.TB, o serverOptions) *server {
 		cancel()
 		jobs.Wait()
 	})
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	reg := metrics.NewRegistry()
 	httpClient := &http.Client{Transport: &http.Transport{}, Timeout: 5 * time.Second}
 
