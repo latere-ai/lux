@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# A spend window with enough headroom that a multi-thousand-request
+# benchmark never trips it. The point is to keep luxd's per-request limit
+# arithmetic (reserve, price, settle) on the hot path so the overhead is
+# realistic, without the shared $10 dev Budget exhausting mid-run. State is
+# in memory and resets when run.sh restarts luxd.
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: bench
+spec:
+  amount: "100000000"
+  currency: USD
+  window: month

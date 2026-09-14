@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# The Key the benchmark drives luxd with: every Model, drawing from the
+# high-headroom bench Budget, with passthrough allowed. Server mode mints
+# the value and returns it once, so run.sh applies this without a valueFrom
+# block and reads the returned value.
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: bench
+spec:
+  models: ["*"]
+  budget: bench
+  passthrough: true

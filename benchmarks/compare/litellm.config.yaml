@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# LiteLLM proxy config for the benchmark. Third-party format (LiteLLM's own
+# schema); see https://docs.litellm.ai/docs/proxy/configs.
+#
+# Both upstreams are the shared mock (lux-stubs' stub provider), so the proxy
+# and the network cost are all that separates a subject from the baseline.
+# The api_base and credential are read from the environment so this file is
+# free of the per-checkout ports run.sh derives; run.sh exports them.
+#
+#   stub-openai            OpenAI in  -> OpenAI upstream  (passthrough)
+#   xlate-openai-anthropic OpenAI in  -> Anthropic upstream (translation)
+model_list:
+  - model_name: stub-openai
+    litellm_params:
+      model: openai/stub-openai
+      api_base: os.environ/LITELLM_OPENAI_API_BASE
+      api_key: os.environ/LITELLM_STUB_CREDENTIAL
+  - model_name: xlate-openai-anthropic
+    litellm_params:
+      model: anthropic/stub-anthropic
+      api_base: os.environ/LITELLM_ANTHROPIC_API_BASE
+      api_key: os.environ/LITELLM_STUB_CREDENTIAL
+
+litellm_settings:
+  # No outbound analytics from a benchmark process.
+  telemetry: false
+
+general_settings:
+  # A fixed master key so the proxy authorizes requests without a database:
+  # any other bearer sends LiteLLM to look the key up in a DB it has none of.
+  # Send this exact value as the bearer. This is a loopback benchmark secret,
+  # not a credential; do not expose this proxy off loopback.
+  master_key: sk-lux-bench
