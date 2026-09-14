@@ -210,6 +210,17 @@ func (r *replica) client() *http.Client {
 func (r *replica) attach(t *testing.T, name, upstream string, token func() (string, error)) (result <-chan error, stop func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
+	// The session is held once the registry names a session that was not
+	// there before, which covers a first connect and one that supersedes
+	// another on this very replica alike. What was there before is read
+	// before the agent starts: read after, a connect that lands first
+	// would be taken for the previous session and never seen as held.
+	previous := ""
+	if p := r.provider(ctx, name); p != nil {
+		if row, err := r.st.Tunnels().Get(ctx, p.Status.ID); err == nil {
+			previous = row.Session
+		}
+	}
 	done := make(chan error, 1)
 	go func() {
 		done <- agent.Run(ctx, agent.Options{
@@ -217,15 +228,6 @@ func (r *replica) attach(t *testing.T, name, upstream string, token func() (stri
 			Logger: slog.New(slog.DiscardHandler),
 		})
 	}()
-	// The session is held once the registry names a session that was not
-	// there before, which covers a first connect and one that supersedes
-	// another on this very replica alike.
-	previous := ""
-	if p := r.provider(ctx, name); p != nil {
-		if row, err := r.st.Tunnels().Get(ctx, p.Status.ID); err == nil {
-			previous = row.Session
-		}
-	}
 	waitFor(t, func() bool {
 		select {
 		case err := <-done:
