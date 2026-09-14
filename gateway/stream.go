@@ -150,25 +150,21 @@ func (c *call) endStream(f *failure) *failure {
 // usage read from every event that carries it. A target that answered a
 // stream request with one JSON body is decoded whole and re-emitted as
 // the door's event sequence. The status and the headers are written
-// when the first event arrives. A stream that fails past its first
-// event ends with the door's one error frame, which endStream writes,
-// so the bridge is given no Fail of its own: one writer of the frame,
-// never two.
+// and flushed as soon as the upstream's headers have arrived, before
+// the first event is waited for, so the caller's time to first byte is
+// the upstream's and not the first event's. A stream that fails past
+// its first event ends with the door's one error frame, which endStream
+// writes, so the bridge is given no Fail of its own: one writer of the
+// frame, never two.
 func (c *call) streamTranslated(ctx context.Context, t Target, resp *http.Response) *failure {
 	b, f := c.bridgeFor(ctx, t)
 	if f != nil {
 		return f
 	}
 	c.w.Header().Set("Content-Type", "text/event-stream")
-	opts := bridge.StreamOptions{
-		Model: c.model.Metadata.Name,
-		FirstByte: func() error {
-			c.w.WriteHeader(http.StatusOK)
-			c.w.Flush()
-			return nil
-		},
-		Flush: c.w.Flush,
-	}
+	c.w.WriteHeader(http.StatusOK)
+	c.w.Flush()
+	opts := bridge.StreamOptions{Model: c.model.Metadata.Name, Flush: c.w.Flush}
 	var usage bridge.Usage
 	var err error
 	if isSSE(resp.Header.Get("Content-Type")) {

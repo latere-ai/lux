@@ -381,3 +381,63 @@ func TestStreamErrorFramePerDoor(t *testing.T) {
 		t.Errorf("stalled body: %s", rec.Header().Get(HeaderError))
 	}
 }
+
+// TestTranslatedStreamHeadersPrecedeTheFirstEvent: on a translated
+// stream the caller has the status and the headers as soon as the
+// upstream answered, before its first event arrives, so the time to
+// first byte is the upstream's and does not wait for the first event.
+func TestTranslatedStreamHeadersPrecedeTheFirstEvent(t *testing.T) {
+	w := newWorld(t)
+	gate := make(chan struct{})
+	w.anthropic.respond(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/event-stream")
+		rw.WriteHeader(http.StatusOK)
+		rc := http.NewResponseController(rw)
+		_ = rc.Flush()
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+			return
+		}
+		for _, f := range strings.SplitAfter(anthropicStream, "\n\n") {
+			_, _ = io.WriteString(rw, f)
+			_ = rc.Flush()
+		}
+	})
+	srv := httptest.NewServer(w.h)
+	defer srv.Close()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/openai/v1/chat/completions", strings.NewReader(chatBody("claude", true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+keyValue)
+	req.Header.Set("Content-Type", "application/json")
+	type answer struct {
+		resp *http.Response
+		err  error
+	}
+	answered := make(chan answer, 1)
+	go func() {
+		resp, err := srv.Client().Do(req)
+		answered <- answer{resp, err}
+	}()
+	var resp *http.Response
+	select {
+	case a := <-answered:
+		if a.err != nil {
+			t.Fatal(a.err)
+		}
+		resp = a.resp
+	case <-time.After(10 * time.Second):
+		t.Fatal("the status waited for the first event")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("%d %v", resp.StatusCode, resp.Header)
+	}
+	close(gate)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || !strings.HasSuffix(string(body), "data: [DONE]\n\n") || !strings.Contains(string(body), `"model":"claude"`) {
+		t.Fatalf("stream after the gate: %v %s", err, body)
+	}
+}
