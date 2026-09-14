@@ -5,6 +5,8 @@ package config
 
 import (
 	"maps"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,16 +17,39 @@ import (
 	"latere.ai/x/lux/internal/secrets"
 )
 
+// env reads m, and answers publicURL for LUX_PUBLIC_URL when m does not
+// mention it, since every mode requires the variable and few tests are
+// about it; a test about it sets the entry, blank for unset.
 func env(m map[string]string) Getenv {
-	return func(k string) string { return m[k] }
+	return func(k string) string {
+		if v, ok := m[k]; ok {
+			return v
+		}
+		if k == "LUX_PUBLIC_URL" {
+			return publicURLValue
+		}
+		return ""
+	}
 }
 
 // issuer and kek are the two variables a server-mode configuration
-// cannot do without, so every test that is not about them sets them.
+// cannot do without, and publicURLValue the one every mode needs, so
+// every test that is not about them sets them.
 const (
-	issuer = "https://login.example.com"
-	kek    = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+	issuer         = "https://login.example.com"
+	kek            = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+	publicURLValue = "https://lux.example.com"
 )
+
+// wantPublicURL is publicURLValue parsed, for the expected configurations.
+func wantPublicURL(t *testing.T) *url.URL {
+	t.Helper()
+	u, err := url.Parse(publicURLValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
 
 // withKEK adds the key a server-mode configuration needs to m.
 func withKEK(m map[string]string) map[string]string {
@@ -52,7 +77,9 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		PublicAddr: ":8080", InternalAddr: ":8081", DBMaxConns: 8,
 		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
-		KeyCache: 10 * time.Second,
+		KeyCache:  10 * time.Second,
+		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
+		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -66,43 +93,57 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := Load(env(map[string]string{
-		"LUX_PUBLIC_ADDR":                 "127.0.0.1:9000",
-		"LUX_INTERNAL_ADDR":               "127.0.0.1:9001",
-		"LUX_MANIFEST_DIR":                dir,
-		"LUX_OIDC_ISSUERS":                issuer + "/, http://issuer.internal.example",
-		"LUX_OIDC_AUDIENCE":               "gateway",
-		"LUX_OIDC_INSECURE_ISSUERS":       "http://issuer.internal.example/",
-		"LUX_AUTHORIZER_URL":              "https://authz.example.com/decide",
-		"LUX_AUTHORIZER_TOKEN":            " s3cret\n",
-		"LUX_AUTHORIZER_TIMEOUT":          "2s",
-		"LUX_ADMIN_SUBJECTS":              issuer + "|alice, " + issuer + "|ops",
-		"LUX_SECRETS_KEK":                 kek + ", " + strings.ReplaceAll(kek, "AQ", "Ag"),
-		"LUX_UPSTREAM_ALLOW_PRIVATE":      "1",
-		"LUX_DISCOVERY_INTERVAL":          "15m",
-		"LUX_HEALTH_INTERVAL":             "1m",
-		"LUX_KEY_CACHE":                   "30s",
-		"LUX_DEFAULT_REQUESTS_PER_MINUTE": "600",
-		"LUX_DEFAULT_TOKENS_PER_MINUTE":   "200000",
+		"LUX_PUBLIC_ADDR":                         "127.0.0.1:9000",
+		"LUX_INTERNAL_ADDR":                       "127.0.0.1:9001",
+		"LUX_MANIFEST_DIR":                        dir,
+		"LUX_OIDC_ISSUERS":                        issuer + "/, http://issuer.internal.example",
+		"LUX_OIDC_AUDIENCE":                       "gateway",
+		"LUX_OIDC_INSECURE_ISSUERS":               "http://issuer.internal.example/",
+		"LUX_AUTHORIZER_URL":                      "https://authz.example.com/decide",
+		"LUX_AUTHORIZER_TOKEN":                    " s3cret\n",
+		"LUX_AUTHORIZER_TIMEOUT":                  "2s",
+		"LUX_ADMIN_SUBJECTS":                      issuer + "|alice, " + issuer + "|ops",
+		"LUX_SECRETS_KEK":                         kek + ", " + strings.ReplaceAll(kek, "AQ", "Ag"),
+		"LUX_UPSTREAM_ALLOW_PRIVATE":              "1",
+		"LUX_DISCOVERY_INTERVAL":                  "15m",
+		"LUX_HEALTH_INTERVAL":                     "1m",
+		"LUX_KEY_CACHE":                           "30s",
+		"LUX_DEFAULT_REQUESTS_PER_MINUTE":         "600",
+		"LUX_DEFAULT_TOKENS_PER_MINUTE":           "200000",
+		"LUX_PUBLIC_URL":                          "https://gateway.example.com/lux/",
+		"LUX_REQUESTS_PER_MINUTE":                 "1200",
+		"LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE": "0",
+		"LUX_TRUSTED_PROXIES":                     "10.0.0.0/8, 2001:db8::/32",
+		"LUX_MAX_MANIFEST_BYTES":                  "1Mi",
+		"LUX_MAX_BODY_BYTES":                      "8Mi",
+		"LUX_UPSTREAM_TIMEOUT":                    "2m",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := Config{
 		PublicAddr: "127.0.0.1:9000", InternalAddr: "127.0.0.1:9001", ManifestDir: dir, DBMaxConns: 8,
-		OIDCIssuers:              []string{issuer, "http://issuer.internal.example"},
-		OIDCAudience:             "gateway",
-		OIDCInsecureIssuers:      []string{"http://issuer.internal.example"},
-		AuthorizerURL:            "https://authz.example.com/decide",
-		AuthorizerToken:          "s3cret",
-		AuthorizerTimeout:        2 * time.Second,
-		AdminSubjects:            []string{issuer + "|alice", issuer + "|ops"},
-		SecretsKEK:               two,
-		UpstreamAllowPrivate:     true,
-		DiscoveryInterval:        15 * time.Minute,
-		HealthInterval:           time.Minute,
-		KeyCache:                 30 * time.Second,
-		DefaultRequestsPerMinute: 600,
-		DefaultTokensPerMinute:   200000,
+		OIDCIssuers:                      []string{issuer, "http://issuer.internal.example"},
+		OIDCAudience:                     "gateway",
+		OIDCInsecureIssuers:              []string{"http://issuer.internal.example"},
+		AuthorizerURL:                    "https://authz.example.com/decide",
+		AuthorizerToken:                  "s3cret",
+		AuthorizerTimeout:                2 * time.Second,
+		AdminSubjects:                    []string{issuer + "|alice", issuer + "|ops"},
+		SecretsKEK:                       two,
+		UpstreamAllowPrivate:             true,
+		DiscoveryInterval:                15 * time.Minute,
+		HealthInterval:                   time.Minute,
+		KeyCache:                         30 * time.Second,
+		DefaultRequestsPerMinute:         600,
+		DefaultTokensPerMinute:           200000,
+		PublicURL:                        &url.URL{Scheme: "https", Host: "gateway.example.com", Path: "/lux"},
+		RequestsPerMinute:                1200,
+		UnauthenticatedRequestsPerMinute: 0,
+		TrustedProxies:                   []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("2001:db8::/32")},
+		MaxManifestBytes:                 1 << 20,
+		MaxBodyBytes:                     8 << 20,
+		UpstreamTimeout:                  2 * time.Minute,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -120,7 +161,9 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		DBURL: "postgres://lux:secret@db.example.com:5432/lux?sslmode=require", DBMaxConns: 20,
 		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
-		KeyCache: 10 * time.Second,
+		KeyCache:  10 * time.Second,
+		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
+		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)

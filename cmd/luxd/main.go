@@ -238,10 +238,12 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (st
 	case cfg.DBURL != "":
 		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
 	case cfg.ManifestDir != "":
-		// The resolver's defaults are spec 007's two rates, so a Key the
-		// directory declares without limits gets the operator's.
-		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute}
-		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate})
+		// The resolver's defaults are spec 007's two rates and spec 004's
+		// upstream timeout, so a Key the directory declares without limits
+		// gets the operator's and a Provider without a timeout the same;
+		// the public URL is the loop check's, as through the API.
+		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
+		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL})
 		if err != nil {
 			return nil, nil, "", err
 		}

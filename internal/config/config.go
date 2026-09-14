@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"sort"
@@ -101,6 +102,31 @@ type Config struct {
 	// Key without limits gets at resolve; 0 is no limit.
 	DefaultRequestsPerMinute int
 	DefaultTokensPerMinute   int
+
+	// The control plane variables of spec 011, and the two of spec 004
+	// its Resolve defaults and the doors' body cap read.
+
+	// PublicURL is LUX_PUBLIC_URL: the absolute address callers reach the
+	// public listener at, without a trailing slash; every URL in a
+	// response and the loop check of Resolve are built from it.
+	PublicURL *url.URL
+	// RequestsPerMinute is the control plane rate per subject per
+	// replica, which an authorizer's limits.requests_per_minute overrides
+	// for that subject; 0 is no limit.
+	RequestsPerMinute int
+	// UnauthenticatedRequestsPerMinute is the rate per client address
+	// before authentication, on both planes; 0 is no limit.
+	UnauthenticatedRequestsPerMinute int
+	// TrustedProxies are the ranges whose X-Forwarded-For names the
+	// client; nil trusts no header.
+	TrustedProxies []netip.Prefix
+	// MaxManifestBytes is the largest control plane request body.
+	MaxManifestBytes int64
+	// MaxBodyBytes is LUX_MAX_BODY_BYTES, the doors' body cap.
+	MaxBodyBytes int64
+	// UpstreamTimeout is LUX_UPSTREAM_TIMEOUT, the Defaults.Timeout a
+	// Provider without spec.timeout gets at resolve.
+	UpstreamTimeout time.Duration
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -154,6 +180,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadIdentity(getenv)...)
 	problems = append(problems, c.loadProviders(getenv)...)
 	problems = append(problems, c.loadKeys(getenv)...)
+	problems = append(problems, c.loadAPI(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))
