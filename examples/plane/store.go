@@ -321,9 +321,9 @@ func (s *store) recordsOf(match func(metering.Record) bool) []metering.Record {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]metering.Record, 0, len(s.records))
-	for i := len(s.records) - 1; i >= 0; i-- {
-		if match == nil || match(s.records[i]) {
-			out = append(out, s.records[i])
+	for _, v := range slices.Backward(s.records) {
+		if match == nil || match(v) {
+			out = append(out, v)
 		}
 	}
 	return out

@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -306,8 +307,8 @@ func TestRunRefusesAnIncompleteConfiguration(t *testing.T) {
 		{"an address in use", []string{"-issuer", "http://127.0.0.1:1", "-authorizer", "http://127.0.0.1:1", "-addr", "256.256.256.256:1"}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var out strings.Builder
-			if code := run(t.Context(), tc.args, &out); code != tc.want {
+			out := &syncBuffer{}
+			if code := run(t.Context(), tc.args, out); code != tc.want {
 				t.Errorf("run = %d, want %d: %s", code, tc.want, out.String())
 			}
 		})
@@ -320,13 +321,13 @@ func TestRunServesAndStops(t *testing.T) {
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
 	az := stub.New(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	var out strings.Builder
+	out := &syncBuffer{}
 	done := make(chan int, 1)
 	go func() {
 		done <- run(ctx, []string{
 			"-addr", "127.0.0.1:0", "-issuer", iss.URL(), "-authorizer", az.URL(),
 			"-authorizer-token", az.Token(), "-allow-private-upstreams",
-		}, &out)
+		}, out)
 	}()
 	deadline := time.Now().Add(10 * time.Second)
 	for !strings.Contains(out.String(), "plane: serving") {
@@ -350,11 +351,36 @@ func TestRunServesAndStops(t *testing.T) {
 // answer discovery refuses to start rather than admitting every token.
 func TestRunRefusesAnUnreachableIssuer(t *testing.T) {
 	az := stub.New(t)
-	var out strings.Builder
+	out := &syncBuffer{}
 	code := run(t.Context(), []string{
 		"-addr", "127.0.0.1:0", "-issuer", "http://127.0.0.1:1", "-authorizer", az.URL(),
-	}, &out)
+	}, out)
 	if code != 1 || !strings.Contains(out.String(), "plane:") {
 		t.Errorf("run = %d: %s", code, out.String())
 	}
+}
+
+// syncBuffer lets a test read what a command is still writing, which a
+// strings.Builder read from two goroutines is not.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func (s *syncBuffer) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.b.Reset()
 }

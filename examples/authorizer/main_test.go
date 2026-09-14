@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -187,22 +188,22 @@ func TestTheEnvelopeIsTheContracts(t *testing.T) {
 // TestRunRefusesWithoutATokenAndServes: the command says what it needs,
 // serves when it has it, and stops when its context ends.
 func TestRunRefusesWithoutATokenAndServes(t *testing.T) {
-	var out strings.Builder
-	if code := run(t.Context(), nil, &out); code != 2 || !strings.Contains(out.String(), "-token") {
+	out := &syncBuffer{}
+	if code := run(t.Context(), nil, out); code != 2 || !strings.Contains(out.String(), "-token") {
 		t.Fatalf("run with no token = %d: %s", code, out.String())
 	}
 	out.Reset()
-	if code := run(t.Context(), []string{"-nonesuch"}, &out); code != 2 {
+	if code := run(t.Context(), []string{"-nonesuch"}, out); code != 2 {
 		t.Errorf("run with an unknown flag = %d", code)
 	}
 	out.Reset()
-	if code := run(t.Context(), []string{"-token", token, "-addr", "256.256.256.256:1"}, &out); code != 1 {
+	if code := run(t.Context(), []string{"-token", token, "-addr", "256.256.256.256:1"}, out); code != 1 {
 		t.Errorf("run on an address that cannot be bound = %d: %s", code, out.String())
 	}
 	out.Reset()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan int, 1)
-	go func() { done <- run(ctx, []string{"-token", token, "-addr", "127.0.0.1:0"}, &out) }()
+	go func() { done <- run(ctx, []string{"-token", token, "-addr", "127.0.0.1:0"}, out) }()
 	deadline := time.Now().Add(10 * time.Second)
 	for !strings.Contains(out.String(), "deciding at") {
 		if time.Now().After(deadline) {
@@ -219,4 +220,29 @@ func TestRunRefusesWithoutATokenAndServes(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("the endpoint did not stop")
 	}
+}
+
+// syncBuffer lets a test read what a command is still writing, which a
+// strings.Builder read from two goroutines is not.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func (s *syncBuffer) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.b.Reset()
 }

@@ -227,12 +227,13 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ln, err := net.Listen("tcp", *addr)
+	var listener net.ListenConfig
+	ln, err := listener.Listen(ctx, "tcp", *addr)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "authorizer:", err)
 		return 1
 	}
-	_, _ = fmt.Fprintf(stderr, "authorizer: deciding at http://%s\n", ln.Addr())
+	_, _ = fmt.Fprintf(stderr, "authorizer: deciding at %s\n", ln.Addr())
 	server := &http.Server{Handler: handler(*token), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
 	go func() {

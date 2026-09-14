@@ -59,7 +59,8 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ln, err := net.Listen("tcp", *addr)
+	var listener net.ListenConfig
+	ln, err := listener.Listen(ctx, "tcp", *addr)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "plane:", err)
 		return 1

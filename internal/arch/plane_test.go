@@ -37,7 +37,7 @@ func tables(t *testing.T, text string, want []string) [][][]string {
 	var out [][][]string
 	var rows [][]string
 	inTable := false
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "|") {
 			if inTable {
@@ -144,7 +144,7 @@ func readMechanisms(t *testing.T) mechanisms {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, line := range strings.Split(string(doc), "\n") {
+	for line := range strings.SplitSeq(string(doc), "\n") {
 		if path, ok := strings.CutPrefix(line, "  /"); ok && strings.HasSuffix(path, ":") {
 			m.routes = append(m.routes, "/"+strings.TrimSuffix(path, ":"))
 		}
@@ -290,7 +290,7 @@ func planeSections(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	inDesign := false
-	for _, line := range strings.Split(readSpec(t, planeSpec), "\n") {
+	for line := range strings.SplitSeq(readSpec(t, planeSpec), "\n") {
 		switch {
 		case line == "## Design":
 			inDesign = true
@@ -317,7 +317,7 @@ func planeSections(t *testing.T) []string {
 func TestPlaneDocIsCurrent(t *testing.T) {
 	doc := readSpec(t, planeDoc)
 	var headings []string
-	for _, line := range strings.Split(doc, "\n") {
+	for line := range strings.SplitSeq(doc, "\n") {
 		if title, ok := strings.CutPrefix(line, "## "); ok {
 			headings = append(headings, title)
 		}
@@ -368,7 +368,7 @@ func codeBlock(t *testing.T, text, language string) string {
 	var blocks []string
 	var current []string
 	open := false
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		switch {
 		case !open && line == "```"+language:
 			open, current = true, nil

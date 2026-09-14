@@ -4,8 +4,6 @@
 package main
 
 import (
-	"time"
-
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
 )
@@ -118,6 +116,3 @@ func (p *Plane) hardBudgetOf(k *v1.Key) *v1.Budget {
 	}
 	return b
 }
-
-// zeroTime is the expiry of a counter that never resets.
-var zeroTime time.Time

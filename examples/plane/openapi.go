@@ -3,7 +3,10 @@
 
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"maps"
+)
 
 // The document this front serves at GET /v1/openapi.json, which is what
 // a generated client is built from and what the conformance suite holds
@@ -60,9 +63,7 @@ func openAPIDocument(base string) []byte {
 func operation(responses ...map[string]any) map[string]any {
 	all := map[string]any{"default": jsonResponse("a refusal", ref("Error"))}
 	for _, r := range responses {
-		for status, body := range r {
-			all[status] = body
-		}
+		maps.Copy(all, r)
 	}
 	return map[string]any{"responses": all}
 }

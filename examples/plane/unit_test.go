@@ -660,8 +660,9 @@ func TestPrintableASCIIIsTheEchoRule(t *testing.T) {
 			t.Errorf("printableASCII(%q) = %v", tc.in, got)
 		}
 	}
-	if newName() == newName() {
-		t.Error("two generated names are the same")
+	first, second := newName(), newName()
+	if first == second || !strings.HasPrefix(first, "key-") {
+		t.Errorf("two generated names are %q and %q", first, second)
 	}
 	if last(nil) != "" {
 		t.Error("the last of no values is not empty")

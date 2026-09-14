@@ -139,16 +139,13 @@ var codeMessage = map[string]string{
 // did not decide is authorizer_unavailable, and a store failure is
 // store_unavailable.
 func mapErr(err error) *apiError {
-	var ae *apiError
-	if errors.As(err, &ae) {
+	if ae, ok := errors.AsType[*apiError](err); ok {
 		return ae
 	}
-	var me *manifest.Error
-	if errors.As(err, &me) {
+	if me, ok := errors.AsType[*manifest.Error](err); ok {
 		return &apiError{code: string(me.Code), paths: me.Paths, detail: me.Detail}
 	}
-	var unavailable *authz.Unavailable
-	if errors.As(err, &unavailable) {
+	if _, ok := errors.AsType[*authz.Unavailable](err); ok {
 		return refuse(codeAuthorizerUnavailable, err.Error())
 	}
 	switch {
@@ -720,8 +717,7 @@ func (c *call) readBody() ([]byte, *apiError) {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(c.w, c.r.Body, maxManifestBytes))
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, refuse(codeBodyTooLarge, "the body crossed "+strconv.FormatInt(maxManifestBytes, 10)+" bytes")
 		}
 		return nil, refuse(codeMalformedBody, "reading the body: "+err.Error())
@@ -1107,8 +1103,7 @@ func (c *call) usage(ctx context.Context) *apiError {
 // queryRefusal turns metering's own parameter error into the envelope's
 // invalid_field at the parameter it names.
 func queryRefusal(err error) *apiError {
-	var qe *metering.QueryError
-	if errors.As(err, &qe) {
+	if qe, ok := errors.AsType[*metering.QueryError](err); ok {
 		return refuse(codeInvalidField, qe.Error(), qe.Field)
 	}
 	return refuse(codeInvalidField, err.Error())
@@ -1153,7 +1148,7 @@ func (c *call) parseUsage() (metering.Query, []metering.Dimension, metering.Inte
 		case "to":
 			q.To, err = parseTime(name, last(vals))
 		case "by":
-			for _, d := range strings.Split(last(vals), ",") {
+			for d := range strings.SplitSeq(last(vals), ",") {
 				by = append(by, metering.Dimension(strings.TrimSpace(d)))
 			}
 			q.By = by
