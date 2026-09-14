@@ -38,25 +38,9 @@ interface to what surrounds it. Target selection is
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from has
-a per-provider passthrough route where the path names the provider,
-and a separate compatibility surface where the path names the dialect
-and the body's model decides the provider, with two code paths, three
-error shapes, and two ways of reading usage. Its eight providers speak
-three wire dialects, so this design's four cover them: every provider
-that is not Anthropic or Gemini is an `openai` dialect Provider with its
-own base URL. What this design keeps from it is named where it applies:
-the three credential headers a Key is read from, the header set removed
-before forwarding, the injection of `stream_options.include_usage` on
-an OpenAI-dialect stream, the retry set, the loss report as a response
-header, and the estimate that answers a token count no upstream can.
-What it changes deliberately: one path where the door names the dialect
-only; the upstream's status and body never become the caller's; the
-gateway's own request id, `User-Agent`, and upstream timeout; no
-redirect is followed on any route; and a Gemini model reaches other
-doors through Google's OpenAI-compatible endpoint declared as an
-`openai` Provider rather than through a codec the translation library
-does not have.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

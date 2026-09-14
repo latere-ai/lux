@@ -204,7 +204,7 @@ markers, checked by a test in that spec.
 `verify.yml` runs on every push to `main`, every pull request, and on
 demand; on a tag it triggers and every job skips, because the release
 pipeline of [[017-release-and-installation]] owns tags: the `gate` job calls
-`latere-ai/ci/.github/workflows/lateregate.yml@v1` on hosted runners,
+`latere-ai/ci/.github/workflows/lateregate.yml@v1` on GitHub's runners,
 `tidy` checks `go mod tidy -diff`, and `image` builds the developer
 image and asks it for its version. The tiers that need a provider
 beside them join in [[015-test-stubs-and-tiers]]; the release pipeline
@@ -220,11 +220,11 @@ Contributor Covenant 2.1. `SECURITY.md` names the address, the
 response times, and the properties the design commits to.
 `CHANGELOG.md` has one section per release and a tag without one is
 refused. `.github/` carries the bug and feature templates, the pull
-request template, and the actionlint configuration that declares no
-self-hosted runner. `AGENTS.md` holds the conventions an agent working
-in the tree follows, the first of which is that this repository is
-public: no hostname, token, or internal reference of the hosted plane
-appears in it except as a default or an example.
+request template, and the actionlint configuration, which declares no
+runner of its own. `AGENTS.md` holds the conventions an agent working in
+the tree follows, the first of which is that this repository is public:
+no hostname, token, or internal reference appears in it except as a
+default or an example, and no particular deployment of Lux is named.
 
 ## Not in this spec
 

@@ -39,11 +39,9 @@ sends is [[003-manifest-contract]]'s; `lux serve`'s protocol is
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from has
-no command: its surfaces are a dashboard and a hand-written HTTP API,
-so every script against it is `curl` with a bearer and a hand-built
-body, and there is nothing an agent can be given that teaches it the
-API in one file.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

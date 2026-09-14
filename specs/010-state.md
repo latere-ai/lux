@@ -51,11 +51,9 @@ implementation, by mode.
 
 ## Current state
 
-Nothing is built. The hosted gateway keeps everything in one Postgres
-schema, reads a key's spend from the same table it bills from on every
-request, and has no mode that runs without a database. The split into
-desired and observed, the counters as their own table, and the file
-mode are what this spec adds.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
@@ -316,15 +314,15 @@ Errors the interface names: `ErrNotFound`, `ErrVersionConflict`,
 `ErrHashTaken` to `invalid_field` at `spec.value` with a detail that
 names no Key ([[007-keys-and-limits]]); `ErrInvalidCursor`
 is `invalid_field` at `cursor` there, and `ErrNested` is a programming
-error a test catches. A name is unique per kind in one installation
-among objects that are not deleted ([[003-manifest-contract]]), which
-is what backs `ErrNameTaken` and what lets a name be reused after a
-delete. Lease names are `discovery`, `health`, `journal`, and `usage`;
-every TTL is 15 seconds and a holder renews at a third of it. Every
-method of every collection counts one `lux_store_operations_total`
-with `op` its name and `result` `ok`, `conflict`, or `error`
-([[019-observability]]), through `store.Instrument(Store) Store`,
-which `internal/serve` wraps around whichever implementation it built.
+error a test catches. A name is unique per kind in an installation among
+objects that are not deleted ([[003-manifest-contract]]), which is what
+backs `ErrNameTaken` and what lets a name be reused after a delete.
+Lease names are `discovery`, `health`, `journal`, and `usage`; every TTL
+is 15 seconds and a holder renews at a third of it. Every method of
+every collection counts one `lux_store_operations_total` with `op` its
+name and `result` `ok`, `conflict`, or `error` ([[019-observability]]),
+through `store.Instrument(Store) Store`, which `internal/serve` wraps
+around whichever implementation it built.
 
 What satisfies the interfaces `gateway` and `metering` take is
 `internal/serve`, never the store itself, so neither root package
@@ -497,7 +495,7 @@ Key. A value of another shape is a start-up failure naming the Key and
 the variable, never the value.
 
 Ids in file mode are minted by the loader, a fresh ULID per object at
-start, and carried over by kind and name across a re-read, so an id is
+start, and preserved by kind and name across a re-read, so an id is
 stable for the life of the process and differs between starts and
 between replicas; a client of the mode addresses by name, and the
 start-up log says so. A `Provider`'s `status.credential.version` is 1

@@ -36,18 +36,9 @@ much, and cost a caller nothing.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from
-writes an administrative audit row into its database and no event to
-any endpoint, and writes its per-call record into a Redis stream that a
-worker drains to an S3 bucket in NDJSON batches of 256 records or two
-seconds under `<prefix>/requests/dt=<yyyy-mm-dd>/hour=<hh>/<host>-<ulid>.ndjson`,
-keyed by the flush time, with an in-memory fallback of 4 096 records
-that drops the newest when full (`internal/store/reqlog`). The event
-stream here is the part of that audit row that describes an object
-rather than the platform around it, signed and delivered rather than
-queried; the request log is that record with the platform's columns
-removed, a larger batch, a key by the first record's hour, and a buffer
-that drops the oldest, each said below.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

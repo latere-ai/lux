@@ -33,8 +33,8 @@ The design follows the Kubernetes API server in one respect and Cella in
 another. Like an API server, `luxd` owns the schema, the validation, the
 defaulting, the desired state, and the reconciliation of desired into
 observed, and pushes every question of who may do what to an endpoint an
-operator writes. Like Cella, the whole component is public, one
-installation of it is Latere's, and nothing in the tree names that
+operator writes. Like Cella, the whole component is public, a platform's
+installation is one consumer among any, and nothing in the tree names an
 installation except as a default, an example, or the API group. A
 platform that composes Cella and Lux gives a sandbox model access with
 no mechanism of its own: it applies a `Key`, stores the value as a Cella
@@ -49,14 +49,7 @@ flows, and the invariants. Read it first.
 
 Nothing of the design is built. The repository holds the scaffold of
 [[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate. The hosted gateway this design is
-extracted from runs today as one closed binary with its own identity,
-tenancy, dashboard, and funded-grant surfaces beside the proxy; the
-proxy, the provider adapters, the virtual keys, the metering, the
-request log, and the tunnel for local runtimes are the parts this
-design carries over, one spec at a time. That gateway's migration onto
-this one is its own work and out of scope here, except that the
-boundary this spec draws must make it possible without a fork.
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

@@ -46,20 +46,6 @@ Nothing is built. The scaffold's `verify.yml` runs the gate, the tidy
 check, and the image build ([[002-repository-scaffold]]), and `make
 run` starts a process that serves the probes and nothing else.
 
-The hosted gateway this design is extracted from has none of what
-follows, which is why none of it is a port. Its upstreams are
-twenty-five anonymous `httptest` closures written one per test file,
-none of which records what it received; it has no stub authorizer and
-no stub sink; it has no build tags and no test name prefixes, so its
-database tests select themselves on an unset `DATABASE_URL` and skip,
-and its CI provisions no database, so they have never run on a runner;
-and it has nothing runnable against a server it did not start. Its one
-reusable piece is a stub issuer of its own, which this spec replaces
-with the family's. The lesson this spec takes from it is the one its
-own documentation states: a clean clone of that tree cannot serve a
-request without reaching a real identity provider, so `make run` here
-reaches nothing outside the checkout.
-
 ## Design
 
 ### The binary
@@ -73,7 +59,7 @@ installation; [[001-architecture]]'s binary table says so.
 | Stub | Comes from | Serves |
 |---|---|---|
 | provider | `test/stubs/provider`, written here | one instance per dialect: `openai`, `anthropic`, `gemini`, `lux` |
-| issuer | `latere.ai/x/pkg/authkit/issuertest`, mounted | OIDC discovery, a key set, and the family's minting routes |
+| issuer | `latere.ai/x/pkg/authkit/issuertest`, mounted | OIDC discovery, a key set, and the package's minting routes |
 | authorizer | `latere.ai/x/pkg/authz/stub`, mounted | the contract of `latere.ai/x/pkg/authz`, which is [[006-identity]]'s |
 | sink | `test/stubs/sink`, written here | the contract of [[012-request-log-and-events]] |
 
@@ -384,7 +370,7 @@ and not the server.
 ### CI
 
 `verify.yml` keeps its `gate`, `tidy`, and `image` jobs and gains two,
-each on hosted runners, each with every third-party action pinned by
+each on GitHub's runners, each with every third-party action pinned by
 commit with its version in a comment, as the file already does.
 
 | Job | Runs | Does |

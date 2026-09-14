@@ -41,22 +41,9 @@ deltas on a short interval, with the overshoot bounded and stated
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from has
-virtual keys whose value is `lux_` and 52 base32 characters of 32 random
-bytes, stored as a SHA-256 hash with the first eight characters after
-the prefix kept for display (`internal/store/virtualkeys`); a door
-lookup that refuses any value not beginning with `lux_` before hashing;
-per-key model bindings and allow lists; per-key `invoke`, `read`, and
-`manage` scopes; fixed per-minute request and token windows, per replica
-or shared through Redis, charged with a token estimate before the call
-and refunded after it (`internal/policy`); a per-key and per-principal
-spend cap over a rolling window of `window_days` read from Redis
-day buckets on every request, failing closed; a calendar-month funded
-cap per principal; and a `Lux-Cost-Tag` request header of up to eight
-attribution pairs. There is no shared budget across keys, no fixed
-window a replica can compute from the clock alone, and no supplied
-value. Where this design keeps, changes, or drops each of those is said
-in the section that owns it.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
@@ -102,12 +89,11 @@ a platform that gives a developer one credential registers that
 credential here, so the same string the developer presents to every
 control plane as a token opens the doors as a Key, under the models
 and the budget the platform attached, and the hot path stays a hash
-lookup ([[001-architecture]], invariant 3; the family record is
-`decisions/2026-09-13-one-platform-open-cores.md` in latere-ai/specs,
-decision C6). The field is [[003-manifest-contract]]'s: a string,
-write-once, decoded into a member the JSON and YAML encoders skip
-exactly as `Provider.spec.credential.value` is, so no object carrying
-it can be serialized by accident.
+lookup ([[001-architecture]], invariant 3). The field is
+[[003-manifest-contract]]'s: a string, write-once, decoded into a member
+the JSON and YAML encoders skip exactly as
+`Provider.spec.credential.value` is, so no object carrying it can be
+serialized by accident.
 
 The rules are the minted value's with these differences:
 
@@ -322,17 +308,15 @@ nothing is debited on a refusal, and a request refused at a later
 stage or failed before it was sent is refunded whole. Because the
 buckets are per replica, an installation with `n` replicas admits at
 most `n` times the configured rate, which the documentation says in
-those words. The hosted gateway this descends from used fixed
-per-minute windows and never debited an under-estimate; the bucket and
-the symmetric settle are deliberate, because a fixed window admits two
-minutes' worth at a boundary and an unsettled under-estimate lets a
-Key exceed its tokens per minute by the estimate's error every minute.
+those words. The bucket and the symmetric settle are deliberate, because
+a fixed window admits two minutes' worth at a boundary and an unsettled
+under-estimate lets a Key exceed its tokens per minute by the estimate's
+error every minute.
 
 ### Spend windows
 
 A Key that names no spend limit and draws from no Budget spends without
-bound: the core has no default cap, where the hosted plane applied one
-of 100 USD over 30 days to every key, because a default that is money
+bound: the core has no default cap, because a default that is money
 belongs to the operator's manifest or to the authorizer's `limits`.
 
 A Key's `limits.spend` and a Budget are both a spend window: an
@@ -438,11 +422,9 @@ archive, never an aggregate dimension, and never trusted for anything
 but reporting. A pair that fails the rule, a duplicate, and every pair
 past the eighth are dropped and the rest kept; the header is never
 forwarded to a provider ([[004-request-path]] strips every `Lux-*`
-request header). This is the hosted gateway's `Lux-Cost-Tag` under the
-name this design uses for the same idea everywhere, with one change:
-that gateway refused a malformed header with a 400, and this one drops
-the bad pair, because a data plane refusal is a code in the error table
-and attribution is not worth one.
+request header). Dropping a bad pair rather than refusing the request is
+deliberate: a data plane refusal is a code in the error table, and
+attribution is not worth one.
 
 ### Configuration
 

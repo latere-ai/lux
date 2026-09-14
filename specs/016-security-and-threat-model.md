@@ -33,13 +33,14 @@ file and fails when a named test is not in the tree.
 
 ## Current state
 
-Nothing is built. The controls descend from the hosted gateway this
-design is extracted from, minus the ones that belonged to its identity,
-tenancy, and billing surfaces, plus the ones this design adds because
-it must be safe in an installation nobody at Latere operates: envelope
-encryption with a rotation path ([[005-providers]]), the plane boundary
-that makes a Key useless on the control plane ([[006-identity]]), and a
-record type that cannot carry content ([[009-usage-and-metering]]).
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0. The controls below are the
+ones the design needs to be safe in an installation its authors do not
+operate: envelope encryption with a rotation path ([[005-providers]]),
+the plane boundary that makes a Key useless on the control plane
+([[006-identity]]), and a record type that cannot carry content
+([[009-usage-and-metering]]).
 
 ## Design
 

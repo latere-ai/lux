@@ -46,23 +46,9 @@ are [[004-request-path]]'s.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from has a
-reverse tunnel for local runtimes built on `github.com/hashicorp/yamux`
-over a WebSocket upgrade at one route on the public listener, opened
-with a short-lived issuer token that the agent re-mints and carries on
-every heartbeat so the session outlives any one token. The serving
-node is a row in Redis with a liveness TTL, and a replica that does not
-hold the session forwards to the one that does over a pod-to-pod route
-behind a shared secret; without Redis the feature is single-replica.
-The agent probes its runtime once, at connect, and pushes the model
-list in its first frame, so a model pulled later appears only after a
-reconnect. A tunnelled model is private to the subject that attached it
-unless that subject shares it with its organisation, is addressed as
-`local/<name>`, is served by its own proxy path beside the provider
-adapters, and is metered at zero cost with no rate or spend gate. This
-design makes it a Provider instead: one field on the kind, one
-transport, and every other rule already written. What it keeps, drops,
-and changes from the hosted plane is stated section by section below.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
@@ -124,9 +110,9 @@ may read.
 
 ### Why HTTP/2 and not yamux over a WebSocket
 
-The predecessor multiplexed with `github.com/hashicorp/yamux` over a
-WebSocket upgrade. This design uses HTTP/2 streams and the standard
-library alone, for three reasons.
+A tunnel of this shape can be multiplexed with
+`github.com/hashicorp/yamux` over a WebSocket upgrade. This design uses
+HTTP/2 streams and the standard library alone, for three reasons.
 
 1. `./cmd/lux` reaches the standard library and
    `latere.ai/x/pkg/httpjson` and nothing else
@@ -180,8 +166,8 @@ decides whether this subject may attach this machine. The bearer is an
 ordinary issuer token with `aud` `LUX_OIDC_AUDIENCE`: a person's token
 when a person attaches a laptop, a service token from
 `client_credentials` when a machine attaches unattended. The gateway
-mints nothing for this seam; the family's identity rules permit a
-product-local token here and this design does not need one.
+mints nothing for this seam: a product-local token would be allowed here
+and this design does not need one.
 
 A carrier asks the authorizer nothing. It carries a bearer from a
 listed issuer and a `Lux-Tunnel-Session` header, and is accepted when
@@ -204,11 +190,10 @@ bearer and expiry. A `token` that does not verify or names another
 subject is ignored, logged with its developer detail, and leaves the
 previous expiry in place. When the expiry passes with no fresh token
 the session is closed with `token_expired` and every in-flight carrier
-is cancelled. Issuer tokens are short-lived by the family's rules, so
-the agent's loop sends a fresh token on the first heartbeat after its
-token source yields one ([[014-agent-client]]'s `--token-file` is read
-per request for this reason), and a session runs for as long as the
-agent can obtain tokens.
+is cancelled. Issuer tokens are short-lived, so the agent's loop sends a
+fresh token on the first heartbeat after its token source yields one
+([[014-agent-client]]'s `--token-file` is read per request for this
+reason), and a session runs for as long as the agent can obtain tokens.
 
 `LUX_TUNNEL_ENABLED` unset makes all three routes `not_found`, the
 answer [[011-api]] gives any path outside the route table.
@@ -375,17 +360,16 @@ at connect, and declares one Model per surviving upstream name,
 through the same `manifest.Resolve`. The runtime is therefore expected
 to serve its dialect's models route at `--upstream`: Ollama, vLLM,
 llama.cpp, LM Studio, and MLX all answer `GET /v1/models` in the
-`openai` shape. The hosted plane's agent probed the runtime itself,
-with an Ollama-specific list route, and pushed the names once at
-connect; this design pulls through the same job every other Provider
-gets, so a model pulled after the agent started appears on the next
-interval rather than after a reconnect. A runtime with no models route
-runs with `discovery.mode: none` and declared Models. Target selection,
-the circuit per target, fallback, and the dialect matrix are
-[[008-routing-and-models]]'s unchanged: a tunnelled Provider is one more
-provider in the order, and a Model may name a tunnelled target and a
-hosted one together, which is how a laptop serves a model until it
-sleeps and a hosted provider serves it afterwards.
+`openai` shape. The agent pushes nothing: this design pulls through the
+same job every other Provider gets, so a model pulled after the agent
+started appears on the next interval rather than after a reconnect. A
+runtime with no models route runs with `discovery.mode: none` and
+declared Models. Target selection, the circuit per target, fallback, and
+the dialect matrix are [[008-routing-and-models]]'s unchanged: a
+tunnelled Provider is one more provider in the order, and a Model may
+name a tunnelled target and a remote one together, which is how a laptop
+serves a model until it sleeps and a cloud provider serves it
+afterwards.
 
 A discovered Model has no pricing, so under a spend limit or a Budget it
 is `model_unpriced` unless the Key sets `allowUnpriced`
@@ -397,11 +381,10 @@ Metering is unchanged: one record per request with the Provider, the
 upstream model, the tokens read from the runtime's own usage members,
 and the cost ([[009-usage-and-metering]]). Nothing marks a record as
 having crossed a tunnel; the Provider's name is what an operator groups
-by, because one Provider is one machine. The hosted plane recorded a
-tunnelled call at zero cost with a flag naming the serving node and ran
-no rate or spend gate for it; here the Key's rate windows apply as for
-any Provider, and the cost is the Model's pricing or unpriced, as
-above.
+by, because one Provider is one machine. The Key's rate windows apply as
+for any Provider, and the cost is the Model's pricing or unpriced, as
+above: a tunnelled call is neither free of the gates nor recorded at
+zero cost by rule.
 
 ### The upstream client of a tunnelled Provider
 
@@ -505,19 +488,18 @@ The consequence to state rather than discover: under the owner policy
 every subject may `use` every Model, so the Models discovered on one
 person's laptop are callable by every subject the issuer admits, through
 any Key whose selectors match. That is the owner policy working as
-written, the catalog being the installation's. The hosted plane kept a
-tunnelled model private to the subject that attached it unless that
-subject shared it with its organisation; this design drops that
-default deliberately, because the data plane carries no subject and
-the owner policy is one rule for every Model ([[006-identity]]). The
-exposure is bounded: no Model an administrator declared routes to a
-tunnelled Provider unless the administrator targeted it, so a caller
-reaches another subject's machine only by writing that Provider's name
-in the model it asks for, and only while `LUX_TUNNEL_ENABLED` is set,
-which it is not by default. An installation where even that is wrong
-runs an authorizer and denies `model.use` on Models whose Provider is
-`tunnel: true` to every subject but the Provider's owner, which is the
-remedy for every other case where the built-in policy is too open.
+written, the catalog being the installation's. There is no per-subject
+privacy for a tunnelled model, deliberately, because the data plane
+carries no subject and the owner policy is one rule for every Model
+([[006-identity]]). The exposure is bounded: no Model an administrator
+declared routes to a tunnelled Provider unless the administrator
+targeted it, so a caller reaches another subject's machine only by
+writing that Provider's name in the model it asks for, and only while
+`LUX_TUNNEL_ENABLED` is set, which it is not by default. An installation
+where even that is wrong runs an authorizer and denies `model.use` on
+Models whose Provider is `tunnel: true` to every subject but the
+Provider's owner, which is the remedy for every other case where the
+built-in policy is too open.
 
 Who may call a tunnelled Provider is otherwise the ordinary rule: a Key
 whose selectors match a Model on it, with `model.use` decided at the

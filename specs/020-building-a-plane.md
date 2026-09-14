@@ -23,9 +23,8 @@ its own catalog builds on Lux in one of two ways, or both in sequence:
 run `luxd` and write the webhooks, or import `manifest`, `gateway`, and
 `metering` into its own binary with its own identity and store. This
 spec is the guide for that platform, and it fixes what the gateway
-promises one and what it does not. The first platform to follow it is
-the hosted plane this design was extracted from, which is one consumer
-among any.
+promises one and what it does not. A platform that follows it is one
+consumer among any.
 
 It also answers the question a platform asks once and then builds on:
 how a sandbox running untrusted code calls a model without holding a
@@ -34,12 +33,9 @@ either that is not already there.
 
 ## Current state
 
-Nothing is built. The hosted plane runs today as one binary with
-accounts, a dashboard, funded grants, and the proxy in one process, so
-its permission model is compiled into the request path and its catalog
-is a table nobody outside it can read. Its migration onto these two
-doors is its own work in its own repository; this spec is what it
-migrates against.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

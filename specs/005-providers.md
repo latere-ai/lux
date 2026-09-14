@@ -35,23 +35,9 @@ What happens to a request once a target is chosen is
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from has
-one Go type per upstream with its own HTTP client, its own model list
-parser, and its own credential lookup, so a timeout fix lands three
-times and a credential reaches the outbound request through three code
-paths. Credentials sit in a column encrypted under one process-wide key
-with no rotation path. Health is inferred from a counter that no
-request path reads.
-
-Env-sourced credentials, which the hosted plane reads at request time
-in every mode so that a rotation is a restart and no database write,
-exist here in file mode only (`credential.valueFrom.env`,
-[[003-manifest-contract]]); in server mode a rotation is one `PUT`
-carrying the new value, and `luxd rewrap` covers the key that wraps it.
-The hosted plane's credential check at create, one request against the
-provider before the row is written, becomes the first health probe,
-whose `credential refused` result is visible within
-`LUX_HEALTH_INTERVAL`.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

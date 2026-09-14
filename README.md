@@ -11,9 +11,9 @@ answer back in the dialect it was asked in, and records what it cost.
 Identity comes from any OpenID Connect issuer. Permission comes from an
 endpoint you write.
 
-Latere runs Lux inside its hosted platform at lux.latere.ai; this
-repository is the gateway that platform is built on, and anyone can run
-it.
+Anyone can run Lux. A platform can build on it through the webhooks and
+the packages rather than forking it, and is one consumer among any
+([building a plane](specs/020-building-a-plane.md)).
 
 [![CI](https://github.com/latere-ai/lux/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/lux/actions/workflows/verify.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)

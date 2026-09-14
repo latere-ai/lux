@@ -58,15 +58,13 @@ license:
   spdx: Apache-2.0
   holder: Latere AI
 
-# The identity shape of the family: specs/infrastructure/identity.md in latere-ai/specs
 identity:
   role: core
   audience: lux
   config_prefix: LUX
   api_group: lux.latere.ai
-  # The default audience of the open core, verified only where the core is
-  # self-hosted; the hosted plane is latere-ai/llm-gateway, audience
-  # lux.latere.ai.
+  # The default audience a deployment verifies unless it configures its
+  # own.
   reached_by: self-hosted
   waive:
     verifier:

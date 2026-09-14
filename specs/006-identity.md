@@ -38,30 +38,14 @@ each is a platform's, expressed through the authorizer.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from
-trusts one issuer with a hardcoded default hostname and a list of
-audiences that, left empty, accepts a token minted for any audience
-with a warning; reads that issuer's organisation and role claims and a
-superadmin flag to decide who is an administrator (`internal/auth/role.go`,
-`can.go`); grants each virtual key a set of fine scopes, `invoke`,
-`read`, `manage`, of its own (`internal/auth/finescope.go`); keeps a
-browser session for its dashboard; accepts pre-shared master keys
-(`LUX_MASTER_KEYS`) and runs unauthenticated with `LUX_STATELESS`; and
-holds a table of platform-funded grants that gates who may bind a
-funded provider key. Every one of those is deliberately absent here: the
-roles, the grants, and the per-subject permissions become the
-authorizer's tables, which for the hosted plane is `platformd`; the
-session becomes the console's; a key's scopes become what its resolved
-manifest names; master keys and the stateless switch have no
-equivalent, because a control plane credential is an issuer's token and
-nothing else. That gateway's migration is its own work
-([[020-building-a-plane]]).
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
-Amended on 2026-09-13 by the family decision "one platform over open
-cores" (latere-ai/specs, `decisions/2026-09-13-one-platform-open-cores.md`):
-the claims forwarded, the cache and retry rules, the verifier, the
-subject string and the probe id are one contract shared by the three
-open cores, Cella, Lux and Origo, so one authorizer serves all three.
+Amended on 2026-09-13: the verifier, the authorizer envelope, its cache
+and retry rules, the subject string and the probe id are the shared
+contract of `latere.ai/x/pkg/authz`, so one authorizer can serve several
+open cores.
 
 ## Design
 
@@ -95,16 +79,15 @@ request's bearer is accepted when it is a JWS signed by a listed
 issuer's key, `iss` matches, `aud` contains `LUX_OIDC_AUDIENCE`
 (default `lux`), `exp` is present and in the future, and `nbf` if
 present is past. `LUX_OIDC_AUDIENCE` is one value: the audience is the
-gateway's own name (identity rule R2), and no second audience is needed
-because a platform's own developer credential never reaches `/v1` as a
-token; it reaches the doors as a Key ([[020-building-a-plane]]). Every
-claim of the verified token, read from the payload with
-`jwt.DecodePayload` after `Validate` accepted it, is handed to the
-authorizer verbatim in `claims`, and none is interpreted by the
-gateway: an issuer's organisation, role, or group claims mean something
-to the authorizer that reads them and nothing to `luxd`. An `http://`
-issuer is refused unless it is on a loopback
-address or in `LUX_OIDC_INSECURE_ISSUERS`.
+gateway's own name, and no second audience is needed because a
+platform's own developer credential never reaches `/v1` as a token; it
+reaches the doors as a Key ([[020-building-a-plane]]). Every claim of
+the verified token, read from the payload with `jwt.DecodePayload` after
+`Validate` accepted it, is handed to the authorizer verbatim in
+`claims`, and none is interpreted by the gateway: an issuer's
+organisation, role, or group claims mean something to the authorizer
+that reads them and nothing to `luxd`. An `http://` issuer is refused
+unless it is on a loopback address or in `LUX_OIDC_INSECURE_ISSUERS`.
 
 A control plane request without a bearer is `unauthenticated`, 401. A
 control plane request whose bearer is a Key value is `unauthenticated`
@@ -118,16 +101,16 @@ claims: an actor token, minted for a signed-in person and carrying that
 person's `sub`, when a person acts, for a console or a CLI; a service
 token from the `client_credentials` grant, whose `sub` is the platform's
 own service account, for unattended work such as provisioning a Key for
-a run (identity rules R3 and R5; `oidc.MintActorToken` and
-`oidc.ServiceTokenSource` in `latere.ai/x/pkg/authkit/oidc` mint them).
-The consequence is the `owner`: every object's `owner` is the rendered
-subject of the token that applied it, so a Key applied with an actor
-token is owned by the person and its usage is attributed to the person,
-and one applied with a service token is owned by the service account,
-and a platform that wants the person on the record puts them in a label
-under its own prefix ([[009-usage-and-metering]]). The two are one
-credential kind on this hop, a bearer from a listed issuer, verified
-one way ([[020-building-a-plane]]).
+a run (`oidc.MintActorToken` and `oidc.ServiceTokenSource` in
+`latere.ai/x/pkg/authkit/oidc` mint them). The consequence is the
+`owner`: every object's `owner` is the rendered subject of the token
+that applied it, so a Key applied with an actor token is owned by the
+person and its usage is attributed to the person, and one applied with a
+service token is owned by the service account, and a platform that wants
+the person on the record puts them in a label under its own prefix
+([[009-usage-and-metering]]). The two are one credential kind on this
+hop, a bearer from a listed issuer, verified one way
+([[020-building-a-plane]]).
 
 With `LUX_OIDC_ISSUERS` unset, `luxd` refuses to start unless
 `LUX_MANIFEST_DIR` is set: in file mode the control plane is read-only
@@ -227,14 +210,15 @@ Rules:
   never a data plane request.
 - `LUX_AUTHORIZER_TOKEN` is the bearer of this one endpoint and of no
   other: it is not `LUX_EVENTS_SECRET`, not `LUX_TUNNEL_FORWARD_SECRET`,
-  and not a token any issuer minted (identity rule R8). `luxd` reads it
-  at start, so rotating it is setting the new value on both sides and
-  restarting; an authorizer that accepts the old and the new bearer
-  during the swap loses no decision. The endpoint should be reachable
-  from inside the installation only, which is the operator's network
-  policy ([[017-release-and-installation]]) and nothing `luxd` can
-  check; `luxd check` reports the URL's scheme and host so an operator
-  sees what it dials.
+  and not a token any issuer minted, because every cross-service
+  credential is per endpoint and rotates. `luxd` reads it at start, so
+  rotating it is setting the new value on both sides and restarting; an
+  authorizer that accepts the old and the new bearer during the swap
+  loses no decision. The endpoint should be reachable from inside the
+  installation only, which is the operator's network policy
+  ([[017-release-and-installation]]) and nothing `luxd` can check; `luxd
+  check` reports the URL's scheme and host so an operator sees what it
+  dials.
 - The authorizer is asked inside a control plane request, so it must
   answer from the bearer above and its own state alone: an endpoint
   that requires a session refuses every call, and one that calls this
@@ -377,8 +361,8 @@ holds.
 
 | Package | Change | Why |
 |---|---|---|
-| `authkit/jwt` | verify `ES256` beside `RS256`: accept `alg: ES256` in the header and `kty: EC` keys in the key set | the start-up check and `TestBearerAcceptance` above name `ES256`; the family's C5 names it as the shared verifier's; today the package refuses the algorithm and skips the keys |
-| `authz` | a conformance test an authorizer passes, `authz/conformance` or a `Conformance(t, url, token)` in the package: the probe is denied for every subject, a wrong bearer is refused, a well-formed request answers a 200 with `allow`, `ttl` when present is a positive integer, and `filter` and `limits` when present have the contract's shape | the family says the package carries it and this spec's authorizer criteria and [[020-building-a-plane]]'s `TestPlaneDocAuthorizerConforms` run it; nothing in the package does yet |
+| `authkit/jwt` | verify `ES256` beside `RS256`: accept `alg: ES256` in the header and `kty: EC` keys in the key set | the start-up check and `TestBearerAcceptance` above name `ES256`; the shared verifier is expected to accept it; today the package refuses the algorithm and skips the keys |
+| `authz` | a conformance test an authorizer passes, `authz/conformance` or a `Conformance(t, url, token)` in the package: the probe is denied for every subject, a wrong bearer is refused, a well-formed request answers a 200 with `allow`, `ttl` when present is a positive integer, and `filter` and `limits` when present have the contract's shape | the package is where a shared conformance test belongs, and this spec's authorizer criteria and [[020-building-a-plane]]'s `TestPlaneDocAuthorizerConforms` run it; nothing in the package does yet |
 
 ### What the gateway never does
 

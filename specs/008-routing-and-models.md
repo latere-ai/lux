@@ -31,20 +31,9 @@ which target a Model reaches.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from
-routes through a per-key binding document: a model name maps to a list
-of targets under one of four strategies, `fallback`, `round-robin`,
-`weighted`, or `least-latency`, where only `fallback` walks past the
-first target, on a `429`, any `5xx`, or a transport error, with no
-backoff and never after the first response byte. On its dialect
-surfaces a bare name is looked up in a catalog and a `provider/model`
-name has its prefix stripped. There is no priority tier, no circuit,
-and no per-target health beyond a latency average that only successes
-feed, so a target that fails fast is retried on every request. This
-design keeps the fallback walk and its retry set, replaces the four
-strategies with weights and priorities on the Model, and adds the
-circuit; the `provider/model` form survives as the name of a discovered
-Model rather than as a parsing rule.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
@@ -235,9 +224,8 @@ Two consequences worth naming:
   wants Google's models behind every door declares a second Provider
   with `dialect: openai` at Google's OpenAI-compatible base URL
   (`https://generativelanguage.googleapis.com/v1beta/openai`, bearer
-  credential), which is how the hosted plane reaches them on its
-  translated surfaces; that Provider is an `openai` target like any
-  other and the matrix needs no Gemini codec for it.
+  credential); that Provider is an `openai` target like any other and
+  the matrix needs no Gemini codec for it.
 - A `lux` door is translated toward every other dialect, because the
   lux dialect is the intermediate representation itself and its
   frontend leg is lossless by construction. Every representational
@@ -255,8 +243,7 @@ family, `gateway.OpenAIReasoningFamily(name)`: the name begins with
 more, compared case-insensitively on the part before any `/`. Those
 models are served by OpenAI on `/responses`, which carries their
 reasoning items across turns where Chat Completions drops them into the
-loss report, and the predicate is the one the hosted plane applies.
-[[004-request-path]] uses the same predicate to choose
+loss report. [[004-request-path]] uses the same predicate to choose
 `max_completion_tokens` over `max_tokens`. A request that arrived on an
 `openai` door toward an `openai` target is a passthrough on the route
 it arrived on, and this rule never touches it. A Model that always

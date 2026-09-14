@@ -37,22 +37,9 @@ year after it was written.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from
-prices a call in floating point USD per million tokens from a rate card
-compiled into the binary and a live snapshot of one provider's price
-list (`internal/rates`), rounds to USD micro-units, and marks a model
-the card does not know with `-1` and a `model_unknown` flag while
-serving the call; keeps its running totals in Redis, one day bucket
-per key and per principal and one calendar-month bucket per funded
-principal (`internal/store/redisusage`), and reads a rolling sum of the
-day buckets on every request to enforce a cap; writes the per-call
-record to a Redis stream drained to an S3 bucket as NDJSON
-(`internal/store/reqlog`); and answers its usage routes by folding the
-recent stream window. Its earlier Postgres usage table was retired. This
-design keeps the micro-unit integer and the archive, moves the price
-onto the `Model` an operator declares so the gateway ships no card,
-replaces the day buckets with fixed windows every replica computes from
-the clock, and takes the per-request store read off the hot path.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
@@ -147,9 +134,8 @@ request it cannot price.
 
 The core ships no price card. Every price is the operator's
 `Model.spec.pricing` ([[003-manifest-contract]]), a discovered Model is
-unpriced until an operator declares it, and the hosted plane's compiled
-rate card and its provider price snapshot are the platform's to keep
-as Models it applies.
+unpriced until an operator declares it, and a compiled-in rate card or a
+provider's price snapshot is a platform's to keep as Models it applies.
 
 ```go
 // Pricing quotes money per Per tokens, with Per one of 1, 1000,

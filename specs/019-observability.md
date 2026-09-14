@@ -39,21 +39,6 @@ Nothing is built. The scaffold of [[002-repository-scaffold]] serves
 `/livez`, `/readyz`, `/version`, and an empty `/metrics` on the
 internal listener.
 
-The hosted gateway this design is extracted from does four things this
-spec does differently, and each difference is deliberate. It pushes
-OpenTelemetry instruments over OTLP and serves no `/metrics` at all, so
-an operator with Prometheus and no collector sees nothing; this spec
-serves the Prometheus text format on the internal listener and treats
-OTLP as the exporter for traces. Its per-request metrics carry the
-request's raw URL path as a label, so every path-embedded model name is
-a series of its own; this spec labels with a resolved object's name and
-never a caller's string. Its spans carry the caller's organisation,
-principal, and key id, behind a variable that hashes them rather than
-removes them; this spec puts no identity on a span at all and joins
-through the request id instead. And it writes no per-request log line,
-so an incident starts from the archive rather than from the logs; this
-spec writes one line per request on both planes.
-
 ## Design
 
 ### The four probes and the registry
@@ -105,8 +90,7 @@ table is the reference: a metric not in it does not exist, and
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream
-duration; it is the figure an operator of a model server watches, and
-the one hosted metric this spec carries over by name.
+duration; it is the figure an operator of a model server watches.
 
 Label values, each from a closed set:
 
@@ -196,9 +180,9 @@ W3C `traceparent` and `baggage`, and the sampler is parent-based with
 the ratio of `OTEL_TRACES_SAMPLER_ARG`, all of that package's. No
 `LUX_*` variable configures tracing, and none configures redaction,
 because there is nothing to redact: the attributes below are the whole
-set. The hosted gateway's `LUX_OTEL_REDACT_IDENTITY`, a switch between
-identity on a span and a hash of identity on a span, has no counterpart
-here, because neither state of it is a state this spec allows.
+set. A switch between identity on a span and a hash of identity on a
+span has no counterpart here, because neither state of it is a state
+this spec allows.
 
 | Span | Parent | Attributes |
 |---|---|---|

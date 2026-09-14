@@ -35,15 +35,9 @@ and nothing else in the tree makes that claim.
 
 ## Current state
 
-Nothing is built. The hosted gateway this design is extracted from uses
-the word "conformance" nowhere. It has a handful of live tests that take
-a base URL from the environment and skip without a key, which is the
-closest thing to this idea in the family, but they sit inside the same
-package as its unit tests, cannot be imported, run against real
-upstreams so they assert shapes rather than values, and are not run by
-its release pipeline. Its release smoke is a shell script that fetches
-three paths. Nothing there states a contract a third party could
-implement, so none of this is a port.
+Nothing is built. The repository holds the scaffold of
+[[002-repository-scaffold]]: the binary serving its probes, typed
+configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 

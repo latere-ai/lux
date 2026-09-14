@@ -43,18 +43,6 @@ subcommand today. The CHANGELOG rule is already in force through the
 gate's pre-push hook, and `CHANGELOG.md` carries an `Unreleased`
 section. No tag has been cut; `SECURITY.md` says the first is `v0.1.0`.
 
-The hosted gateway has shipped two hundred and fourteen tags through a
-pipeline that builds one `linux/amd64` image, pushes it, applies a
-kustomize overlay to one cluster, curls three paths, and publishes a
-release whose body is the CHANGELOG section. That last part is the one
-piece this spec inherits unchanged. Everything else below is new to the
-family: no repository in it signs an image, produces a bill of
-materials, attests a build, publishes a checksum, ships a binary
-outside an image, builds for two architectures, runs an install
-document in CI, or has a preflight subcommand. Its own install
-document has already drifted from its pipeline, which is the concrete
-reason the document here is executed rather than reviewed.
-
 ## Design
 
 ### Artifacts
@@ -278,7 +266,7 @@ The rows this spec owns:
 | `configuration` | `internal/config.Load` returns without a problem |
 | `public url` | `LUX_PUBLIC_URL` is absolute, and no Provider's `baseURL` names its host, which would be a loop ([[003-manifest-contract]]) |
 | `issuers` | every `LUX_OIDC_ISSUERS` entry answers `/.well-known/openid-configuration` and its `jwks_uri` with at least one `RS256` or `ES256` key |
-| `authorizer` | the endpoint answers a probe inside `LUX_AUTHORIZER_TIMEOUT` with a body that parses as a decision, and denies it. The probe is `latere.ai/x/pkg/authz.Probe("provider.read", "Provider")`, whose resource id is `authz.ProbeID`, the reserved id every authorizer in the family denies for every subject and action; the row is `latere.ai/x/pkg/authz.Check`, and `authz.ErrProbeAllowed` is what an allow returns. The line **fails** on an allow: an authorizer that allows an action on an object that can exist nowhere is answering without reading the request, which makes every later allow unreadable too. The answer is not entered in the decision cache ([[006-identity]]), so a check run never changes what a later request is told |
+| `authorizer` | the endpoint answers a probe inside `LUX_AUTHORIZER_TIMEOUT` with a body that parses as a decision, and denies it. The probe is `latere.ai/x/pkg/authz.Probe("provider.read", "Provider")`, whose resource id is `authz.ProbeID`, the reserved id every authorizer denies for every subject and action; the row is `latere.ai/x/pkg/authz.Check`, and `authz.ErrProbeAllowed` is what an allow returns. The line **fails** on an allow: an authorizer that allows an action on an object that can exist nowhere is answering without reading the request, which makes every later allow unreadable too. The answer is not entered in the decision cache ([[006-identity]]), so a check run never changes what a later request is told |
 | `events` | with `LUX_EVENTS_URL` set, the sink answers 2xx to one signed ping whose body is a `check.ping` event and whose signature is computed exactly as [[012-request-log-and-events]] says. That type is [[012-request-log-and-events]]'s, in its table for this row's sake: it names no object, carries an empty `data`, has `reason: check`, and is never written to the journal, so a sink that keys on `type` has a row to ignore rather than an unknown body to refuse |
 | `requestlog` | with the exporter `s3`, the bucket accepts and then deletes one empty object under `LUX_S3_PREFIX` |
 
@@ -311,8 +299,8 @@ the developer image and `deploy/` from the checkout, and the
 `install-release` job of `release.yml` against the published image and
 the unpacked archive. The first catches a prose defect the day it
 lands; the second proves the artifacts an operator actually downloads.
-The hosted gateway's install document drifted from its pipeline because
-nobody ran it, which is the failure this job exists to make impossible.
+An install document nobody runs drifts from the pipeline beside it,
+which is the failure this job exists to make impossible.
 
 ### What a version promises
 
@@ -320,14 +308,12 @@ Semantic versioning on the tag. Before `v1.0.0` a minor may break any
 row below with a CHANGELOG entry naming the break; from `v1.0.0` the
 table binds.
 
-The table is a promise to an operator outside Latere and is not the
-family's internal rule. Latere's own decision is that a seam between
-two of its repositories changes in one coordinated batch with no
-window; that rule governs the seams between `luxd`, `platformd`, and
-`latere.ai/x/pkg`, which are one deployment. It does not govern the
-surfaces below, which strangers code against on their own schedule, and
-a table that bound both would be a table that promised a stranger what
-a colleague gets.
+The table is a promise to an operator this project does not employ. A
+seam between two components one team deploys together can change in one
+coordinated batch with no window; the surfaces below cannot, because
+strangers code against them on their own schedule, and a table that
+bound both would be a table that promised a stranger what a colleague
+gets.
 
 | Surface | A patch may | A minor may | A major may |
 |---|---|---|---|
