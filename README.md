@@ -18,15 +18,7 @@ the packages rather than forking it, and is one consumer among any
 [![CI](https://github.com/latere-ai/lux/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/lux/actions/workflows/verify.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-
-## Status
-
-Pre-release. Everything described here is built and covered by tests,
-and `main` passes the full quality gate on every commit; what remains is
-cutting the first tagged release, so there is not yet a published image
-or binary to pull. Run it from a checkout with `make run`, below. The
-manifest schema may still change before that tag, and the CHANGELOG
-records every change to it.
+[![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange.svg)](#project-status)
 
 ## The problem
 
@@ -184,6 +176,15 @@ install a release on a cluster, see [`docs/install.md`](docs/install.md).
 | [Keys and limits](specs/007-keys-and-limits.md) | what a `Key` may reach and what a `Budget` stops |
 | [Building a plane](specs/020-building-a-plane.md) | how a platform composes the packages and the webhooks |
 | [docs/](docs/README.md) | for people who run `luxd` or build against it |
+
+## Project status
+
+Pre-release, built in the open. Every capability above is implemented and
+covered by tests, and `main` passes the full quality gate on every
+commit. What remains before `v1` is the first tagged release, so there is
+no published image or binary to pull yet and the manifest schema may
+still change; the [CHANGELOG](CHANGELOG.md) records every change to it.
+Until then, run it from a checkout as [Try it](#try-it) shows.
 
 ## Contributing
 
