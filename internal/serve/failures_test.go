@@ -257,7 +257,7 @@ func TestHealthSurvivesStoreFailures(t *testing.T) {
 	}
 	// A credential that cannot be opened is a failed probe.
 	failing := NewHealth(HealthOptions{Store: h.st, Clients: h.clients, Credentials: failingCredentials{}})
-	if failed, lastError := failing.probe(t.Context(), h.provider(t, "openai", v1.DialectOpenAI, "http://127.0.0.1:1", nil)); !failed || !strings.Contains(lastError, errBroken.Error()) {
+	if failed, lastError := failing.Probe(t.Context(), h.provider(t, "openai", v1.DialectOpenAI, "http://127.0.0.1:1", nil)); !failed || !strings.Contains(lastError, errBroken.Error()) {
 		t.Fatalf("probe = %v, %q", failed, lastError)
 	}
 	if failing.o.Holder == "" || failing.o.Logger == nil || failing.o.Now == nil || !strings.HasPrefix(failing.o.NewID(), "evt_") {

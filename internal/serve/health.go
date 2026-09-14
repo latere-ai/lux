@@ -168,7 +168,7 @@ func (h *Health) Tick(ctx context.Context) {
 		}
 		switch p.Spec.Health.Mode {
 		case v1.HealthProbe:
-			failed, lastError := h.probe(ctx, p)
+			failed, lastError := h.Probe(ctx, p)
 			h.mu.Lock()
 			h.observeLocal(p.Status.ID, failed)
 			h.record(ctx, p, failed, lastError, true)
@@ -182,11 +182,13 @@ func (h *Health) Tick(ctx context.Context) {
 	h.fillModels(ctx)
 }
 
-// probe calls the Provider's models route, first page only, within the
+// Probe calls the Provider's models route, first page only, within the
 // probe budget. A transport failure, a timeout, or a 5xx is a failure;
 // any other complete response is a success, and a 401 or 403 is a
-// success whose lastError says the credential was refused.
-func (h *Health) probe(ctx context.Context, p *v1.Provider) (failed bool, lastError string) {
+// success whose lastError says the credential was refused. It is the
+// providers row of luxd check as well as the job's own step, and needs
+// no store or lease.
+func (h *Health) Probe(ctx context.Context, p *v1.Provider) (failed bool, lastError string) {
 	ctx, cancel := context.WithTimeout(ctx, probeBudget)
 	defer cancel()
 	rawURL, err := modelsURL(p, "")

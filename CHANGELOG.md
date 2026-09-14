@@ -6,6 +6,29 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Providers: a Provider's credential is sealed the moment it is applied,
+  envelope encryption under the keys in `LUX_SECRETS_KEK`, one to eight
+  keys of which the first wraps and every one opens, and `luxd serve`
+  refuses to start without a key that opens every stored credential,
+  naming a bad key by its position and never by its value; the file mode
+  reads its credentials from the environment and needs no key. Rotation
+  is `LUX_SECRETS_KEK=new,old`, then `luxd rewrap`, which re-wraps every
+  stored data key under the new key and prints one line, then
+  `LUX_SECRETS_KEK=new`; until the Postgres store lands the role says so
+  and exits. Discovery reads every Provider's model list on
+  `LUX_DISCOVERY_INTERVAL` (default `1h`), and at once when a Provider
+  is created or re-addressed, and declares each name as a Model
+  `<provider>/<name>` with `status.source: discovered`; a declared Model
+  of the same name wins, a failed list changes nothing, and a name the
+  schema refuses is a warning in `status.discovered.warnings`. Health
+  probes every Provider's model list on `LUX_HEALTH_INTERVAL` (default
+  `30s`), publishes `status.health` and every Model's
+  `status.available`, and raises `provider.unreachable` and
+  `provider.healthy` once per transition. Every request toward a
+  provider goes through one client per Provider: pinned to its base URL,
+  no proxy, no redirects, TLS 1.2 or later, HTTP/2, no compression added,
+  a private address refused at dial unless `LUX_UPSTREAM_ALLOW_PRIVATE=1`,
+  and `spec.concurrency` in-flight requests at most.
 - The store: `luxd serve` holds desired state, Key hashes, credential
   rows, spend counters, leases, the event journal, and the tunnel
   registry in memory by default and says so at start in one line, and

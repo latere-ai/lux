@@ -378,7 +378,7 @@ func TestHealthStoreFailures(t *testing.T) {
 	}
 	// A Provider whose baseURL cannot be a client is a failed probe.
 	bad := h.provider(t, "bad", v1.DialectOpenAI, "://nope", nil)
-	failed, lastError := job.probe(t.Context(), bad)
+	failed, lastError := job.Probe(t.Context(), bad)
 	if !failed || lastError == "" {
 		t.Fatalf("probe of a bad baseURL = %v, %q", failed, lastError)
 	}
