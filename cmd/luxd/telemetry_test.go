@@ -157,6 +157,11 @@ func runTelemetry(t *testing.T) (*telemetryRun, string) {
 		"LUX_AUTHORIZER_URL":         authorizer.URL(),
 		"LUX_AUTHORIZER_TOKEN":       authorizer.Token(),
 		"LUX_UPSTREAM_ALLOW_PRIVATE": "1",
+		// The health job reads the catalogue on its tick, so a Provider
+		// applied after the start carries a lux_provider_health series
+		// from the next one; the floor of the interval is what the scrape
+		// below waits out.
+		"LUX_HEALTH_INTERVAL": "5s",
 	})
 	run := &telemetryRun{issuerURL: iss.URL(), subject: iss.URL() + "|alice"}
 	bearer := []string{"Authorization", "Bearer " + iss.Mint(issuertest.Claims{Sub: "alice"})}
@@ -208,9 +213,19 @@ func runTelemetry(t *testing.T) (*telemetryRun, string) {
 	if resp.StatusCode < 400 {
 		return nil, "hostile name applied: " + strconv.Itoa(resp.StatusCode) + " " + body
 	}
-	resp, body = do(t, http.MethodGet, srv.internalURL+"/metrics", "")
-	if resp.StatusCode != http.StatusOK {
-		return nil, "/metrics: " + strconv.Itoa(resp.StatusCode)
+	// The scrape is taken once the health job has read the Provider the
+	// run applied, which is its first tick after the apply and the last
+	// series the metric table waits for.
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		resp, body = do(t, http.MethodGet, srv.internalURL+"/metrics", "")
+		if resp.StatusCode != http.StatusOK {
+			return nil, "/metrics: " + strconv.Itoa(resp.StatusCode)
+		}
+		if strings.Contains(body, "lux_provider_health{") || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	run.metrics = body
 	if code := srv.stop(); code != 0 {
