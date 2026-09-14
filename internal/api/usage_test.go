@@ -88,10 +88,10 @@ func newUsageHarness(t *testing.T) *usageHarness {
 	rows := []metering.Aggregate{
 		{Bucket: u.at.Truncate(time.Hour), KeyID: u.keyID, ModelID: u.modelID, ProviderID: u.providerID, Owner: h.subject(),
 			Door: v1.DialectOpenAI, Status: metering.StatusOK, Currency: "USD", Labels: map[string]string{"team": "research"},
-			Sums: metering.Sums{Requests: 3, InputTokens: 30, OutputTokens: 60, Cost: 1250000}},
+			Requests: 3, InputTokens: 30, OutputTokens: 60, Cost: 1250000},
 		{Bucket: u.at.Truncate(time.Hour), KeyID: u.bobKeyID, ModelID: u.modelID, ProviderID: u.providerID, Owner: u.bob,
 			Door: v1.DialectOpenAI, Status: metering.StatusOK, Currency: "USD", Labels: map[string]string{"team": "ops"},
-			Sums: metering.Sums{Requests: 1, InputTokens: 10, OutputTokens: 20, Cost: 500000}},
+			Requests: 1, InputTokens: 10, OutputTokens: 20, Cost: 500000},
 	}
 	if err := h.st.Usage().AddRows(bg(), rows); err != nil {
 		t.Fatal(err)

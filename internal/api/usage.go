@@ -128,7 +128,7 @@ func (c *call) usageQuery(ctx context.Context, records bool) (usageQuery, *Error
 	if err != nil {
 		return q, err
 	}
-	q.q.Query = q.q.Query.WithDefaults(c.h.o.Now())
+	q.q.Query = q.q.WithDefaults(c.h.o.Now())
 	if verr := q.q.Validate(); verr != nil {
 		return q, usageError(verr)
 	}
