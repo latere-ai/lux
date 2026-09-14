@@ -1,0 +1,9 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: laptop/llama3.1:8b             # a local runtime's name carries a colon tag
+spec:
+  targets:
+    - provider: laptop
+      model: llama3.1:8b
+  fallback: never

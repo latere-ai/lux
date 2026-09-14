@@ -1,0 +1,25 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-opus-4
+  labels:
+    family: claude
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-opus-4-20250514
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "15"
+    output: "75"
+    cachedInput: "1.5"
+    cacheWrite: "18.75"
+  modalities:
+    input: [text, image, file]
+    output: [text]
+  contextWindow: 200000
+  maxOutputTokens: 32000

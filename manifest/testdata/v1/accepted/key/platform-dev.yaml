@@ -1,0 +1,11 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: platform-dev
+spec:
+  models: ["gpt-5"]
+  value: platform-credential-example-0123456789   # supplied by the caller: write-once, never returned
+  limits:
+    requestsPerMinute: 0               # explicit: no limit
+  expiresAt: 2027-01-01T00:00:00Z
+  allowUnpriced: true

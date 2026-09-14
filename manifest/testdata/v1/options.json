@@ -1,0 +1,12 @@
+{
+  "now": "2026-09-13T10:00:00Z",
+  "newName": "fixed-name-0000",
+  "defaults": {"requestsPerMinute": 0, "tokensPerMinute": 0, "timeout": "10m"},
+  "limits": {"maxRequestsPerMinute": 0, "maxTokensPerMinute": 0, "maxSpend": "0", "maxTTL": "0s"},
+  "existing": null,
+  "fileMode": false,
+  "allowPrivateUpstreams": false,
+  "tunnelEnabled": true,
+  "publicURL": "https://lux.example.com",
+  "lookup": "the accepted corpus: every accepted Provider and Budget by name, and for a selector every accepted Model whose name it matches"
+}

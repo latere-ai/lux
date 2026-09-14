@@ -1,0 +1,6 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+spec:                                  # no metadata.name: the generator names it
+  models: ["anthropic/*"]
+  ttl: 1h
+  passthrough: true

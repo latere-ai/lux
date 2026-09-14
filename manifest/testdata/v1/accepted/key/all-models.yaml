@@ -1,0 +1,6 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: all-models
+spec:
+  models: ["*"]                        # every model, declared or discovered

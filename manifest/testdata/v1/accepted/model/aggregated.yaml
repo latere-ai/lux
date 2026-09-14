@@ -1,0 +1,12 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: relay/anthropic/claude-sonnet-4   # an upstream name that itself carries a slash
+spec:
+  targets:
+    - provider: relay
+      model: anthropic/claude-sonnet-4
+  pricing:
+    per: 1000
+    input: "0.003"
+    output: "0.015"

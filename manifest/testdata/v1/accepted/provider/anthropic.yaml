@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic
+spec:
+  dialect: anthropic
+  baseURL: https://anthropic.example.com/v1

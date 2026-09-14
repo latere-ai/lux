@@ -1,0 +1,11 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: relay
+spec:
+  dialect: lux                         # another Lux, reached in the lux-native dialect
+  baseURL: https://relay.example.com/lux/v1
+  credential:
+    value: lux_relay-example
+  headers:
+    X-Relay-Tenant: acme

@@ -1,0 +1,9 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: laptop
+spec:
+  dialect: openai
+  tunnel: true                         # the upstream is whichever agent connects through the tunnel
+  health:
+    mode: none

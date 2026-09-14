@@ -1,0 +1,11 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-sonnet-4      # the form a discovered Model takes, declared here
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-sonnet-4-20250514
+  pricing:
+    input: "3"
+    output: "15"

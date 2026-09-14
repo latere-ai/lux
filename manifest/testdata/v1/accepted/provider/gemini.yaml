@@ -1,0 +1,14 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: gemini
+  annotations:
+    example.com/owner-team: research
+spec:
+  dialect: gemini
+  baseURL: https://gemini.example.com/v1beta
+  credential:
+    value: AIza-example
+  discovery:
+    include: ["gemini-*"]
+    exclude: ["*-exp"]
