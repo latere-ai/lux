@@ -44,8 +44,8 @@ builder, the credential injection, and the errors the door maps;
 sources; `internal/rewrap` the run of the rewrap role; and `luxd serve`
 checks the keys against every stored row, starts the two jobs after the
 store and the identity, and stops them with the process, while
-`luxd rewrap` reads its two variables and, until the Postgres store of
-[[010-state]]'s phase 6 lands, says there is no stored row to re-wrap.
+`luxd rewrap` reads its two variables and re-wraps every row of the
+store `LUX_DB_URL` names ([[010-state]]).
 The door handler that takes the client and the credential source is
 [[004-request-path]]'s and is built beside this. The readings this pass
 fixed where the text was open are written into the Design below, each
@@ -228,9 +228,8 @@ survives no process and the file mode seals nothing, so there is
 nothing durable to re-wrap. The run itself, `rewrap.Run(ctx,
 store.Credentials, *secrets.Keyring, report io.Writer) (Summary,
 error)`, works over the interface and is proven against the memory
-store; until the Postgres store of [[010-state]]'s phase 6 lands, the
-role with `LUX_DB_URL` set exits 1 saying the store is not in this
-build, as `serve` does. It applies
+store and, under the postgres tag, over a real database in
+`cmd/luxd`'s `TestPostgresRewrapRole` ([[010-state]]). It applies
 no migration and refuses a schema that is not at the binary's version
 ([[010-state]]). For every row of `Credentials.List` it tries the
 first key against the wrapped data key: a row that opens under it is
@@ -476,6 +475,20 @@ wins over both the caller's headers and the Provider's static
 because the caller's network location is not the provider's business
 and a gateway that forwards it makes itself a tracking relay.
 
+The client's own two metrics are this spec's rows in
+[[019-observability]]'s table, written by the gateway's attempt rather
+than by the builder, because the attempt is the one place that knows
+the Provider, the duration, and the outcome together:
+`lux_upstream_requests_total`, a counter labelled `provider` and
+`status`, and `lux_upstream_duration_seconds`, a histogram labelled
+`provider` over that spec's duration buckets, one observation of each
+per target tried. `status` is a closed set of three: `timeout` for the
+Provider's own deadline, `error` for a transport failure, a 5xx, a
+refused credential, or a redirect, and `ok` for everything else, the
+upstream's refusal of the caller's own request and a caller that left
+included, so `LuxUpstreamErrorRateHigh` names a provider that is
+failing and not a caller that is. A nil registry records neither.
+
 Bodies are buffered where [[004-request-path]] says and nowhere else.
 A request body on a translated or model route is read whole by the
 door, within `LUX_MAX_BODY_BYTES`, because the door decodes it or reads
@@ -593,10 +606,10 @@ the Design above beside the rule it settles:
 - A concurrency wait that ends with the request's deadline is
   `ErrProviderBusy` whichever of the timer and the context fired first;
   only a cancelled caller is the context's own error.
-- `luxd rewrap` with `LUX_DB_URL` set exits 1 saying the Postgres
-  store is not in this build, as `serve` does, until [[010-state]]'s
-  phase 6; the run is proven over `store.Credentials` against the
-  memory store.
+- `luxd rewrap` runs over the store `LUX_DB_URL` names: the run is
+  proven over `store.Credentials` against the memory store and, since
+  [[010-state]]'s Postgres store landed, over a real database in
+  `cmd/luxd`'s `TestPostgresRewrapRole`.
 - The jobs redact the credential value from an upstream body's excerpt
   before keeping it in `status.health.lastError`, because an upstream
   that echoes the header it was sent would otherwise put the value into

@@ -504,7 +504,8 @@ type Options struct {
 	Recorder    Recorder         // one record per request (009)
 	Clients     ClientSource     // the upstream client per Provider, built by NewClientSource (005)
 	Health      HealthObserver   // outcomes per Provider for passive health (005)
-	Metrics     *metrics.Registry // the three request metrics of 019; nil records none
+	Metrics     *metrics.Registry // the three request metrics of 019 and the two upstream metrics of 005; nil records none
+	Logger      *slog.Logger     // the one INFO line per request of 019; nil is slog.Default
 	Version     string           // the User-Agent
 	MaxBodyBytes int64
 	Now         func() time.Time
@@ -646,7 +647,13 @@ commit:
   handler records `lux_requests_total`, `lux_request_duration_seconds`,
   and `lux_time_to_first_byte_seconds` with [[019-observability]]'s
   labels and buckets, because the three are this spec's to own and the
-  handler is the one place that knows every label value.
+  handler is the one place that knows every label value. The same
+  registry carries the two upstream metrics of [[005-providers]]'s row,
+  written once per target tried.
+- `Options.Logger *slog.Logger` is added with [[019-observability]],
+  nil being `slog.Default`, because the data plane's one INFO line per
+  request has to be written inside the request's span and the handler
+  is what holds it; that spec owns the line's fields.
 - The interfaces the Design listed by name alone have their method sets
   in the package section, and `Record` is this package's struct rather
   than `metering.Record`, which does not exist yet:

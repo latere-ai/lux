@@ -739,13 +739,13 @@ authorizer payload and the owner policy the exception amends
 | With `LUX_TUNNEL_FORWARD_SECRET` `new,old` on one replica and `old` on another, forwards succeed in both directions; with `new` alone against `old` alone they are refused | `TestForwardSecretRotation` | passing, two Gateways over one memory store |
 | Killing the agent makes the Provider `Unreachable` and `status.tunnel.state` `Disconnected` within `LUX_TUNNEL_REGISTRY_TTL`, every target leaves selection, and `provider.unreachable` is emitted once | `TestTunnelLossIsUnreachableWithinTheTTL` | passing in `internal/serve` with the row lapsed by the clock; the agent's stop through `run` in `TestServeTunnelsARuntime` |
 | A clean `lux serve` shutdown unregisters at once, so the Provider is `Unreachable` before the TTL lapses | `TestCleanDisconnectIsImmediate` | passing for the agent package's stop; `lux serve`'s signal handling is [[014-agent-client]]'s |
-| With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas`, `TestForwardIsOneHop` | passing as `TestForwardingAcrossReplicas`, two Gateways over one memory store, the one hop included; Postgres is [[010-state]]'s phase 6 |
+| With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas`, `TestForwardIsOneHop` | passing as `TestForwardingAcrossReplicas`, two Gateways over one memory store, the one hop included; the registry two replicas share over Postgres is [[010-state]]'s `TestPostgresReplicasShareOneStore` |
 | `/internal/tunnel/{id}` without the secret, with a wrong secret, and on the public listener are each refused | `TestForwardRouteNeedsTheSecret` | passing |
 | Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalogue | `TestTunnelDiscovery` | passing |
 | Every request through a tunnel has one usage record with the Provider, the upstream model, and the runtime's reported tokens | `TestTunnelRequestsAreMetered` | the counted request with the Provider and the runtime's tokens passes at the wiring in `TestServeTunnelsARuntime`; the record's fields are [[015-test-stubs-and-tiers]]'s e2e |
 | The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | passing at the wiring in `TestServeTunnelsARuntime` through the openai door, and at the carrier in `TestTunnelCarriesNoCredential`; every door is [[015-test-stubs-and-tiers]]'s |
 | Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | passing, in `internal/api` |
-| The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | passing against memory; Postgres is [[010-state]]'s phase 6 |
+| The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | passing against memory, and against Postgres under the tag in that spec's `TestPostgresStoreConformance` |
 | `internal/tunnel` imports the standard library and `latere.ai/x/pkg/httpjson` only, and `./cmd/lux`'s build list is unchanged by `lux serve` | the `depcheck` gate | passing for `./cmd/luxd`; the `./cmd/lux` row is written with the command ([[014-agent-client]]) |
 
 ## Outcome
@@ -758,8 +758,8 @@ the wiring in `cmd/luxd`, and `TestTunnelProviderSchema` in
 `manifest`. Every acceptance row of this spec's own passes; the rows
 that name `lux serve` are [[014-agent-client]]'s, the rows that run the
 stub providers through every door are [[015-test-stubs-and-tiers]]'s,
-and the rows that name Postgres are [[010-state]]'s phase 6, each
-marked so in the table. The gate passes whole with every package above
+and the rows that name Postgres run in [[010-state]]'s postgres tier,
+each marked so in the table. The gate passes whole with every package above
 90%.
 
 What was built differs from the first writing in these points, each
