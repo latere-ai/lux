@@ -1,13 +1,13 @@
 ---
 title: "Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
   - specs/004-request-path.md
   - specs/006-identity.md
   - specs/010-state.md
-affects: [gateway/, metering/, internal/store/, internal/api/, docs/]
+affects: [gateway/, metering/, internal/serve/, internal/config/, cmd/luxd/, docs/]
 effort: medium
 created: 2026-09-13
 updated: 2026-09-14
@@ -42,9 +42,22 @@ deltas on a short interval, with the overshoot bounded and stated
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built, over the memory store and the file mode of [[010-state]] and
+beside the door handler of [[004-request-path]]: `metering` holds the
+window arithmetic, the counter key scheme, the reservation figures, the
+overshoot bound, the marker claim, and a replica's deltas over the
+store; `internal/serve` holds the Key value's mint, hash, and prefix,
+the Key cache with its journal tail and its `Reset`, the Limiter over
+`latere.ai/x/pkg/ratelimit` v0.66.0 and the store's counters, and the
+read-time rendering of a Key's and a Budget's status; `internal/config`
+the three rows; and `luxd serve` starts the cache's tail beside the two
+jobs of [[005-providers]], empties the cache after a file-mode `SIGHUP`,
+and resolves a file-mode Key under the two rate defaults. The door
+handler is not mounted and the `/v1` routes that create, rotate, and
+read a Key are [[011-api]]'s, so the Key cache and the Limiter are
+constructed and proven here and wired to a door there. The readings
+this pass fixed where the text was open are written into the Design
+below, each beside the rule it settles.
 
 ## Design
 
@@ -81,6 +94,14 @@ the spec, the owner, and the windows, and invalidates the old hash at
 once; a request with the old value is `unauthenticated` within
 `LUX_KEY_CACHE` on every replica. There is no grace period: a caller
 that needs one creates a second Key and deletes the first.
+
+The three functions of the value are `internal/serve`'s, which the
+routes of [[011-api]] call: `MintKeyValue` draws forty bytes from
+`crypto/rand` and maps each through its low six bits onto the 64-letter
+alphabet, so no letter is favoured; `HashKeyValue` is the SHA-256 of
+the exact bytes as 64 lower-case hex characters, the one function the
+store indexes under and the door looks up with; `KeyPrefix` renders
+`status.prefix` for a minted or a supplied value.
 
 ### A supplied value
 
@@ -189,6 +210,20 @@ The cache is what makes invariant 3 of [[001-architecture]] cheap: a
 hot path that touches the store once per Key per ten seconds, and a
 counter per request, dials nothing else.
 
+The cache is `serve.KeyCache`, [[004-request-path]]'s `KeyLookup`. It
+also holds the Budget a Key draws from, by id, under the same window
+and the same bound, dropped by a `budget.updated` or `budget.deleted`
+row, so the Limiter's read of a hard Budget's amount is a cache read
+and never a store round trip per request. A hash whose row is gone,
+which a delete in flight leaves for a moment, is a negative entry like
+an unknown value. The tail is `Run`, started by `luxd serve` beside the
+jobs of [[005-providers]]; its first read walks the journal from the
+start, which evicts nothing from a cache that is empty at start and
+places the tail at the end. A store failure on a lookup is returned as
+the store's error, which the door answers `store_unavailable`, and is
+cached nowhere. The file-mode re-read writes no journal row, so `luxd`
+calls `Reset` after every successful `SIGHUP` reload instead.
+
 ### States
 
 ```mermaid
@@ -213,10 +248,15 @@ without a write. `Exhausted` is the Key's spend window at or over its
 amount, refused `spend_exceeded`, or the hard Budget it draws from at
 or over its amount, refused `budget_exhausted`; it is decided at stage
 7 of the pipeline from the current counters, so a window that has reset
-serves at once. The codes and their statuses are
-[[004-request-path]]'s table. An `Expired` Key is kept until deleted,
-so its usage stays readable; an operator's sweep of expired Keys is a
-platform's job or a `lux keys prune` later.
+serves at once. A refusal can precede the state: a window is refused
+when the request's estimate would carry it over the amount, so a Key
+whose window holds a little less than its amount is refused
+`spend_exceeded` while it renders `Active` with the remainder in
+`status.usage.window`, and the refusal's `Retry-After` names the reset
+either way. The codes and their statuses are [[004-request-path]]'s
+table. An `Expired` Key is kept until deleted, so its usage stays
+readable; an operator's sweep of expired Keys is a platform's job or a
+`lux keys prune` later.
 
 The `status` fields that report the facts are rendered at read time,
 not stored, so no flush writes a row per Key per interval and every
@@ -227,12 +267,18 @@ replica renders the same answer from the store:
 | `status.state` | the rules above, from `spec.disabled`, `status.expiresAt`, and the counters of the current window |
 | `status.usage.window` | `{requests, tokens, spend, resetsAt}` of the current spend window, from the three counters [[009-usage-and-metering]] keeps under `limits.spend.window`; absent when the Key has no spend limit |
 | `status.usage.total` | `{requests, tokens, spend}` over the Key's lifetime, from the same three counters under window `none` |
-| `status.lastUsedAt` | the one field written: by the flush, through `PutStatus` ([[010-state]]), at most once per minute per Key that was used, rounded down to the minute, so a busy Key costs one status write a minute and not one a request |
+| `status.lastUsedAt` | the one field written: by the Limiter's flush, through `PutStatus` ([[010-state]]), for every Key whose request was admitted at stage 7 in a minute not yet written, rounded down to the minute, so a busy Key costs one status write a minute and not one a request; a Key deleted between its use and the flush is no error |
 
 `spend` in `status.usage` renders the counter's micro-units as a money
 string of [[003-manifest-contract]], the form a person reads; the
 record and the usage API carry the same number as an integer
-([[009-usage-and-metering]]).
+([[009-usage-and-metering]]). The rendering is `serve.RenderKey` and
+`serve.RenderBudget`, which fill the read-time members of one object
+from one `Counters.Read` and, for a Key that draws from a Budget, one
+read of the Budget; the routes of [[011-api]] call them on every read
+and list. A Key's `usage.window` is absent without a spend limit, and
+under a `none` spend window it is the totals themselves, because the
+`none` window is the lifetime counter.
 
 ### Selectors
 
@@ -289,6 +335,13 @@ func (b *Buckets) Adjust(key string, delta int)
 // bucket and per-key rates only, rather than a disabled limiter.
 ```
 
+The three landed in `latere.ai/x/pkg` v0.66.0, which the module pins.
+The Limiter runs one `Buckets` in the per-key mode with two keys per
+Key id, `requests:<id>` and `tokens:<id>`, and sets each rate before
+each admission, because an evicted key's rate goes with it and the rate
+is the Key's spec, or `LUX_DEFAULT_REQUESTS_PER_MINUTE` and
+`LUX_DEFAULT_TOKENS_PER_MINUTE` where the spec names none.
+
 A request costs one from the request bucket at stage 7. The token
 bucket is charged a reservation before the request and settled after:
 
@@ -302,17 +355,24 @@ adjust   = reserve - settle        (a refund when positive, a further debit when
 the decoded request on translated routes, and, on a passthrough model
 route, the body's length in bytes divided by four, because no upstream
 reports a count before it answers; an opaque route reserves one request
-and no tokens. The settle uses the measured count either way. A bucket that cannot cover the
-reservation refuses with `rate_limited` and `Retry-After` of the
-seconds until it can, `Allowance.Retry` rounded up and at least `1`;
-nothing is debited on a refusal, and a request refused at a later
-stage or failed before it was sent is refunded whole. Because the
-buckets are per replica, an installation with `n` replicas admits at
-most `n` times the configured rate, which the documentation says in
-those words. The bucket and the symmetric settle are deliberate, because
-a fixed window admits two minutes' worth at a boundary and an unsettled
-under-estimate lets a Key exceed its tokens per minute by the estimate's
-error every minute.
+and no tokens. The settle uses the measured count either way. A
+reservation is bounded by the rate, which is the bucket's burst: a
+request whose estimate is larger than a whole minute's tokens is
+charged the minute, admitted when the bucket is full, and settled to
+its measured count, which the refill covers as a deficit before the
+next token, rather than refused on every call with a wait that never
+ends. A bucket that cannot cover the reservation refuses with
+`rate_limited` and `Retry-After` of the seconds until it can,
+`Allowance.Retry` rounded up and at least `1`; nothing is debited on a
+refusal, the request token included when the token bucket refuses
+after the request bucket admitted, and a request refused at a later
+stage or failed before it was sent is refunded whole, which is a settle
+with zero tokens. Because the buckets are per replica, an installation
+with `n` replicas admits at most `n` times the configured rate, which
+the documentation says in those words. The bucket and the symmetric
+settle are deliberate, because a fixed window admits two minutes' worth
+at a boundary and an unsettled under-estimate lets a Key exceed its
+tokens per minute by the estimate's error every minute.
 
 ### Spend windows
 
@@ -327,6 +387,31 @@ micro-units of the currency, keyed by `(object id, window number)`
 ([[010-state]]); each replica keeps a delta per key per window and
 flushes every `LUX_METERING_FLUSH` (default `1s`).
 
+The arithmetic is `metering`'s, as [[001-architecture]] places it:
+`Window` is the bounds of a window at an instant; `CounterKey` renders
+`<kind>:<id>:<counter>:<start>` with the start as Unix seconds, and the
+word `none` in place of a start for the `none` window, because the
+`none` window is the lifetime counter and a duration window that begins
+at the object's creation instant must not share its key, which
+[[009-usage-and-metering]]'s table, keying the totals by `createdAt`,
+would have let it; `TotalKey` is that key; `Reserved`, `Settled`,
+`Adjustment`, `Projected`, and `Exceeds` are the figures above and
+below; `Overshoot` is the bound; `Claim` is the marker; and `Counters`
+is one replica's deltas over the store's `Counters()`, with `Add`
+carrying the window's expiry the store writes when it first sees the
+key, `Known` and `Pending` the two terms of the check, `Flush` one add
+per dirty key whose returned total replaces the known value and whose
+failure keeps the delta, and `Run` the flush on the interval and once
+more at stop. The Limiter of `internal/serve` composes the buckets
+with `metering.Counters` over the store, and it feeds the three
+counters of a Key: one request at admission, the estimate at admission
+and the measured cost less the estimate at the settle, and the measured
+tokens at the settle, each under the lifetime totals and, for a Key
+with a spend limit, under the current window, once when the two are one
+key. A Budget's spend counter takes the same two adds. The Recorder of
+[[009-usage-and-metering]] folds the aggregates from the records and
+adds to none of these.
+
 At stage 7, for each of the Key's spend window and the Budget's:
 
 ```
@@ -337,8 +422,12 @@ refuse when projected > amount
 ```
 
 The estimated cost is the reservation's tokens priced by the Model's
-`pricing` through `metering.Cost` ([[009-usage-and-metering]]); after
-the response the measured cost replaces it in the delta. The bound this
+`pricing` through `metering.Cost` ([[009-usage-and-metering]]), whose
+arithmetic the Limiter holds as `costOf` until that package lands and
+replaces it; after the response the measured cost replaces it in the
+delta. The Budget a Key draws from is read through the Key cache, and
+a Key whose Budget is gone, which `budget_in_use` forbids and a delete
+in flight can leave for a moment, draws from none. The bound this
 gives, stated once here and once in the metering spec in the same
 symbols: with `R` replicas, a flush interval `F` in seconds, `T`
 requests per second per replica against the counter, and `C` the
@@ -369,7 +458,23 @@ emits `key.exhausted` or `budget.exhausted`
 ([[012-request-log-and-events]]), and every other replica's returns
 more and emits nothing. No lease is needed, because the store's add is
 atomic, and the marker resets with the window because it is keyed by
-the window's start.
+the window's start. For a hard window the observation is the first
+`spend_exceeded` or `budget_exhausted` refusal, as
+[[012-request-log-and-events]]'s table says, so the event's `spent` is
+the window's total as the refusing replica saw it, which the estimate
+of the refused request would have carried over the amount. For a soft
+Budget it is the flush whose returned total is at or over the amount,
+so the announcing replica is one whose own delta crossed, and its
+`spent` is the total that flush returned; a replica whose last flush
+left the window under and that has nothing more to flush for it does
+not look again, because another replica's crossing is that replica's
+to announce. The event is `reason: limit` with the object block of the
+Key or the Budget and `data` of `{window, amount, spent, currency,
+resetsAt}`, `resetsAt` absent for a `none` window, and `hard` added on
+a Budget's; `amount` and `spent` are money strings. A marker or a
+journal the store cannot answer is logged and the refusal stands, and
+that window's event is the one at-least-once does not cover
+([[012-request-log-and-events]]).
 
 Pricing rules at this stage:
 
@@ -393,8 +498,9 @@ Pricing rules at this stage:
 
 A Budget is drawn by every Key that names it. `budget.draw` is decided
 once, at the Key's resolve ([[006-identity]]); after that the draw is
-arithmetic. Its `status` is rendered at read time like a Key's:
-`status.keys` counts the live Keys naming it now; `status.spent` is the
+arithmetic. Its `status` is rendered at read time like a Key's, by
+`serve.RenderBudget`: `status.keys` counts the live Keys whose
+`status.budget` names it now; `status.spent` is the
 current window's counter as a money string, `status.remaining` is
 `amount` less that, floored at zero, and `status.resetsAt` is the
 window's reset, or absent for `none`; `status.state` is `Exhausted`
@@ -453,28 +559,28 @@ the checks sit in the pipeline and the codes' HTTP statuses
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| A minted value matches `^lux_[A-Za-z0-9_-]{40}$`, ten thousand mints are distinct, and `status.prefix` is its first twelve characters | `TestKeyValueShape`, `TestKeyValuesAreDistinct` | not built |
-| A minted value and a supplied value each appear in the create response (the minted one only) and the rotate response and in no other read, list, event, record, or log line, with a canary of each run through every path | `TestKeyValueShownOnce`, `TestKeyValueNeverAppearsInLogs` | not built |
-| A rotated Key keeps its id, name, spec, owner, and windows; the old value is `unauthenticated` on a second replica within `LUX_KEY_CACHE` | `TestRotateReplacesTheValue` | not built |
-| A Key created with a 32-byte `spec.value` authenticates by that exact value on every door and credential form, the create response carries no `status.value`, `status.prefix` is `sup_` and the first eight hex characters of the value's SHA-256, and the supplied value is refused at rotate while the minted one is accepted | `TestSuppliedKeyValue` | not built |
-| A supplied value of 31 bytes and one of 4097 bytes are each `invalid_field` at `spec.value`; one with leading whitespace authenticates only with that whitespace; a value that is a well-formed JWT with a past `exp` and a bad signature authenticates, because the gateway parses nothing | `TestSuppliedValueBounds`, `TestSuppliedValueIsOpaqueBytes` | not built |
-| A second create with a value already registered, to a live or a disabled Key, is `invalid_field` at `spec.value` whose detail names no Key; two concurrent creates of one value yield one 201 and one `invalid_field` | `TestSuppliedValueMustBeUnique` | not built |
-| An update carrying `spec.value`, equal to the stored one or not, is `immutable_field` at `spec.value`; `spec.value` with `spec.valueFrom` is `exclusive_fields`; `spec.value` in file mode is `invalid_field` | `TestSuppliedValueIsWriteOnce` with [[003-manifest-contract]]'s `TestImmutableFields` | not built |
-| A supplied value that is a token for a listed issuer with another audience is a Key on a door and `unauthenticated` on `/v1`; a minted value is `unauthenticated` on `/v1`; an issuer token no Key was created with is `unauthenticated` on a door | `TestPlaneBoundaryHoldsByVerification` with [[006-identity]]'s `TestPlanesRefuseEachOthersCredential` and [[004-request-path]]'s `TestDoorsTakeKeysOnly` | not built |
-| A Key looked up once is served from the cache for the window with one store call; a negative entry holds an unknown value to one store call per window; the cache evicts at 100 000 entries; every lookup increments `lux_key_cache_hits_total` with the matching `result` | `TestKeyCache`, `TestNegativeCache`, `TestCacheBound` | not built |
-| A deleted, disabled, or rotated Key is refused at the next request on a replica that has consumed the journal row and within the window on one that has not; a `SIGHUP` in file mode empties the cache | `TestRevocationPropagates`, `TestFileModeReloadEmptiesTheCache` | not built |
-| Each state is decided from the facts: `Disabled` from the spec, `Expired` from the clock on every replica at once, `Exhausted` from the current window and cleared by its reset without a write; each refuses with its code | `TestKeyStates`, table-driven with a fake clock | not built |
-| `status.usage.window` and `.total` render the counters' requests, tokens, and spend with `spend` as a money string, `window` is absent for a Key without a spend limit, and `status.lastUsedAt` is written at most once per minute per used Key | `TestKeyStatusRendersFromCounters`, `TestLastUsedIsCoalesced` | not built |
-| A request naming a Model whose name matches no selector is `model_not_allowed` after `model_not_found`; a Model declared or discovered after the Key was resolved is admitted when a selector matches its name; a glob matches across `/`; the match is `manifest.Match` | `TestSelectorsMatchAtRequestTime`, table-driven | not built |
-| `ratelimit.Buckets` offers `AllowN`, `Adjust`, and per-key rates without a default bucket, and the gateway's buckets use them | `TestRateLimitPackageShape`, compile-time against `latere.ai/x/pkg/ratelimit` | not built, pkg change |
-| A Key with `requestsPerMinute` 60 admits 60 at once, refuses the 61st with `Retry-After` 1, and admits one more after a second; zero is no limit | `TestRequestBucket` | not built |
-| The token bucket is charged the reservation before the request and settled to the measured count after, refunding an over-estimate and debiting an under-estimate; a refusal at this stage debits nothing, and a refusal at a later stage refunds the whole reservation | `TestTokenReservationSettles`, `TestRefusalDebitsNothing` | not built |
-| Two replicas each admit the configured rate, so the installation admits twice it and no more | `TestRateIsPerReplica` | not built |
-| A spend window refuses when `known + pending + estimate` exceeds the amount, serves after the window number changes, and `Retry-After` names the reset; a `none` window carries no `Retry-After` | `TestSpendWindow`, `TestWindowReset` | not built |
-| With three replicas, a flush interval of one second, ten requests a second per replica, and a one-cent request, the overshoot of a hard limit never exceeds `(R − 1) × F × T × C + C`, twenty-one cents, over a hundred runs, and one replica never overshoots by more than one request | `TestOvershootBound` | not built |
-| Six replicas driving one Key's spend window and one Budget's window past their amounts emit exactly one `key.exhausted` and one `budget.exhausted` per window, through the marker counter, for a hard limit at the first refusal and for a soft Budget at the first flush that observes it | `TestExhaustionIsAnnouncedOnce`, with [[012-request-log-and-events]]'s `TestStateChangeEventIsRaisedOnce` | not built |
-| An unpriced Model and an opaque route are `model_unpriced` under a spend limit or a Budget, hard or soft, without `allowUnpriced`, served with it, and served with `priced: false` under neither | `TestUnpricedRule`, [[001-architecture]]'s `TestUnpricedModelRefusedUnderABudget` | not built |
-| A Budget in another currency than the Model's pricing is `currency_mismatch`; the refusal order across all five money and rate codes is the pipeline's | `TestCurrencyMismatch`, `TestRefusalOrderAmongLimits` | not built |
-| A soft Budget never refuses for its amount, emits `budget.exhausted` exactly once per window when reached, and renders `Exhausted` until the reset | `TestSoftBudget` | not built |
-| Deleting a Budget a Key names is `budget_in_use`; raising an exhausted Budget's amount serves at the next request; `status.keys`, `spent`, `remaining`, `resetsAt`, and `state` render from the live Keys and the current window's counter | `TestBudgetLifecycle` | not built |
-| Every record carries the Key's id, prefix, owner, and labels, and the valid `Lux-Labels` pairs as `requestLabels`; a ninth pair, a duplicate key, and a pair outside the syntax are dropped while the rest are kept; the header reaches no provider | `TestAttribution`, `TestRequestLabelsSyntax` | not built |
+| A minted value matches `^lux_[A-Za-z0-9_-]{40}$`, ten thousand mints are distinct, and `status.prefix` is its first twelve characters | `TestKeyValueShape`, `TestKeyValuesAreDistinct` | passing, `internal/serve` |
+| A minted value and a supplied value each appear in the create response (the minted one only) and the rotate response and in no other read, list, event, record, or log line, with a canary of each run through every path | `TestKeyValueShownOnce`, `TestKeyValueNeverAppearsInLogs` | not built; the responses are [[011-api]]'s and the run through every path is [[015-test-stubs-and-tiers]]'s; the cache and the Limiter are held to logging no value in `TestKeyCacheRunTailsAndSurvivesFailures` and `TestLimiterRunAndFailures` |
+| A rotated Key keeps its id, name, spec, owner, and windows; the old value is `unauthenticated` on a second replica within `LUX_KEY_CACHE` | `TestRotateReplacesTheValue` | the cache half passing in `TestRevocationPropagates`, the old hash refused on the replica that consumed the row at once and on the other within the window; the route is [[011-api]]'s |
+| A Key created with a 32-byte `spec.value` authenticates by that exact value on every door and credential form, the create response carries no `status.value`, `status.prefix` is `sup_` and the first eight hex characters of the value's SHA-256, and the supplied value is refused at rotate while the minted one is accepted | `TestSuppliedKeyValue` | passing at the store and the cache, `internal/serve`; the door half is [[004-request-path]]'s `TestSuppliedValueOpensTheDoor`; the rotate half is [[011-api]]'s |
+| A supplied value of 31 bytes and one of 4097 bytes are each `invalid_field` at `spec.value`; one with leading whitespace authenticates only with that whitespace; a value that is a well-formed JWT with a past `exp` and a bad signature authenticates, because the gateway parses nothing | `TestSuppliedValueBounds`, `TestSuppliedValueIsOpaqueBytes` | passing: the bounds as [[003-manifest-contract]]'s `TestSuppliedValueSchema`, the bytes in `internal/serve` |
+| A second create with a value already registered, to a live or a disabled Key, is `invalid_field` at `spec.value` whose detail names no Key; two concurrent creates of one value yield one 201 and one `invalid_field` | `TestSuppliedValueMustBeUnique` | passing at the store, `internal/serve`: `ErrHashTaken` inside the transaction, the refused Key stored nowhere, one Key from a concurrent pair; the `invalid_field` mapping is [[011-api]]'s |
+| An update carrying `spec.value`, equal to the stored one or not, is `immutable_field` at `spec.value`; `spec.value` with `spec.valueFrom` is `exclusive_fields`; `spec.value` in file mode is `invalid_field` | `TestSuppliedValueIsWriteOnce` with [[003-manifest-contract]]'s `TestImmutableFields` | passing as [[003-manifest-contract]]'s `TestSuppliedValueSchema` and `TestImmutableFields`, and [[010-state]]'s `TestFileModeRefusesServerOnlyFields` for the file mode |
+| A supplied value that is a token for a listed issuer with another audience is a Key on a door and `unauthenticated` on `/v1`; a minted value is `unauthenticated` on `/v1`; an issuer token no Key was created with is `unauthenticated` on a door | `TestPlaneBoundaryHoldsByVerification` with [[006-identity]]'s `TestPlanesRefuseEachOthersCredential` and [[004-request-path]]'s `TestDoorsTakeKeysOnly` | not built; the door half passes as [[004-request-path]]'s `TestDoorsTakeKeysOnly`, the `/v1` half waits for [[011-api]] |
+| A Key looked up once is served from the cache for the window with one store call; a negative entry holds an unknown value to one store call per window; the cache evicts at 100 000 entries; every lookup increments `lux_key_cache_hits_total` with the matching `result` | `TestKeyCache`, `TestNegativeCache`, `TestCacheBound` | passing, `internal/serve` |
+| A deleted, disabled, or rotated Key is refused at the next request on a replica that has consumed the journal row and within the window on one that has not; a `SIGHUP` in file mode empties the cache | `TestRevocationPropagates`, `TestFileModeReloadEmptiesTheCache` | passing, `internal/serve`; `luxd serve` calls `Reset` after the reload in `cmd/luxd`'s `TestFileModeServesAndReloadsOnSIGHUP` |
+| Each state is decided from the facts: `Disabled` from the spec, `Expired` from the clock on every replica at once, `Exhausted` from the current window and cleared by its reset without a write; each refuses with its code | `TestKeyStates`, table-driven with a fake clock | passing, `internal/serve`, over `RenderKey` and the Limiter; `key_disabled` and `key_expired` at the door are [[004-request-path]]'s `TestKeyState` |
+| `status.usage.window` and `.total` render the counters' requests, tokens, and spend with `spend` as a money string, `window` is absent for a Key without a spend limit, and `status.lastUsedAt` is written at most once per minute per used Key | `TestKeyStatusRendersFromCounters`, `TestLastUsedIsCoalesced` | passing, `internal/serve` |
+| A request naming a Model whose name matches no selector is `model_not_allowed` after `model_not_found`; a Model declared or discovered after the Key was resolved is admitted when a selector matches its name; a glob matches across `/`; the match is `manifest.Match` | `TestSelectorsMatchAtRequestTime`, table-driven | passing, `gateway` |
+| `ratelimit.Buckets` offers `AllowN`, `Adjust`, and per-key rates without a default bucket, and the gateway's buckets use them | `TestRateLimitPackageShape`, compile-time against `latere.ai/x/pkg/ratelimit` | passing, `internal/serve`; the pkg change is v0.66.0 |
+| A Key with `requestsPerMinute` 60 admits 60 at once, refuses the 61st with `Retry-After` 1, and admits one more after a second; zero is no limit | `TestRequestBucket` | passing, `internal/serve` |
+| The token bucket is charged the reservation before the request and settled to the measured count after, refunding an over-estimate and debiting an under-estimate; a refusal at this stage debits nothing, and a refusal at a later stage refunds the whole reservation | `TestTokenReservationSettles`, `TestRefusalDebitsNothing` | passing, `internal/serve` |
+| Two replicas each admit the configured rate, so the installation admits twice it and no more | `TestRateIsPerReplica` | passing, `internal/serve` |
+| A spend window refuses when `known + pending + estimate` exceeds the amount, serves after the window number changes, and `Retry-After` names the reset; a `none` window carries no `Retry-After` | `TestSpendWindow`, `TestWindowReset` | passing, `internal/serve` |
+| With three replicas, a flush interval of one second, ten requests a second per replica, and a one-cent request, the overshoot of a hard limit never exceeds `(R − 1) × F × T × C + C`, twenty-one cents, over a hundred runs, and one replica never overshoots by more than one request | `TestOvershootBound` | passing, `internal/serve`: three Limiters over one store, the flush driven by the simulated clock, a hundred seeded runs; the worst run reaches twenty cents |
+| Six replicas driving one Key's spend window and one Budget's window past their amounts emit exactly one `key.exhausted` and one `budget.exhausted` per window, through the marker counter, for a hard limit at the first refusal and for a soft Budget at the first flush that observes it | `TestExhaustionIsAnnouncedOnce`, with [[012-request-log-and-events]]'s `TestStateChangeEventIsRaisedOnce` | passing here, `internal/serve`, six Limiters over one store; the delivery half is [[012-request-log-and-events]]'s |
+| An unpriced Model and an opaque route are `model_unpriced` under a spend limit or a Budget, hard or soft, without `allowUnpriced`, served with it, and served with `priced: false` under neither | `TestUnpricedRule`, [[001-architecture]]'s `TestUnpricedModelRefusedUnderABudget` | passing here, `internal/serve`; the e2e row is [[009-usage-and-metering]]'s |
+| A Budget in another currency than the Model's pricing is `currency_mismatch`; the refusal order across all five money and rate codes is the pipeline's | `TestCurrencyMismatch`, `TestRefusalOrderAmongLimits` | passing, `internal/serve` |
+| A soft Budget never refuses for its amount, emits `budget.exhausted` exactly once per window when reached, and renders `Exhausted` until the reset | `TestSoftBudget` | passing, `internal/serve` |
+| Deleting a Budget a Key names is `budget_in_use`; raising an exhausted Budget's amount serves at the next request; `status.keys`, `spent`, `remaining`, `resetsAt`, and `state` render from the live Keys and the current window's counter | `TestBudgetLifecycle` | the raise and the rendering passing, `internal/serve`; `budget_in_use` is [[011-api]]'s `TestBudgetInUse` |
+| Every record carries the Key's id, prefix, owner, and labels, and the valid `Lux-Labels` pairs as `requestLabels`; a ninth pair, a duplicate key, and a pair outside the syntax are dropped while the rest are kept; the header reaches no provider | `TestAttribution`, `TestRequestLabels` | the syntax passing as [[004-request-path]]'s `TestRequestLabels`, which drops the ninth pair, a duplicate, and a pair outside the alphabet and keeps the rest; the record's fields are [[004-request-path]]'s `TestRecordFields` and the header's absence upstream its `TestCallerCredentialsNeverForwarded`; the e2e run is [[009-usage-and-metering]]'s |
