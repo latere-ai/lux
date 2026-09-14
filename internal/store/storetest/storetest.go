@@ -733,7 +733,10 @@ func leases(t *testing.T, s store.Store) {
 	truth(t, !held, "a non-holder's Release changed nothing")
 
 	time.Sleep(2 * lapse)
-	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", lapse)
+	// b takes the lapsed lease with a long TTL, so the next check, that a
+	// is no longer the holder and cannot take it, does not race b's own
+	// expiry on a store whose round-trips take longer than a lapse.
+	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", time.Hour)
 	noErr(t, err, "Acquire b after the lapse")
 	truth(t, held, "b acquires once the row lapsed")
 	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", lapse)
