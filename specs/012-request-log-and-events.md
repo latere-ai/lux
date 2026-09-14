@@ -1,6 +1,6 @@
 ---
 title: "Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/006-identity.md
