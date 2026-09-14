@@ -197,7 +197,7 @@ func TestFileModeIsReadOnly(t *testing.T) {
 		rec := send("PATCH", path, nil)
 		wantCode(t, rec, CodeNotFound)
 	}
-	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/budgets", "/v1/budgets/team", "/v1/openapi.json"} {
+	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/budgets", "/v1/budgets/team", "/v1/usage", "/v1/requests", "/v1/openapi.json"} {
 		rec := send("GET", path, nil)
 		if rec.Code != http.StatusOK {
 			t.Errorf("GET %s: %d %s", path, rec.Code, rec.Body.String())

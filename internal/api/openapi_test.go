@@ -89,13 +89,13 @@ func TestOpenAPIServedMatchesCommitted(t *testing.T) {
 	}
 	doc := served.(map[string]any)
 	paths := doc["paths"].(map[string]any)
-	for _, p := range []string{"/v1/providers", "/v1/providers/{name}", "/v1/models", "/v1/models/{name}", "/v1/keys", "/v1/keys/{name}", "/v1/keys/{name}/rotate", "/v1/budgets", "/v1/budgets/{name}", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
+	for _, p := range []string{"/v1/providers", "/v1/providers/{name}", "/v1/models", "/v1/models/{name}", "/v1/keys", "/v1/keys/{name}", "/v1/keys/{name}/rotate", "/v1/budgets", "/v1/budgets/{name}", "/v1/usage", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
 		if paths[p] == nil {
 			t.Errorf("no path %s", p)
 		}
 	}
-	if paths["/v1/usage"] != nil || paths["/v1/requests"] != nil {
-		t.Error("the usage routes are documented while unmounted")
+	if op := paths["/v1/requests"].(map[string]any)["get"].(map[string]any); op["x-lux-action"] != "usage.read" {
+		t.Errorf("the requests action %v", op["x-lux-action"])
 	}
 	schemas := doc["components"].(map[string]any)["schemas"].(map[string]any)
 	for _, kind := range []string{"Provider", "Model", "Key", "Budget"} {

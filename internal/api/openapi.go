@@ -18,6 +18,7 @@ import (
 
 	"latere.ai/x/lux/internal/auth"
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 // The OpenAPI document of spec 011, generated from the kinds' Go types,
@@ -25,8 +26,7 @@ import (
 // server agree by construction. tools/apidoc writes it as
 // api/openapi.yaml; the handler serves the same document as JSON at
 // GET /v1/openapi.json; TestOpenAPIIsCurrent holds the committed file to
-// a fresh generation. The two usage routes are not in the document
-// until they are mounted.
+// a fresh generation.
 
 // ordered is a JSON object whose members keep the order they were
 // written in, so the document reads in the Go struct order and two
@@ -157,11 +157,25 @@ func openAPIDocument() ordered {
 	s.add("SelfLimits", s.of(reflect.TypeFor[SelfLimits]()))
 	s.add("Filter", s.of(reflect.TypeFor[authz.Filter]()))
 	s.add("WellKnown", s.of(reflect.TypeFor[WellKnown]()))
+	s.add("UsageList", obj("type", "object", "required", []string{"items"}, "properties", obj(
+		"items", obj("type", "array", "items", s.of(reflect.TypeFor[metering.Row]())),
+	)))
+	s.add("RecordList", obj("type", "object", "required", []string{"items", "source"}, "properties", obj(
+		"items", obj("type", "array", "items", s.of(reflect.TypeFor[metering.Record]())),
+		"next_cursor", obj("type", "string", "description", "The cursor of the next page; absent on the last."),
+		"source", obj("type", "string", "enum", []string{sourceArchive, sourceMemory}, "description", "Which record set answered: the replica's own ring, or the installation-wide archive when a request log exporter is configured."),
+	)))
 	paths := ordered{}
 	for _, k := range kinds {
 		paths = append(paths, kindPaths(k)...)
 	}
 	paths = append(paths,
+		member{"/v1/usage", obj("get", operation("readUsage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", auth.ActionUsageRead,
+			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "by"), ref("parameters", "interval"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel")},
+			nil, response("200", "The rows.", "UsageList")))},
+		member{"/v1/requests", obj("get", operation("listRequests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", auth.ActionUsageRead,
+			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
+			nil, response("200", "One page of records.", "RecordList")))},
 		member{"/v1/self", obj("get", operation("readSelf", "The caller's identity, who decides permission, and what this replica remembers granting the subject.", "none", nil, nil, response("200", "The caller.", "Self")))},
 		member{"/v1/openapi.json", obj("get", operation("readOpenAPI", "This document as JSON; no bearer.", "none", []any{}, nil, obj("200", obj("description", "The document.", "content", obj("application/json", obj("schema", obj("type", "object"))))))).set("security", []any{})},
 		member{"/.well-known/lux", obj("get", operation("readWellKnown", "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer.", "none", []any{}, nil, response("200", "The server.", "WellKnown")).set("security", []any{}))},
@@ -271,6 +285,19 @@ func parameters() ordered {
 		"cursor", query("cursor", "The previous page's next_cursor, opaque; one from another kind or filter is invalid_field.", obj("type", "string")),
 		"source", query("source", "Models by source.", obj("type", "string", "enum", []string{string(v1.SourceDeclared), string(v1.SourceDiscovered)})),
 		"provider", query("provider", "Models with a target on the Provider, by name or prv_ id.", obj("type", "string")),
+		"from", query("from", "The start of the range, RFC 3339; default 24 hours before to. The range is at most 90 days.", obj("type", "string", "format", "date-time")),
+		"to", query("to", "The end of the range, RFC 3339; default now. It must be after from.", obj("type", "string", "format", "date-time")),
+		"by", query("by", "The dimensions to group by, comma separated, at most three: key, model, provider, owner, door, status, or label:<name>. None is one total row.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"interval", query("interval", "The bucket width; none is one row per group over the whole range.", obj("type", "string", "enum", []string{string(metering.IntervalNone), string(metering.IntervalHour), string(metering.IntervalDay), string(metering.IntervalMonth)}, "default", string(metering.IntervalNone))),
+		"usageKey", query("key", "A Key by name or key_ id, repeatable; a filter, not a grouping. A name that names no Key is an empty items, and a key_ id keeps working after the Key is deleted.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"usageModel", query("model", "A Model by name or mdl_ id, repeatable.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"usageProvider", query("provider", "A Provider by name or prv_ id, repeatable.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"usageOwner", query("owner", "A rendered subject, repeatable; intersected with the authorizer's filter, so one outside it is an empty items.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"usageLabel", query("label", "name=value over the Key's labels, repeatable; every pair must match.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"status", query("status", "Records of one outcome.", obj("type", "string", "enum", []string{string(metering.StatusOK), string(metering.StatusRefused), string(metering.StatusFailed)})),
+		"error", query("error", "Records carrying one error code of x-lux-errors.", obj("type", "string")),
+		"stream", query("stream", "Streamed records alone, or unstreamed alone.", obj("type", "boolean")),
+		"recordLimit", query("limit", "Page size, default 50, at most 1000; above is invalid_field.", obj("type", "integer", "minimum", 1, "maximum", maxRecordLimit, "default", defaultLimit)),
 		"ifMatch", obj("name", "If-Match", "in", "header", "required", false, "description", "* for the object must exist, or one quoted integer for exactly this version; a mismatch is conflict, a free name not_found. Anything else is invalid_field.", "schema", obj("type", "string")),
 		"ifNoneMatch", obj("name", "If-None-Match", "in", "header", "required", false, "description", "* for create only; a taken name is already_exists. Anything else is invalid_field.", "schema", obj("type", "string")),
 	)
@@ -367,6 +394,7 @@ var enums = map[reflect.Type][]string{
 	reflect.TypeFor[v1.Source]():        {string(v1.SourceDeclared), string(v1.SourceDiscovered)},
 	reflect.TypeFor[v1.KeyState]():      {string(v1.KeyActive), string(v1.KeyDisabled), string(v1.KeyExpired), string(v1.KeyExhausted)},
 	reflect.TypeFor[v1.BudgetState]():   {string(v1.BudgetOpen), string(v1.BudgetExhausted)},
+	reflect.TypeFor[metering.Status]():  {string(metering.StatusOK), string(metering.StatusRefused), string(metering.StatusFailed)},
 }
 
 // scalars are the named types with one JSON shape of their own.

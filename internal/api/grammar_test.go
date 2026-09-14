@@ -125,8 +125,9 @@ func TestGrammarPerKind(t *testing.T) {
 }
 
 // TestRouteTableActions: every route requires a bearer but
-// /v1/openapi.json and /.well-known/lux, which serve without one; the
-// unmounted usage routes are not_found; the rotate asks key.update.
+// /v1/openapi.json and /.well-known/lux, which serve without one; a
+// path outside the table is not_found; the two usage routes ask
+// usage.read and the rotate asks key.update.
 func TestRouteTableActions(t *testing.T) {
 	h := newHarness(t, nil)
 	h.seed()
@@ -135,7 +136,7 @@ func TestRouteTableActions(t *testing.T) {
 		{"PUT", "/v1/models/x"}, {"GET", "/v1/models"}, {"GET", "/v1/models/x"}, {"DELETE", "/v1/models/x"},
 		{"PUT", "/v1/keys/x"}, {"GET", "/v1/keys"}, {"GET", "/v1/keys/x"}, {"DELETE", "/v1/keys/x"}, {"POST", "/v1/keys/x/rotate"},
 		{"PUT", "/v1/budgets/x"}, {"GET", "/v1/budgets"}, {"GET", "/v1/budgets/x"}, {"DELETE", "/v1/budgets/x"},
-		{"GET", "/v1/self"},
+		{"GET", "/v1/self"}, {"GET", "/v1/usage"}, {"GET", "/v1/requests"},
 	} {
 		rec := h.request(r.method, r.path, "", "Authorization", "")
 		wantCode(t, rec, CodeUnauthenticated)
@@ -149,9 +150,18 @@ func TestRouteTableActions(t *testing.T) {
 			t.Errorf("GET %s without a bearer: %d", path, rec.Code)
 		}
 	}
-	for _, path := range []string{"/v1/usage", "/v1/requests", "/v1/providers/openai/tunnel", "/v1/providers/openai/tunnel/carry", "/v1/nothing", "/v1/keys/run-42/other"} {
+	for _, path := range []string{"/v1/providers/openai/tunnel", "/v1/providers/openai/tunnel/carry", "/v1/nothing", "/v1/keys/run-42/other"} {
 		if rec := h.request(http.MethodGet, path, ""); rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s: %d, want not_found while unmounted", path, rec.Code)
+		}
+	}
+	for _, path := range []string{"/v1/usage", "/v1/requests"} {
+		h.stub.ClearRequests()
+		if rec := h.request(http.MethodGet, path, ""); rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, rec.Code, rec.Body.String())
+		}
+		if asked := h.actionsAsked(); !reflect.DeepEqual(asked, []string{"usage.read"}) {
+			t.Errorf("GET %s asked %v", path, asked)
 		}
 	}
 	h.stub.ClearRequests()
@@ -176,7 +186,7 @@ func TestRouteTableActions(t *testing.T) {
 func TestNoPatch(t *testing.T) {
 	h := newHarness(t, nil)
 	h.seed()
-	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/keys/run-42/rotate", "/v1/budgets", "/v1/budgets/team", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
+	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/keys/run-42/rotate", "/v1/budgets", "/v1/budgets/team", "/v1/usage", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
 		for _, method := range []string{"PATCH", "OPTIONS"} {
 			rec := h.request(method, path, `{"spec": {}}`)
 			if d := wantCode(t, rec, CodeNotFound); !strings.Contains(d["detail"].(string), method+" "+path) {

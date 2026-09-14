@@ -603,6 +603,77 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/usage:
+    get:
+      operationId: readUsage
+      summary: Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.
+      x-lux-action: usage.read
+      parameters:
+      - $ref: "#/components/parameters/from"
+      - $ref: "#/components/parameters/to"
+      - $ref: "#/components/parameters/by"
+      - $ref: "#/components/parameters/interval"
+      - $ref: "#/components/parameters/usageKey"
+      - $ref: "#/components/parameters/usageModel"
+      - $ref: "#/components/parameters/usageProvider"
+      - $ref: "#/components/parameters/usageOwner"
+      - $ref: "#/components/parameters/usageLabel"
+      responses:
+        "200":
+          description: The rows.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/requests:
+    get:
+      operationId: listRequests
+      summary: Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.
+      x-lux-action: usage.read
+      parameters:
+      - $ref: "#/components/parameters/from"
+      - $ref: "#/components/parameters/to"
+      - $ref: "#/components/parameters/usageKey"
+      - $ref: "#/components/parameters/usageModel"
+      - $ref: "#/components/parameters/usageProvider"
+      - $ref: "#/components/parameters/usageOwner"
+      - $ref: "#/components/parameters/usageLabel"
+      - $ref: "#/components/parameters/status"
+      - $ref: "#/components/parameters/error"
+      - $ref: "#/components/parameters/stream"
+      - $ref: "#/components/parameters/recordLimit"
+      - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: One page of records.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/self:
     get:
       operationId: readSelf
@@ -736,6 +807,136 @@ components:
       description: Models with a target on the Provider, by name or prv_ id.
       schema:
         type: string
+    from:
+      name: from
+      in: query
+      required: false
+      description: The start of the range, RFC 3339; default 24 hours before to. The range is at most 90 days.
+      schema:
+        type: string
+        format: date-time
+    to:
+      name: to
+      in: query
+      required: false
+      description: The end of the range, RFC 3339; default now. It must be after from.
+      schema:
+        type: string
+        format: date-time
+    by:
+      name: by
+      in: query
+      required: false
+      description: "The dimensions to group by, comma separated, at most three: key, model, provider, owner, door, status, or label:<name>. None is one total row."
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    interval:
+      name: interval
+      in: query
+      required: false
+      description: The bucket width; none is one row per group over the whole range.
+      schema:
+        type: string
+        enum:
+        - none
+        - hour
+        - day
+        - month
+        default: none
+    usageKey:
+      name: key
+      in: query
+      required: false
+      description: A Key by name or key_ id, repeatable; a filter, not a grouping. A name that names no Key is an empty items, and a key_ id keeps working after the Key is deleted.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    usageModel:
+      name: model
+      in: query
+      required: false
+      description: A Model by name or mdl_ id, repeatable.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    usageProvider:
+      name: provider
+      in: query
+      required: false
+      description: A Provider by name or prv_ id, repeatable.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    usageOwner:
+      name: owner
+      in: query
+      required: false
+      description: A rendered subject, repeatable; intersected with the authorizer's filter, so one outside it is an empty items.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    usageLabel:
+      name: label
+      in: query
+      required: false
+      description: name=value over the Key's labels, repeatable; every pair must match.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    status:
+      name: status
+      in: query
+      required: false
+      description: Records of one outcome.
+      schema:
+        type: string
+        enum:
+        - ok
+        - refused
+        - failed
+    error:
+      name: error
+      in: query
+      required: false
+      description: Records carrying one error code of x-lux-errors.
+      schema:
+        type: string
+    stream:
+      name: stream
+      in: query
+      required: false
+      description: Streamed records alone, or unstreamed alone.
+      schema:
+        type: boolean
+    recordLimit:
+      name: limit
+      in: query
+      required: false
+      description: Page size, default 50, at most 1000; above is invalid_field.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 50
     ifMatch:
       name: If-Match
       in: header
@@ -1528,6 +1729,260 @@ components:
       $ref: "#/components/schemas/Filter"
     WellKnown:
       $ref: "#/components/schemas/WellKnown"
+    Row:
+      type: object
+      required:
+      - dimensions
+      - requests
+      - ok
+      - refused
+      - failed
+      - inputTokens
+      - outputTokens
+      - cachedInputTokens
+      - cacheWriteTokens
+      - cost
+      - currency
+      - unpricedRequests
+      properties:
+        bucket:
+          type: string
+          format: date-time
+        dimensions:
+          type: object
+          additionalProperties:
+            type: string
+        requests:
+          type: integer
+        ok:
+          type: integer
+        refused:
+          type: integer
+        failed:
+          type: integer
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        cachedInputTokens:
+          type: integer
+        cacheWriteTokens:
+          type: integer
+        cost:
+          type: integer
+        currency:
+          type: string
+        unpricedRequests:
+          type: integer
+    UsageList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Row"
+    Record:
+      type: object
+      required:
+      - id
+      - at
+      - endedAt
+      - key
+      - owner
+      - model
+      - provider
+      - upstreamModel
+      - door
+      - targetDialect
+      - route
+      - translated
+      - loss
+      - attempts
+      - status
+      - error
+      - upstreamStatus
+      - latencyMs
+      - ttfbMs
+      - tokens
+      - cost
+      - stream
+      - labels
+      - requestLabels
+      properties:
+        id:
+          type: string
+        at:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        key:
+          $ref: "#/components/schemas/KeyRef"
+        owner:
+          type: string
+        model:
+          $ref: "#/components/schemas/Ref"
+        provider:
+          $ref: "#/components/schemas/Ref"
+        upstreamModel:
+          type: string
+        door:
+          type: string
+          enum:
+          - openai
+          - anthropic
+          - gemini
+          - lux
+        targetDialect:
+          type: string
+          enum:
+          - openai
+          - anthropic
+          - gemini
+          - lux
+        route:
+          type: string
+        translated:
+          type: boolean
+        loss:
+          type: array
+          items:
+            type: string
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attempt"
+        status:
+          type: string
+          enum:
+          - ok
+          - refused
+          - failed
+        error:
+          type: string
+        upstreamStatus:
+          type: integer
+        latencyMs:
+          type: integer
+        ttfbMs:
+          type: integer
+        tokens:
+          $ref: "#/components/schemas/Tokens"
+        cost:
+          $ref: "#/components/schemas/Charge"
+        stream:
+          type: boolean
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        requestLabels:
+          type: object
+          additionalProperties:
+            type: string
+    KeyRef:
+      type: object
+      required:
+      - id
+      - prefix
+      properties:
+        id:
+          type: string
+        prefix:
+          type: string
+    Ref:
+      type: object
+      required:
+      - name
+      - id
+      properties:
+        name:
+          type: string
+        id:
+          type: string
+    Attempt:
+      type: object
+      required:
+      - provider
+      - upstreamModel
+      - status
+      - httpStatus
+      - error
+      - durationMs
+      properties:
+        provider:
+          type: string
+        upstreamModel:
+          type: string
+        status:
+          type: string
+          enum:
+          - ok
+          - refused
+          - failed
+        httpStatus:
+          type: integer
+        error:
+          type: string
+        durationMs:
+          type: integer
+    Tokens:
+      type: object
+      required:
+      - input
+      - output
+      - cachedInput
+      - cacheWrite
+      - reasoning
+      - estimated
+      properties:
+        input:
+          type: integer
+        output:
+          type: integer
+        cachedInput:
+          type: integer
+        cacheWrite:
+          type: integer
+        reasoning:
+          type: integer
+        estimated:
+          type: boolean
+    Charge:
+      type: object
+      required:
+      - amount
+      - currency
+      - priced
+      properties:
+        amount:
+          type: integer
+        currency:
+          type: string
+        priced:
+          type: boolean
+    RecordList:
+      type: object
+      required:
+      - items
+      - source
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Record"
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last.
+        source:
+          type: string
+          enum:
+          - archive
+          - memory
+          description: "Which record set answered: the replica's own ring, or the installation-wide archive when a request log exporter is configured."
 security:
 - bearer: []
 x-lux-errors:

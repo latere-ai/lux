@@ -268,6 +268,8 @@ func (h *Handler) routes() {
 			}))
 		}
 	}
+	h.mux.Handle("/v1/usage", h.route(map[string]handlerFunc{http.MethodGet: (*call).usage}))
+	h.mux.Handle("/v1/requests", h.route(map[string]handlerFunc{http.MethodGet: (*call).requests}))
 	h.mux.Handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
 	h.mux.Handle("/v1/openapi.json", h.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
 	h.mux.Handle("/.well-known/lux", h.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
@@ -275,10 +277,7 @@ func (h *Handler) routes() {
 }
 
 // route dispatches on the method and writes the refusal a handler
-// returns. The two usage routes of spec 011, GET /v1/usage and GET
-// /v1/requests, are not mounted in this build: they are this table's
-// not_found until spec 009's aggregation and spec 012's request log
-// land, and the spec's acceptance states say so.
+// returns.
 func (h *Handler) route(methods map[string]handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := callOf(r)
