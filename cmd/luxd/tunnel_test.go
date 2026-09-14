@@ -119,13 +119,17 @@ func TestServeTunnelsARuntime(t *testing.T) {
 		return s
 	}
 	waitUntil(t, "the session to be Connected", func() bool { return tunnelState() == "Connected" })
+	// The health job probes on LUX_HEALTH_INTERVAL, a tick apart from the
+	// connect, so the state is read when it has run and not the instant the
+	// session is up, when status.health is still empty on a slow runner.
+	waitUntil(t, "the runtime to be Healthy", func() bool {
+		h, _ := provider()["health"].(map[string]any)
+		return h["state"] == "Healthy"
+	})
 	st := provider()
 	tun := st["tunnel"].(map[string]any)
 	if tun["agent"] != "lux/test" || tun["subject"] != iss.URL()+"|alice" || !strings.HasPrefix(tun["session"].(string), "tun_") {
 		t.Errorf("status.tunnel %v", tun)
-	}
-	if health, _ := st["health"].(map[string]any); health["state"] != "Healthy" {
-		t.Errorf("status.health %v", health)
 	}
 	// Discovery at connect declared the runtime's model under alice.
 	waitUntil(t, "the discovered Model", func() bool {
