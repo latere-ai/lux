@@ -4,6 +4,8 @@
 package auth
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	"latere.ai/x/pkg/authz"
@@ -84,14 +86,7 @@ func Kind(action string) string {
 }
 
 // Known reports whether action is one of the vocabulary.
-func Known(action string) bool {
-	for _, a := range actions {
-		if a == action {
-			return true
-		}
-	}
-	return false
-}
+func Known(action string) bool { return slices.Contains(actions, action) }
 
 // verb is the part of an action after the kind: create, read, list, use.
 func verb(action string) string {
@@ -274,9 +269,7 @@ func ResourceFor(action string, obj v1.Object) (authz.Resource, bool) {
 // labels copies a label map, never nil.
 func labels(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	return out
 }
 

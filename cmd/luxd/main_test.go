@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"regexp"
@@ -32,9 +33,7 @@ func serveEnv(t *testing.T, extra map[string]string) map[string]string {
 		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
 		"LUX_OIDC_ISSUERS":  issuertest.New(t).URL(),
 	}
-	for k, v := range extra {
-		m[k] = v
-	}
+	maps.Copy(m, extra)
 	return m
 }
 
