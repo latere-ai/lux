@@ -66,10 +66,11 @@ type Limiter struct {
 	buckets  *ratelimit.Buckets
 	counters *metering.Counters
 
-	mu      sync.Mutex
-	used    map[string]time.Time  // key id to the minute of its last admitted request
-	written map[string]time.Time  // key id to the minute lastUsedAt was last written
-	soft    map[string]softWindow // a soft Budget's spend key to the window Flush checks
+	mu        sync.Mutex
+	used      map[string]time.Time  // key id to the minute of its last admitted request
+	written   map[string]time.Time  // key id to the minute lastUsedAt was last written
+	soft      map[string]softWindow // a soft Budget's spend key to the window Flush checks
+	lastFlush time.Time             // the last flush whose counter writes all succeeded
 }
 
 // softWindow is one soft Budget's current window, checked at flush for
@@ -94,12 +95,13 @@ func NewLimiter(o LimiterOptions) *Limiter {
 		o.Flush = metering.DefaultFlush
 	}
 	return &Limiter{
-		o:        o,
-		buckets:  ratelimit.New(ratelimit.Config{Idle: bucketIdle, Now: o.Now}),
-		counters: metering.NewCounters(o.Store.Counters(), o.Flush, metering.WithClock(o.Now)),
-		used:     map[string]time.Time{},
-		written:  map[string]time.Time{},
-		soft:     map[string]softWindow{},
+		o:         o,
+		buckets:   ratelimit.New(ratelimit.Config{Idle: bucketIdle, Now: o.Now}),
+		counters:  metering.NewCounters(o.Store.Counters(), o.Flush, metering.WithClock(o.Now)),
+		used:      map[string]time.Time{},
+		written:   map[string]time.Time{},
+		soft:      map[string]softWindow{},
+		lastFlush: o.Now(),
 	}
 }
 
@@ -218,7 +220,7 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 	}
 	var estimate v1.Money
 	if pricing != nil {
-		estimate = costOf(gateway.Tokens{Input: r.InputTokens, Output: r.OutputTokens}, pricing)
+		estimate, _ = metering.Cost(metering.Tokens{Input: r.InputTokens, Output: r.OutputTokens}, pricing)
 		if spend != nil && spend.Currency != "" && spend.Currency != pricing.Currency {
 			return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Key " + id + " limits its spend in " + spend.Currency + " and Model " + r.Model.Metadata.Name + " is priced in " + pricing.Currency}
 		}
@@ -256,25 +258,6 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 	}
 	le.admit()
 	return nil
-}
-
-// costOf prices tokens under a Model's pricing, spec 009's rule: money
-// per Per tokens in micro-units, one rounding half up over the whole
-// sum. Spec 009's metering.Cost takes this over when it lands; the
-// arithmetic is written there in the same words.
-func costOf(t gateway.Tokens, p *v1.Pricing) v1.Money {
-	per := int64(p.Per)
-	if per <= 0 {
-		per = 1
-	}
-	price := func(m *v1.Money) int64 {
-		if m == nil {
-			return 0
-		}
-		return int64(*m)
-	}
-	n := t.Input*price(p.Input) + t.Output*price(p.Output) + t.CachedInput*price(p.CachedInput) + t.CacheWrite*price(p.CacheWrite)
-	return v1.Money((n + per/2) / per)
 }
 
 // announceKey claims the window's marker and, first, raises key.exhausted.
@@ -332,11 +315,16 @@ func (l *Limiter) touch(id string, now time.Time) {
 // written. A store that cannot answer is logged; the deltas wait for
 // the next flush.
 func (l *Limiter) Flush(ctx context.Context) {
+	flushed := true
 	if err := l.counters.Flush(ctx); err != nil {
+		flushed = false
 		l.o.Logger.ErrorContext(ctx, "limits: flushing the spend counters", "err", err)
 	}
 	now := l.o.Now()
 	l.mu.Lock()
+	if flushed {
+		l.lastFlush = now
+	}
 	soft := make(map[string]softWindow, len(l.soft))
 	for key, w := range l.soft {
 		if !w.resetsAt.IsZero() && !w.resetsAt.After(now) {
@@ -358,6 +346,15 @@ func (l *Limiter) Flush(ctx context.Context) {
 		l.mu.Unlock()
 	}
 	l.writeLastUsed(ctx, used, now)
+}
+
+// FlushLag is the time since this replica's last flush whose counter
+// writes all succeeded, which spec 009's lux_metering_flush_lag_seconds
+// reads through the Recorder.
+func (l *Limiter) FlushLag() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return max(l.o.Now().Sub(l.lastFlush), 0)
 }
 
 // writeLastUsed stamps lastUsedAt once per Key per minute, rounded down
@@ -492,10 +489,7 @@ func (le *lease) Settle(_ context.Context, t gateway.Tokens) {
 		if le.tokens > 0 {
 			le.l.buckets.Adjust(tokensBucket(le.key.Status.ID), int(metering.Adjustment(int64(le.tokens), settled)))
 		}
-		var measured v1.Money
-		if le.pricing != nil {
-			measured = costOf(t, le.pricing)
-		}
+		measured, _ := metering.Cost(metering.Tokens{Input: t.Input, Output: t.Output, CachedInput: t.CachedInput, CacheWrite: t.CacheWrite}, le.pricing)
 		delta := int64(measured) - int64(le.estimate)
 		for _, r := range le.rows(metering.ScopeKeyTokens) {
 			c.Add(r.key, settled, r.expiresAt)

@@ -385,19 +385,19 @@ func TestCostOf(t *testing.T) {
 	}
 	per := &v1.Pricing{Currency: "USD", Per: 1_000_000, Input: money("2"), Output: money("8"), CachedInput: money("0.5"), CacheWrite: money("2.5")}
 	for _, c := range []struct {
-		tokens gateway.Tokens
+		tokens metering.Tokens
 		p      *v1.Pricing
 		want   string
 	}{
-		{gateway.Tokens{Input: 1000, Output: 500}, per, "0.006"},
-		{gateway.Tokens{Input: 1000, CachedInput: 1000, CacheWrite: 1000}, per, "0.005"},
-		{gateway.Tokens{Input: 1}, per, "0.000002"},
-		{gateway.Tokens{Input: 1, Output: 1}, &v1.Pricing{Per: 1000, Input: money("0.0005"), Output: money("0.0005")}, "0.000001"}, // half up over the sum
-		{gateway.Tokens{Input: 3}, &v1.Pricing{Input: money("1")}, "3"},                                                            // Per unset is per token
-		{gateway.Tokens{Input: 3}, &v1.Pricing{Per: 1}, "0"},                                                                       // no prices set
+		{metering.Tokens{Input: 1000, Output: 500}, per, "0.006"},
+		{metering.Tokens{Input: 1000, CachedInput: 1000, CacheWrite: 1000}, per, "0.005"},
+		{metering.Tokens{Input: 1}, per, "0.000002"},
+		{metering.Tokens{Input: 1, Output: 1}, &v1.Pricing{Per: 1000, Input: money("0.0005"), Output: money("0.0005")}, "0.000001"}, // half up over the sum
+		{metering.Tokens{Input: 3}, &v1.Pricing{Input: money("1")}, "3"},                                                            // Per unset is per token
+		{metering.Tokens{Input: 3}, &v1.Pricing{Per: 1}, "0"},                                                                       // no prices set
 	} {
-		if got := costOf(c.tokens, c.p); got.String() != c.want {
-			t.Errorf("costOf(%+v) = %s, want %s", c.tokens, got, c.want)
+		if got, _ := metering.Cost(c.tokens, c.p); got.String() != c.want {
+			t.Errorf("Cost(%+v) = %s, want %s", c.tokens, got, c.want)
 		}
 	}
 }
