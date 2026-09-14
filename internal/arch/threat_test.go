@@ -4,6 +4,9 @@
 package arch
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -302,4 +305,110 @@ func TestThreatTableIsGrounded(t *testing.T) {
 			}
 		})
 	}
+}
+
+// goFiles walks every Go source of the tree and hands each to fn with
+// its path relative to the module root. The directories that are never
+// released are skipped, as they are in the coordinates test.
+func goFiles(t *testing.T, fn func(rel string, file *ast.File)) {
+	t.Helper()
+	dir := root(t)
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] && path != dir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		parsed, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, path)
+		fn(filepath.ToSlash(rel), parsed)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sealingPackage is the one package that may reach a block cipher.
+const sealingPackage = "internal/secrets"
+
+// TestSealingIsOnePackage is the envelope rows of the threat table read
+// over the tree: internal/secrets is the only package that seals or
+// opens anything, so a second implementation of the envelope, with its
+// own mode of operation or its own additional data, cannot appear
+// without this test naming the file it appeared in.
+func TestSealingIsOnePackage(t *testing.T) {
+	goFiles(t, func(rel string, file *ast.File) {
+		if strings.HasPrefix(rel, sealingPackage+"/") {
+			return
+		}
+		for _, spec := range file.Imports {
+			path, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				t.Fatalf("%s: %v", rel, err)
+			}
+			if path == "crypto/aes" || path == "crypto/cipher" {
+				t.Errorf("%s imports %s; sealing and opening a credential is %s's alone", rel, path, sealingPackage)
+			}
+		}
+	})
+}
+
+// TestEveryHTTPClientIsPinned is the SSRF and the host pin rows read
+// over the tree: an outbound client is built with a transport of the
+// project's own, which is where the private-address refusal, the host
+// pin, the TLS floor, and the instrumentation live. A client left with
+// the default transport, and any reach for http.DefaultClient or
+// http.DefaultTransport, has none of them, so neither is admitted
+// outside a test.
+func TestEveryHTTPClientIsPinned(t *testing.T) {
+	isHTTP := func(e ast.Expr, name string) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != name {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		return ok && pkg.Name == "http"
+	}
+	goFiles(t, func(rel string, file *ast.File) {
+		if strings.HasSuffix(rel, "_test.go") {
+			return
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.SelectorExpr:
+				for _, name := range []string{"DefaultClient", "DefaultTransport"} {
+					if isHTTP(node, name) {
+						t.Errorf("%s reaches http.%s, which carries no host pin, no private-address refusal, and no instrumentation", rel, name)
+					}
+				}
+			case *ast.CompositeLit:
+				if !isHTTP(node.Type, "Client") {
+					return true
+				}
+				for _, elt := range node.Elts {
+					kv, ok := elt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Transport" {
+						return true
+					}
+				}
+				t.Errorf("%s builds an http.Client with no Transport, so it dials on the default one", rel)
+			}
+			return true
+		})
+	})
 }
