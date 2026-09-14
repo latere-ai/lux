@@ -53,6 +53,10 @@ depcheck:
         spec 019, and nothing else does without a row here (spec 001)
       allow:
         latere.ai/x/pkg: the shared library every Latere service is built on (spec 002)
+        github.com/goccy/go-yaml: >-
+          the YAML decoder spec 003 names, reached through manifest by the
+          file mode of spec 010, which decodes a directory of manifests at
+          start
 
 license:
   spdx: Apache-2.0

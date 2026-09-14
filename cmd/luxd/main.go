@@ -24,8 +24,12 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/health"
+	"latere.ai/x/pkg/metrics"
 
 	"latere.ai/x/lux/internal/config"
+	"latere.ai/x/lux/internal/store"
+	"latere.ai/x/lux/internal/store/filemode"
+	"latere.ai/x/lux/internal/store/memory"
 	"latere.ai/x/lux/internal/version"
 )
 
@@ -91,9 +95,23 @@ func serve(ctx context.Context, args []string, getenv config.Getenv, stdout, std
 		return fail(stderr, err)
 	}
 
+	st, files, notice, err := openStore(ctx, cfg, getenv)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	defer func() { _ = st.Close() }()
+	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	if files != nil {
+		stopHUP := reloadOnHUP(ctx, files, stdout, stderr)
+		defer stopHUP()
+	}
+
 	draining := make(chan struct{})
 	probes := health.Handler(health.Options{
-		Ready:     health.Checks(health.Check{Name: "draining", Run: notDraining(draining)}),
+		Ready: health.Checks(
+			health.Check{Name: "draining", Run: notDraining(draining)},
+			health.Check{Name: "store", Run: st.Ready},
+		),
 		Timeout:   2 * time.Second,
 		Version:   version.Version,
 		Commit:    version.Commit,
@@ -153,6 +171,62 @@ func serve(ctx context.Context, args []string, getenv config.Getenv, stdout, std
 	return 0
 }
 
+// openStore constructs the store the configuration selects, wrapped in
+// Instrument, and returns the file mode's store beside it when that is
+// the mode, so serve can wire the re-read, and the substance of the one
+// start-up line that names the mode. The Postgres store lands in a later
+// phase; until then a configured LUX_DB_URL is refused rather than
+// silently answered with state in memory, because an operator who asked
+// for durability and got a process's memory would find out at the first
+// restart.
+func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (store.Store, *filemode.Store, string, error) {
+	reg := metrics.NewRegistry()
+	switch {
+	case cfg.DBURL != "":
+		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
+	case cfg.ManifestDir != "":
+		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv})
+		if err != nil {
+			return nil, nil, "", err
+		}
+		return store.Instrument(files, reg), files, files.Notice(), nil
+	default:
+		return store.Instrument(memory.New(), reg), nil, memory.Notice, nil
+	}
+}
+
+// reloadOnHUP re-reads the directory on every SIGHUP until ctx ends or
+// the returned stop is called, printing what was read, or the file and
+// the path that stopped the read while the previous snapshot keeps
+// serving.
+func reloadOnHUP(ctx context.Context, files *filemode.Store, stdout, stderr io.Writer) (stop func()) {
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	quit, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-quit:
+				return
+			case <-hup:
+				if err := files.Reload(ctx); err != nil {
+					_, _ = fmt.Fprintf(stderr, "luxd: reload failed, the previous snapshot keeps serving: %v\n", err)
+					continue
+				}
+				_, _ = fmt.Fprintf(stdout, "luxd: reloaded %s\n", files.Notice())
+			}
+		}
+	}()
+	return func() {
+		signal.Stop(hup)
+		close(quit)
+		<-done
+	}
+}
+
 // fail writes the one line an operator reads on a start-up or runtime
 // failure and returns exit code 1.
 func fail(stderr io.Writer, err error) int {
@@ -161,8 +235,8 @@ func fail(stderr io.Writer, err error) int {
 }
 
 // notDraining fails readiness once shutdown has begun, so a load balancer
-// stops routing before the servers close. It is the only readiness check
-// luxd has: the gateway keeps no state on local disk.
+// stops routing before the servers close. The store's Ready is the other
+// readiness check, named store, and is nil for the memory and file modes.
 func notDraining(draining <-chan struct{}) func(context.Context) error {
 	return func(context.Context) error {
 		select {

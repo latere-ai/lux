@@ -6,6 +6,16 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The store: `luxd serve` holds desired state, Key hashes, credential
+  rows, spend counters, leases, the event journal, and the tunnel
+  registry in memory by default and says so at start in one line, and
+  `LUX_MANIFEST_DIR` selects the file mode, a directory of manifests read
+  at start and on `SIGHUP`, one object per `.yaml` or `.json` file, with
+  a Provider's credential and a Key's value read from the variables the
+  manifests name and the API read-only. `LUX_DB_URL` and
+  `LUX_DB_MAX_CONNS` are read and checked; the Postgres store itself
+  lands in a later release, and setting the URL is refused at start
+  until it does.
 - The manifest contract: `manifest` and `manifest/v1` decode a
   `Provider`, `Model`, `Key`, or `Budget` from YAML or JSON with one
   schema, refuse an unknown field with its path, validate every field

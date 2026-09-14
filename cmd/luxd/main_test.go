@@ -7,11 +7,15 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -112,24 +116,29 @@ func (s *syncBuffer) String() string {
 
 var listening = regexp.MustCompile(`listening public=(\S+) internal=(\S+)`)
 
-// startServe runs serve on loopback ports and returns the two base URLs
-// and a stop function that cancels the context and returns the exit code.
-func startServe(t *testing.T) (publicURL, internalURL string, stop func() int) {
+// server is one serve run on loopback ports: its two base URLs, what it
+// wrote so far, and stop, which cancels the context and returns the exit
+// code.
+type server struct {
+	publicURL, internalURL string
+	out, errOut            *syncBuffer
+	stop                   func() int
+}
+
+// startServe runs serve on loopback ports with extra in the environment
+// and returns once the listeners are reported.
+func startServe(t *testing.T, extra map[string]string) server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	var out syncBuffer
-	var errOut bytes.Buffer
+	vars := map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:0", "LUX_INTERNAL_ADDR": "127.0.0.1:0"}
+	maps.Copy(vars, extra)
+	out, errOut := &syncBuffer{}, &syncBuffer{}
 	codec := make(chan int, 1)
-	go func() {
-		codec <- run(ctx, nil, env(map[string]string{
-			"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
-			"LUX_INTERNAL_ADDR": "127.0.0.1:0",
-		}), &out, &errOut)
-	}()
+	go func() { codec <- run(ctx, nil, env(vars), out, errOut) }()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if m := listening.FindStringSubmatch(out.String()); m != nil {
-			return "http://" + m[1], "http://" + m[2], func() int {
+			return server{"http://" + m[1], "http://" + m[2], out, errOut, func() int {
 				cancel()
 				select {
 				case code := <-codec:
@@ -138,7 +147,7 @@ func startServe(t *testing.T) (publicURL, internalURL string, stop func() int) {
 					t.Fatal("serve did not stop")
 					return -1
 				}
-			}
+			}}
 		}
 		select {
 		case code := <-codec:
@@ -147,6 +156,18 @@ func startServe(t *testing.T) (publicURL, internalURL string, stop func() int) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("serve never reported its listeners; stdout %q", out.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitFor polls buf until it carries want, or fails after five seconds.
+func waitFor(t *testing.T, buf *syncBuffer, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(buf.String(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("never saw %q in:\n%s", want, buf.String())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -171,7 +192,8 @@ func get(t *testing.T, url string) (int, string) {
 }
 
 func TestServeAnswersTheProbesOnBothListenersAndStopsCleanly(t *testing.T) {
-	publicURL, internalURL, stop := startServe(t)
+	srv := startServe(t, nil)
+	publicURL, internalURL, stop := srv.publicURL, srv.internalURL, srv.stop
 
 	for _, base := range []string{publicURL, internalURL} {
 		for _, p := range []string{"/livez", "/readyz"} {
@@ -214,5 +236,120 @@ func TestSleepCtxReturnsEarlyWhenTheContextEnds(t *testing.T) {
 	sleepCtx(ctx, time.Minute)
 	if time.Since(start) > time.Second {
 		t.Fatal("sleepCtx waited for the timer despite a cancelled context")
+	}
+}
+
+// TestMemoryStoreLogsItsAssumptions is spec 010's row: without a store
+// the start-up log names the three consequences in one line.
+func TestMemoryStoreLogsItsAssumptions(t *testing.T) {
+	srv := startServe(t, nil)
+	defer srv.stop()
+	var line string
+	for l := range strings.SplitSeq(srv.out.String(), "\n") {
+		if strings.Contains(l, "state in memory") {
+			line = l
+		}
+	}
+	if !strings.HasPrefix(line, "luxd: ") {
+		t.Fatalf("no memory line in:\n%s", srv.out.String())
+	}
+	for _, want := range []string{"nothing is recovered after a restart", "every window starts empty", "only replica"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line lacks %q: %s", want, line)
+		}
+	}
+}
+
+// TestDatabaseIsNotSelectableYet: the Postgres store is a later phase, so
+// a configured LUX_DB_URL is refused with one line rather than answered
+// with state in memory.
+func TestDatabaseIsNotSelectableYet(t *testing.T) {
+	var errOut bytes.Buffer
+	code := run(t.Context(), nil, env(map[string]string{"LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	got := errOut.String()
+	if !strings.HasPrefix(got, "luxd: LUX_DB_URL: ") || strings.Count(got, "\n") != 1 || strings.Contains(got, "secret") {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+const manifestHead = "apiVersion: lux.latere.ai/v1beta1\n"
+
+const providerYAML = manifestHead + `kind: Provider
+metadata:
+  name: openai
+spec:
+  dialect: openai
+  baseURL: https://api.example.com/v1
+  credential:
+    valueFrom:
+      env: OPENAI_KEY
+`
+
+const modelYAML = manifestHead + `kind: Model
+metadata:
+  name: gpt-5
+spec:
+  targets:
+    - provider: openai
+`
+
+func writeFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFileModeStartupNamesTheFailingFile is spec 010's row at the
+// binary: a file that fails to resolve is one luxd: line naming the file
+// and the path, exit 1, and nothing is served.
+func TestFileModeStartupNamesTheFailingFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "model.yaml", modelYAML)
+	var out, errOut bytes.Buffer
+	code := run(t.Context(), nil, env(map[string]string{"LUX_MANIFEST_DIR": dir, "LUX_PUBLIC_ADDR": "127.0.0.1:0", "LUX_INTERNAL_ADDR": "127.0.0.1:0"}), &out, &errOut)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	got := errOut.String()
+	if !strings.HasPrefix(got, "luxd: manifest dir "+dir) || !strings.Contains(got, "model.yaml: not_found at spec.targets[0].provider") || strings.Count(got, "\n") != 1 {
+		t.Fatalf("stderr = %q", got)
+	}
+	if strings.Contains(out.String(), "listening") {
+		t.Fatal("a failed start served")
+	}
+}
+
+// TestFileModeServesAndReloadsOnSIGHUP: the start-up line names the
+// directory, SIGHUP picks up an added file, and a directory that stops
+// resolving is reported while the previous snapshot keeps serving.
+func TestFileModeServesAndReloadsOnSIGHUP(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "provider.yaml", providerYAML)
+	srv := startServe(t, map[string]string{"LUX_MANIFEST_DIR": dir, "OPENAI_KEY": "sk-live"})
+	if !strings.Contains(srv.out.String(), "luxd: manifest dir "+dir+": 1 files read, 1 providers") {
+		t.Fatalf("no file mode line in:\n%s", srv.out.String())
+	}
+	if code, body := get(t, srv.internalURL+"/readyz"); code != 200 || body != "ok\n" {
+		t.Fatalf("GET /readyz = %d %q", code, body)
+	}
+
+	writeFile(t, dir, "model.yaml", modelYAML)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, srv.out, "luxd: reloaded manifest dir "+dir+": 2 files read, 1 providers, 0 budgets, 1 models")
+
+	writeFile(t, dir, "model.yaml", strings.ReplaceAll(modelYAML, "provider: openai", "provider: nowhere"))
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, srv.errOut, "luxd: reload failed, the previous snapshot keeps serving: manifest dir "+dir+": model.yaml: not_found at spec.targets[0].provider")
+
+	if code := srv.stop(); code != 0 {
+		t.Fatalf("exit %d", code)
 	}
 }
