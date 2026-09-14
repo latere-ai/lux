@@ -137,10 +137,24 @@ same percentile set (p50/p75/p90/p95/p99), throughput, and peak RSS, for
 the passthrough and translated shapes. It measures proxy overhead, not
 model quality, and a Go proxy against a Python one measures the runtimes as
 much as the code; the numbers are machine-relative and prove nothing about
-which proxy routes better. The runnable harness and its measured table live
-under `benchmarks/compare/`: `README.md` for the method, `RESULTS.md`
-for the numbers. That harness is a separate artifact
-from the in-repo Go benchmarks above.
+which proxy routes better.
+
+One measured run, on a 12-core Apple-silicon laptop at concurrency 50
+against the shared mock: for a same-format passthrough, `luxd` added
+about 2 ms of p50 latency over calling the mock directly and sustained
+roughly 19,000 requests per second in a single process at about 42 MB of
+resident memory, while LiteLLM 1.100.1 with one worker added about 115 ms
+of p50 and sustained roughly 400 requests per second at about 330 MB. The
+translated shape held the same ratio, about 3 ms added for `luxd` against
+about 110 ms for LiteLLM, and streaming tracked it, with zero errors on
+every run. Trust the ratios over the absolutes: these are single-process,
+machine-relative figures that compare a Go binary with a Python service
+and measure proxy overhead alone.
+
+The runnable harness and its full table live under
+`benchmarks/compare/`: `README.md` for the method, `RESULTS.md` for the
+numbers. That harness is a separate artifact from the in-repo Go
+benchmarks above.
 
 ## Where the design lives
 
