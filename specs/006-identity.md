@@ -1,6 +1,6 @@
 ---
 title: "Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -38,9 +38,12 @@ each is a platform's, expressed through the authorizer.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built on 2026-09-14 in `internal/auth` and `internal/config`, on pkg
+v0.66.0: the verifier over the listed issuers, the authorizer over the
+shared client with Lux's vocabulary, the `Lookup` for `Resolve`, the
+owner policy, and the start-up check. The wiring into `serve` lands
+with [[010-state]]'s store, which supplies the object lookups the
+package takes as interfaces; the Outcome below names the one call.
 
 Amended on 2026-09-13: the verifier, the authorizer envelope, its cache
 and retry rules, the subject string and the probe id are the shared
@@ -88,6 +91,21 @@ the verified token, read from the payload with `jwt.DecodePayload` after
 organisation, role, or group claims mean something to the authorizer
 that reads them and nothing to `luxd`. An `http://` issuer is refused
 unless it is on a loopback address or in `LUX_OIDC_INSECURE_ISSUERS`.
+
+The start-up check reads each issuer's discovery document, which must
+name the listed issuer as its `issuer` and a `jwks_uri`, and counts the
+keys the shared verifier will use: an RSA key with its coordinates and
+`alg` absent or `RS256`, or a P-256 key with its coordinates and `alg`
+absent or `ES256`; a set with none is the refusal above. Per request,
+the bearer's payload is decoded unverified for its `iss`, which selects
+the issuer's validator, and a token whose `iss` is not listed or that
+carries no `exp` is refused before any signature is checked; the
+validator then verifies the signature, `exp`, `nbf`, `iss`, and `aud`.
+Every refusal is one code, `unauthenticated`, with the finding, no
+bearer, not a JWS, an unlisted issuer, or the validator's error, in the
+developer detail alone. `auth.Verifier` is the type; `Authenticate`
+returns an `auth.Caller` with the rendered subject, the issuer without
+its trailing slash, the `sub`, and the claims.
 
 A control plane request without a bearer is `unauthenticated`, 401. A
 control plane request whose bearer is a Key value is `unauthenticated`
@@ -167,6 +185,14 @@ peer's, or the forwarded one behind a proxy listed in
 | `budget.draw` | the Budget as above; asked at Key resolve through `Lookup.Budget` |
 | `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
 
+Every list and map field of a resource is present and never `null`, so
+an authorizer in any language reads `resource.labels` as an object and
+`resource.models` as a list whether or not the manifest set them; a
+create's `amount` is `""` when the manifest names none, because the
+authorizer is asked before `Resolve` refuses the manifest. The builders
+are `internal/auth`'s, one per row, and `ResourceFor(action, object)`
+picks the row for an action on a manifest object.
+
 Response, 200:
 
 ```json
@@ -204,9 +230,11 @@ Rules:
 - A decision is any of the actions' outcomes. Everything else is
   `authorizer_unavailable`, 503, and never an allow: connection
   refused, a TLS failure, a non-200 status, a body that does not parse,
-  a body without `allow`, a body over 64 KiB, and a timeout of
-  `LUX_AUTHORIZER_TIMEOUT` (default `5s`), which bounds one decision
-  with its retry included. The call is retried once when the connection
+  a body without `allow`, a body over 64 KiB, a `limits` object whose
+  fields do not read as the figures above, a figure below zero, a spend
+  that is not a money string, or a ttl that is not a duration, and a
+  timeout of `LUX_AUTHORIZER_TIMEOUT` (default `5s`), which bounds one
+  decision with its retry included. The call is retried once when the connection
   failed before a response line arrived, a refused or reset connection
   or a dial timeout, and never on a non-200, a timeout after the request
   was sent, or a body that does not parse (`authz.Retryable`). An
@@ -239,9 +267,19 @@ Rules:
   sentence. A `deny` on `model.use`, `budget.draw`, or `provider.read`
   for a target, asked through `Lookup` at resolve, is `not_found`, so a
   refused object and a missing one are the same answer
-  ([[003-manifest-contract]], [[016-security-and-threat-model]]).
+  ([[003-manifest-contract]], [[016-security-and-threat-model]]): the
+  same code and the same developer detail, which names the reference
+  and not the reason, because a detail that differed would disclose
+  which of the two it was. `model.use` is asked for every selector,
+  one that matches nothing included, since the decision binds the
+  selector and a Model declared later will match it.
 - The API constructs `Lookup` per request from the caller's subject and
-  the cache below; an importer constructs its own.
+  the cache below, `auth.Authorizer.Lookup(caller, request, catalog)`
+  over a `Catalog` of the store's Providers, Budgets, and the Models a
+  selector matches; an importer constructs its own. A `Catalog` failure
+  surfaces through `Resolve` as `authorizer_unavailable`, the one code
+  [[003-manifest-contract]] gives a `Lookup` error that is neither
+  `not_found` nor that.
 - An allow is cached per replica for the answer's `ttl`, `60s` when
   the answer names none, capped at `600s`; a deny for `5s`;
   unavailability never; under the key of subject, action, and resource
@@ -276,7 +314,7 @@ Rules:
   authorizer (`authz/stub`) are `latere.ai/x/pkg/authz`, shared with
   the sibling open cores; `luxd` adds its action vocabulary and its
   `resource` shapes and nothing else. The conformance test an
-  authorizer passes is owed by that package and not written yet, below.
+  authorizer passes is `authz/conformance`, below.
 
 ### The owner policy
 
@@ -320,10 +358,22 @@ decided by Lux's rows. The rows, in order, before the frame:
 - no limits are granted: `Limits` is zero, so `Defaults` and the
   manifest's own values hold.
 
-With an authorizer set, `LUX_ADMIN_SUBJECTS` is read and unused. Every
-kind carries an `owner`, the rendered subject that applied it; a
-discovered Model's owner is its Provider's. This is a policy with
-tests, not the absence of one.
+The rows deny with the frame's reasons, `probe`, `anonymous`, and
+`not_owner`, and two of Lux's: `admin_only` for a Provider or Model
+declared, changed, or deleted by a subject that is not an admin, and
+`unknown_action` for a string outside the vocabulary, which no row
+allows. The probe and the anonymous subject are denied before the admin
+row, so an admin is denied the probe like everyone. The frame's rows
+look the object up by the resource's kind and id through an
+`ObjectLookup` the store supplies at wiring, `auth.OwnerPolicy`
+importing no store; a resource with no id names nothing and is
+`not_owner`, and a lookup that fails is no decision,
+`authorizer_unavailable`, because the policy could not decide.
+
+With an authorizer set, `LUX_ADMIN_SUBJECTS` is read and unused, and
+the start-up line says so. Every kind carries an `owner`, the rendered
+subject that applied it; a discovered Model's owner is its Provider's.
+This is a policy with tests, not the absence of one.
 
 ### The boundary between the planes
 
@@ -357,19 +407,30 @@ holds.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `LUX_OIDC_ISSUERS` | yes, unless `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane |
-| `LUX_OIDC_AUDIENCE` | no | `lux` | the one audience a caller token must contain; a list is not accepted |
-| `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
-| `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure |
-| `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
-| `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set |
+| `LUX_OIDC_ISSUERS` | yes, unless `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error |
+| `LUX_OIDC_AUDIENCE` | no | `lux` | the one audience a caller token must contain; a value with a comma is a configuration error, because a list is not accepted |
+| `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
+| `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
+| `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included, a duration above zero; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
+| `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects, each `<iss>\|<sub>`, the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set; an entry without the separator is a configuration error |
 
-### Changes this spec needs in `latere.ai/x/pkg`
+Each problem is one clause without a semicolon, so the one sorted
+message of [[002-repository-scaffold]] reads unambiguously. `auth.Startup`
+builds the verifier and the client from the loaded configuration, or
+nothing in the file mode, and its `String` is the start-up line: the
+issuers, the audience, and who decides, never the token.
+
+### What this spec needed in `latere.ai/x/pkg`
+
+Both changes landed in pkg v0.66.0, which this repository pins, with
+two more the stubs needed.
 
 | Package | Change | Why |
 |---|---|---|
-| `authkit/jwt` | verify `ES256` beside `RS256`: accept `alg: ES256` in the header and `kty: EC` keys in the key set | the start-up check and `TestBearerAcceptance` above name `ES256`; the shared verifier is expected to accept it; today the package refuses the algorithm and skips the keys |
-| `authz` | a conformance test an authorizer passes, `authz/conformance` or a `Conformance(t, url, token)` in the package: the probe is denied for every subject, a wrong bearer is refused, a well-formed request answers a 200 with `allow`, `ttl` when present is a positive integer, and `filter` and `limits` when present have the contract's shape | the package is where a shared conformance test belongs, and this spec's authorizer criteria and [[020-building-a-plane]]'s `TestPlaneDocAuthorizerConforms` run it; nothing in the package does yet |
+| `authkit/jwt` | verifies `ES256` beside `RS256`: `alg: ES256` in the header is checked against the key set's `kty: EC`, `crv: P-256` keys and `RS256` against its RSA keys, never the other way round; `issuertest.WithES256` mints such tokens | the start-up check and `TestBearerAcceptance` name `ES256`, and the shared verifier accepts it |
+| `authz/conformance` | `conformance.Run(t, url, token, opts...)`, the test every authorizer passes: the probe is denied for every subject and action, a wrong bearer and no bearer are refused, a well-formed request answers a 200 with `allow` a boolean, `ttl` when present a positive integer, `limits` an object, `filter` owners and labels, and a deny carries a reason; `WithActions` and `WithSubjects` name a core's vocabulary | this spec's `TestProbeIdIsAlwaysDenied` runs it against the stub under Lux's twenty-four actions, and [[020-building-a-plane]]'s `TestPlaneDocAuthorizerConforms` runs it against the document's authorizer |
+| `authz/stub` | `FailBody(BodyMalformed\|BodyNoAllow)` and `PUT /fail {"body": ...}`, the outage whose answer is a 200 that is no decision | two of the six forms of unavailability above, driven from a test here and from [[015-test-stubs-and-tiers]]'s binary |
+| `authkit/issuertest` | `GET /requests` and `DELETE /requests` | [[001-architecture]]'s `TestHotPathDialsNoWebhook` reads the issuer's record across a process boundary ([[015-test-stubs-and-tiers]]) |
 
 ### What the gateway never does
 
@@ -394,20 +455,99 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| `luxd` refuses to start with no issuer and no manifest directory, with an unreachable issuer, and with an issuer whose key set has no `RS256` or `ES256` key, each naming the issuer | `TestServeRefusesToStartWithoutAnIssuer`, `TestUnreachableIssuerIsAStartupFailure`, `TestIssuerWithoutUsableKeysIsAStartupFailure` | not built |
-| A token from a listed issuer with the audience is accepted; one with another issuer, another audience, an expired `exp`, a future `nbf`, or a bad signature is `unauthenticated` | `TestBearerAcceptance`, table-driven | not built |
-| A Key value on `/v1` is `unauthenticated`; an issuer token on a door is `unauthenticated` when no Key's hash matches it and opens the door when a Key was created with it as `spec.value`, with the door decoding nothing | `TestPlanesRefuseEachOthersCredential`, `TestSuppliedTokenIsAKeyAtTheDoor` | not built |
-| An issuer whose keys become unreachable after start keeps verifying tokens signed by the cached keys and refuses one with an unknown `kid` | `TestStaleKeySetServesUntilRefresh` | not built |
-| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action | not built |
-| Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a connection failure before a response line is retried once and nothing else is; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestAuthorizerRetriesOnlyBeforeAResponseLine`, `TestDataPlaneServesWhileAuthorizerIsDown` | not built |
-| A `deny` on `model.use`, `budget.draw`, or a target's `provider.read` at resolve is `not_found` naming the field; a `deny` on the request's own action is `forbidden` with the reason in the developer detail only | `TestLookupDenyIsNotFound`, `TestDenyReasonStaysOutOfTheUserSentence` | not built |
-| Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers` | not built |
-| `filter` narrows `list` and `usage.read` to the owners and labels named | `TestAuthorizerFilter` | not built |
-| An allow is cached for the answer's `ttl`, `60s` when it names none, and at the `600s` cap, a deny for `5s`, unavailability never, and an answer about a resource with no id never, so ten applies of a Key naming one selector send ten `model.use` calls; a revoked subject is refused on the control plane within the allow's `ttl` | `TestDecisionCache`, `TestNoIdIsNeverCached` | not built |
-| `authz.ProbeID` is denied by the stub authorizer and by the owner policy for every subject and action, `luxd check` reports an authorizer that allows it, and an item route given the probe id answers `not_found` | `TestProbeIdIsAlwaysDenied` | not built |
-| The owner policy: an admin declares a Provider and a Model and a non-admin cannot, except a `tunnel: true` Provider, which its creator owns; every subject reads the catalog and uses every Model in a Key; an owner reads, updates, deletes, and draws its own objects and no other subject's, the deny reason being `not_owner` whether the object exists or not; `list` returns only the subject's own Keys and Budgets; no `Limits` are granted | `TestOwnerPolicy`, table-driven over every action and both roles | not built |
-| A Key applied with a token whose `sub` is a person is owned by `<iss>\|<person>`; one applied with a service token is owned by `<iss>\|<service account>`; the issuer is rendered without a trailing slash in both | `TestOwnerIsTheTokensSubject` | not built |
-| `LUX_AUTHORIZER_TOKEN` is sent as the bearer of every authorizer call and never as a bearer to any other endpoint; the issuer's and the sink's requests carry other credentials | `TestAuthorizerTokenStaysOnItsEndpoint`, over the e2e capture | not built |
+| `luxd` refuses to start with no issuer and no manifest directory, with an unreachable issuer, and with an issuer whose key set has no `RS256` or `ES256` key, each naming the issuer | `TestServeRefusesToStartWithoutAnIssuer` in `internal/config` and `cmd/luxd`, `TestUnreachableIssuerIsAStartupFailure`, `TestIssuerWithoutUsableKeysIsAStartupFailure` in `internal/auth` | passing; the call from `serve` lands with the merge |
+| A token from a listed issuer with the audience is accepted; one with another issuer, another audience, an expired `exp`, a future `nbf`, or a bad signature is `unauthenticated` | `TestBearerAcceptance`, table-driven, `ES256` accepted beside `RS256` | passing |
+| A Key value on `/v1` is `unauthenticated`; an issuer token on a door is `unauthenticated` when no Key's hash matches it and opens the door when a Key was created with it as `spec.value`, with the door decoding nothing | `TestPlanesRefuseEachOthersCredential`, `TestSuppliedTokenIsAKeyAtTheDoor` | the `/v1` half passes; the door half and `TestSuppliedTokenIsAKeyAtTheDoor` are not built and land with [[007-keys-and-limits]]'s doors |
+| An issuer whose keys become unreachable after start keeps verifying tokens signed by the cached keys and refuses one with an unknown `kid` | `TestStaleKeySetServesUntilRefresh` | passing |
+| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action, with `TestResourceShapes` | passing |
+| Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a connection failure before a response line is retried once and nothing else is; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestAuthorizerRetriesOnlyBeforeAResponseLine`, `TestDataPlaneServesWhileAuthorizerIsDown` | the first two pass; the third is not built and lands with [[004-request-path]]'s doors |
+| A `deny` on `model.use`, `budget.draw`, or a target's `provider.read` at resolve is `not_found` naming the field; a `deny` on the request's own action is `forbidden` with the reason in the developer detail only | `TestLookupDenyIsNotFound`, `TestDenyReasonStaysOutOfTheUserSentence` | passing |
+| Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers`, `TestDecodeLimits` | passing to the figures, the rate, `manifest.Limits` refusing through `Resolve`, and `max_keys`; the rate bucket and the `key.create` check are [[011-api]]'s |
+| `filter` narrows `list` and `usage.read` to the owners and labels named | `TestAuthorizerFilter` | passing to the decision; the narrowing of a list is [[011-api]]'s |
+| An allow is cached for the answer's `ttl`, `60s` when it names none, and at the `600s` cap, a deny for `5s`, unavailability never, and an answer about a resource with no id never, so ten applies of a Key naming one selector send ten `model.use` calls; a revoked subject is refused on the control plane within the allow's `ttl` | `TestDecisionCache`, `TestNoIdIsNeverCached` | passing |
+| `authz.ProbeID` is denied by the stub authorizer and by the owner policy for every subject and action, `luxd check` reports an authorizer that allows it, and an item route given the probe id answers `not_found` | `TestProbeIdIsAlwaysDenied` | passing for the stub, the owner policy, and `Check`; `luxd check` is [[017-release-and-installation]]'s and the item route [[011-api]]'s |
+| The owner policy: an admin declares a Provider and a Model and a non-admin cannot, except a `tunnel: true` Provider, which its creator owns; every subject reads the catalog and uses every Model in a Key; an owner reads, updates, deletes, and draws its own objects and no other subject's, the deny reason being `not_owner` whether the object exists or not; `list` returns only the subject's own Keys and Budgets; no `Limits` are granted | `TestOwnerPolicy`, table-driven over every action and both roles | passing |
+| A Key applied with a token whose `sub` is a person is owned by `<iss>\|<person>`; one applied with a service token is owned by `<iss>\|<service account>`; the issuer is rendered without a trailing slash in both | `TestOwnerIsTheTokensSubject`, `TestSubjectRendering` | passing for the subject each token renders to; the write of `owner` is [[011-api]]'s |
+| `LUX_AUTHORIZER_TOKEN` is sent as the bearer of every authorizer call and never as a bearer to any other endpoint; the issuer's and the sink's requests carry other credentials | `TestAuthorizerTokenStaysOnItsEndpoint`, over the e2e capture | passing over a recording transport for the issuer and the authorizer; the e2e capture with the sink is [[015-test-stubs-and-tiers]]'s |
 | During one thousand data plane requests with the stub authorizer and issuer wired, both receive zero calls | [[001-architecture]]'s `TestHotPathDialsNoWebhook` | not built |
 | A read of a Provider through any route or event returns no credential value | [[005-providers]]'s `TestProviderCredentialNeverLeavesTheGateway` | not built |
-| With an authorizer set, a subject listed in `LUX_ADMIN_SUBJECTS` receives no allow the authorizer did not give: the variable is read, reported as unused at start, and consulted by no decision | `TestAdminSubjectsIgnoredUnderAnAuthorizer` | not built |
+| With an authorizer set, a subject listed in `LUX_ADMIN_SUBJECTS` receives no allow the authorizer did not give: the variable is read, reported as unused at start, and consulted by no decision | `TestAdminSubjectsIgnoredUnderAnAuthorizer` | passing |
+
+## Outcome
+
+Built on 2026-09-14 in `internal/auth` and `internal/config`, on pkg
+v0.66.0, on a branch beside [[010-state]]'s store. Coverage is 99.3% of
+`internal/auth` and 100% of `internal/config`; the gate passes whole,
+and the identity gate's two waivers, `verifier` and `authorizer`, are
+gone, because the verifier is `authkit/jwt` and the authorizer
+`pkg/authz`. The Design text above was changed wherever the code had to
+say more than the dispatched text, so the two agree; the additions and
+their reasons:
+
+- The start-up check reads the discovery document's `issuer` and
+  refuses one that names another issuer: a token it signs would carry
+  an `iss` the validator refuses, so every request would fail late
+  instead of the start failing once. A usable key is judged by `kty`,
+  `crv`, and an absent or matching `alg`, which is what the shared
+  verifier reads.
+- The bearer's `iss` is read unverified to pick the issuer's validator,
+  and a token with no `exp` is refused with that finding rather than as
+  expired, because the shared verifier reads an absent `exp` as the
+  epoch.
+- A `limits` object the gateway cannot read is `authorizer_unavailable`.
+  The text listed the forms of no decision by transport and body shape;
+  a ceiling that does not parse is no ceiling the gateway can hold, and
+  an allow it cannot apply whole is not an allow.
+- A refused and a missing reference carry one developer detail naming
+  the reference and not the authorizer's reason, since a detail that
+  differed would disclose which of the two it was
+  ([[016-security-and-threat-model]]).
+- `model.use` is asked for a selector that matches nothing, since the
+  decision binds the selector.
+- Every list and map field of a resource is present and never `null`,
+  and a create's `amount` is `""` when absent.
+- The owner policy has two reasons of its own, `admin_only` and
+  `unknown_action`, denies the probe and the anonymous subject before
+  the admin row, and reads objects through an `ObjectLookup` interface
+  rather than a store; a lookup failure is no decision.
+- The configuration refuses an issuer listed twice, an insecure issuer
+  not in the list, an audience with a comma, a timeout at or below
+  zero, and an admin subject without the `|` separator, each as one
+  clause without a semicolon so the one sorted line stays readable.
+  `LUX_AUTHORIZER_TOKEN` without the URL is accepted and unused.
+  `LUX_MANIFEST_DIR` is read through the environment for the one rule
+  this spec has about it; the field is [[010-state]]'s.
+
+What the merge wires, since the store and `serve` were built beside
+this: one call, `auth.Startup(ctx, cfg, client)` after `config.Load`
+in `serve`, its error a start-up failure and its `String()` the
+start-up line; `Auth.Authorizer(objects)` with the store's object
+lookup once, and `Authorizer.Lookup(caller, request, catalog)` per
+request with the store's catalog. `cmd/luxd`'s build list then reaches
+the OpenTelemetry SDK and its dependencies through the shared verifier's
+instrumented client, so the `depcheck` rows for `go.opentelemetry.io/`,
+`github.com/google/uuid`, `github.com/cenkalti/backoff/v5`,
+`github.com/cespare/xxhash/v2`, `github.com/felixge/httpsnoop`,
+`github.com/go-logr/`, `github.com/grpc-ecosystem/grpc-gateway/v2`,
+`golang.org/x/`, and `google.golang.org/` land with that commit; the
+gate refuses a stale allowance, so they cannot land before it.
+
+What other specs carry from this: [[011-api]] maps `auth.Error`'s three
+codes to 401, 403, and 503, reads `Decision.Limits.RequestsPerMinute`
+for the rate bucket and `Decision.Limits.MaxKeys` at `key.create`,
+passes `Decision.Limits.Key` as `Options.Limits`, and reports
+`Auth.Policy` in `/v1/self`; a `Catalog` failure inside `Resolve`
+surfaces as `authorizer_unavailable`, because
+[[003-manifest-contract]]'s `Lookup` rule gives an error that is
+neither code that one, so a `store_unavailable` there needs
+`manifest.Error` to carry its cause first. [[017-release-and-installation]]
+says the probe's answer is not entered in the decision cache; the
+shared client holds its deny for five seconds like any deny, under the
+anonymous subject and the reserved id, which no request about an object
+shares, so a check run changes what no later request is told and the
+sentence holds in effect. [[007-keys-and-limits]] owns the door half of
+the plane boundary and `TestSuppliedTokenIsAKeyAtTheDoor`;
+[[004-request-path]] `TestDataPlaneServesWhileAuthorizerIsDown`;
+[[015-test-stubs-and-tiers]] the e2e capture of
+`TestAuthorizerTokenStaysOnItsEndpoint`; [[001-architecture]] and
+[[005-providers]] their two rows, left not built.
