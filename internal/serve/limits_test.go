@@ -420,7 +420,7 @@ func TestWindowReset(t *testing.T) {
 // hundred runs; one replica never overshoots by more than one request.
 func TestOvershootBound(t *testing.T) {
 	const replicas, perSecond = 3, 10
-	amount := v1.Money(100 * cent)
+	amount := 100 * cent
 	bound := metering.Overshoot(replicas, time.Second, perSecond, cent)
 	if bound != 21*cent {
 		t.Fatalf("the bound is %s", bound)
@@ -795,7 +795,7 @@ func TestBudgetLifecycle(t *testing.T) {
 	}
 	// The amount is raised: the cached Budget serves until the journal
 	// row is consumed, then the next request runs.
-	amount := v1.Money(5 * cent)
+	amount := 5 * cent
 	b.Spec.Amount = &amount
 	if _, err := h.st.Objects().Put(ctx, b, b.Status.Version); err != nil {
 		t.Fatal(err)

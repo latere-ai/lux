@@ -186,7 +186,7 @@ func (l *Limiter) budgetOf(ctx context.Context, k *v1.Key) (*v1.Budget, error) {
 	}
 	b, ok := obj.(*v1.Budget)
 	if !ok {
-		return nil, fmt.Errorf("Budget %s: the store returned a %T", k.Status.Budget.ID, obj)
+		return nil, fmt.Errorf("reading Budget %s: the store returned a %T", k.Status.Budget.ID, obj)
 	}
 	return b, nil
 }
@@ -203,7 +203,7 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 	spend := spendLimit(k)
 	budget, err := l.budgetOf(ctx, k)
 	if err != nil {
-		return fmt.Errorf("Budget of Key %s: %w", id, err)
+		return fmt.Errorf("reading the Budget of Key %s: %w", id, err)
 	}
 	var pricing *v1.Pricing
 	if !r.Opaque && r.Model != nil {

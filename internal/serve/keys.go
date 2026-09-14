@@ -182,7 +182,7 @@ func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Key by hash: %w", err)
+		return nil, fmt.Errorf("looking up the Key by hash: %w", err)
 	}
 	obj, _, err := c.o.Store.Objects().Get(ctx, v1.KindKey, id)
 	if errors.Is(err, store.ErrNotFound) {
@@ -192,11 +192,11 @@ func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Key %s: %w", id, err)
+		return nil, fmt.Errorf("reading Key %s: %w", id, err)
 	}
 	k, ok := obj.(*v1.Key)
 	if !ok {
-		return nil, fmt.Errorf("Key %s: the store returned a %T", id, obj)
+		return nil, fmt.Errorf("reading Key %s: the store returned a %T", id, obj)
 	}
 	c.put(&entry{key: cacheKeyHash + hash, id: id, k: k})
 	return k, nil
@@ -217,11 +217,11 @@ func (c *KeyCache) Budget(ctx context.Context, id string) (*v1.Budget, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Budget %s: %w", id, err)
+		return nil, fmt.Errorf("reading Budget %s: %w", id, err)
 	}
 	b, ok := obj.(*v1.Budget)
 	if !ok {
-		return nil, fmt.Errorf("Budget %s: the store returned a %T", id, obj)
+		return nil, fmt.Errorf("reading Budget %s: the store returned a %T", id, obj)
 	}
 	c.put(&entry{key: cacheKeyBudget + id, id: id, b: b})
 	return b, nil

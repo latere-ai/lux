@@ -24,7 +24,6 @@ import (
 // Limiter refuses each exhausted window with its code.
 func TestKeyStates(t *testing.T) {
 	h := newHarness(t)
-	ctx := t.Context()
 	st, reg := h.instrumented()
 	p := priced("p", "0.01", "0", "USD")
 	hard := h.budget(t, "hard", "0.01", "USD", "1h", true)
@@ -51,6 +50,7 @@ func TestKeyStates(t *testing.T) {
 		{"expired before exhausted", edits(func(k *v1.Key) { k.Status.ExpiresAt = h.clock() }, spends("0.01", "USD", "1h")), 1, v1.KeyExpired, gateway.CodeSpendExceeded, v1.KeyExpired},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			ctx := t.Context()
 			h.now = time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 			l := h.limiter(st, nil, manifest.Defaults{})
 			k, _ := h.key(t, strings.ReplaceAll(c.name, " ", "-"), c.edit)

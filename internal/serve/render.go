@@ -51,7 +51,7 @@ func RenderKey(ctx context.Context, st store.Store, k *v1.Key, now time.Time) er
 	if k.Status.Budget != nil && k.Status.Budget.ID != "" {
 		obj, _, err := st.Objects().Get(ctx, v1.KindBudget, k.Status.Budget.ID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("Budget of Key %s: %w", id, err)
+			return fmt.Errorf("reading the Budget of Key %s: %w", id, err)
 		}
 		if b, ok := obj.(*v1.Budget); ok && isHard(b) {
 			budget = b
@@ -61,7 +61,7 @@ func RenderKey(ctx context.Context, st store.Store, k *v1.Key, now time.Time) er
 	}
 	m, err := st.Counters().Read(ctx, keys)
 	if err != nil {
-		return fmt.Errorf("counters of Key %s: %w", id, err)
+		return fmt.Errorf("reading the counters of Key %s: %w", id, err)
 	}
 	usage := &v1.KeyUsage{Total: v1.UsageTotal{Requests: m[totalRequests], Tokens: m[totalTokens], Spend: v1.Money(m[totalSpend])}}
 	exhausted := false
@@ -97,11 +97,11 @@ func RenderBudget(ctx context.Context, st store.Store, b *v1.Budget, now time.Ti
 	spendKey := metering.CounterKey(metering.ScopeBudgetSpend, id, b.Spec.Window, now, b.Status.CreatedAt)
 	m, err := st.Counters().Read(ctx, []string{spendKey})
 	if err != nil {
-		return fmt.Errorf("counters of Budget %s: %w", id, err)
+		return fmt.Errorf("reading the counters of Budget %s: %w", id, err)
 	}
 	keys, _, err := st.Objects().List(ctx, v1.KindKey, store.Filter{}, store.Page{})
 	if err != nil {
-		return fmt.Errorf("Keys of Budget %s: %w", id, err)
+		return fmt.Errorf("listing the Keys of Budget %s: %w", id, err)
 	}
 	n := 0
 	for _, obj := range keys {
