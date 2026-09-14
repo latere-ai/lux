@@ -1839,10 +1839,12 @@ components:
         targetDialect:
           type: string
           enum:
+          - ""
           - openai
           - anthropic
           - gemini
           - lux
+          description: The dialect of the target that answered; empty when no target was chosen, as on a refused request.
         route:
           type: string
         translated:

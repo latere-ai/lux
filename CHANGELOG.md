@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The conformance suite: `test/conformance` runs the acceptance
+  criteria of the manifest contract, the `/v1` API, the doors, the
+  Keys, the identity boundary, and the usage records against any
+  server, as `go test latere.ai/x/lux/test/conformance -run
+  TestContract` with `LUX_TEST_URL` and `LUX_TEST_TOKEN` in the
+  environment, or through `conformance.Run` with a `Config` whose
+  `Token` mints through the caller's own issuer. It holds every `/v1`
+  answer to the server's own `GET /v1/openapi.json`, names every object
+  it creates `conf-<run>-*` under the label `conformance=<run>` and
+  deletes them at teardown, mints one Key and no issuer token, skips
+  the cases that need `LUX_TEST_STUBS_URL` by name when it is unset,
+  and reads a `file` mode server's `/v1` at `LUX_TEST_INTERNAL_URL`.
 - The usage routes: `GET /v1/usage` answers usage aggregated over a
   range, grouped by up to three of key, model, provider, owner, door,
   status, and a key label, in hour, day, or month buckets or one total,

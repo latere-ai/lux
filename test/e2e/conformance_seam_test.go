@@ -5,7 +5,12 @@
 
 package e2e
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"latere.ai/x/lux/test/conformance"
+)
 
 // TestE2EConformance runs the conformance suite of spec 018 in process
 // against a server this tier started, through runConformance, rather
@@ -18,11 +23,24 @@ func TestE2EConformance(t *testing.T) {
 }
 
 // runConformance is the one seam between this tier and test/conformance:
-// it calls conformance.Run(t, cfg) with the stack's public URL, token,
-// and Key. Spec 018 builds that package on another branch; at the merge
-// the call replaces the skip below and this file changes nowhere else.
-func runConformance(t *testing.T, s *stack, keyValue string) {
+// the suite runs against the stack's public URL with a token minted from
+// the stack's own issuer for whichever subject a case asks for, so every
+// case that needs a second subject runs rather than skips. The suite
+// mints and deletes its own Key, so the tier's fixture Key is not handed
+// over; the stub table's cases skip until lux-stubs serves the stubs
+// document the suite reads at its root.
+func runConformance(t *testing.T, s *stack, _ string) {
 	t.Helper()
-	_, _, _ = s.gw.public, s.token, keyValue
-	t.Skip("test/conformance is spec 018's and lands on another branch; runConformance calls conformance.Run at the merge")
+	issuer := strings.TrimRight(s.stubs.urls["issuer"], "/")
+	conformance.Run(t, conformance.Config{
+		URL:     s.gw.public,
+		Subject: issuer + "|dev",
+		Token: func(subject string) (string, bool) {
+			i := strings.LastIndexByte(subject, '|')
+			if i < 0 || strings.TrimRight(subject[:i], "/") != issuer {
+				return "", false
+			}
+			return mint(t, s.stubs, subject[i+1:]), true
+		},
+	})
 }

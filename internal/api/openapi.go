@@ -397,6 +397,15 @@ var enums = map[reflect.Type][]string{
 	reflect.TypeFor[metering.Status]():  {string(metering.StatusOK), string(metering.StatusRefused), string(metering.StatusFailed)},
 }
 
+// fieldSchemas are the members whose shape is not their type's: a
+// record's targetDialect is the dialect set plus the empty string, which
+// a refused request carries because no target was chosen (spec 009).
+var fieldSchemas = map[reflect.Type]map[string]ordered{
+	reflect.TypeFor[metering.Record](): {
+		"TargetDialect": obj("type", "string", "enum", append([]string{""}, enums[reflect.TypeFor[v1.Dialect]()]...), "description", "The dialect of the target that answered; empty when no target was chosen, as on a refused request."),
+	},
+}
+
 // scalars are the named types with one JSON shape of their own.
 var scalars = map[reflect.Type]ordered{
 	reflect.TypeFor[v1.Money]():    obj("type", "string", "pattern", `^[0-9]{1,12}(\.[0-9]{1,6})?$`, "description", "A money amount as a decimal string of at most 12 integer and 6 fraction digits."),
@@ -461,6 +470,10 @@ func (s *schemas) properties(t reflect.Type) ordered {
 		}
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 		if name == "-" || name == "" {
+			continue
+		}
+		if sc, ok := fieldSchemas[t][f.Name]; ok {
+			props = append(props, member{name, sc})
 			continue
 		}
 		props = append(props, member{name, s.of(f.Type)})
