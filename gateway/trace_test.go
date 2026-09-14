@@ -198,7 +198,7 @@ func TestSpansCarryNoIdentity(t *testing.T) {
 	}
 	for _, s := range spans {
 		for _, kv := range s.Attributes() {
-			key, value := string(kv.Key), kv.Value.Emit()
+			key, value := string(kv.Key), kv.Value.String()
 			if slices.Contains(identityKeys, key) {
 				t.Errorf("span %s carries %s", s.Name(), key)
 			}

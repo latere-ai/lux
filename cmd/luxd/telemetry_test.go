@@ -291,7 +291,7 @@ func parseExposition(text string) exposition {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		name := line
+		var name string
 		var labels []string
 		if open := strings.IndexByte(line, '{'); open >= 0 {
 			name = line[:open]

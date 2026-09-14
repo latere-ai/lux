@@ -107,7 +107,7 @@ func TestRequestSpans(t *testing.T) {
 		}
 		for _, kv := range s.Attributes() {
 			for _, identity := range []string{"alice", h.iss.URL(), "203.0.113.9", canary} {
-				if strings.Contains(kv.Value.Emit(), identity) {
+				if strings.Contains(kv.Value.String(), identity) {
 					t.Errorf("span %s attribute %s carries %q", s.Name(), kv.Key, identity)
 				}
 			}

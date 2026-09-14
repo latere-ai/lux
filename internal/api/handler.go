@@ -171,7 +171,7 @@ type handlerFunc func(c *call, ctx context.Context) *Error
 // internal, and ends with the request's one log line and the span.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := h.begin(w, r)
-	ctx, span := startAPI(r)
+	ctx, span := startAPI(r.Context(), r.Header)
 	defer func() {
 		if p := recover(); p != nil {
 			h.logger.ErrorContext(ctx, "api: handler panic", "request_id", c.id, "method", r.Method, "path", r.URL.Path, "panic", p, "stack", string(debug.Stack()))
@@ -217,7 +217,7 @@ func (h *Handler) begin(w http.ResponseWriter, r *http.Request) *call {
 func (h *Handler) Unmounted() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := h.begin(w, r)
-		ctx, span := startAPI(r)
+		ctx, span := startAPI(r.Context(), r.Header)
 		defer c.end(ctx, span)
 		c.fail(refuse(CodeNotFound, "the control plane is on the internal listener in the file mode; "+r.URL.Path+" is not mounted here"))
 	})

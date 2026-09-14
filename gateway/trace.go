@@ -56,10 +56,11 @@ const (
 	AttrHTTPStatus = "http.response.status_code"
 )
 
-// startRequest opens the lux.request span as a child of the context the
-// caller propagated, when it did, through the W3C headers.
-func startRequest(r *http.Request) (context.Context, trace.Span) {
-	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+// startRequest opens the lux.request span under the request's context,
+// as a child of the context the caller propagated, when it did, through
+// the W3C headers.
+func startRequest(ctx context.Context, h http.Header) (context.Context, trace.Span) {
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
 	return otel.Tracer(tracerScope).Start(ctx, SpanRequest, trace.WithSpanKind(trace.SpanKindServer))
 }
 

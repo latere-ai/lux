@@ -131,7 +131,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hdr.Set("X-Request-Id", xid)
 	}
 	c.rec = Record{ID: c.id, At: c.start}
-	ctx, span := startRequest(r)
+	ctx, span := startRequest(r.Context(), r.Header)
 	c.span = span
 	c.finish(ctx, c.run(ctx))
 }

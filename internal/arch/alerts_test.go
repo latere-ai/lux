@@ -183,7 +183,7 @@ func TestAlertsNameKnownMetrics(t *testing.T) {
 			if suffix != "" && row.typ != "histogram" {
 				t.Errorf("%s reads %s%s of a %s", r.Alert, name, suffix, row.typ)
 			}
-			for _, pair := range strings.Split(selector, ",") {
+			for pair := range strings.SplitSeq(selector, ",") {
 				label, _, _ := strings.Cut(strings.TrimSpace(pair), "=")
 				label = strings.TrimSuffix(label, "!")
 				if label == "" || label == "le" && suffix == "_bucket" {

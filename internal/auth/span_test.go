@@ -56,9 +56,9 @@ func TestAuthorizerSpanCarriesTheDecision(t *testing.T) {
 		}
 		attrs := map[string]string{}
 		for _, kv := range sp.Attributes() {
-			attrs[string(kv.Key)] = kv.Value.Emit()
+			attrs[string(kv.Key)] = kv.Value.String()
 			for _, secret := range []string{"alice", "login.example.com", "203.0.113.9"} {
-				if strings.Contains(kv.Value.Emit(), secret) {
+				if strings.Contains(kv.Value.String(), secret) {
 					t.Errorf("%s carries %q", kv.Key, secret)
 				}
 			}

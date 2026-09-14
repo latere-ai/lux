@@ -50,10 +50,11 @@ const (
 	StatusFailed  = "failed"
 )
 
-// startAPI opens the lux.api span as a child of the context the caller
-// propagated, when it did, through the W3C headers.
-func startAPI(r *http.Request) (context.Context, trace.Span) {
-	ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+// startAPI opens the lux.api span under the request's context, as a
+// child of the context the caller propagated, when it did, through the
+// W3C headers.
+func startAPI(ctx context.Context, h http.Header) (context.Context, trace.Span) {
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
 	return otel.Tracer(tracerScope).Start(ctx, SpanAPI, trace.WithSpanKind(trace.SpanKindServer))
 }
 
