@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The doors' translation between dialects, their error envelopes and
+  stream error frames, their model lists, the count emulation, the
+  reading of every dialect's usage members, and the two member edits a
+  passthrough body admits are `latere.ai/x/pkg/llmdialect/bridge`'s,
+  imported by `gateway`, so a program that holds bytes in one
+  provider's dialect and wants them in another imports the bridge with
+  no gateway running. Nothing a caller of a door sees changes: the same
+  bytes, headers, envelopes, codes, and records, held by the door tests
+  and by the bridge's goldens, which are the doors' own bytes.
 - `lux serve`: a session's carriers and heartbeat have ended when the
   session ends, so nothing of a session that closed writes to stderr
   after the command printed its close reason or connected again.
