@@ -1,6 +1,6 @@
 ---
 title: "Routing and models: targets, weights, priorities, fallback, retries, the circuit per target"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/003-manifest-contract.md
