@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The usage routes: `GET /v1/usage` answers usage aggregated over a
+  range, grouped by up to three of key, model, provider, owner, door,
+  status, and a key label, in hour, day, or month buckets or one total,
+  and filtered by key, model, provider, owner, and label, each taking a
+  name or an id. `GET /v1/requests` answers the records themselves,
+  newest first, with the same filters plus status, error, and stream,
+  paged by `limit` (default `50`, at most `1000`) and `cursor`, and
+  says in `source` whether they came from this replica's own recent
+  records (`memory`) or from the archive. Both need a bearer, ask
+  permission once with the action `usage.read`, and narrow the answer
+  to what the permission service allows, so a query outside it comes
+  back empty rather than refused; both are in the OpenAPI document.
 - Usage and metering: every request through a door ends in one usage
   record, the gateway's record with the cost the Model's `pricing` gives
   its tokens, an integer count of micro-units and never a float: one
@@ -23,8 +35,8 @@ refused before it is pushed.
   how often a replica writes its spend counters and its aggregates,
   `lux_tokens_total{direction}` and `lux_spend_microunits_total{currency}`
   follow the records, and `lux_metering_flush_lag_seconds` grows while
-  the store refuses a flush. The `/v1/usage` and `/v1/requests` routes
-  that read all of this mount with the API.
+  the store refuses a flush. The two usage routes above read all of
+  this.
 - Keys and limits: a Key's value is `lux_` and forty characters from a
   secure source, shown once and stored as a hash, and a platform may
   supply its own value of 32 to 4096 bytes instead, which opens the
@@ -182,5 +194,4 @@ refused before it is pushed.
   `LUX_UPSTREAM_TIMEOUT` and `LUX_MAX_BODY_BYTES` now reach the resolver
   and the doors. In file mode `/v1` is read-only on the internal
   listener and needs no bearer. `/metrics` on the internal listener
-  serves one registry with every family. `GET /v1/usage` and `GET
-  /v1/requests` are not served yet; they land with metering.
+  serves one registry with every family.
