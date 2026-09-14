@@ -15,7 +15,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -31,7 +31,7 @@ func (c *call) read(ctx context.Context, k kind, ref string) *Error {
 		return err
 	}
 	if !c.h.fileMode() {
-		res, _ := auth.ResourceFor(k.read, obj)
+		res, _ := authorizer.ResourceFor(k.read, obj)
 		if _, err := c.authorize(ctx, k.read, res); err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 	}
 	var filter *authz.Filter
 	if !c.h.fileMode() {
-		res, _ := auth.ResourceFor(k.list, zeroObject(k.name))
+		res, _ := authorizer.ResourceFor(k.list, zeroObject(k.name))
 		d, err := c.authorize(ctx, k.list, res)
 		if err != nil {
 			return err

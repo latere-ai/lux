@@ -17,6 +17,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -750,7 +751,7 @@ func TestTheFrontRefusesWhatItCannotServe(t *testing.T) {
 
 	// A decision the authorizer denies is forbidden, and one it cannot
 	// make is the permission service being unavailable.
-	h.authz.Deny(stub.Rule{Action: actionKeyRead}, "not yours")
+	h.authz.Deny(stub.Rule{Action: authorizer.ActionKeyRead}, "not yours")
 	if resp := h.do(t, http.MethodGet, "/v1/keys/drawer", token, ""); resp.status != http.StatusForbidden {
 		t.Errorf("a denied read = %d %s", resp.status, resp.body)
 	}

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package auth
+package authorizer
 
 import (
 	"fmt"
@@ -28,16 +28,23 @@ type Limits struct {
 	MaxKeys int
 }
 
-// wireLimits is the limits object as the answer carries it. Every field
-// is optional; a field the object does not name stays nil. A money value
-// is a string, as a manifest writes one, and a duration is Go syntax.
-type wireLimits struct {
-	RequestsPerMinute       *int        `json:"requests_per_minute"`
-	MaxKeyRequestsPerMinute *int        `json:"max_key_requests_per_minute"`
-	MaxKeyTokensPerMinute   *int        `json:"max_key_tokens_per_minute"`
-	MaxKeySpend             *v1.Money   `json:"max_key_spend"`
-	MaxKeyTTL               v1.Duration `json:"max_key_ttl"`
-	MaxKeys                 *int        `json:"max_keys"`
+// WireLimits is the limits object as an answer carries it, exported so
+// an authorizer renders its answer through the type luxd decodes rather
+// than through six string literals. Every member is optional; a member
+// the object does not name stays nil, and omitempty leaves it out, so an
+// authorizer that sets two ceilings sends two and the other four stay
+// absent, which grants nothing and takes nothing away. Five are
+// pointers, so a member deliberately set to zero is still sent and
+// decodes to zero, the same grant as absence; MaxKeyTTL is a duration
+// string, whose absent case is the empty string. A money value is a
+// string, as a manifest writes one, and a duration is Go syntax.
+type WireLimits struct {
+	RequestsPerMinute       *int        `json:"requests_per_minute,omitempty"`
+	MaxKeyRequestsPerMinute *int        `json:"max_key_requests_per_minute,omitempty"`
+	MaxKeyTokensPerMinute   *int        `json:"max_key_tokens_per_minute,omitempty"`
+	MaxKeySpend             *v1.Money   `json:"max_key_spend,omitempty"`
+	MaxKeyTTL               v1.Duration `json:"max_key_ttl,omitempty"`
+	MaxKeys                 *int        `json:"max_keys,omitempty"`
 }
 
 // DecodeLimits reads a decision's limits object. A decision with no
@@ -46,7 +53,7 @@ type wireLimits struct {
 // duration is an error, and the caller treats the answer as no decision:
 // a ceiling the gateway cannot read is not a ceiling it can hold.
 func DecodeLimits(d authz.Decision) (Limits, error) {
-	var w wireLimits
+	var w WireLimits
 	if err := d.DecodeLimits(&w); err != nil {
 		return Limits{}, err
 	}

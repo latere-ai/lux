@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -198,7 +198,7 @@ func (c *call) authorizeUsage(ctx context.Context, q *usageQuery) *Error {
 	if c.h.fileMode() {
 		return nil
 	}
-	d, err := c.authorize(ctx, auth.ActionUsageRead, auth.UsageRead(q.q.Keys, q.q.Owners))
+	d, err := c.authorize(ctx, authorizer.ActionUsageRead, authorizer.UsageRead(q.q.Keys, q.q.Owners))
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/store"
 )
@@ -92,7 +93,7 @@ func TestRequestSpans(t *testing.T) {
 	if got := slices.Sorted(maps.Keys(attrs)); !slices.Equal(got, slices.Sorted(slices.Values(apiAttrKeys))) {
 		t.Errorf("attributes %v", got)
 	}
-	want := map[string]string{AttrRoute: "/v1/providers/{name}", AttrAction: auth.ActionProviderCreate, AttrKind: "Provider", AttrStatus: StatusOK, AttrCode: "", AttrRequestID: rec.Header().Get("Lux-Request-Id")}
+	want := map[string]string{AttrRoute: "/v1/providers/{name}", AttrAction: authorizer.ActionProviderCreate, AttrKind: "Provider", AttrStatus: StatusOK, AttrCode: "", AttrRequestID: rec.Header().Get("Lux-Request-Id")}
 	for k, v := range want {
 		if attrs[k].AsString() != v {
 			t.Errorf("%s = %q, want %q", k, attrs[k].AsString(), v)
@@ -175,7 +176,7 @@ func TestAPILineFields(t *testing.T) {
 	if !slices.Equal(fields, slices.Sorted(slices.Values(controlLogFields))) {
 		t.Errorf("fields %v", fields)
 	}
-	want := map[string]any{"request_id": rec.Header().Get("Lux-Request-Id"), "route": "/v1/providers/{name}", "action": auth.ActionProviderCreate, "kind": "Provider", "name": "openai",
+	want := map[string]any{"request_id": rec.Header().Get("Lux-Request-Id"), "route": "/v1/providers/{name}", "action": authorizer.ActionProviderCreate, "kind": "Provider", "name": "openai",
 		"status": StatusOK, "code": "", "subject": h.subject(), "duration_ms": float64(0)}
 	for k, v := range want {
 		if line[k] != v {

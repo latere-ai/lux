@@ -13,6 +13,7 @@ import (
 	"latere.ai/x/pkg/authkit/issuertest"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
@@ -195,11 +196,11 @@ func TestTunnelInTheAuthorizerResource(t *testing.T) {
 		if tun, ok := req.Resource.Fields["tunnel"].(bool); !ok || !tun {
 			t.Errorf("%s: resource %v carries no tunnel true", req.Action, req.Resource.Fields)
 		}
-		if req.Action == auth.ActionProviderTunnel && (req.Resource.ID != id || req.Resource.Fields["owner"] != h.subject() || req.Resource.Fields["baseURL"] != "") {
+		if req.Action == authorizer.ActionProviderTunnel && (req.Resource.ID != id || req.Resource.Fields["owner"] != h.subject() || req.Resource.Fields["baseURL"] != "") {
 			t.Errorf("provider.tunnel resource %+v", req.Resource)
 		}
 	}
-	for _, action := range []string{auth.ActionProviderCreate, auth.ActionProviderRead, auth.ActionProviderUpdate, auth.ActionProviderDelete, auth.ActionProviderTunnel} {
+	for _, action := range []string{authorizer.ActionProviderCreate, authorizer.ActionProviderRead, authorizer.ActionProviderUpdate, authorizer.ActionProviderDelete, authorizer.ActionProviderTunnel} {
 		if !seen[action] {
 			t.Errorf("%s was not asked", action)
 		}
@@ -208,7 +209,7 @@ func TestTunnelInTheAuthorizerResource(t *testing.T) {
 	if rec := h.request(http.MethodPut, "/v1/providers/laptop", tunnelProviderJSON); rec.Code != http.StatusCreated {
 		t.Fatalf("apply again: %d %s", rec.Code, rec.Body.String())
 	}
-	h.stub.Deny(stub.Rule{Action: auth.ActionProviderTunnel}, "no_machines")
+	h.stub.Deny(stub.Rule{Action: authorizer.ActionProviderTunnel}, "no_machines")
 	rec := h.request(http.MethodPost, "/v1/providers/laptop/tunnel", "")
 	if details := wantCode(t, rec, CodeForbidden); !strings.Contains(details["detail"].(string), "no_machines") {
 		t.Errorf("a denied session: %v", details)

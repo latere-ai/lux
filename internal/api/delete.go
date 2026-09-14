@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -34,7 +34,7 @@ func (c *call) delete(ctx context.Context, k kind, ref string) *Error {
 	if err != nil {
 		return err
 	}
-	res, _ := auth.ResourceFor(k.del, obj)
+	res, _ := authorizer.ResourceFor(k.del, obj)
 	if _, err := c.authorize(ctx, k.del, res); err != nil {
 		return err
 	}

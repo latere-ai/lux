@@ -16,6 +16,8 @@ import (
 
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
+
+	"latere.ai/x/lux/authorizer"
 )
 
 // TestAuthorizerSpanCarriesTheDecision is spec 019's lux.authorizer: one
@@ -31,18 +33,18 @@ func TestAuthorizerSpanCarriesTheDecision(t *testing.T) {
 		otel.SetTracerProvider(noop.NewTracerProvider())
 	})
 	s, z := newStubAuthorizer(t)
-	s.Deny(stub.Rule{Action: ActionKeyDelete}, "not yours")
+	s.Deny(stub.Rule{Action: authorizer.ActionKeyDelete}, "not yours")
 	caller := Caller{Subject: "https://login.example.com|alice", Issuer: "https://login.example.com", Sub: "alice", Claims: map[string]any{"email": "alice@example.com"}}
 	ctx, parent := tp.Tracer("test").Start(t.Context(), "lux.api")
 	res := authz.Resource{Kind: "Key", ID: "key_01J9ZK2P7Q8R9S0T1U2V3W4X5Y"}
-	if _, err := z.Decide(ctx, caller, ActionKeyRead, res, authz.Caller{ID: "req_1", IP: "203.0.113.9"}); err != nil {
+	if _, err := z.Decide(ctx, caller, authorizer.ActionKeyRead, res, authz.Caller{ID: "req_1", IP: "203.0.113.9"}); err != nil {
 		t.Fatalf("allow: %v", err)
 	}
-	if _, err := z.Decide(ctx, caller, ActionKeyDelete, res, authz.Caller{ID: "req_2"}); err == nil {
+	if _, err := z.Decide(ctx, caller, authorizer.ActionKeyDelete, res, authz.Caller{ID: "req_2"}); err == nil {
 		t.Fatal("deny was allowed")
 	}
 	s.Fail(http.StatusInternalServerError)
-	if _, err := z.Decide(ctx, caller, ActionKeyUpdate, res, authz.Caller{ID: "req_3"}); err == nil {
+	if _, err := z.Decide(ctx, caller, authorizer.ActionKeyUpdate, res, authz.Caller{ID: "req_3"}); err == nil {
 		t.Fatal("an outage was allowed")
 	}
 	parent.End()
@@ -68,7 +70,7 @@ func TestAuthorizerSpanCarriesTheDecision(t *testing.T) {
 		}
 		got = append(got, attrs[AttrAction]+"="+attrs[AttrDecision])
 	}
-	want := []string{ActionKeyRead + "=" + DecisionAllow, ActionKeyDelete + "=" + DecisionDeny, ActionKeyUpdate + "=" + DecisionUnavailable}
+	want := []string{authorizer.ActionKeyRead + "=" + DecisionAllow, authorizer.ActionKeyDelete + "=" + DecisionDeny, authorizer.ActionKeyUpdate + "=" + DecisionUnavailable}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("spans %v, want %v", got, want)
 	}

@@ -6,13 +6,19 @@ package arch
 import (
 	"bufio"
 	"bytes"
+	"go/ast"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"latere.ai/x/lux/authorizer"
 )
 
 const module = "latere.ai/x/lux"
@@ -55,15 +61,15 @@ func goList(t *testing.T, dir string, args ...string) []string {
 }
 
 // The directories a package may live under. Everything at the module
-// root that is not one of the three exported trees is a role, a tool,
+// root that is not one of the four exported trees is a role, a tool,
 // or an example under one of these. examples holds the two programs
 // docs/plane.md prints, which are built and tested like any package
 // and are imported by nothing (spec 020).
-var rootDirs = []string{"cmd", "internal", "test", "tools", "examples", "manifest", "gateway", "metering"}
+var rootDirs = []string{"cmd", "internal", "test", "tools", "examples", "manifest", "gateway", "metering", "authorizer"}
 
 // TestRootPackagesAreTheThree is the first half of spec 001's package
-// rule: every package of the module is manifest, gateway, or metering, or
-// sits under cmd, internal, test, or tools.
+// rule: every package of the module is manifest, gateway, metering, or
+// authorizer, or sits under cmd, internal, test, or tools.
 func TestRootPackagesAreTheThree(t *testing.T) {
 	dir := root(t)
 	for _, pkg := range goList(t, dir, "./...") {
@@ -71,7 +77,7 @@ func TestRootPackagesAreTheThree(t *testing.T) {
 		rel = strings.TrimPrefix(rel, "/")
 		first, _, _ := strings.Cut(rel, "/")
 		if rel == "" || !slices.Contains(rootDirs, first) {
-			t.Errorf("package %s sits at the module root outside manifest, gateway, metering, cmd, internal, test, and tools", pkg)
+			t.Errorf("package %s sits at the module root outside manifest, gateway, metering, authorizer, cmd, internal, test, and tools", pkg)
 		}
 	}
 }
@@ -145,17 +151,48 @@ var rootAllow = map[string]allow{
 		},
 		noStd: []string{"database/sql", "os/exec"},
 	},
+	// authorizer is the vocabulary an authorizer is written against and
+	// no policy at all: the actions, the resource per action, and the
+	// limits an allow may carry (spec 022). It names authz.Resource and
+	// authz.Decision, so it reaches latere.ai/x/pkg/authz and, behind it,
+	// that package's decision cache and HTTP client, which it never
+	// constructs and never dials; it reaches manifest for the ceilings a
+	// limits object decodes to, and with it the one YAML library.
+	"authorizer": {
+		module: []string{module + "/manifest", module + "/authorizer"},
+		external: []string{
+			"latere.ai/x/pkg/authz",
+			"latere.ai/x/pkg/cache",
+			"github.com/goccy/go-yaml",
+		},
+		noStd: []string{"database/sql", "os/exec"},
+	},
 }
 
 // Prefixes no root package may reach, whatever its row says: the
-// module's own internals, the identity libraries, and the store drivers.
-var rootForbid = []string{
-	module + "/internal/",
-	module + "/cmd/",
-	"latere.ai/x/pkg/authkit",
-	"latere.ai/x/pkg/authz",
-	"github.com/jackc/",
-	"github.com/golang-migrate/",
+// module's own internals, the identity libraries, and the store
+// drivers. A prefix may name the one package it does not bind: the
+// shared authorizer contract is the envelope authorizer's whole purpose
+// is naming, and net/http comes with it as a type that package never
+// constructs (spec 022).
+var rootForbid = map[string][]string{
+	module + "/internal/":        nil,
+	module + "/cmd/":             nil,
+	"latere.ai/x/pkg/authkit":    nil,
+	"latere.ai/x/pkg/authz":      {"authorizer"},
+	"github.com/jackc/":          nil,
+	"github.com/golang-migrate/": nil,
+}
+
+// outOfReach reports whether this root package may not reach the path,
+// whatever its allow list says.
+func outOfReach(name, path string) bool {
+	for prefix, except := range rootForbid {
+		if strings.HasPrefix(path, prefix) && !slices.Contains(except, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasPrefix(s string, prefixes []string) bool {
@@ -173,7 +210,7 @@ func hasPrefix(s string, prefixes []string) bool {
 // each lands.
 func TestRootPackagesDialNothing(t *testing.T) {
 	dir := root(t)
-	for _, name := range []string{"manifest", "metering", "gateway"} {
+	for _, name := range []string{"manifest", "metering", "gateway", "authorizer"} {
 		rule := rootAllow[name]
 		t.Run(name, func(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
@@ -187,7 +224,7 @@ func TestRootPackagesDialNothing(t *testing.T) {
 					if slices.Contains(rule.noStd, path) {
 						t.Errorf("%s reaches %s, which dials", name, path)
 					}
-				case hasPrefix(path, rootForbid):
+				case outOfReach(name, path):
 					t.Errorf("%s reaches %s, which no root package may", name, path)
 				case hasPrefix(path, rule.module), hasPrefix(path, rule.external):
 				default:
@@ -196,4 +233,99 @@ func TestRootPackagesDialNothing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// vocabularyHome is the one package that declares the action strings
+// and the wire names of the limits object (spec 022).
+const vocabularyHome = "authorizer/"
+
+// wireLimitNames are the six members of the limits object an allow may
+// carry, by the names they go over the wire under (spec 006).
+var wireLimitNames = []string{
+	"requests_per_minute", "max_key_requests_per_minute", "max_key_tokens_per_minute",
+	"max_key_spend", "max_key_ttl", "max_keys",
+}
+
+// wireLimitsElsewhere is the one type outside the vocabulary that
+// carries those names, with the reason it does.
+var wireLimitsElsewhere = map[string]string{
+	"SelfLimits": "GET /v1/self renders what the last allow granted, in the answer's own names (spec 011)",
+}
+
+// TestVocabularyHasOneHome is spec 022's rule over the tree's
+// declarations: the action strings and the wire names of the limits
+// object are declared in the authorizer package and nowhere else, so a
+// platform reads one table and no copy of it drifts. An action string
+// left in the tree is a JSON fixture or a subtest name inside a test,
+// which declares nothing; a constant or a variable holding one is a
+// second home.
+func TestVocabularyHasOneHome(t *testing.T) {
+	vocabulary := map[string]bool{}
+	for _, a := range authorizer.Actions() {
+		vocabulary[a] = true
+	}
+	limits := map[string]bool{}
+	for _, n := range wireLimitNames {
+		limits[n] = true
+	}
+	goFiles(t, func(rel string, file *ast.File) {
+		if strings.HasPrefix(rel, vocabularyHome) {
+			return
+		}
+		named := map[*ast.StructType]string{}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.ValueSpec:
+				for i, v := range node.Values {
+					s, ok := stringLit(v)
+					if !ok || !vocabulary[s] {
+						continue
+					}
+					name := "_"
+					if i < len(node.Names) {
+						name = node.Names[i].Name
+					}
+					t.Errorf("%s declares %s = %q, a second home for an action; the vocabulary is %s's", rel, name, s, module+"/authorizer")
+				}
+			case *ast.TypeSpec:
+				if st, ok := node.Type.(*ast.StructType); ok {
+					named[st] = node.Name.Name
+				}
+			case *ast.StructType:
+				what := named[node]
+				if what == "" {
+					what = "a struct"
+				}
+				if why, exempt := wireLimitsElsewhere[what]; exempt {
+					t.Logf("%s: %s carries the limits names: %s", rel, what, why)
+					return true
+				}
+				for _, f := range node.Fields.List {
+					if f.Tag == nil {
+						continue
+					}
+					tag, err := strconv.Unquote(f.Tag.Value)
+					if err != nil {
+						continue
+					}
+					name, _, _ := strings.Cut(reflect.StructTag(tag).Get("json"), ",")
+					if limits[name] {
+						t.Errorf("%s declares %s with the limits member %q, a second reading of the limits object; it is %s.WireLimits", rel, what, name, module+"/authorizer")
+					}
+				}
+			}
+			return true
+		})
+	})
+}
+
+// stringLit is the string a declaration's value is, where it is one
+// literal string and not an expression over several.
+func stringLit(e ast.Expr) (string, bool) {
+	lit, ok := e.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	s, err := strconv.Unquote(lit.Value)
+	return s, err == nil
 }

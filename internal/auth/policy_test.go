@@ -12,6 +12,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
@@ -67,41 +68,41 @@ func TestOwnerPolicy(t *testing.T) {
 	unknownBudget := fixtureBudget(t)
 	unknownBudget.Status.ID = "bud_01J9NOSUCHBUDGET00000000000"
 	rows := []row{
-		{"provider.create", ActionProviderCreate, ProviderCreate(provider), admins, admins},
-		{"provider.create of a tunnel", ActionProviderCreate, ProviderCreate(tunnelled), allow, allow},
-		{"provider.read", ActionProviderRead, ProviderObject(provider), allow, allow},
-		{"provider.update", ActionProviderUpdate, ProviderObject(provider), admins, admins},
-		{"provider.update of a tunnel", ActionProviderUpdate, ProviderObject(tunnelled), allow, notOwner},
-		{"provider.delete", ActionProviderDelete, ProviderObject(provider), admins, admins},
-		{"provider.delete of a tunnel", ActionProviderDelete, ProviderObject(tunnelled), allow, notOwner},
-		{"provider.tunnel", ActionProviderTunnel, ProviderObject(tunnelled), allow, notOwner},
-		{"provider.list", ActionProviderList, ProviderList(), allow, allow},
-		{"model.create", ActionModelCreate, ModelCreate(model), admins, admins},
-		{"model.read", ActionModelRead, ModelObject(model), allow, allow},
-		{"model.update", ActionModelUpdate, ModelObject(model), admins, admins},
-		{"model.delete", ActionModelDelete, ModelObject(model), admins, admins},
-		{"model.list", ActionModelList, ModelList(), allow, allow},
-		{"model.use", ActionModelUse, ModelUse("anthropic/*", fixtureMatched), allow, allow},
-		{"key.create", ActionKeyCreate, KeyCreate(key), allow, allow},
-		{"key.read", ActionKeyRead, KeyObject(key), allow, notOwner},
-		{"key.read of an unknown id", ActionKeyRead, KeyObject(unknownKey), notOwner, notOwner},
-		{"key.update", ActionKeyUpdate, KeyObject(key), allow, notOwner},
-		{"key.delete", ActionKeyDelete, KeyObject(key), allow, notOwner},
-		{"key.list", ActionKeyList, KeyList(), filtered, filtered},
-		{"budget.create", ActionBudgetCreate, BudgetCreate(budget), allow, allow},
-		{"budget.read", ActionBudgetRead, BudgetObject(budget), allow, notOwner},
-		{"budget.update", ActionBudgetUpdate, BudgetObject(budget), allow, notOwner},
-		{"budget.delete", ActionBudgetDelete, BudgetObject(budget), allow, notOwner},
-		{"budget.delete of an unknown id", ActionBudgetDelete, BudgetObject(unknownBudget), notOwner, notOwner},
-		{"budget.list", ActionBudgetList, BudgetList(), filtered, filtered},
-		{"budget.draw", ActionBudgetDraw, BudgetObject(budget), allow, notOwner},
-		{"usage.read", ActionUsageRead, UsageRead(nil, nil), filtered, filtered},
+		{"provider.create", authorizer.ActionProviderCreate, authorizer.ProviderCreate(provider), admins, admins},
+		{"provider.create of a tunnel", authorizer.ActionProviderCreate, authorizer.ProviderCreate(tunnelled), allow, allow},
+		{"provider.read", authorizer.ActionProviderRead, authorizer.ProviderObject(provider), allow, allow},
+		{"provider.update", authorizer.ActionProviderUpdate, authorizer.ProviderObject(provider), admins, admins},
+		{"provider.update of a tunnel", authorizer.ActionProviderUpdate, authorizer.ProviderObject(tunnelled), allow, notOwner},
+		{"provider.delete", authorizer.ActionProviderDelete, authorizer.ProviderObject(provider), admins, admins},
+		{"provider.delete of a tunnel", authorizer.ActionProviderDelete, authorizer.ProviderObject(tunnelled), allow, notOwner},
+		{"provider.tunnel", authorizer.ActionProviderTunnel, authorizer.ProviderObject(tunnelled), allow, notOwner},
+		{"provider.list", authorizer.ActionProviderList, authorizer.ProviderList(), allow, allow},
+		{"model.create", authorizer.ActionModelCreate, authorizer.ModelCreate(model), admins, admins},
+		{"model.read", authorizer.ActionModelRead, authorizer.ModelObject(model), allow, allow},
+		{"model.update", authorizer.ActionModelUpdate, authorizer.ModelObject(model), admins, admins},
+		{"model.delete", authorizer.ActionModelDelete, authorizer.ModelObject(model), admins, admins},
+		{"model.list", authorizer.ActionModelList, authorizer.ModelList(), allow, allow},
+		{"model.use", authorizer.ActionModelUse, authorizer.ModelUse("anthropic/*", fixtureMatched), allow, allow},
+		{"key.create", authorizer.ActionKeyCreate, authorizer.KeyCreate(key), allow, allow},
+		{"key.read", authorizer.ActionKeyRead, authorizer.KeyObject(key), allow, notOwner},
+		{"key.read of an unknown id", authorizer.ActionKeyRead, authorizer.KeyObject(unknownKey), notOwner, notOwner},
+		{"key.update", authorizer.ActionKeyUpdate, authorizer.KeyObject(key), allow, notOwner},
+		{"key.delete", authorizer.ActionKeyDelete, authorizer.KeyObject(key), allow, notOwner},
+		{"key.list", authorizer.ActionKeyList, authorizer.KeyList(), filtered, filtered},
+		{"budget.create", authorizer.ActionBudgetCreate, authorizer.BudgetCreate(budget), allow, allow},
+		{"budget.read", authorizer.ActionBudgetRead, authorizer.BudgetObject(budget), allow, notOwner},
+		{"budget.update", authorizer.ActionBudgetUpdate, authorizer.BudgetObject(budget), allow, notOwner},
+		{"budget.delete", authorizer.ActionBudgetDelete, authorizer.BudgetObject(budget), allow, notOwner},
+		{"budget.delete of an unknown id", authorizer.ActionBudgetDelete, authorizer.BudgetObject(unknownBudget), notOwner, notOwner},
+		{"budget.list", authorizer.ActionBudgetList, authorizer.BudgetList(), filtered, filtered},
+		{"budget.draw", authorizer.ActionBudgetDraw, authorizer.BudgetObject(budget), allow, notOwner},
+		{"usage.read", authorizer.ActionUsageRead, authorizer.UsageRead(nil, nil), filtered, filtered},
 	}
 	covered := map[string]bool{}
 	for _, r := range rows {
 		covered[r.action] = true
 	}
-	for _, a := range Actions() {
+	for _, a := range authorizer.Actions() {
 		if !covered[a] {
 			t.Errorf("the table has no row for %s", a)
 		}
@@ -148,12 +149,12 @@ func TestOwnerPolicy(t *testing.T) {
 	t.Run("through the Authorizer", func(t *testing.T) {
 		z := NewAuthorizer(policy)
 		bob := Caller{Subject: otherSubject, Issuer: fixtureIssuer, Sub: "bob"}
-		_, err := z.Decide(t.Context(), bob, ActionKeyRead, KeyObject(key), info)
+		_, err := z.Decide(t.Context(), bob, authorizer.ActionKeyRead, authorizer.KeyObject(key), info)
 		if e := wantCode(t, err, CodeForbidden); !strings.HasSuffix(e.Detail, authz.ReasonNotOwner) {
 			t.Errorf("detail %q", e.Detail)
 		}
-		d, err := z.Decide(t.Context(), bob, ActionKeyList, KeyList(), info)
-		if err != nil || !reflect.DeepEqual(d.Filter, &authz.Filter{Owners: []string{otherSubject}}) || d.Limits != (Limits{}) {
+		d, err := z.Decide(t.Context(), bob, authorizer.ActionKeyList, authorizer.KeyList(), info)
+		if err != nil || !reflect.DeepEqual(d.Filter, &authz.Filter{Owners: []string{otherSubject}}) || d.Limits != (authorizer.Limits{}) {
 			t.Errorf("key.list = %+v, %v", d, err)
 		}
 		// The Lookup over the owner policy: bob may use every Model and
@@ -169,19 +170,19 @@ func TestOwnerPolicy(t *testing.T) {
 
 	t.Run("an action outside the vocabulary", func(t *testing.T) {
 		c := Caller{Subject: adminSubject, Issuer: fixtureIssuer, Sub: "root"}
-		check(t, adminSubject, Request(c, "key.rotate", KeyObject(key), info), verdict{reason: ReasonUnknownAction})
+		check(t, adminSubject, Request(c, "key.rotate", authorizer.KeyObject(key), info), verdict{reason: ReasonUnknownAction})
 	})
 
 	t.Run("a lookup that fails is no decision", func(t *testing.T) {
 		broken := &OwnerPolicy{Objects: &catalog{err: errors.New("store: timeout")}}
 		c := Caller{Subject: fixtureSubject, Issuer: fixtureIssuer, Sub: "alice"}
-		if _, err := broken.Authorize(t.Context(), Request(c, ActionKeyRead, KeyObject(key), info)); err == nil || !strings.Contains(err.Error(), "store: timeout") {
+		if _, err := broken.Authorize(t.Context(), Request(c, authorizer.ActionKeyRead, authorizer.KeyObject(key), info)); err == nil || !strings.Contains(err.Error(), "store: timeout") {
 			t.Errorf("err = %v", err)
 		}
-		_, err := NewAuthorizer(broken).Decide(t.Context(), c, ActionKeyRead, KeyObject(key), info)
+		_, err := NewAuthorizer(broken).Decide(t.Context(), c, authorizer.ActionKeyRead, authorizer.KeyObject(key), info)
 		wantCode(t, err, CodeAuthorizerUnavailable)
 		// A row that needs no object still answers.
-		if d, err := broken.Authorize(t.Context(), Request(c, ActionKeyCreate, KeyCreate(key), info)); err != nil || !d.Allow {
+		if d, err := broken.Authorize(t.Context(), Request(c, authorizer.ActionKeyCreate, authorizer.KeyCreate(key), info)); err != nil || !d.Allow {
 			t.Errorf("key.create = %+v, %v", d, err)
 		}
 	})
@@ -189,11 +190,11 @@ func TestOwnerPolicy(t *testing.T) {
 	t.Run("no lookup at all", func(t *testing.T) {
 		none := &OwnerPolicy{}
 		c := Caller{Subject: fixtureSubject, Issuer: fixtureIssuer, Sub: "alice"}
-		if _, err := none.Authorize(t.Context(), Request(c, ActionKeyRead, KeyObject(key), info)); err == nil || !strings.Contains(err.Error(), "no object lookup") {
+		if _, err := none.Authorize(t.Context(), Request(c, authorizer.ActionKeyRead, authorizer.KeyObject(key), info)); err == nil || !strings.Contains(err.Error(), "no object lookup") {
 			t.Errorf("err = %v", err)
 		}
 		// An object named by no id is denied without a lookup.
-		d, err := none.Authorize(t.Context(), Request(c, ActionKeyRead, authz.NewResource(v1.KindKey, "", nil), info))
+		d, err := none.Authorize(t.Context(), Request(c, authorizer.ActionKeyRead, authz.NewResource(v1.KindKey, "", nil), info))
 		if err != nil || d.Allow || d.Reason != authz.ReasonNotOwner {
 			t.Errorf("key.read with no id = %+v, %v", d, err)
 		}
@@ -205,7 +206,7 @@ func TestOwnerPolicy(t *testing.T) {
 func TestOwnerPolicyIsAnAuthorizer(t *testing.T) {
 	var _ authz.Authorizer = (*OwnerPolicy)(nil)
 	var a authz.Authorizer = &OwnerPolicy{Objects: objectsOf()}
-	if _, err := a.Authorize(context.Background(), authz.Probe(ActionKeyRead, v1.KindKey)); err != nil {
+	if _, err := a.Authorize(context.Background(), authz.Probe(authorizer.ActionKeyRead, v1.KindKey)); err != nil {
 		t.Fatal(err)
 	}
 }

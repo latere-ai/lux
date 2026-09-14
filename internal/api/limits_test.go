@@ -13,6 +13,7 @@ import (
 
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 )
 
@@ -76,7 +77,7 @@ func TestRateLimits(t *testing.T) {
 
 // decisionWithTTL is an allow granting one request a minute for ttl.
 func decisionWithTTL(ttl time.Duration) auth.Decision {
-	return auth.Decision{Limits: auth.Limits{RequestsPerMinute: 1}, TTL: ttl}
+	return auth.Decision{Limits: authorizer.Limits{RequestsPerMinute: 1}, TTL: ttl}
 }
 
 // TestGrantsMemo: the memo remembers a subject's last allow for its ttl,

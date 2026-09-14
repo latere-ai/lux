@@ -27,6 +27,9 @@ coverage.out
 /luxd
 /lux-stubs
 /authorizer
+# ... except the package directory of that name, which spec 022 added at
+# the root and which the rule above would otherwise swallow whole.
+!/authorizer/
 /plane
 
 # An agent tool's worktrees, checked out under the repository and never

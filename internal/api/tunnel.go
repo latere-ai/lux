@@ -53,8 +53,7 @@ func (c *call) tunnelSession(ctx context.Context, ref string) *Error {
 	if err != nil {
 		return err
 	}
-	res, _ := auth.ResourceFor(auth.ActionProviderTunnel, p)
-	if _, err := c.authorize(ctx, auth.ActionProviderTunnel, res); err != nil {
+	if err := c.authorizeTunnel(ctx, p); err != nil {
 		return err
 	}
 	if e := c.h.o.Tunnel.ServeSession(c.w, c.r, tunnel.SessionRequest{

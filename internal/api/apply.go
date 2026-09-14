@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/manifest"
@@ -81,7 +81,7 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 	if existing != nil {
 		action, subject = k.update, existing
 	}
-	res, _ := auth.ResourceFor(action, subject)
+	res, _ := authorizer.ResourceFor(action, subject)
 	decision, err := c.authorize(ctx, action, res)
 	if err != nil {
 		return 0, nil, 0, err

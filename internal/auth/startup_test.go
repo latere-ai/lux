@@ -13,6 +13,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/config"
 )
 
@@ -75,10 +76,10 @@ func TestStartupBuildsEachPolicy(t *testing.T) {
 			t.Errorf("String() = %q", got)
 		}
 		z := a.Authorizer(objects)
-		if _, err := z.Decide(t.Context(), bob, ActionKeyRead, KeyObject(fixtureKey()), info); err == nil {
+		if _, err := z.Decide(t.Context(), bob, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info); err == nil {
 			t.Error("the owner policy let bob read alice's key")
 		}
-		if _, err := z.Decide(t.Context(), Caller{Subject: adminSubject}, ActionKeyRead, KeyObject(fixtureKey()), info); err != nil {
+		if _, err := z.Decide(t.Context(), Caller{Subject: adminSubject}, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info); err != nil {
 			t.Errorf("the owner policy refused the admin: %v", err)
 		}
 		if _, err := a.Verifier.Verify(iss.Mint(issuertest.Claims{Sub: "bob"})); err != nil {
@@ -103,7 +104,7 @@ func TestStartupBuildsEachPolicy(t *testing.T) {
 		if strings.Contains(got, s.Token()) {
 			t.Error("the start-up line carries the authorizer's token")
 		}
-		if _, err := a.Authorizer(nil).Decide(t.Context(), bob, ActionKeyRead, KeyObject(fixtureKey()), info); err != nil {
+		if _, err := a.Authorizer(nil).Decide(t.Context(), bob, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info); err != nil {
 			t.Errorf("the stub refused bob: %v", err)
 		}
 	})
@@ -139,7 +140,7 @@ func TestAdminSubjectsIgnoredUnderAnAuthorizer(t *testing.T) {
 	s := stub.New(t)
 	s.Deny(stub.Rule{Subject: adminSubject}, "no rule for root")
 	root := Caller{Subject: adminSubject, Issuer: fixtureIssuer, Sub: "root"}
-	res := ProviderCreate(fixtureProvider())
+	res := authorizer.ProviderCreate(fixtureProvider())
 
 	withAuthorizer, err := New(t.Context(), Options{
 		Issuers: []string{iss.URL()}, Audience: audience, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(),
@@ -148,7 +149,7 @@ func TestAdminSubjectsIgnoredUnderAnAuthorizer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = withAuthorizer.Authorizer(objectsOf()).Decide(t.Context(), root, ActionProviderCreate, res, info)
+	_, err = withAuthorizer.Authorizer(objectsOf()).Decide(t.Context(), root, authorizer.ActionProviderCreate, res, info)
 	if e := wantCode(t, err, CodeForbidden); !strings.Contains(e.Detail, "no rule for root") {
 		t.Errorf("detail %q", e.Detail)
 	}
@@ -165,7 +166,7 @@ func TestAdminSubjectsIgnoredUnderAnAuthorizer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := withoutAuthorizer.Authorizer(objectsOf()).Decide(t.Context(), root, ActionProviderCreate, res, info); err != nil {
+	if _, err := withoutAuthorizer.Authorizer(objectsOf()).Decide(t.Context(), root, authorizer.ActionProviderCreate, res, info); err != nil {
 		t.Errorf("the owner policy refused the admin: %v", err)
 	}
 }
@@ -202,7 +203,7 @@ func TestAuthorizerTokenStaysOnItsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Authorizer(nil).Decide(t.Context(), caller, ActionKeyCreate, KeyCreate(fixtureKey()), info); err != nil {
+	if _, err := a.Authorizer(nil).Decide(t.Context(), caller, authorizer.ActionKeyCreate, authorizer.KeyCreate(fixtureKey()), info); err != nil {
 		t.Fatal(err)
 	}
 	rec.mu.Lock()
@@ -238,7 +239,7 @@ func TestAuthorizerTokenStaysOnItsEndpoint(t *testing.T) {
 func TestAuthorizerObservesEveryCall(t *testing.T) {
 	iss := newIssuer(t)
 	s := stub.New(t)
-	s.Deny(stub.Rule{Action: ActionModelCreate}, "no")
+	s.Deny(stub.Rule{Action: authorizer.ActionModelCreate}, "no")
 	var mu sync.Mutex
 	var results []string
 	a, err := New(t.Context(), Options{
@@ -249,10 +250,10 @@ func TestAuthorizerObservesEveryCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	z := a.Authorizer(nil)
-	_, _ = z.Decide(t.Context(), alice, ActionKeyCreate, KeyCreate(fixtureKey()), info)
-	_, _ = z.Decide(t.Context(), alice, ActionModelCreate, ModelCreate(fixtureModel()), info)
+	_, _ = z.Decide(t.Context(), alice, authorizer.ActionKeyCreate, authorizer.KeyCreate(fixtureKey()), info)
+	_, _ = z.Decide(t.Context(), alice, authorizer.ActionModelCreate, authorizer.ModelCreate(fixtureModel()), info)
 	s.Fail(http.StatusInternalServerError)
-	_, _ = z.Decide(t.Context(), alice, ActionBudgetCreate, BudgetCreate(fixtureBudget(t)), info)
+	_, _ = z.Decide(t.Context(), alice, authorizer.ActionBudgetCreate, authorizer.BudgetCreate(fixtureBudget(t)), info)
 	mu.Lock()
 	defer mu.Unlock()
 	if strings.Join(results, ",") != "allow,deny,error" {

@@ -19,6 +19,18 @@ refused before it is pushed.
   the Providers whose targets are out of selection and the shipped
   `LuxProviderUnreachable` alert fires on them. A Provider deleted from
   the catalogue leaves the metric at the health job's next tick.
+- `latere.ai/x/lux/authorizer`: the vocabulary an authorization endpoint
+  is written against, importable. It carries the actions `luxd` asks,
+  one constant each, the resource shape it sends per action with the
+  builders that render them, and the `limits` an allow may carry, as
+  `WireLimits` for the endpoint that answers and `DecodeLimits` for the
+  reading `luxd` does. A platform that kept a copy of the twenty-four
+  strings and of the six wire names deletes it and imports this
+  instead; the promise is the root packages', additive within a module
+  major, so an action never changes its string and a `limits` member
+  never changes its name. Nothing changes on the wire, and the minimal
+  authorizer of `docs/plane.md` now decides by the package rather than
+  by string literals.
 - A whole answer's spend is settled before its body reaches the caller,
   so the request a caller sends the moment it has the answer meets the
   Budget and spend the answer moved; before, a fast caller could slip

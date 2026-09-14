@@ -7,7 +7,7 @@ import (
 	"context"
 	"net/http"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -38,7 +38,7 @@ func (c *call) rotate(ctx context.Context, ref string) *Error {
 	if !ok {
 		return refuse(CodeInternal, "")
 	}
-	res, _ := auth.ResourceFor(k.update, key)
+	res, _ := authorizer.ResourceFor(k.update, key)
 	if _, err := c.authorize(ctx, k.update, res); err != nil {
 		return err
 	}

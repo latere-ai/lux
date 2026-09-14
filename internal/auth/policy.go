@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"latere.ai/x/pkg/authz"
+
+	"latere.ai/x/lux/authorizer"
 )
 
 // ObjectLookup is what the owner policy asks the store: whether an id of
@@ -63,27 +65,27 @@ func (p *OwnerPolicy) Authorize(ctx context.Context, req authz.Request) (authz.D
 		return authz.Decision{Reason: authz.ReasonProbe}, nil
 	case req.Subject == "":
 		return authz.Decision{Reason: authz.ReasonAnonymous}, nil
-	case !Known(req.Action):
+	case !authorizer.Known(req.Action):
 		return authz.Decision{Reason: ReasonUnknownAction}, nil
 	case slices.Contains(p.Admins, req.Subject):
 		return authz.Decision{Allow: true}, nil
 	}
 	switch req.Action {
-	case ActionProviderCreate:
+	case authorizer.ActionProviderCreate:
 		if tunnel, _ := req.Resource.Fields["tunnel"].(bool); tunnel {
 			return authz.Decision{Allow: true}, nil
 		}
 		return authz.Decision{Reason: ReasonAdminOnly}, nil
-	case ActionProviderUpdate, ActionProviderDelete:
+	case authorizer.ActionProviderUpdate, authorizer.ActionProviderDelete:
 		if tunnel, _ := req.Resource.Fields["tunnel"].(bool); !tunnel {
 			return authz.Decision{Reason: ReasonAdminOnly}, nil
 		}
-	case ActionModelCreate, ActionModelUpdate, ActionModelDelete:
+	case authorizer.ActionModelCreate, authorizer.ActionModelUpdate, authorizer.ActionModelDelete:
 		return authz.Decision{Reason: ReasonAdminOnly}, nil
-	case ActionProviderRead, ActionProviderList, ActionModelRead, ActionModelList, ActionModelUse,
-		ActionKeyCreate, ActionBudgetCreate:
+	case authorizer.ActionProviderRead, authorizer.ActionProviderList, authorizer.ActionModelRead, authorizer.ActionModelList, authorizer.ActionModelUse,
+		authorizer.ActionKeyCreate, authorizer.ActionBudgetCreate:
 		return authz.Decision{Allow: true}, nil
-	case ActionKeyList, ActionBudgetList, ActionUsageRead:
+	case authorizer.ActionKeyList, authorizer.ActionBudgetList, authorizer.ActionUsageRead:
 		return authz.Decision{Allow: true, Filter: &authz.Filter{Owners: []string{req.Subject}}}, nil
 	}
 	// The frame: key.read, .update, .delete, budget.read, .update,

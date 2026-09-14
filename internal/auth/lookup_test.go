@@ -12,6 +12,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -127,9 +128,9 @@ func TestLookupDenyIsNotFound(t *testing.T) {
 		in     v1.Object
 		path   string
 	}{
-		{"model.use on a Key's selector", ActionModelUse, keySelector(), "spec.models[0]"},
-		{"budget.draw on a Key's budget", ActionBudgetDraw, keyManifest(), "spec.budget"},
-		{"provider.read on a Model's target", ActionProviderRead, modelManifest(), "spec.targets[0].provider"},
+		{"model.use on a Key's selector", authorizer.ActionModelUse, keySelector(), "spec.models[0]"},
+		{"budget.draw on a Key's budget", authorizer.ActionBudgetDraw, keyManifest(), "spec.budget"},
+		{"provider.read on a Model's target", authorizer.ActionProviderRead, modelManifest(), "spec.targets[0].provider"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Each phase runs over a fresh client, because the shared client
@@ -148,7 +149,7 @@ func TestLookupDenyIsNotFound(t *testing.T) {
 			_, z = newStubAuthorizer(t)
 			opts.Lookup = z.Lookup(alice, info, catalogOf())
 			_, err = manifest.Resolve(t.Context(), tc.in, opts)
-			if tc.action == ActionModelUse {
+			if tc.action == authorizer.ActionModelUse {
 				// A selector matching nothing is a warning, not a refusal.
 				if err != nil {
 					t.Fatalf("an empty catalog refused the selector: %v", err)
@@ -187,15 +188,15 @@ func TestLookupDenyIsNotFound(t *testing.T) {
 		if len(reqs) != 3 {
 			t.Fatalf("%d requests", len(reqs))
 		}
-		for i, tc := range []struct{ action string }{{ActionProviderRead}, {ActionBudgetDraw}, {ActionModelUse}} {
+		for i, tc := range []struct{ action string }{{authorizer.ActionProviderRead}, {authorizer.ActionBudgetDraw}, {authorizer.ActionModelUse}} {
 			if reqs[i].Action != tc.action || reqs[i].Subject != fixtureSubject || reqs[i].Request != info {
 				t.Errorf("request %d: %+v", i, reqs[i])
 			}
 		}
-		if got := flat(t, reqs[0].Resource); !reflect.DeepEqual(got, want[ActionProviderRead]) {
+		if got := flat(t, reqs[0].Resource); !reflect.DeepEqual(got, want[authorizer.ActionProviderRead]) {
 			t.Errorf("provider.read resource %v", got)
 		}
-		if got := flat(t, reqs[1].Resource); !reflect.DeepEqual(got, want[ActionBudgetDraw]) {
+		if got := flat(t, reqs[1].Resource); !reflect.DeepEqual(got, want[authorizer.ActionBudgetDraw]) {
 			t.Errorf("budget.draw resource %v", got)
 		}
 		if got := flat(t, reqs[2].Resource); got["selector"] != "anthropic/*" || len(got["matched"].([]any)) != 1 {
@@ -243,9 +244,9 @@ func TestNoIdIsNeverCached(t *testing.T) {
 	uses, draws := 0, 0
 	for _, r := range s.Requests() {
 		switch r.Action {
-		case ActionModelUse:
+		case authorizer.ActionModelUse:
 			uses++
-		case ActionBudgetDraw:
+		case authorizer.ActionBudgetDraw:
 			draws++
 		}
 	}
