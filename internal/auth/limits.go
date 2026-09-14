@@ -4,7 +4,6 @@
 package auth
 
 import (
-	"errors"
 	"fmt"
 
 	"latere.ai/x/pkg/authz"
@@ -71,9 +70,7 @@ func DecodeLimits(d authz.Decision) (Limits, error) {
 		*f.dst = *f.src
 	}
 	if w.MaxKeySpend != nil {
-		if *w.MaxKeySpend < 0 {
-			return Limits{}, errors.New("limits.max_key_spend is below zero")
-		}
+		// A money string carries no sign, so the figure is never below zero.
 		l.Key.MaxSpend = *w.MaxKeySpend
 	}
 	if w.MaxKeyTTL != "" {

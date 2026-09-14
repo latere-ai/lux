@@ -205,9 +205,14 @@ func TestResourceListsAreNeverNull(t *testing.T) {
 	}
 }
 
+// impostor claims a kind without being that kind's type.
+type impostor struct{ v1.Object }
+
+func (impostor) Kind() string { return v1.KindKey }
+
 // TestResourceForRefusesTheWrongKind: an action on an object of another
-// kind, an action whose resource is not an object, and a string outside
-// the vocabulary build nothing.
+// kind, an action whose resource is not an object, a string outside the
+// vocabulary, and a value that claims a kind it is not build nothing.
 func TestResourceForRefusesTheWrongKind(t *testing.T) {
 	for _, tc := range []struct {
 		action string
@@ -218,6 +223,7 @@ func TestResourceForRefusesTheWrongKind(t *testing.T) {
 		{ActionUsageRead, fixtureKey()},
 		{"key.rotate", fixtureKey()},
 		{ActionKeyRead, nil},
+		{ActionKeyRead, impostor{}},
 	} {
 		if _, ok := ResourceFor(tc.action, tc.obj); ok {
 			t.Errorf("ResourceFor(%s, %T) built a resource", tc.action, tc.obj)

@@ -144,6 +144,7 @@ func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
 		name, issuer, want string
 	}{
 		{"a refused connection", refused, "discovery: "},
+		{"an issuer that is not a URL", "::not-a-url", "discovery: "},
 		{"an issuer that never answers", hanging.URL(), "discovery: "},
 		{"a discovery that is not a 200", notFound.URL, "answered 404"},
 		{"a discovery that is not JSON", badDiscovery.URL, "is not JSON"},
