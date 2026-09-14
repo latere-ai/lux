@@ -587,8 +587,9 @@ the checks sit in the pipeline and the codes' HTTP statuses
 
 ## Outcome
 
-Built on 2026-09-14 in thirteen commits on `main`, over the memory
-store and the file mode of [[010-state]] and beside the door handler of
+Built on 2026-09-14 on `main`, in the commits from `specs: 007 in
+progress` to `specs: 007 complete`, over the memory store and the file
+mode of [[010-state]] and beside the door handler of
 [[004-request-path]], and proven by the whole gate, fifteen gates, and
 per-package coverage of 97.8% for `metering`, 97.0% for
 `internal/serve`, 99.4% for `internal/config`, 96.6% for `gateway`, and
