@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,6 @@ import (
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/store"
-	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/test/stubs/provider"
@@ -203,14 +203,27 @@ func h2c(t *testing.T, secret string, status int) string {
 }
 
 // seeded returns an open hook over one memory store seed fills.
-func seeded(seed func(t *testing.T, st store.Store)) func(*testing.T) func(context.Context, config.Config, config.Getenv) (store.Store, *filemode.Store, error) {
-	return func(t *testing.T) func(context.Context, config.Config, config.Getenv) (store.Store, *filemode.Store, error) {
+func seeded(seed func(t *testing.T, st store.Store)) func(*testing.T) func(context.Context, config.Config, config.Getenv) (opened, error) {
+	return func(t *testing.T) func(context.Context, config.Config, config.Getenv) (opened, error) {
 		st := memory.New()
 		seed(t, st)
-		return func(context.Context, config.Config, config.Getenv) (store.Store, *filemode.Store, error) {
-			return st, nil, nil
+		return func(context.Context, config.Config, config.Getenv) (opened, error) {
+			return opened{st: st}, nil
 		}
 	}
+}
+
+// closedPort is a loopback port nothing listens at, for a database that
+// is down.
+func closedPort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return addr
 }
 
 // putProvider stores a Provider directly, bypassing Resolve, so a row
@@ -313,11 +326,11 @@ func TestCheckNamesEachFailure(t *testing.T) {
 		},
 		{
 			name: "store", env: (*stack).serverEnv,
-			edit: func(_ *testing.T, _ *stack, m map[string]string) {
-				m["LUX_DB_URL"] = "postgres://lux:secret@db.example.com/lux"
+			edit: func(t *testing.T, _ *stack, m map[string]string) {
+				m["LUX_DB_URL"] = "postgres://lux:secret@" + closedPort(t) + "/lux?sslmode=disable"
 			},
 			failing: []string{"store"},
-			warning: []string{"public url", "migrations", "credentials", "providers", "dialects"},
+			warning: []string{"public url", "migrations", "db conns", "credentials", "providers", "dialects"},
 		},
 		{
 			name: "manifest dir", env: (*stack).fileEnv,

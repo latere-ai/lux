@@ -36,11 +36,13 @@ import (
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/reqlog"
+	"latere.ai/x/lux/internal/rewrap"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
+	"latere.ai/x/lux/internal/store/postgres"
 	"latere.ai/x/lux/internal/tunnel"
 	"latere.ai/x/lux/internal/version"
 	"latere.ai/x/lux/manifest"
@@ -73,7 +75,7 @@ func run(ctx context.Context, args []string, getenv config.Getenv, stdout, stder
 	case "check":
 		return checkCmd(ctx, rest, getenv, stdout, stderr)
 	case "rewrap":
-		return rewrapCmd(rest, getenv, stderr)
+		return rewrapCmd(ctx, rest, getenv, stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "luxd: unknown subcommand %q; serve is the default, and check and rewrap are the others\n", name)
 		return 2
@@ -121,12 +123,14 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// control plane's families land in it, and the internal listener
 	// serves it at /metrics.
 	reg := metrics.NewRegistry()
-	st, files, notice, err := openStore(ctx, cfg, getenv, reg)
+	st, files, notices, err := openStore(ctx, cfg, getenv, reg)
 	if err != nil {
 		return fail(stderr, err)
 	}
 	defer func() { _ = st.Close() }()
-	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	for _, notice := range notices {
+		_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	}
 
 	// The telemetry of spec 019: traces, metrics, and logs through
 	// latere.ai/x/pkg/otel on the standard OTEL_* variables, exporting
@@ -414,15 +418,24 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 // openStore constructs the store the configuration selects, wrapped in
 // Instrument on the process's registry, and returns the file mode's
 // store beside it when that is the mode, so serve can wire the re-read,
-// and the substance of the one start-up line that names the mode. The
-// Postgres store lands in a later phase; until then a configured
-// LUX_DB_URL is refused rather than silently answered with state in
-// memory, because an operator who asked for durability and got a
-// process's memory would find out at the first restart.
-func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg *metrics.Registry) (store.Store, *filemode.Store, string, error) {
+// and the start-up lines that name the mode. With LUX_DB_URL the
+// Postgres store of spec 010 opens its pool, holds the schema to the
+// guards, applies the migrations that are missing, and adds one WARN
+// line when the schema is ahead of this build within its major; a
+// database that does not answer, a dirty schema, or one of another
+// major is the start-up failure.
+func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg *metrics.Registry) (store.Store, *filemode.Store, []string, error) {
 	switch {
 	case cfg.DBURL != "":
-		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
+		pg, warning, err := postgres.Connect(ctx, postgres.Options{URL: cfg.DBURL, MaxConns: cfg.DBMaxConns})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		notices := []string{pg.Notice(ctx)}
+		if warning != "" {
+			notices = append(notices, "WARN "+warning)
+		}
+		return store.Instrument(pg, reg), nil, notices, nil
 	case cfg.ManifestDir != "":
 		// The resolver's defaults are spec 007's two rates and spec 004's
 		// upstream timeout, so a Key the directory declares without limits
@@ -431,11 +444,11 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg
 		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
 		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL})
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, nil, err
 		}
-		return store.Instrument(files, reg), files, files.Notice(), nil
+		return store.Instrument(files, reg), files, []string{files.Notice()}, nil
 	default:
-		return store.Instrument(memory.New(), reg), nil, memory.Notice, nil
+		return store.Instrument(memory.New(), reg), nil, []string{memory.Notice}, nil
 	}
 }
 
@@ -519,21 +532,47 @@ func checkCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	return check.Run(ctx, check.Options{Getenv: getenv}, stdout)
 }
 
-// rewrapCmd is the rewrap role: it reads LUX_SECRETS_KEK and LUX_DB_URL
-// and nothing else of the table, and re-wraps every stored credential's
-// data key under the first key. The Postgres store is a later phase, so
-// until it lands a configured LUX_DB_URL is refused here as it is in
-// serve, and without one the role has nothing durable to re-wrap.
-func rewrapCmd(args []string, getenv config.Getenv, stderr io.Writer) int {
+// rewrapCmd is the rewrap role of spec 005: it reads LUX_SECRETS_KEK and
+// LUX_DB_URL and nothing else of the table, opens the Postgres store
+// without applying a migration, refuses a schema that is not at this
+// build's highest version, and re-wraps every stored credential's data
+// key under the first key, printing one summary line and one line per
+// row no listed key opens. Exit 1 when a row could not be re-wrapped;
+// without LUX_DB_URL the role has nothing durable to re-wrap.
+func rewrapCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("luxd rewrap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if _, err := config.LoadRewrap(getenv); err != nil {
+	r, err := config.LoadRewrap(getenv)
+	if err != nil {
 		return fail(stderr, err)
 	}
-	return fail(stderr, errors.New("LUX_DB_URL: the Postgres store is not in this build, so there is no stored row to re-wrap yet"))
+	pg, err := postgres.Open(ctx, postgres.Options{URL: r.DBURL, MaxConns: 2})
+	if err != nil {
+		return fail(stderr, err)
+	}
+	defer func() { _ = pg.Close() }()
+	schema, err := pg.Schema(ctx)
+	if err != nil {
+		return fail(stderr, fmt.Errorf("LUX_DB_URL: the database at %s did not answer: %w", pg.Endpoint(), err))
+	}
+	switch {
+	case schema.Dirty:
+		return fail(stderr, fmt.Errorf("LUX_DB_URL: the schema is dirty at version %d; rewrap applies no migration, and a dirty schema is an operator's to repair", schema.Version))
+	case schema.Version != postgres.Highest:
+		return fail(stderr, fmt.Errorf("LUX_DB_URL: the schema is at version %d and this build's is %d; rewrap applies no migration and runs against the schema it was built with, so run luxd serve of this build first, or this build's rewrap against the schema it wrote", schema.Version, postgres.Highest))
+	}
+	sum, err := rewrap.Run(ctx, pg.Credentials(), r.SecretsKEK, stderr)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", sum)
+	if sum.Failed() {
+		return 1
+	}
+	return 0
 }
 
 // reloadOnHUP re-reads the directory on every SIGHUP until ctx ends or

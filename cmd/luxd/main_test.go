@@ -165,9 +165,23 @@ func TestServeStartsTheMeteringFlush(t *testing.T) {
 	}
 }
 
+// closedPort is a loopback port nothing listens at, for a database that
+// is down.
+func closedPort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return addr
+}
+
 // TestRewrapNeedsTheStore is spec 005's row at the process: without
-// LUX_DB_URL the role exits 1 naming the variable; with one, the
-// Postgres store is a later phase and the role says so with exit 1.
+// LUX_DB_URL the role exits 1 naming the variable; with one naming a
+// database that does not answer, it exits 1 naming the endpoint and
+// never the password, having applied nothing.
 func TestRewrapNeedsTheStore(t *testing.T) {
 	var errOut bytes.Buffer
 	if code := run(t.Context(), []string{"rewrap"}, env(map[string]string{"LUX_SECRETS_KEK": kek}), io.Discard, &errOut); code != 1 {
@@ -177,10 +191,11 @@ func TestRewrapNeedsTheStore(t *testing.T) {
 		t.Fatalf("stderr = %q", got)
 	}
 	errOut.Reset()
-	if code := run(t.Context(), []string{"rewrap"}, env(map[string]string{"LUX_SECRETS_KEK": kek, "LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut); code != 1 {
+	addr := closedPort(t)
+	if code := run(t.Context(), []string{"rewrap"}, env(map[string]string{"LUX_SECRETS_KEK": kek, "LUX_DB_URL": "postgres://lux:secret@" + addr + "/lux?sslmode=disable"}), io.Discard, &errOut); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if got := errOut.String(); !strings.HasPrefix(got, "luxd: LUX_DB_URL: the Postgres store is not in this build") || strings.Contains(got, "secret") {
+	if got := errOut.String(); !strings.HasPrefix(got, "luxd: LUX_DB_URL: the database at "+addr+"/lux did not answer") || strings.Contains(got, "secret") || strings.Count(got, "\n") != 1 {
 		t.Fatalf("stderr = %q", got)
 	}
 	if code := run(t.Context(), []string{"rewrap", "-no-such-flag"}, env(nil), io.Discard, &errOut); code != 2 {
@@ -403,18 +418,23 @@ func TestMemoryStoreLogsItsAssumptions(t *testing.T) {
 	}
 }
 
-// TestDatabaseIsNotSelectableYet: the Postgres store is a later phase, so
-// a configured LUX_DB_URL is refused with one line rather than answered
-// with state in memory.
-func TestDatabaseIsNotSelectableYet(t *testing.T) {
-	var errOut bytes.Buffer
-	code := run(t.Context(), nil, env(map[string]string{"LUX_OIDC_ISSUERS": "https://login.example.com", "LUX_SECRETS_KEK": kek, "LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
+// TestDatabaseDownAtStartupExitsOne: a configured LUX_DB_URL whose
+// database does not answer is exit 1 with one line naming the variable
+// and the endpoint, never the password, rather than a process serving
+// from memory what an operator asked to have kept.
+func TestDatabaseDownAtStartupExitsOne(t *testing.T) {
+	var out, errOut bytes.Buffer
+	addr := closedPort(t)
+	code := run(t.Context(), nil, env(map[string]string{"LUX_OIDC_ISSUERS": "https://login.example.com", "LUX_SECRETS_KEK": kek, "LUX_DB_URL": "postgres://lux:secret@" + addr + "/lux?sslmode=disable"}), &out, &errOut)
 	if code != 1 {
 		t.Fatalf("exit %d", code)
 	}
 	got := errOut.String()
-	if !strings.HasPrefix(got, "luxd: LUX_DB_URL: ") || strings.Count(got, "\n") != 1 || strings.Contains(got, "secret") {
+	if !strings.HasPrefix(got, "luxd: LUX_DB_URL: the database at "+addr+"/lux did not answer: ") || strings.Count(got, "\n") != 1 || strings.Contains(got, "secret") {
 		t.Fatalf("stderr = %q", got)
+	}
+	if strings.Contains(out.String(), "listening") {
+		t.Fatalf("serve listened without its store:\n%s", out.String())
 	}
 }
 
