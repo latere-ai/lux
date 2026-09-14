@@ -8,8 +8,11 @@
 // the bound on how far several replicas may overshoot a spend limit
 // before they agree, the marker one replica claims to announce an
 // exhausted window once, and one replica's unflushed deltas over the
-// store's totals. Spec 009 adds the record, its cost from a Model's
-// pricing, and the aggregates.
+// store's totals. Spec 009 adds the record of one request built from
+// the gateway's with the cost a Model's pricing gives its tokens, the
+// hourly aggregate rows the store keeps and the response rows the usage
+// API answers, the pure fold from records to either, and the query with
+// its bounds and the intersection with an authorizer's filter.
 //
 // The package computes and dials nothing: it imports manifest/v1 and
 // the standard library, takes the counter table through CounterStore,
