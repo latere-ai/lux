@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"latere.ai/x/lux/internal/secrets"
 )
 
 // Defaults for the optional variables.
@@ -75,6 +77,20 @@ type Config struct {
 	// AdminSubjects are the rendered subjects the owner policy lets act on
 	// every object; read and unused when an authorizer is set.
 	AdminSubjects []string
+
+	// The provider variables of spec 005.
+
+	// SecretsKEK is the parsed LUX_SECRETS_KEK: the first key wraps every
+	// new data key and every key is tried to open one. Nil in the file
+	// mode when the variable is unset, since nothing is sealed there.
+	SecretsKEK *secrets.Keyring
+	// UpstreamAllowPrivate admits a Provider base URL, and the address it
+	// resolves to, on a loopback, link-local, or private network.
+	UpstreamAllowPrivate bool
+	// DiscoveryInterval is how often a Provider's model list is read.
+	DiscoveryInterval time.Duration
+	// HealthInterval is how often a Provider is probed.
+	HealthInterval time.Duration
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -126,6 +142,7 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, "LUX_DB_URL and LUX_MANIFEST_DIR are both set; desired state comes from the directory or the database, not both")
 	}
 	problems = append(problems, c.loadIdentity(getenv)...)
+	problems = append(problems, c.loadProviders(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))

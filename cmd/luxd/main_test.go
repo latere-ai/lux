@@ -26,6 +26,9 @@ func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
+// kek is one 32-byte key in the variable's syntax.
+const kek = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+
 // serveEnv is the smallest environment serve starts under: loopback
 // listeners and one issuer, a stub on loopback so the start-up fetch of
 // spec 006 has something to reach. The extra entries override.
@@ -35,6 +38,7 @@ func serveEnv(t *testing.T, extra map[string]string) map[string]string {
 		"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
 		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
 		"LUX_OIDC_ISSUERS":  issuertest.New(t).URL(),
+		"LUX_SECRETS_KEK":   kek,
 	}
 	maps.Copy(m, extra)
 	return m
@@ -297,7 +301,7 @@ func TestMemoryStoreLogsItsAssumptions(t *testing.T) {
 // with state in memory.
 func TestDatabaseIsNotSelectableYet(t *testing.T) {
 	var errOut bytes.Buffer
-	code := run(t.Context(), nil, env(map[string]string{"LUX_OIDC_ISSUERS": "https://login.example.com", "LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
+	code := run(t.Context(), nil, env(map[string]string{"LUX_OIDC_ISSUERS": "https://login.example.com", "LUX_SECRETS_KEK": kek, "LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("exit %d", code)
 	}
