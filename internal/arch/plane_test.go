@@ -297,7 +297,9 @@ func planeSections(t *testing.T) []string {
 		case strings.HasPrefix(line, "## "):
 			inDesign = false
 		case inDesign && strings.HasPrefix(line, "### "):
-			if title := strings.TrimPrefix(line, "### "); title != "The document" {
+			// Two headings are about the document and the build rather
+			// than sections of the document itself.
+			if title := strings.TrimPrefix(line, "### "); title != "The document" && title != "What the build changed" {
 				out = append(out, title)
 			}
 		}

@@ -1,6 +1,6 @@
 ---
 title: "Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -33,9 +33,12 @@ either that is not already there.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built on 2026-09-14: `docs/plane.md` is the document, `examples/plane`
+is a platform front over the three root packages that carries the
+conformance suite, and `examples/authorizer` is the endpoint the
+document prints, held to `latere.ai/x/pkg/authz/conformance` and run
+beside `luxd` in the integration tier. The departures from the design
+below are listed under "What the build changed".
 
 ## Design
 
@@ -279,8 +282,22 @@ archive a release publishes.
 `docs/plane.md` is this spec in the user register: the two doors, the
 concerns table, the minimal authorizer, the sandbox composition, and
 the conformance command, written for a platform engineer rather than
-for a contributor to this repository. It is owed by this spec and is
-not written yet.
+for a contributor to this repository. Its sections are this design's
+headings, its concerns and its credential hops are these tables' rows,
+and its Go block is `examples/authorizer/main.go` word for word, all
+of which `TestPlaneDocIsCurrent` holds.
+
+### What the build changed
+
+Each row is a departure from the design above, with the reason.
+
+| Where | The design said | The build does | Why |
+|---|---|---|---|
+| the minimal authorizer | one ceiling table with an `admin` row | `spendCap` has `free` and `team`, and an administrator is granted no `limits` at all | a ceiling refuses a Key that names no limit ([[003-manifest-contract]]), so an installation's own Keys, the conformance suite's among them, cannot be applied under one |
+| the minimal authorizer | the twenty lines of `decide` | that, plus the `POST` handler and the listener of `examples/authorizer`, which is the program the document prints | a block a reader copies has to compile and run, and the contract's own suite refuses an endpoint that does not check its bearer |
+| the example plane | a server that passes `TestContract` | `examples/plane`, which the suite runs 42 cases against; the thirteen that read a stub provider's record skip by name, as they do against any front without `LUX_TEST_STUBS_URL` | two drifts between [[015-test-stubs-and-tiers]]'s stub and [[018-conformance-suite]]'s reader keep a run with that document red for reasons no front can answer: the stub writes its record under `header` and the suite reads `headers`, and its `events-<n>` stream carries a finish chunk the suite's frame count does not expect |
+| the acceptance tests | `TestSandboxCompositionEndToEnd`, `TestPlatformCredentialAsKey`, and the rest | the same tests under the tier's prefix, `TestE2E…` | [[015-test-stubs-and-tiers]]'s rule is that every test in a file tagged `integration` begins with `TestE2E`, and `TestEveryTestIsInATier` holds it |
+| the run's ledger | the delete refuses on every replica | the integration tier proves one replica within `LUX_KEY_CACHE`; the multi-replica half is the postgres tier's, which waits on [[010-state]] | the tier that runs two replicas against one database is not built |
 
 ## Not in this spec
 
@@ -296,12 +313,12 @@ plane's own design, which is that project's.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, denies the probe id and passes the conformance suite's `identity` and `manifest` groups | `TestPlaneDocAuthorizerConforms`, running the document's code block | not built |
-| A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | not built |
-| Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | not built |
-| A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestSandboxCompositionEndToEnd` in the e2e tier | not built |
-| A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestOwnerFollowsTheToken` | not built |
-| A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestPlatformCredentialAsKey` in the e2e tier | not built |
-| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestRunKeyDeletionLeavesTheLedger` | not built |
-| Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestOneCredentialKindPerHop`, over the e2e capture | not built |
-| `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent` | not built |
+| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, denies the probe id and passes the conformance suite's `identity` and `manifest` groups | `TestPlaneDocAuthorizerConforms` over the program the document prints, and `TestE2EPlaneDocAuthorizerConforms`, which runs it as `luxd`'s `LUX_AUTHORIZER_URL` and carries the whole suite | passing; the endpoint also passes `latere.ai/x/pkg/authz/conformance` under the twenty-four actions |
+| A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | passing over `conformance.Run`: 42 cases green, the thirteen that read a stub's record skipped by name |
+| Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | passing, `internal/arch` |
+| A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestE2ESandboxComposition` in the e2e tier | passing; the workload is the `lux` command in a directory of its own, holding a placeholder |
+| A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestE2EOwnerFollowsTheToken` | passing |
+| A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestE2EPlatformCredentialAsKey` in the e2e tier | passing; the supplied value is a token whose own `exp` has passed, so what the door honours can only be the Key |
+| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestE2ERunKeyDeletionLeavesTheLedger` | passing for one replica; the multi-replica half is the postgres tier's ([[010-state]]) |
+| Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestE2EOneCredentialKindPerHop`, over the e2e capture | passing; the authorizer hop is read through a recorder in front of the stub, which records the envelope and not the bearer |
+| `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent`, `TestE2EPlaneDocCommand` | passing: the sections, the tables, and the Go block in `internal/arch`; the command itself run by the tier against `make run` |
