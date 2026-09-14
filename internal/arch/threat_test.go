@@ -108,6 +108,108 @@ func threatRows(t *testing.T) []row {
 	return rows
 }
 
+// promiseRows is the "What `SECURITY.md` promises" table: the property
+// sentence and the Threat cell of the row that answers it.
+func promiseRows(t *testing.T) [][2]string {
+	t.Helper()
+	lines := strings.Split(readSpec(t, threatModel), "\n")
+	start := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "### What `SECURITY.md` promises") })
+	if start < 0 {
+		t.Fatalf("%s has no What SECURITY.md promises heading", threatModel)
+	}
+	var rows [][2]string
+	for i := start; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "### ") && i > start {
+			break
+		}
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := trimAll(strings.Split(strings.Trim(line, "|"), "|"))
+		if len(cells) != 2 {
+			t.Errorf("%s:%d: the promises table has %d columns, want Property and Threat", threatModel, i+1, len(cells))
+			continue
+		}
+		if cells[0] == "Property `SECURITY.md` states" || strings.HasPrefix(cells[0], "---") {
+			continue
+		}
+		rows = append(rows, [2]string{cells[0], cells[1]})
+	}
+	if len(rows) == 0 {
+		t.Fatalf("%s: the promises table has no rows", threatModel)
+	}
+	return rows
+}
+
+// oneLine collapses every run of white space to one space, so a
+// sentence wrapped across lines in a document matches the same sentence
+// written on one line in a table cell.
+var oneLine = regexp.MustCompile(`\s+`)
+
+// TestSecurityDocumentMatchesTheModel holds `SECURITY.md` to the threat
+// model: every property that document states is a row of the promises
+// table, whose sentence is in the document word for word and whose
+// threat is a row of the threat table. A property nobody can point at a
+// threat for, and a threat row renamed out from under the document,
+// both fail here.
+func TestSecurityDocumentMatchesTheModel(t *testing.T) {
+	document := oneLine.ReplaceAllString(readSpec(t, "SECURITY.md"), " ")
+	threats := map[string]bool{}
+	for _, r := range threatRows(t) {
+		threats[r.threat] = true
+	}
+	var promised []string
+	for _, p := range promiseRows(t) {
+		property, threat := p[0], p[1]
+		if !strings.Contains(document, property) {
+			t.Errorf("SECURITY.md does not state %q word for word", property)
+		}
+		if !threats[threat] {
+			t.Errorf("the promises table answers %q with %q, which is no row of the threat table", property, threat)
+		}
+		promised = append(promised, property)
+	}
+	// Every bullet of the document's property list is one of them, so a
+	// property cannot be added there without a threat to answer it.
+	for _, bullet := range bullets(t) {
+		bullet = strings.TrimSuffix(bullet, ".")
+		if !slices.Contains(promised, bullet) {
+			t.Errorf("SECURITY.md states %q, which the promises table of %s does not answer with a threat", bullet, threatModel)
+		}
+	}
+}
+
+// bullets are the sentences of `SECURITY.md`'s property list, each
+// joined onto one line and stripped of its full stop, in the order the
+// document writes them.
+func bullets(t *testing.T) []string {
+	t.Helper()
+	lines := strings.Split(readSpec(t, "SECURITY.md"), "\n")
+	start := slices.Index(lines, "## What the design commits to")
+	if start < 0 {
+		t.Fatal("SECURITY.md has no What the design commits to section")
+	}
+	var out []string
+	for _, line := range lines[start+1:] {
+		switch {
+		case strings.HasPrefix(line, "## "):
+			return out
+		case strings.HasPrefix(line, "- "):
+			out = append(out, strings.TrimPrefix(line, "- "))
+		case strings.HasPrefix(line, "  ") && len(out) > 0:
+			out[len(out)-1] += " " + strings.TrimSpace(line)
+		case strings.TrimSpace(line) == "":
+		default:
+			// A paragraph of prose ends the list.
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
 func trimAll(s []string) []string {
 	out := make([]string, len(s))
 	for i, v := range s {

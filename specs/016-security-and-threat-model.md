@@ -171,6 +171,24 @@ that owes it, and the row's State repeats those numbers. So a row fails
 two ways: when it names a test the tree does not hold without saying who
 owes it, and when it still marks a test as owed after that test lands.
 
+### What `SECURITY.md` promises
+
+`SECURITY.md` is what a reader finds first, so every property it states
+is a row of the table above and not a separate claim. The left column is
+the sentence in that document, word for word; the right column is the
+Threat cell of the row that answers it.
+
+| Property `SECURITY.md` states | The threat it answers |
+|---|---|
+| A Key never works on the control plane, and an issuer token never opens a door | A Key is used on the control plane to read or change desired state |
+| A provider credential never leaves the gateway: it is sealed in the store, opened in memory for one request, and sent only toward that Provider's own base URL | A credential is readable in the store, a backup, or a dump |
+| A decision the authorizer cannot give is a refusal, never an allow | The authorizer is down or slow, and a caller hopes that means allow |
+| An object a subject may not see is not found, whether it exists or not | A subject probes for objects it may not see by naming them in a manifest |
+| No prompt, completion, credential, or Key value reaches a usage record, an event, a log line, a metric, or a span | Prompts or completions reach a log, a metric, a span, an event, or a usage record |
+| No route on either plane serves HTML, and no page in a browser can call either plane cross-origin | A browser page is tricked into calling the API with an ambient credential |
+| A Provider base URL that names a private address, a single label, or the gateway itself is refused at resolve and again at dial | A Provider `baseURL` names a service inside the cluster, making the gateway an SSRF primitive |
+| An installation with no authorizer and no listed administrator declares no upstream, so a fresh one holds no credential to take | A fresh installation with no authorizer is taken over by whoever presents a token first |
+
 ### The gateway process itself
 
 The release ships the process hardened, and [[017-release-and-installation]]
@@ -238,4 +256,4 @@ reporting address and the response times (`SECURITY.md`).
 | No header on an outbound request is one the caller's body, query, or headers supplied, over every door, every route class, and a body that names a header-shaped field | `TestOutboundHeadersAreBuiltNotCopied` | not built |
 | A name, label value, and model string carrying newlines, ANSI escapes, and JSON control characters produce one escaped log line and one valid event body each, and add no field | `TestLogFieldsAreTheTable` with [[019-observability]]'s field tables | not built |
 | With `LUX_AUTHORIZER_URL` unset and `LUX_ADMIN_SUBJECTS` empty, no subject can apply a `Provider` or a `Model`; with an authorizer set the variable changes no decision | [[006-identity]]'s `TestOwnerPolicy` | not built |
-| `SECURITY.md`'s stated properties each appear as a row in the threat table with a test | `TestSecurityDocumentMatchesTheModel` | not built |
+| Every property `SECURITY.md` states is a row of the promises table, word for word, whose threat is a row of the threat table, and the document states no property that table does not answer | `TestSecurityDocumentMatchesTheModel`, `internal/arch`, reading both files | passing |
