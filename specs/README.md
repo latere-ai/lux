@@ -52,7 +52,7 @@ later.
 | [002](002-repository-scaffold.md) | Repository scaffold: module, binary, configuration, quality gate, images, workflows | small | complete | 001 |
 | [003](003-manifest-contract.md) | Manifest contract: the four kinds, decoding, validation, defaulting, resolve | large | complete | 001 |
 | [004](004-request-path.md) | Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors | large | dispatched | 001, 003 |
-| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | testing | 001, 003, 010 |
+| [005](005-providers.md) | Providers: dialects, credential custody, discovery, health, the upstream client | medium | complete | 001, 003, 010 |
 | [006](006-identity.md) | Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy | medium | complete | 001, 002, 003 |
 | [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | validated | 003, 004, 006, 010 |
 | [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | validated | 003, 005 |
