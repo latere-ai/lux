@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -71,9 +71,7 @@ func drive(tb testing.TB, h *Handler, mk func() *http.Request, concurrency, tota
 	var next atomic.Int64
 	var wg sync.WaitGroup
 	for range concurrency {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				i := int(next.Add(1)) - 1
 				if i >= total {
@@ -89,7 +87,7 @@ func drive(tb testing.TB, h *Handler, mk func() *http.Request, concurrency, tota
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	return lat
@@ -108,7 +106,7 @@ func measure(tb testing.TB, name string, h *Handler, mk func() *http.Request, co
 	elapsed := time.Since(start)
 	var m1 runtime.MemStats
 	runtime.ReadMemStats(&m1)
-	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
+	slices.Sort(lat)
 	d := distribution{
 		name: name, count: total, concurrency: concurrency, elapsed: elapsed,
 		p50: percentile(lat, 50), p75: percentile(lat, 75), p90: percentile(lat, 90),
