@@ -14,10 +14,45 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"latere.ai/x/pkg/authkit/issuertest"
 )
 
 func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
+}
+
+// serveEnv is the smallest environment serve starts under: loopback
+// listeners and one issuer, a stub on loopback so the start-up fetch of
+// spec 006 has something to reach. The extra entries override.
+func serveEnv(t *testing.T, extra map[string]string) map[string]string {
+	t.Helper()
+	m := map[string]string{
+		"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
+		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
+		"LUX_OIDC_ISSUERS":  issuertest.New(t).URL(),
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+// TestServeRefusesToStartWithoutAnIssuer is spec 006's first start-up
+// rule at the process: no issuer and no manifest directory is exit 1
+// with the one configuration line naming the variable.
+func TestServeRefusesToStartWithoutAnIssuer(t *testing.T) {
+	var errOut bytes.Buffer
+	code := run(t.Context(), nil, env(map[string]string{
+		"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
+		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
+	}), io.Discard, &errOut)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if got := errOut.String(); !strings.HasPrefix(got, "luxd: configuration: ") || !strings.Contains(got, "LUX_OIDC_ISSUERS is unset") {
+		t.Fatalf("stderr = %q", got)
+	}
 }
 
 func TestVersionFlagPrintsTheIdentityAndExitsZero(t *testing.T) {
@@ -82,10 +117,10 @@ func TestOccupiedAddressExitsOne(t *testing.T) {
 		{"internal", "127.0.0.1:0", ln.Addr().String()},
 	} {
 		var errOut bytes.Buffer
-		code := run(t.Context(), nil, env(map[string]string{
+		code := run(t.Context(), nil, env(serveEnv(t, map[string]string{
 			"LUX_PUBLIC_ADDR":   tc.public,
 			"LUX_INTERNAL_ADDR": tc.internal,
-		}), io.Discard, &errOut)
+		})), io.Discard, &errOut)
 		if code != 1 || !strings.Contains(errOut.String(), "address already in use") {
 			t.Fatalf("%s: exit %d, stderr %q", tc.name, code, errOut.String())
 		}
@@ -121,10 +156,7 @@ func startServe(t *testing.T) (publicURL, internalURL string, stop func() int) {
 	var errOut bytes.Buffer
 	codec := make(chan int, 1)
 	go func() {
-		codec <- run(ctx, nil, env(map[string]string{
-			"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
-			"LUX_INTERNAL_ADDR": "127.0.0.1:0",
-		}), &out, &errOut)
+		codec <- run(ctx, nil, env(serveEnv(t, nil)), &out, &errOut)
 	}()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
