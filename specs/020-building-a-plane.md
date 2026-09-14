@@ -108,20 +108,26 @@ type resp struct {
 	Filter map[string]any `json:"filter,omitempty"`
 }
 
-// probeID is authz.ProbeID: every authorizer denies it, so luxd check
-// can tell an endpoint that reads the request from one that does not.
-const probeID = "00000000-0000-0000-0000-000000000001"
+// probeID is the reserved id every authorizer denies, so luxd check can
+// tell an endpoint that reads the request from one that does not. It is
+// the contract's own value rather than a copy of it.
+const probeID = authz.ProbeID
 
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
+// The kind an action acts on is authorizer.Kind's answer, so the
+// catalogue's two kinds are named once and an action outside the
+// vocabulary is refused before any rule reads it.
 func decide(r req) resp {
 	plan, _ := r.Claims["plan"].(string)
-	switch {
+	switch kind := authorizer.Kind(r.Action); {
 	case r.Resource["id"] == probeID:
 		return resp{Allow: false, Reason: "the probe id is reserved"}
-	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
+	case kind == "":
+		return resp{Reason: "no action of the gateway's vocabulary"}
+	case kind == "Provider", kind == "Model":
 		switch {
-		case r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
+		case r.Action == authorizer.ActionModelUse || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
 		case plan == "admin":
 			return resp{Allow: true}
