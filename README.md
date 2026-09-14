@@ -11,9 +11,8 @@ answer back in the dialect it was asked in, and records what it cost.
 Identity comes from any OpenID Connect issuer. Permission comes from an
 endpoint you write.
 
-Anyone can run Lux. A platform can build on it through the webhooks and
-the packages rather than forking it, and is one consumer among any
-([building a plane](specs/020-building-a-plane.md)).
+Run it standalone, or build a platform on its Go packages and webhooks
+instead of forking it.
 
 [![CI](https://github.com/latere-ai/lux/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/lux/actions/workflows/verify.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)
