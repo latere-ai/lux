@@ -27,11 +27,14 @@ import (
 
 	"latere.ai/x/pkg/health"
 	"latere.ai/x/pkg/metrics"
+	"latere.ai/x/pkg/s3"
 
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/config"
+	"latere.ai/x/lux/internal/events"
+	"latere.ai/x/lux/internal/reqlog"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
@@ -89,7 +92,8 @@ func subcommand(args []string) (string, []string) {
 // serveCmd is the node: the two listeners and the probes of spec 002,
 // the store and the identity, the two jobs of spec 005, the Key cache
 // and the Limiter of spec 007, the doors of spec 004 with the routing of
-// spec 008, and the control plane of spec 011, mounted per mode.
+// spec 008, the control plane of spec 011, mounted per mode, and the
+// two streams of spec 012 when the configuration names them.
 func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("luxd serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -154,7 +158,25 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// shared by the Limiter and the API's Resolve.
 	defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
 	limiter := serve.NewLimiter(serve.LimiterOptions{Store: st, Budgets: keys, Defaults: defaults, Flush: cfg.MeteringFlush, Logger: logger})
-	recorder := serve.NewRecorder(serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger})
+
+	// The request log of spec 012: with the exporter s3 every priced
+	// record also goes to the archive's ring, written to the bucket in
+	// NDJSON batches by the exporter's worker; with none nothing leaves
+	// the process and GET /v1/requests reads this replica's memory.
+	recorderOptions := serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger}
+	var exporter *reqlog.Exporter
+	if cfg.RequestLogExporter == config.ExporterS3 {
+		bucket, err := s3.New(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, s3.WithPathStyle(), s3.WithRetry(reqlog.WritePolicy))
+		if err != nil {
+			return fail(stderr, fmt.Errorf("LUX_S3_ENDPOINT: %w", err))
+		}
+		exporter = reqlog.NewExporter(reqlog.ExporterOptions{Bucket: bucket, Prefix: cfg.S3Prefix, Metrics: reg, Logger: logger})
+		recorderOptions.Archive = exporter
+		_, _ = fmt.Fprintf(stdout, "luxd: request log: archived to bucket %s at %s under %s, in batches of %d records or every %s\n", cfg.S3Bucket, cfg.S3Endpoint, cfg.S3Prefix, reqlog.FlushSize, reqlog.FlushInterval)
+	} else {
+		_, _ = fmt.Fprintln(stdout, "luxd: request log: not archived; GET /v1/requests reads this replica's memory")
+	}
+	recorder := serve.NewRecorder(recorderOptions)
 	_, _ = fmt.Fprintf(stdout, "luxd: metering: spend counters and usage aggregates flush every %s\n", cfg.MeteringFlush)
 
 	// The two jobs of spec 005, the Key cache's journal tail, and the two
@@ -170,6 +192,27 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	jobs.Go(func() { keys.Run(jobsCtx) })
 	jobs.Go(func() { limiter.Run(jobsCtx) })
 	jobs.Go(func() { recorder.Run(jobsCtx) })
+	if exporter != nil {
+		jobs.Go(func() { exporter.Run(jobsCtx) })
+	}
+	// The events of spec 012: every mutation and state change is
+	// journalled whatever the configuration says; with a sink named the
+	// delivery worker on the replica holding the journal lease posts each
+	// row signed, at least once and in order per object.
+	if cfg.EventsURL != "" {
+		worker := events.NewWorker(events.WorkerOptions{
+			Store: st, Metrics: reg, Logger: logger,
+			Sink: events.NewSink(events.SinkOptions{URL: cfg.EventsURL, Secret: []byte(cfg.EventsSecret)}),
+		})
+		jobs.Go(func() { worker.Run(jobsCtx) })
+		durability := "; the journal is this process's memory, and a restart loses what was not yet acknowledged"
+		if cfg.DBURL != "" {
+			durability = ""
+		}
+		_, _ = fmt.Fprintf(stdout, "luxd: events: delivered to %s%s\n", cfg.EventsURL, durability)
+	} else {
+		_, _ = fmt.Fprintln(stdout, "luxd: events: off; set LUX_EVENTS_URL and LUX_EVENTS_SECRET to deliver them")
+	}
 	defer func() {
 		stopJobs()
 		jobs.Wait()
