@@ -6,6 +6,13 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `/metrics` carries `lux_tunnel_sessions`, the number of tunnel
+  sessions the scraped replica holds, on every installation: the gauge
+  moves with a session opening and closing where the tunnel is on, and
+  reads zero where it is off, so an expression over it tells a replica
+  holding no session from one that is not being scraped. It has no
+  labels; a session's Provider is already a series of
+  `lux_provider_health`.
 - `/metrics` carries `lux_provider_health`, a gauge with one series per
   Provider and state, `1` on the state the replica acts on and `0` on
   the other three, so `lux_provider_health{state="Unreachable"}` names

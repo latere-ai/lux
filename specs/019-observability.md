@@ -1,6 +1,6 @@
 ---
 title: "Observability: metrics, traces, logs, alerts"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
@@ -43,12 +43,12 @@ writes the control plane's line, `internal/auth` opens
 the Recorder emits `lux_output_tokens_per_second`, the gateway's
 attempt emits the two upstream metrics of [[005-providers]]'s row, that
 spec's health job emits `lux_provider_health`, and
-`deploy/base/prometheusrule.yaml` carries the ten alerts. Every row of
-the acceptance table that is this spec's own passes; one metric of the
-table waits on its owner, `lux_tunnel_sessions` on
-[[013-tunnelled-runtimes]], and the rules file's `promtool` step on
-[[017-release-and-installation]], which is what keeps this spec at
-`testing`.
+`deploy/base/prometheusrule.yaml` carries the ten alerts. The last
+metric of the table that waited on its owner,
+[[013-tunnelled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
+on every configuration, and the rules file's `promtool` step is the
+`rules` job [[017-release-and-installation]] wrote into `verify.yml`.
+Every row of the acceptance table passes.
 
 ## Design
 
@@ -108,7 +108,7 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_authorizer_duration_seconds` | histogram | `decision` | [[006-identity]] |
 | `lux_store_operations_total` | counter | `op`, `result` | [[010-state]] |
 | `lux_circuit_open` | gauge | `provider`, `model` | [[008-routing-and-models]] |
-| `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]], not built |
+| `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]] |
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream
@@ -166,12 +166,26 @@ Label values, each from a closed set:
 otherwise, one series per target, which is the `provider` and the
 target's upstream model name of [[008-routing-and-models]]'s key and is
 bounded by the catalog like every other pair. `lux_tunnel_sessions` is
-the number of tunnel sessions this replica holds
-([[013-tunnelled-runtimes]]); the provider name is not a label on it,
-because a session's Provider is already a series of
-`lux_provider_health`. Both are gauges, which `latere.ai/x/pkg/metrics`
-serves as a callback read at scrape time, so neither is a counter this
-code has to keep in step.
+the number of tunnel sessions this replica holds,
+`tunnel.MetricSessions` ([[013-tunnelled-runtimes]]); the provider name
+is not a label on it, because a session's Provider is already a series
+of `lux_provider_health`. Both are gauges, which
+`latere.ai/x/pkg/metrics` serves as a callback read at scrape time, so
+neither is a counter this code has to keep in step: the sessions gauge
+reads the map the `Gateway` attaches and detaches a session in, so a
+scrape is the count at the moment it is taken and no close can leave it
+standing.
+
+The tunnel is optional, so its gauge is registered twice over: by
+`tunnel.New` when [[013-tunnelled-runtimes]]'s `LUX_TUNNEL_ENABLED` is
+on, and by `tunnel.RegisterIdle` from the serve wiring when it is off
+or the file mode leaves it off, which reads a constant zero. The
+unlabelled series is therefore in the registry on every configuration,
+as the two metrics of [[012-request-log-and-events]] are, and an
+expression over it distinguishes a replica holding no session from a
+replica that is not scraped at all. `lux_provider_health` is the
+exception above because it is per Provider and has no series to hold at
+zero.
 
 A `control` request carries an empty `model` and `provider`, so one
 counter answers both planes and an expression scopes to a plane with
@@ -468,6 +482,11 @@ Each of these is written into the Design above in the same commit.
   `NewHealth`, with the one wiring line in `cmd/luxd`.
 - `lux_output_tokens_per_second` is the Recorder's, with the time rule
   above, as [[009-usage-and-metering]] left it to this spec to place.
+- `lux_tunnel_sessions` is [[013-tunnelled-runtimes]]'s own and is
+  registered by `tunnel.New`, which that spec's Design already claimed;
+  what this spec settled is the idle registration, `tunnel.RegisterIdle`
+  from the serve wiring, since the table holds every metric of a process
+  whatever is configured and the tunnel is off by default.
 - `lux.store` opens only under a parent span, so the jobs trace
   nothing; without the rule every tick of discovery, health, and the
   two flushes would be a root trace of its own.
@@ -503,7 +522,7 @@ the events, and the tunnel ([[012-request-log-and-events]],
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The registry holds exactly the metrics in the table, each with its type, and every label in the table and no other | `TestMetricsTable`, reading this file and the registry | passing, `cmd/luxd`; `lux_tunnel_sessions` tolerated as not built, 013 |
+| The registry holds exactly the metrics in the table, each with its type, and every label in the table and no other | `TestMetricsTable`, reading this file and the registry | passing, `cmd/luxd`, with `lux_tunnel_sessions` at zero from the idle registration |
 | Every label value a handler writes is in the closed set of its row | `TestMetricLabelValues`, table-driven over every label | passing, `gateway` |
 | Ten thousand requests naming ten thousand model strings that resolve to nothing add no series to the registry, and one hundred requests to one Model add one | `TestUnresolvedModelAddsNoSeries` | passing, `gateway` |
 | No metric, span attribute, or log line in an e2e run contains a canary Key value, a canary provider credential, a canary prompt, or a canary completion | `TestTelemetryCarriesNoSecrets` | passing, `cmd/luxd` |
@@ -514,7 +533,61 @@ the events, and the tunnel ([[012-request-log-and-events]],
 | Each histogram in the buckets table is registered with exactly the boundaries in its row, and a ten minute stream lands in a bucket below `+Inf` | `TestHistogramBuckets` | passing, `internal/serve` |
 | Every log line of an e2e run carries the base fields and exactly the fields of its plane's row and no other, and a name, label, and model string of newlines and terminal escapes produce one line each | `TestLogFieldsAreTheTable` | passing, `cmd/luxd`, with `TestRequestLineFields` in `gateway` and `TestAPILineFields` in `internal/api` |
 | An authorizer answer of each kind moves `lux_authorizer_requests_total` on the matching `decision`, with a `pkg/authz` `error` counted as `unavailable` | `TestAuthorizerMetricMapping` | passing, `internal/serve` |
-| A target whose circuit opens sets `lux_circuit_open` to 1 for that provider and model and back to 0 when it closes; an open and a closed tunnel session move `lux_tunnel_sessions` by one | `TestCircuitAndTunnelGauges` | the circuit half passing, `gateway`; the tunnel half not built, 013 |
-| `./cmd/luxd`'s build list carries the OpenTelemetry SDK under the row this spec adds, and `./cmd/lux`'s carries none of it | the `depcheck` gate | passing; `./cmd/lux` is not built, 014 |
+| A target whose circuit opens sets `lux_circuit_open` to 1 for that provider and model and back to 0 when it closes; an open and a closed tunnel session move `lux_tunnel_sessions` by one | `TestCircuitAndTunnelGauges` | passing: the circuit half in `gateway`, the tunnel half as `TestSessionsGauge` in `internal/tunnel` and at the wiring in `cmd/luxd`'s `TestServeTunnelsARuntime`, with `TestRegisterIdleReadsZero` and `TestTunnelOffNotices` on the gauge with the tunnel off |
+| `./cmd/luxd`'s build list carries the OpenTelemetry SDK under the row this spec adds, and `./cmd/lux`'s carries none of it | the `depcheck` gate | passing; `./cmd/lux`'s row, written with the command ([[014-agent-client]]), admits no OpenTelemetry module |
 | The rules file passes `promtool check rules` and names only metrics and labels in the table | the CI step, `TestAlertsNameKnownMetrics` | `TestAlertsNameKnownMetrics` passing, `internal/arch`; the CI step is the `rules` job of `verify.yml`, running `promtool check rules` through the pinned Prometheus image |
 | `/metrics` is served on the internal listener in the Prometheus text format with the `version=0.0.4` content type, and answered 404 on the public one, while the other three probes answer on both | [[002-repository-scaffold]]'s `TestServeAnswersTheProbesOnBothListenersAndStopsCleanly`, `TestMetricsContentType` | passing, `cmd/luxd` |
+
+## Outcome
+
+2026-09-14. Built across the tree rather than in one package, because
+telemetry is written where the work is: `serve.Telemetry` and the one
+`metrics.Registry` in `cmd/luxd`, `serve.Metrics` behind the internal
+listener's `/metrics`, the redacting handler and the Recorder's
+`lux_output_tokens_per_second` in `internal/serve`, the three request
+metrics, the two upstream ones, `lux_circuit_open`, and the
+`lux.request` and `lux.upstream` spans in `gateway`, `lux.api` in
+`internal/api`, `lux.authorizer` in `internal/auth`, `lux.store` in
+`internal/store`, `lux_provider_health` in `internal/serve`'s health
+job, `lux_tunnel_sessions` in `internal/tunnel`, the ten alerts in
+`deploy/base/prometheusrule.yaml`, and the `latere.ai/x/lux/cmd/luxd`
+row of `.lateregate.yaml`. Every acceptance row passes and the gate
+passes whole.
+
+The last row to close was the metric table's own. `lux_tunnel_sessions`
+is [[013-tunnelled-runtimes]]'s, and that spec built the gauge with the
+`Gateway` that holds the sessions it counts; what this spec waited on
+was the family being in the registry of a process with the tunnel off,
+which is the default and was the one configuration the table did not
+hold for. `tunnel.RegisterIdle`, called from the serve wiring on both
+paths that build no `Gateway`, registers the unlabelled series reading
+a constant zero, in the shape [[012-request-log-and-events]]'s two
+metrics already had; the `not built` mark is gone from the table and
+`TestMetricsTable` now reads the whole of it against the registry with
+nothing tolerated. The constant is `tunnel.MetricSessions` rather than
+a name repeating its package, as `events.MetricPending` and
+`reqlog.MetricDropped` are, since the package has one metric.
+
+What the build settled is written into the Design above, each point in
+the commit that made it: the tracer resolved from the global provider
+per call, so no option carries one; `gateway.Options.Logger`, because
+the data plane's line must be written inside the request's span; the
+two upstream metrics emitted by the gateway's attempt with the `status`
+rule the Design gives; `lux_output_tokens_per_second` placed in the
+Recorder, as [[009-usage-and-metering]] left it to this spec to place;
+`lux.store` opened only under a parent span, so the jobs trace nothing;
+no server span on either listener, the roots being `lux.request` and
+`lux.api`; and the line's message being the span's name, so no field
+tells the planes apart.
+
+What the neighbouring specs own from here. [[004-request-path]]'s
+Options listing owes the `Logger` field. [[005-providers]]'s Design
+owes the paragraph claiming `lux_upstream_requests_total` and
+`lux_upstream_duration_seconds`, which its row in the table above
+names and its text does not. [[016-security-and-threat-model]]'s
+verification rows that still say `019` are its own to update, the
+three test markers this build dropped having already gone.
+[[017-release-and-installation]] owns the `rules` job of `verify.yml`
+that runs `promtool check rules` over the file this spec's alert table
+fixes. A dashboard over any of it is a platform's and is not shipped
+here.

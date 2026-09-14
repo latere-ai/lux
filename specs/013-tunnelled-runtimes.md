@@ -682,8 +682,12 @@ stream is committed and nil after; `Forward`, the handler of
 transport and every other from the clients; `Revoke`, which closes a
 deleted Provider's session with `provider_deleted` and tells the
 clients; `Drain`, which closes every session with `draining`; and the
-`lux_tunnel_sessions` gauge. `OnConnect` is the seam the wiring lists
-the models and ticks health through.
+`lux_tunnel_sessions` gauge, which `New` registers over the same
+session map `Sessions` counts and `RegisterIdle` registers at a
+constant zero for a process that builds no `Gateway`, so the metric of
+[[019-observability]]'s table is in the registry whether the tunnel is
+on or off. `OnConnect` is the seam the wiring lists the models and
+ticks health through.
 
 `internal/tunnel/agent` is the agent side, which `lux serve` wraps:
 `Run(ctx, Options)` opens one session with `Gateway`, `Provider`,
