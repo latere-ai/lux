@@ -36,7 +36,6 @@ type distribution struct {
 	name        string
 	count       int
 	concurrency int
-	elapsed     time.Duration
 	p50, p75    time.Duration
 	p90, p95    time.Duration
 	p99         time.Duration
@@ -108,7 +107,7 @@ func measure(tb testing.TB, name string, h *Handler, mk func() *http.Request, co
 	runtime.ReadMemStats(&m1)
 	slices.Sort(lat)
 	d := distribution{
-		name: name, count: total, concurrency: concurrency, elapsed: elapsed,
+		name: name, count: total, concurrency: concurrency,
 		p50: percentile(lat, 50), p75: percentile(lat, 75), p90: percentile(lat, 90),
 		p95: percentile(lat, 95), p99: percentile(lat, 99),
 	}
