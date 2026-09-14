@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,28 +18,63 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	v1 "latere.ai/x/lux/manifest/v1"
 )
+
+// logBuffer collects the handler's log lines under a lock, because some
+// tests drive the handler from a goroutine while they read.
+type logBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func (l *logBuffer) Reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.b.Reset()
+}
 
 // The fakes below satisfy every interface of Options from maps, and count
 // every call, so a test can prove what the handler reached and what it
 // did not.
 
 type fakeKeys struct {
-	mu     sync.Mutex
-	byHash map[string]*v1.Key
-	calls  atomic.Int64
-	err    error
+	mu      sync.Mutex
+	byHash  map[string]*v1.Key
+	calls   atomic.Int64
+	err     error
+	lastCtx context.Context // the context of the last lookup, for the span tests
 }
 
-func (f *fakeKeys) ByHash(_ context.Context, hash string) (*v1.Key, error) {
+func (f *fakeKeys) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 	f.calls.Add(1)
 	if f.err != nil {
 		return nil, f.err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.lastCtx = ctx
 	return f.byHash[hash], nil
+}
+
+func (f *fakeKeys) context() context.Context {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastCtx
 }
 
 func (f *fakeKeys) add(k *v1.Key, value string) {
@@ -389,6 +425,7 @@ type world struct {
 	recorder *fakeRecorder
 	clients  *fakeClients
 	health   *fakeHealth
+	log      *logBuffer
 	mu       sync.Mutex
 	now      time.Time
 	ids      atomic.Int64
@@ -427,6 +464,7 @@ func newWorld(t *testing.T) *world {
 		limiter:  &fakeLimiter{lease: &fakeLease{}},
 		recorder: &fakeRecorder{},
 		health:   &fakeHealth{observed: map[string][]bool{}},
+		log:      &logBuffer{},
 		now:      time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC),
 	}
 	w.router = &fakeRouter{catalog: w.catalog, exclude: map[string]bool{}, deny: map[string]bool{}, successes: map[string]int{}, failures: map[string]int{}}
@@ -437,7 +475,9 @@ func newWorld(t *testing.T) *world {
 	// the outbound request is the gateway's doing and not the client's.
 	inner := http.DefaultTransport.(*http.Transport).Clone()
 	inner.DisableCompression = true
-	transport := &countingTransport{next: inner, hosts: map[string]bool{}}
+	// The instrumented transport of spec 005's client, so the span tests
+	// see the client span each attempt opens under lux.upstream.
+	transport := &countingTransport{next: otelhttp.NewTransport(inner), hosts: map[string]bool{}}
 	for _, s := range w.stubs {
 		transport.hosts[s.host()] = true
 	}
@@ -482,8 +522,9 @@ func (w *world) options() Options {
 	return Options{
 		Keys: w.keys, Catalog: w.catalog, Credentials: w.creds, Router: w.router, Limiter: w.limiter,
 		Recorder: w.recorder, Clients: w.clients, Health: w.health, Version: "test", MaxBodyBytes: 1 << 20,
-		Now:   w.clock,
-		NewID: func() string { return "req_" + strings.Repeat("0", 20) + padID(w.ids.Add(1)) },
+		Logger: slog.New(slog.NewJSONHandler(w.log, nil)),
+		Now:    w.clock,
+		NewID:  func() string { return "req_" + strings.Repeat("0", 20) + padID(w.ids.Add(1)) },
 	}
 }
 

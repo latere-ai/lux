@@ -236,3 +236,21 @@ refused before it is pushed.
   fallbacks. The skill at `skills/lux/SKILL.md` teaches an agent the
   command, and `docs/cli.md` is its `-help`, command by command.
   `lux serve` arrives with the tunnel.
+- Observability: `luxd` reads the standard `OTEL_*` variables and, with
+  `OTEL_EXPORTER_OTLP_ENDPOINT` set, exports traces, metrics, and logs
+  over OTLP/HTTP with W3C propagation and a parent-based sampler; with
+  it unset nothing leaves the process. Every request is one
+  `lux.request` span with one `lux.upstream` child per provider tried,
+  or one `lux.api` span with its `lux.authorizer` and `lux.store`
+  children, and no span carries a subject, an owner, a Key id, a Key
+  prefix, or a caller address. Logs are JSON on stderr with `service`,
+  `version`, and `replica` on every line, `trace_id` and `span_id` on a
+  line written inside a span, one `INFO` line per request with the
+  fixed fields of the observability spec's two rows, and any minted Key
+  value truncated to its twelve-character prefix wherever it is
+  written. `/metrics` adds `lux_output_tokens_per_second{provider,model}`,
+  `lux_upstream_requests_total{provider,status}`, and
+  `lux_upstream_duration_seconds{provider}`; the metric table, the
+  bucket boundaries, and the span and log field sets are the spec's, and
+  `deploy/base/prometheusrule.yaml` carries the ten alerts an
+  installation starts with.

@@ -63,6 +63,7 @@ func (c *call) info() authz.Caller {
 // granted the subject. A deny is forbidden with the reason in the
 // detail; no decision is authorizer_unavailable.
 func (c *call) authorize(ctx context.Context, action string, res authz.Resource) (auth.Decision, *Error) {
+	c.action, c.kind = action, res.Kind
 	d, err := c.h.o.Authorizer.Decide(ctx, c.caller, action, res, c.info())
 	if err != nil {
 		return auth.Decision{}, mapError(err)

@@ -8,6 +8,10 @@ import (
 	"errors"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"latere.ai/x/pkg/metrics"
 
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -30,11 +34,26 @@ const (
 	ResultError    = "error"
 )
 
+// SpanStore is the span of spec 019's table every store method opens
+// under a lux.request or lux.api span, with the three attributes below;
+// a method called with no span in its context, the jobs' reads and the
+// flushes, opens none, so a trace is a request's and never a tick's.
+const (
+	SpanStore  = "lux.store"
+	AttrOp     = "lux.op"
+	AttrKind   = "lux.kind"
+	AttrResult = "lux.result"
+)
+
+// tracerScope names this package as the instrumentation scope.
+const tracerScope = "latere.ai/x/lux/internal/store"
+
 // Instrument wraps s so every method of every collection, Transact, and
-// Ready counts one MetricOperations on reg, and the Store handed to a
-// Transact's fn counts the same way. The registry is spec 019's one
-// registry, constructed by the serve role and passed here rather than
-// reached for, because the metrics package has no default on purpose.
+// Ready counts one MetricOperations on reg and, under a parent span,
+// opens one SpanStore; the Store handed to a Transact's fn counts the
+// same way. The registry is spec 019's one registry, constructed by the
+// serve role and passed here rather than reached for, because the
+// metrics package has no default on purpose.
 func Instrument(s Store, reg *metrics.Registry) Store {
 	return &instrumented{inner: s, counter: reg.Counter(MetricOperations, "Store operations by method and result.")}
 }
@@ -57,8 +76,36 @@ type instrumented struct {
 	counter *metrics.Counter
 }
 
+// begin opens one operation: the span when ctx carries a parent, and the
+// count either way, recorded by the returned done with the operation's
+// error.
+func (s *instrumented) begin(ctx context.Context, op, kind string) (context.Context, func(error)) {
+	if !trace.SpanContextFromContext(ctx).IsValid() {
+		return ctx, func(err error) { s.count(op, err) }
+	}
+	attrs := []attribute.KeyValue{attribute.String(AttrOp, op)}
+	if kind != "" {
+		attrs = append(attrs, attribute.String(AttrKind, kind))
+	}
+	ctx, span := otel.Tracer(tracerScope).Start(ctx, SpanStore, trace.WithAttributes(attrs...))
+	return ctx, func(err error) {
+		result := resultOf(err)
+		s.counter.Inc(map[string]string{"op": op, "result": result})
+		span.SetAttributes(attribute.String(AttrResult, result))
+		span.End()
+	}
+}
+
 func (s *instrumented) count(op string, err error) {
 	s.counter.Inc(map[string]string{"op": op, "result": resultOf(err)})
+}
+
+// kindOf is an object's kind for the span, empty for a nil object.
+func kindOf(obj v1.Object) string {
+	if obj == nil {
+		return ""
+	}
+	return obj.Kind()
 }
 
 func (s *instrumented) Objects() Objects         { return iObjects{s.inner.Objects(), s} }
@@ -71,16 +118,18 @@ func (s *instrumented) Tunnels() Tunnels         { return iTunnels{s.inner.Tunne
 func (s *instrumented) Usage() Usage             { return iUsage{s.inner.Usage(), s} }
 
 func (s *instrumented) Transact(ctx context.Context, fn func(tx Store) error) error {
+	ctx, done := s.begin(ctx, "Transact", "")
 	err := s.inner.Transact(ctx, func(tx Store) error {
 		return fn(&instrumented{inner: tx, counter: s.counter})
 	})
-	s.count("Transact", err)
+	done(err)
 	return err
 }
 
 func (s *instrumented) Ready(ctx context.Context) error {
+	ctx, done := s.begin(ctx, "Ready", "")
 	err := s.inner.Ready(ctx)
-	s.count("Ready", err)
+	done(err)
 	return err
 }
 
@@ -92,44 +141,51 @@ type iObjects struct {
 }
 
 func (o iObjects) Put(ctx context.Context, obj v1.Object, ifVersion int64) (int64, error) {
+	ctx, done := o.s.begin(ctx, "Objects.Put", kindOf(obj))
 	v, err := o.Objects.Put(ctx, obj, ifVersion)
-	o.s.count("Objects.Put", err)
+	done(err)
 	return v, err
 }
 
 func (o iObjects) Get(ctx context.Context, kind, id string) (v1.Object, int64, error) {
+	ctx, done := o.s.begin(ctx, "Objects.Get", kind)
 	obj, v, err := o.Objects.Get(ctx, kind, id)
-	o.s.count("Objects.Get", err)
+	done(err)
 	return obj, v, err
 }
 
 func (o iObjects) ByName(ctx context.Context, kind, name string) (v1.Object, int64, error) {
+	ctx, done := o.s.begin(ctx, "Objects.ByName", kind)
 	obj, v, err := o.Objects.ByName(ctx, kind, name)
-	o.s.count("Objects.ByName", err)
+	done(err)
 	return obj, v, err
 }
 
 func (o iObjects) List(ctx context.Context, kind string, f Filter, p Page) ([]v1.Object, string, error) {
+	ctx, done := o.s.begin(ctx, "Objects.List", kind)
 	objs, next, err := o.Objects.List(ctx, kind, f, p)
-	o.s.count("Objects.List", err)
+	done(err)
 	return objs, next, err
 }
 
 func (o iObjects) Delete(ctx context.Context, kind, id string) error {
+	ctx, done := o.s.begin(ctx, "Objects.Delete", kind)
 	err := o.Objects.Delete(ctx, kind, id)
-	o.s.count("Objects.Delete", err)
+	done(err)
 	return err
 }
 
 func (o iObjects) PutStatus(ctx context.Context, kind, id string, observed any) error {
+	ctx, done := o.s.begin(ctx, "Objects.PutStatus", kind)
 	err := o.Objects.PutStatus(ctx, kind, id, observed)
-	o.s.count("Objects.PutStatus", err)
+	done(err)
 	return err
 }
 
 func (o iObjects) Prune(ctx context.Context, before time.Time) (int, error) {
+	ctx, done := o.s.begin(ctx, "Objects.Prune", "")
 	n, err := o.Objects.Prune(ctx, before)
-	o.s.count("Objects.Prune", err)
+	done(err)
 	return n, err
 }
 
@@ -139,20 +195,23 @@ type iKeys struct {
 }
 
 func (k iKeys) Put(ctx context.Context, keyID, hash string) error {
+	ctx, done := k.s.begin(ctx, "Keys.Put", "")
 	err := k.Keys.Put(ctx, keyID, hash)
-	k.s.count("Keys.Put", err)
+	done(err)
 	return err
 }
 
 func (k iKeys) ByHash(ctx context.Context, hash string) (string, error) {
+	ctx, done := k.s.begin(ctx, "Keys.ByHash", "")
 	id, err := k.Keys.ByHash(ctx, hash)
-	k.s.count("Keys.ByHash", err)
+	done(err)
 	return id, err
 }
 
 func (k iKeys) Delete(ctx context.Context, keyID string) error {
+	ctx, done := k.s.begin(ctx, "Keys.Delete", "")
 	err := k.Keys.Delete(ctx, keyID)
-	k.s.count("Keys.Delete", err)
+	done(err)
 	return err
 }
 
@@ -162,32 +221,37 @@ type iCredentials struct {
 }
 
 func (c iCredentials) Put(ctx context.Context, providerID string, sealed Sealed) error {
+	ctx, done := c.s.begin(ctx, "Credentials.Put", "")
 	err := c.Credentials.Put(ctx, providerID, sealed)
-	c.s.count("Credentials.Put", err)
+	done(err)
 	return err
 }
 
 func (c iCredentials) Rewrap(ctx context.Context, providerID string, ifVersion int, wrappedKey, wrappedNonce []byte) error {
+	ctx, done := c.s.begin(ctx, "Credentials.Rewrap", "")
 	err := c.Credentials.Rewrap(ctx, providerID, ifVersion, wrappedKey, wrappedNonce)
-	c.s.count("Credentials.Rewrap", err)
+	done(err)
 	return err
 }
 
 func (c iCredentials) Get(ctx context.Context, providerID string) (Sealed, error) {
+	ctx, done := c.s.begin(ctx, "Credentials.Get", "")
 	sealed, err := c.Credentials.Get(ctx, providerID)
-	c.s.count("Credentials.Get", err)
+	done(err)
 	return sealed, err
 }
 
 func (c iCredentials) Delete(ctx context.Context, providerID string) error {
+	ctx, done := c.s.begin(ctx, "Credentials.Delete", "")
 	err := c.Credentials.Delete(ctx, providerID)
-	c.s.count("Credentials.Delete", err)
+	done(err)
 	return err
 }
 
 func (c iCredentials) List(ctx context.Context) ([]string, error) {
+	ctx, done := c.s.begin(ctx, "Credentials.List", "")
 	ids, err := c.Credentials.List(ctx)
-	c.s.count("Credentials.List", err)
+	done(err)
 	return ids, err
 }
 
@@ -197,20 +261,23 @@ type iCounters struct {
 }
 
 func (c iCounters) Add(ctx context.Context, key string, delta int64, expiresAt time.Time) (int64, error) {
+	ctx, done := c.s.begin(ctx, "Counters.Add", "")
 	total, err := c.Counters.Add(ctx, key, delta, expiresAt)
-	c.s.count("Counters.Add", err)
+	done(err)
 	return total, err
 }
 
 func (c iCounters) Read(ctx context.Context, keys []string) (map[string]int64, error) {
+	ctx, done := c.s.begin(ctx, "Counters.Read", "")
 	out, err := c.Counters.Read(ctx, keys)
-	c.s.count("Counters.Read", err)
+	done(err)
 	return out, err
 }
 
 func (c iCounters) Prune(ctx context.Context, before time.Time) (int, error) {
+	ctx, done := c.s.begin(ctx, "Counters.Prune", "")
 	n, err := c.Counters.Prune(ctx, before)
-	c.s.count("Counters.Prune", err)
+	done(err)
 	return n, err
 }
 
@@ -220,14 +287,16 @@ type iLeases struct {
 }
 
 func (l iLeases) Acquire(ctx context.Context, name, holder string, ttl time.Duration) (bool, error) {
+	ctx, done := l.s.begin(ctx, "Leases.Acquire", "")
 	held, err := l.Leases.Acquire(ctx, name, holder, ttl)
-	l.s.count("Leases.Acquire", err)
+	done(err)
 	return held, err
 }
 
 func (l iLeases) Release(ctx context.Context, name, holder string) error {
+	ctx, done := l.s.begin(ctx, "Leases.Release", "")
 	err := l.Leases.Release(ctx, name, holder)
-	l.s.count("Leases.Release", err)
+	done(err)
 	return err
 }
 
@@ -237,50 +306,58 @@ type iJournal struct {
 }
 
 func (j iJournal) Append(ctx context.Context, e Event) (int64, error) {
+	ctx, done := j.s.begin(ctx, "Journal.Append", "")
 	seq, err := j.Journal.Append(ctx, e)
-	j.s.count("Journal.Append", err)
+	done(err)
 	return seq, err
 }
 
 func (j iJournal) Pending(ctx context.Context, limit int) ([]Event, error) {
+	ctx, done := j.s.begin(ctx, "Journal.Pending", "")
 	events, err := j.Journal.Pending(ctx, limit)
-	j.s.count("Journal.Pending", err)
+	done(err)
 	return events, err
 }
 
 func (j iJournal) Acknowledge(ctx context.Context, id string) error {
+	ctx, done := j.s.begin(ctx, "Journal.Acknowledge", "")
 	err := j.Journal.Acknowledge(ctx, id)
-	j.s.count("Journal.Acknowledge", err)
+	done(err)
 	return err
 }
 
 func (j iJournal) Defer(ctx context.Context, id string, attempts int, next time.Time) error {
+	ctx, done := j.s.begin(ctx, "Journal.Defer", "")
 	err := j.Journal.Defer(ctx, id, attempts, next)
-	j.s.count("Journal.Defer", err)
+	done(err)
 	return err
 }
 
 func (j iJournal) Drop(ctx context.Context, id string) error {
+	ctx, done := j.s.begin(ctx, "Journal.Drop", "")
 	err := j.Journal.Drop(ctx, id)
-	j.s.count("Journal.Drop", err)
+	done(err)
 	return err
 }
 
 func (j iJournal) ByObject(ctx context.Context, objectID string, p Page) ([]Event, string, error) {
+	ctx, done := j.s.begin(ctx, "Journal.ByObject", "")
 	events, next, err := j.Journal.ByObject(ctx, objectID, p)
-	j.s.count("Journal.ByObject", err)
+	done(err)
 	return events, next, err
 }
 
 func (j iJournal) Since(ctx context.Context, afterGSeq int64, limit int) ([]Event, error) {
+	ctx, done := j.s.begin(ctx, "Journal.Since", "")
 	events, err := j.Journal.Since(ctx, afterGSeq, limit)
-	j.s.count("Journal.Since", err)
+	done(err)
 	return events, err
 }
 
 func (j iJournal) Prune(ctx context.Context, before time.Time) (int, error) {
+	ctx, done := j.s.begin(ctx, "Journal.Prune", "")
 	n, err := j.Journal.Prune(ctx, before)
-	j.s.count("Journal.Prune", err)
+	done(err)
 	return n, err
 }
 
@@ -290,26 +367,30 @@ type iTunnels struct {
 }
 
 func (t iTunnels) Register(ctx context.Context, row Tunnel, ttl time.Duration) error {
+	ctx, done := t.s.begin(ctx, "Tunnels.Register", "")
 	err := t.Tunnels.Register(ctx, row, ttl)
-	t.s.count("Tunnels.Register", err)
+	done(err)
 	return err
 }
 
 func (t iTunnels) Heartbeat(ctx context.Context, providerID, session string, ttl time.Duration) (bool, error) {
+	ctx, done := t.s.begin(ctx, "Tunnels.Heartbeat", "")
 	held, err := t.Tunnels.Heartbeat(ctx, providerID, session, ttl)
-	t.s.count("Tunnels.Heartbeat", err)
+	done(err)
 	return held, err
 }
 
 func (t iTunnels) Get(ctx context.Context, providerID string) (Tunnel, error) {
+	ctx, done := t.s.begin(ctx, "Tunnels.Get", "")
 	row, err := t.Tunnels.Get(ctx, providerID)
-	t.s.count("Tunnels.Get", err)
+	done(err)
 	return row, err
 }
 
 func (t iTunnels) Unregister(ctx context.Context, providerID, session string) error {
+	ctx, done := t.s.begin(ctx, "Tunnels.Unregister", "")
 	err := t.Tunnels.Unregister(ctx, providerID, session)
-	t.s.count("Tunnels.Unregister", err)
+	done(err)
 	return err
 }
 
@@ -319,25 +400,29 @@ type iUsage struct {
 }
 
 func (u iUsage) AddRows(ctx context.Context, rows []metering.Aggregate) error {
+	ctx, done := u.s.begin(ctx, "Usage.AddRows", "")
 	err := u.Usage.AddRows(ctx, rows)
-	u.s.count("Usage.AddRows", err)
+	done(err)
 	return err
 }
 
 func (u iUsage) QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error) {
+	ctx, done := u.s.begin(ctx, "Usage.QueryRows", "")
 	rows, err := u.Usage.QueryRows(ctx, q)
-	u.s.count("Usage.QueryRows", err)
+	done(err)
 	return rows, err
 }
 
 func (u iUsage) AppendRecord(ctx context.Context, r metering.Record) error {
+	ctx, done := u.s.begin(ctx, "Usage.AppendRecord", "")
 	err := u.Usage.AppendRecord(ctx, r)
-	u.s.count("Usage.AppendRecord", err)
+	done(err)
 	return err
 }
 
 func (u iUsage) Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error) {
+	ctx, done := u.s.begin(ctx, "Usage.Records", "")
 	recs, next, err := u.Usage.Records(ctx, q, p)
-	u.s.count("Usage.Records", err)
+	done(err)
 	return recs, next, err
 }

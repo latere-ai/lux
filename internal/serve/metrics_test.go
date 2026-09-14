@@ -12,10 +12,12 @@ import (
 	"latere.ai/x/pkg/metrics"
 )
 
-// TestAuthorizerObserverRenamesError: every call counts by decision with
-// the client's error renamed unavailable, the duration is observed, and
-// /metrics serves both families in the text format.
-func TestAuthorizerObserverRenamesError(t *testing.T) {
+// TestAuthorizerMetricMapping is spec 019's row: an authorizer answer of
+// each kind moves lux_authorizer_requests_total on the matching
+// decision, with the shared client's error counted as unavailable, the
+// duration is observed under the same label, and /metrics serves both
+// families in the text format.
+func TestAuthorizerMetricMapping(t *testing.T) {
 	reg := metrics.NewRegistry()
 	observe := AuthorizerObserver(reg)
 	observe("allow", 0.01)

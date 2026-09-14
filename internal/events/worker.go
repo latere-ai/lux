@@ -111,7 +111,7 @@ func NewWorker(o WorkerOptions) *Worker {
 	}
 	w := &Worker{o: o}
 	if o.Metrics != nil {
-		o.Metrics.Gauge(MetricPending, "Events journalled and not yet acknowledged by the sink, as the lease holder counts them.", func() []metrics.LabeledValue {
+		o.Metrics.Gauge(MetricPending, pendingHelp, func() []metrics.LabeledValue {
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			if !w.held {
@@ -345,4 +345,18 @@ func defaultHolder() string {
 		host = "replica"
 	}
 	return host + ":" + strconv.Itoa(os.Getpid())
+}
+
+// pendingHelp is MetricPending's help text, one string for the worker and
+// the idle registration.
+const pendingHelp = "Events journalled and not yet acknowledged by the sink, as the lease holder counts them."
+
+// RegisterIdle registers MetricPending reading zero, for a process with no
+// sink configured, so the registry carries every metric of the table
+// whether or not delivery is on. A process with a Worker must not call it,
+// since the Worker registers the gauge itself.
+func RegisterIdle(reg *metrics.Registry) {
+	reg.Gauge(MetricPending, pendingHelp, func() []metrics.LabeledValue {
+		return []metrics.LabeledValue{{Labels: map[string]string{}, Value: 0}}
+	})
 }

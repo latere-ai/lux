@@ -122,7 +122,19 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	defer func() { _ = st.Close() }()
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
-	logger := slog.New(slog.NewTextHandler(stderr, nil))
+
+	// The telemetry of spec 019: traces, metrics, and logs through
+	// latere.ai/x/pkg/otel on the standard OTEL_* variables, exporting
+	// only with OTEL_EXPORTER_OTLP_ENDPOINT set; the doors and the control
+	// plane take their tracer from the provider it installs, and every
+	// line is JSON on stderr with service, version, and replica, behind
+	// the handler that truncates a Key value to its prefix before any
+	// exporter sees it, and the process's default logger is that one. The
+	// stop flushes every exporter after the listeners and the jobs have
+	// stopped.
+	logger, stopTelemetry := serve.Telemetry(ctx, version.Version, stderr)
+	slog.SetDefault(logger)
+	defer func() { _ = stopTelemetry(context.WithoutCancel(ctx)) }()
 
 	// The Key cache of spec 007: the doors' lookup, invalidated by the
 	// journal tail below, and emptied after a file-mode re-read, which
@@ -176,6 +188,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		archive = reqlog.NewReader(bucket, cfg.S3Prefix)
 		_, _ = fmt.Fprintf(stdout, "luxd: request log: archived to bucket %s at %s under %s, in batches of %d records or every %s\n", cfg.S3Bucket, cfg.S3Endpoint, cfg.S3Prefix, reqlog.FlushSize, reqlog.FlushInterval)
 	} else {
+		reqlog.RegisterIdle(reg)
 		_, _ = fmt.Fprintln(stdout, "luxd: request log: not archived; GET /v1/requests reads this replica's memory")
 	}
 	recorder := serve.NewRecorder(recorderOptions)
@@ -213,6 +226,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		}
 		_, _ = fmt.Fprintf(stdout, "luxd: events: delivered to %s%s\n", cfg.EventsURL, durability)
 	} else {
+		events.RegisterIdle(reg)
 		_, _ = fmt.Fprintln(stdout, "luxd: events: off; set LUX_EVENTS_URL and LUX_EVENTS_SECRET to deliver them")
 	}
 	defer func() {

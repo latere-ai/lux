@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The alerts an installation of Lux starts with: every expression names
+# a metric of the observability spec's table, read from the internal
+# listener's /metrics, and the job label is the scrape job the deploy
+# manifests give luxd. An installation copies and tunes these; nothing
+# here is required for the gateway to run.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: luxd
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  groups:
+    - name: luxd
+      rules:
+        - alert: LuxDown
+          expr: up{job="luxd"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: a luxd replica is not being scraped
+            description: "{{ $labels.instance }} has answered no scrape for five minutes."
+        - alert: LuxRefusalRateHigh
+          expr: sum(rate(lux_refusals_total[5m])) / sum(rate(lux_requests_total{door!="control"}[5m])) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: more than a tenth of data plane requests are refused
+            description: "A limit, a key, or a catalog problem: read lux_refusals_total by code."
+        - alert: LuxUpstreamErrorRateHigh
+          expr: sum by (provider) (rate(lux_upstream_requests_total{status!="ok"}[5m])) / sum by (provider) (rate(lux_upstream_requests_total[5m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: one provider is failing a twentieth of its requests
+            description: "Provider {{ $labels.provider }} answered more than 5% of attempts with an error or a timeout over ten minutes."
+        - alert: LuxProviderUnreachable
+          expr: max by (provider) (lux_provider_health{state="Unreachable"}) == 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: a Provider's targets are out of selection
+            description: "Provider {{ $labels.provider }} has been Unreachable for ten minutes; its targets take no traffic."
+        - alert: LuxTimeToFirstByteSlow
+          expr: histogram_quantile(0.95, sum by (le, door) (rate(lux_time_to_first_byte_seconds_bucket[5m]))) > 10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: callers are waiting on the first byte
+            description: "The 95th percentile time to first byte on the {{ $labels.door }} door is above ten seconds; the gateway or a provider is slow."
+        - alert: LuxMeteringFlushLagging
+          expr: max(lux_metering_flush_lag_seconds) > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: spend counters are stale
+            description: "A replica has not flushed its spend counters for thirty seconds, so hard limits overshoot further than the stated bound."
+        - alert: LuxAuthorizerUnavailable
+          expr: increase(lux_authorizer_requests_total{decision="unavailable"}[5m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: control plane requests are being refused authorizer_unavailable
+            description: "The authorizer produced no decision in the last five minutes; every write is refused until it answers."
+        - alert: LuxStoreFailing
+          expr: increase(lux_store_operations_total{result="error"}[5m]) > 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: the store is failing operations
+            description: "Store operations have returned errors for ten minutes: read lux_store_operations_total by op."
+        - alert: LuxEventsBacklog
+          expr: max(lux_events_pending) > 1000
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: the operator's sink is not acknowledging events
+            description: "More than a thousand events have waited for delivery for fifteen minutes."
+        - alert: LuxRequestLogDropping
+          expr: increase(lux_requestlog_dropped_total[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: request log records are being lost
+            description: "The archive is unreachable and a batch of records was dropped in the last ten minutes."

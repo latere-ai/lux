@@ -127,7 +127,8 @@ func NewExporter(o ExporterOptions) *Exporter {
 	}
 	e := &Exporter{o: o, ring: newRing(o.Cap), wake: make(chan struct{}, 1)}
 	if o.Metrics != nil {
-		e.dropped = o.Metrics.Counter(MetricDropped, "Request log records dropped because the buffer was at its cap while the archive did not keep up.")
+		e.dropped = o.Metrics.Counter(MetricDropped, droppedHelp)
+		e.dropped.Add(nil, 0) // a zero series from the start, so the metric table holds before the first drop
 	}
 	return e
 }
@@ -275,4 +276,16 @@ func Replica(host string) string {
 		return "replica"
 	}
 	return out
+}
+
+// droppedHelp is MetricDropped's help text, one string for the exporter
+// and the idle registration.
+const droppedHelp = "Request log records dropped because the buffer was at its cap while the archive did not keep up."
+
+// RegisterIdle registers MetricDropped at zero, for a process with no
+// exporter configured, so the registry carries every metric of the table
+// whether or not the archive is on. A process with an Exporter must not
+// call it, since the Exporter registers the counter itself.
+func RegisterIdle(reg *metrics.Registry) {
+	reg.Counter(MetricDropped, droppedHelp).Add(nil, 0)
 }

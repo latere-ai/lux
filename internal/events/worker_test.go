@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/pkg/metrics"
 	"latere.ai/x/pkg/retry"
 )
 
@@ -390,5 +391,17 @@ func TestWorkerStoreFailures(t *testing.T) {
 	brokenRelease.release(ctx)
 	if !strings.Contains(h.log.String()[before:], "events: releasing the lease") {
 		t.Fatal("a failed release was not logged")
+	}
+}
+
+// TestRegisterIdleReadsZero: a process with no sink still exposes
+// MetricPending, at zero, so the metric table holds without delivery.
+func TestRegisterIdleReadsZero(t *testing.T) {
+	reg := metrics.NewRegistry()
+	RegisterIdle(reg)
+	var out strings.Builder
+	reg.WritePrometheus(&out)
+	if !strings.Contains(out.String(), MetricPending+" 0") {
+		t.Fatalf("registry lacks %s at zero:\n%s", MetricPending, out.String())
 	}
 }

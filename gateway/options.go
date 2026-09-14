@@ -5,6 +5,7 @@ package gateway
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -29,8 +30,15 @@ type Options struct {
 	Health      HealthObserver   // outcomes per Provider for passive health (005)
 	// Metrics is the registry the three request metrics of spec 019 are
 	// recorded in: lux_requests_total, lux_request_duration_seconds, and
-	// lux_time_to_first_byte_seconds. Nil records none.
+	// lux_time_to_first_byte_seconds, with the two upstream metrics of
+	// spec 005's row, lux_upstream_requests_total and
+	// lux_upstream_duration_seconds, one observation per target tried.
+	// Nil records none.
 	Metrics *metrics.Registry
+	// Logger receives the one INFO line per request of spec 019, with
+	// that spec's fields for the data plane, and nothing else; nil is
+	// slog.Default.
+	Logger *slog.Logger
 	// Version is the build's, written as the User-Agent luxd/<Version>
 	// toward every provider. Empty is dev.
 	Version string

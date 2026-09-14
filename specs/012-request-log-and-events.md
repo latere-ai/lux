@@ -436,3 +436,10 @@ What other specs take from here:
   count; both belong to the Postgres phase.
 - [[009-usage-and-metering]]: `TestRequestsSource` can run once
   [[011-api]] takes the reader.
+
+Amended the same day, when [[019-observability]] merged: with no sink or
+no exporter configured, `lux_events_pending` and
+`lux_requestlog_dropped_total` are still registered, at zero, through
+`events.RegisterIdle` and `reqlog.RegisterIdle`, so the process's
+registry always carries the metric table whether or not delivery and the
+archive are on.

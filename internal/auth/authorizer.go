@@ -7,6 +7,10 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"latere.ai/x/pkg/authz"
 
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -73,12 +77,38 @@ func (z *Authorizer) Decide(ctx context.Context, c Caller, action string, res au
 	return Decision{Limits: limits, Filter: d.Filter, TTL: d.TTL}, nil
 }
 
-// ask sends one envelope and maps a call that produced no decision to
-// authorizer_unavailable. A deny comes back as a Decision.
+// The lux.authorizer span of spec 019's table, one per question asked,
+// under the lux.api span of the request that asks: the action and the
+// decision, allow, deny, or unavailable, and never the subject.
+const (
+	SpanAuthorizer = "lux.authorizer"
+	AttrAction     = "lux.action"
+	AttrDecision   = "lux.decision"
+	tracerScope    = "latere.ai/x/lux/internal/auth"
+)
+
+// The decision attribute's closed set, the metric's vocabulary.
+const (
+	DecisionAllow       = "allow"
+	DecisionDeny        = "deny"
+	DecisionUnavailable = "unavailable"
+)
+
+// ask sends one envelope inside its span and maps a call that produced
+// no decision to authorizer_unavailable. A deny comes back as a
+// Decision.
 func (z *Authorizer) ask(ctx context.Context, c Caller, action string, res authz.Resource, info authz.Caller) (authz.Decision, error) {
+	ctx, span := otel.Tracer(tracerScope).Start(ctx, SpanAuthorizer, trace.WithAttributes(attribute.String(AttrAction, action)))
+	defer span.End()
 	d, err := z.a.Authorize(ctx, Request(c, action, res, info))
-	if err != nil {
+	switch {
+	case err != nil:
+		span.SetAttributes(attribute.String(AttrDecision, DecisionUnavailable))
 		return authz.Decision{}, refuse(CodeAuthorizerUnavailable, err.Error())
+	case d.Allow:
+		span.SetAttributes(attribute.String(AttrDecision, DecisionAllow))
+	default:
+		span.SetAttributes(attribute.String(AttrDecision, DecisionDeny))
 	}
 	return d, nil
 }
