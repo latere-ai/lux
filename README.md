@@ -21,11 +21,12 @@ the packages rather than forking it, and is one consumer among any
 
 ## Status
 
-Design. The specs are written and the repository passes its quality
-gate. `luxd` serves its probes and routes nothing yet; the
-[build order](specs/README.md#build-order) says what lands when. The
-schema below may still change before the first tagged release, and the
-CHANGELOG names every change to it.
+Pre-release. Everything described here is built and covered by tests,
+and `main` passes the full quality gate on every commit; what remains is
+cutting the first tagged release, so there is not yet a published image
+or binary to pull. Run it from a checkout with `make run`, below. The
+manifest schema may still change before that tag, and the CHANGELOG
+records every change to it.
 
 ## The problem
 
@@ -128,15 +129,19 @@ curl https://lux.example.com/anthropic/v1/messages \
 
 ## Try it
 
+From a checkout, `make run` builds the gateway and its stubs, starts them
+on loopback with every store in memory, applies the manifest above, and
+prints `LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The
+Key opens any door in the dialect its SDK already speaks:
+
 ```sh
-make run   # luxd on loopback, every state in memory
-make       # the quality gate
+curl -sS "$LUX_URL/openai/v1/chat/completions" \
+  -H "Authorization: Bearer $LUX_KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Today `make run` serves the probes at `http://127.0.0.1:8081/readyz`.
-Once the request path and the API land it starts the stub provider,
-issuer, authorizer, and sink beside the gateway and prints a key to
-send the request above with.
+`make` runs the quality gate and `make run-down` stops the stack. To
+install a release on a cluster, see [`docs/install.md`](docs/install.md).
 
 ## What you get
 
