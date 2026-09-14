@@ -1,6 +1,6 @@
 ---
 title: "Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -743,3 +743,67 @@ authorizer payload and the owner policy the exception amends
 | Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | passing, in `internal/api` |
 | The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | passing against memory; Postgres is [[010-state]]'s phase 6 |
 | `internal/tunnel` imports the standard library and `latere.ai/x/pkg/httpjson` only, and `./cmd/lux`'s build list is unchanged by `lux serve` | the `depcheck` gate | passing for `./cmd/luxd`; the `./cmd/lux` row is written with the command ([[014-agent-client]]) |
+
+## Outcome
+
+Built as `internal/tunnel`, `internal/tunnel/wire`, and
+`internal/tunnel/agent`, with the four configuration rows in
+`internal/config`, the two routes in `internal/api`, the registry as a
+source of health and the `status.tunnel` writer in `internal/serve`,
+the wiring in `cmd/luxd`, and `TestTunnelProviderSchema` in
+`manifest`. Every acceptance row of this spec's own passes; the rows
+that name `lux serve` are [[014-agent-client]]'s, the rows that run the
+stub providers through every door are [[015-test-stubs-and-tiers]]'s,
+and the rows that name Postgres are [[010-state]]'s phase 6, each
+marked so in the table. The gate passes whole with every package above
+90%.
+
+What was built differs from the first writing in these points, each
+carried in the Design above:
+
+- One package became three: the gateway half reaches the store, the
+  verifier, and spec 005's clients, which the agent half must not, so
+  the wire format sits in `internal/tunnel/wire` for both and the
+  agent in `internal/tunnel/agent`.
+- A body is carried in chunked encoding rather than to the end of the
+  stream, because an HTTP/2 server cannot end its response while it
+  still reads the request; the response line gained an `error` member
+  for a runtime the agent could not reach.
+- The forward hop sends the header line, waits for the holder's 200,
+  then streams the body, and retries a refused secret with the next
+  entry before any body byte, which is what makes the `new,old`
+  against `old` rotation hold in both directions; a failure after the
+  200 travels in band.
+- A heartbeat that finds its row gone re-registers it rather than
+  reading a supersede; an agent silent for a TTL is dropped by the
+  holder.
+- The replica that accepts a session lists the Provider's models and
+  ticks its health job at once, so a laptop is callable when it
+  attaches; a live row folds one success under `passive` and `none` so a
+  Provider that left selection can return, while `probe` decides on its
+  own.
+- A session for a Provider with `tunnel: false` is `not_found`; the
+  carrier route is outside the subject's request bucket and loads no
+  object.
+- Two configuration rules beyond the table: the secret without the
+  address, and either forward variable without `LUX_TUNNEL_ENABLED`,
+  are start-up failures; the tunnel stays off in the file mode.
+- `internal/api` gained one option, `Options.Tunnel`, beside the one
+  route registration, because the handler needs the gateway side and
+  has no other seam to receive it through.
+- The threat table of [[016-security-and-threat-model]] marked
+  `TestTunnelCarriesNoCredential`, `TestForwardRouteNeedsTheSecret`, and
+  `TestTunnelOwnerPolicyException` as owed by this spec; the tree's own
+  test for that table required the markers dropped once the tests
+  landed, and they were.
+
+What other specs carry from here: [[014-agent-client]] builds
+`lux serve` over `agent.Run` and `agent.FileToken` and writes the
+`./cmd/lux` `depcheck` row; [[005-providers]]'s health table wants the
+fold rule in its `tunnel: true` row; [[015-test-stubs-and-tiers]] owns
+`TestTunnelEndToEnd` and the every-door forms of the metering and
+credential rows; [[010-state]]'s Postgres phase runs the forwarding
+and registry rows across processes; [[017-release-and-installation]]
+owns the `tunnels` line of `luxd check`; [[011-api]] decides whether
+the two streaming routes join the OpenAPI document, which does not
+carry them.
