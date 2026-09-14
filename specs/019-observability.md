@@ -41,15 +41,14 @@ and writes the data plane's line, `internal/api` opens `lux.api` and
 writes the control plane's line, `internal/auth` opens
 `lux.authorizer`, `internal/store` opens `lux.store` under a parent,
 the Recorder emits `lux_output_tokens_per_second`, the gateway's
-attempt emits the two upstream metrics of [[005-providers]]'s row, and
+attempt emits the two upstream metrics of [[005-providers]]'s row, that
+spec's health job emits `lux_provider_health`, and
 `deploy/base/prometheusrule.yaml` carries the ten alerts. Every row of
-the acceptance table that is this spec's own passes; four metrics of
-the table wait on their owners, `lux_provider_health` on
-[[005-providers]], `lux_events_pending` and
-`lux_requestlog_dropped_total` on [[012-request-log-and-events]], and
-`lux_tunnel_sessions` on [[013-tunnelled-runtimes]], and the rules
-file's `promtool` step on [[017-release-and-installation]], which is
-what keeps this spec at `testing`.
+the acceptance table that is this spec's own passes; one metric of the
+table waits on its owner, `lux_tunnel_sessions` on
+[[013-tunnelled-runtimes]], and the rules file's `promtool` step on
+[[017-release-and-installation]], which is what keeps this spec at
+`testing`.
 
 ## Design
 
@@ -100,7 +99,7 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_refusals_total` | counter | `code` | [[011-api]] |
 | `lux_upstream_requests_total` | counter | `provider`, `status` | [[005-providers]] |
 | `lux_upstream_duration_seconds` | histogram | `provider` | [[005-providers]] |
-| `lux_provider_health` | gauge | `provider`, `state` | [[005-providers]], not built |
+| `lux_provider_health` | gauge | `provider`, `state` | [[005-providers]] |
 | `lux_key_cache_hits_total` | counter | `result` | [[007-keys-and-limits]] |
 | `lux_metering_flush_lag_seconds` | gauge | none | [[009-usage-and-metering]] |
 | `lux_events_pending` | gauge | none | [[012-request-log-and-events]] |
@@ -135,12 +134,18 @@ includes `upstream_rejected`, the request's own refusal by the provider,
 and a caller that left before the answer, so the alert on the ratio
 names a provider that is failing and not a caller that is.
 
-`lux_provider_health` is not built. Its writer is the health job of
-[[005-providers]], which has the state per Provider and no registry;
-`serve.HealthOptions.Metrics` and the gauge in `NewHealth`, one series
-per Provider and state read from `Health.View`, are that spec's to add,
-with the one wiring line in `cmd/luxd`. `LuxProviderUnreachable` in the
-rules file names it now and fires once it exists.
+`lux_provider_health`'s writer is the health job of [[005-providers]],
+which has the state per Provider: `serve.HealthOptions.Metrics` takes
+the registry and `NewHealth` registers the gauge, four series per
+Provider read at scrape time from `Health.View`, `1` on the state the
+replica acts on and `0` on the other three, so
+`LuxProviderUnreachable`'s `max by (provider)` over the replicas fires
+on the first one that cannot reach it. The Providers are the job's last
+tick's, so a Provider an operator deleted leaves the family at the tick
+that stops acting on it, and a replica that knows no Provider writes no
+series: the gauge is per Provider, so there is nothing to register at
+zero when the catalog is empty, as there is for the two metrics of
+[[012-request-log-and-events]] whose component can be off.
 
 Label values, each from a closed set:
 
@@ -458,8 +463,9 @@ Each of these is written into the Design above in the same commit.
   listing owes the field.
 - The two upstream metrics of [[005-providers]]'s row are emitted by
   the gateway's attempt, with the `status` rule above; that spec's
-  Design owes the claim. `lux_provider_health` stays that spec's to
-  build, with `serve.HealthOptions.Metrics`.
+  Design owes the claim. `lux_provider_health` is that spec's own, and
+  is built there on `serve.HealthOptions.Metrics` and the gauge in
+  `NewHealth`, with the one wiring line in `cmd/luxd`.
 - `lux_output_tokens_per_second` is the Recorder's, with the time rule
   above, as [[009-usage-and-metering]] left it to this spec to place.
 - `lux.store` opens only under a parent span, so the jobs trace
@@ -497,7 +503,7 @@ the events, and the tunnel ([[012-request-log-and-events]],
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The registry holds exactly the metrics in the table, each with its type, and every label in the table and no other | `TestMetricsTable`, reading this file and the registry | passing, `cmd/luxd`; `lux_provider_health`, `lux_events_pending`, `lux_requestlog_dropped_total`, and `lux_tunnel_sessions` tolerated as not built, 005, 012, 013 |
+| The registry holds exactly the metrics in the table, each with its type, and every label in the table and no other | `TestMetricsTable`, reading this file and the registry | passing, `cmd/luxd`; `lux_tunnel_sessions` tolerated as not built, 013 |
 | Every label value a handler writes is in the closed set of its row | `TestMetricLabelValues`, table-driven over every label | passing, `gateway` |
 | Ten thousand requests naming ten thousand model strings that resolve to nothing add no series to the registry, and one hundred requests to one Model add one | `TestUnresolvedModelAddsNoSeries` | passing, `gateway` |
 | No metric, span attribute, or log line in an e2e run contains a canary Key value, a canary provider credential, a canary prompt, or a canary completion | `TestTelemetryCarriesNoSecrets` | passing, `cmd/luxd` |

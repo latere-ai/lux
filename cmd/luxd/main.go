@@ -219,7 +219,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	})
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 	discovery = serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
-	healthJob = serve.NewHealth(serve.HealthOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.HealthInterval, TunnelTTL: cfg.TunnelRegistryTTL, Logger: logger})
+	healthJob = serve.NewHealth(serve.HealthOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.HealthInterval, TunnelTTL: cfg.TunnelRegistryTTL, Metrics: reg, Logger: logger})
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	var jobs sync.WaitGroup
 	jobs.Go(func() { discovery.Run(jobsCtx) })

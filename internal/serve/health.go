@@ -8,10 +8,14 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
+
+	"latere.ai/x/pkg/metrics"
 
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -21,6 +25,20 @@ import (
 // timeout: a probe measures reachability, not a generation.
 const probeBudget = 5 * time.Second
 
+// MetricProviderHealth is the gauge of spec 019 this job owns: one
+// series per Provider and state, labelled provider, the Provider's
+// name, and state, one of the four states, carrying 1 on the state this
+// replica acts on and 0 on the other three, so an expression reads a
+// state by selecting it.
+const MetricProviderHealth = "lux_provider_health"
+
+// providerHealthHelp is MetricProviderHealth's help text.
+const providerHealthHelp = "1 on the state a Provider is in on this replica and 0 on the other three, by provider and state."
+
+// healthStates are the four values of the state label, in the order a
+// scrape carries them, which is the order of the state machine.
+var healthStates = []v1.HealthState{v1.HealthHealthy, v1.HealthDegraded, v1.HealthUnreachable, v1.HealthUnknown}
+
 // HealthOptions is what the health job runs under.
 type HealthOptions struct {
 	Store       store.Store
@@ -28,6 +46,9 @@ type HealthOptions struct {
 	Credentials credentialSource
 	// Interval is LUX_HEALTH_INTERVAL, the probe period.
 	Interval time.Duration
+	// Metrics is the registry lux_provider_health is registered in; nil
+	// registers none.
+	Metrics *metrics.Registry
 	// TunnelTTL is LUX_TUNNEL_REGISTRY_TTL, which places a tunnelled
 	// Provider's last heartbeat at its row's expiry less the window;
 	// zero is thirty seconds (spec 013).
@@ -77,7 +98,41 @@ func NewHealth(o HealthOptions) *Health {
 	if o.TunnelTTL <= 0 {
 		o.TunnelTTL = defaultTunnelTTL
 	}
-	return &Health{o: o, providers: providers{}, published: map[string]v1.HealthStatus{}, machines: map[string]*machine{}, local: map[string]*machine{}}
+	h := &Health{o: o, providers: providers{}, published: map[string]v1.HealthStatus{}, machines: map[string]*machine{}, local: map[string]*machine{}}
+	if o.Metrics != nil {
+		o.Metrics.Gauge(MetricProviderHealth, providerHealthHelp, h.gauge)
+	}
+	return h
+}
+
+// gauge is the scrape-time collector of lux_provider_health: four
+// samples per Provider this replica read on its last tick, 1 on the
+// state View gives and 0 on the other three, sorted so an exposition is
+// stable. A Provider an operator deleted is gone from the tick's list
+// and so from the family, which is the same moment this replica stops
+// acting on it; a replica that knows no Provider writes no series, as
+// the gauge has nothing to hold at zero.
+func (h *Health) gauge() []metrics.LabeledValue {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	states := make(map[string]v1.HealthState, len(h.providers))
+	for ref, p := range h.providers {
+		if ref != p.Status.ID {
+			continue // the tick's list is by id and by name; one series set per Provider
+		}
+		states[p.Metadata.Name] = h.viewOf(p.Status.ID)
+	}
+	out := make([]metrics.LabeledValue, 0, len(states)*len(healthStates))
+	for _, name := range slices.Sorted(maps.Keys(states)) {
+		for _, state := range healthStates {
+			value := 0.0
+			if state == states[name] {
+				value = 1
+			}
+			out = append(out, metrics.LabeledValue{Labels: map[string]string{"provider": name, "state": string(state)}, Value: value})
+		}
+	}
+	return out
 }
 
 // defaultTunnelTTL is LUX_TUNNEL_REGISTRY_TTL's default (spec 013).
@@ -259,6 +314,11 @@ func (h *Health) observeLocal(providerID string, failed bool) {
 func (h *Health) View(providerID string) v1.HealthState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.viewOf(providerID)
+}
+
+// viewOf is View with the lock held.
+func (h *Health) viewOf(providerID string) v1.HealthState {
 	published := v1.HealthUnknown
 	if s, ok := h.published[providerID]; ok && s.State != "" {
 		published = s.State

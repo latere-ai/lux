@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/pkg/metrics"
+
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/store"
@@ -330,9 +332,15 @@ func (h *harness) discovery(holder string) *Discovery {
 }
 
 func (h *harness) health(holder string) *Health {
+	return h.healthMetered(holder, nil)
+}
+
+// healthMetered is the health job with lux_provider_health registered in
+// reg; a nil registry registers no gauge.
+func (h *harness) healthMetered(holder string, reg *metrics.Registry) *Health {
 	return NewHealth(HealthOptions{
 		Store: h.st, Clients: h.clients, Credentials: h.creds, Interval: time.Hour,
-		Holder: holder, Logger: h.logger, Now: h.clock,
+		Holder: holder, Logger: h.logger, Now: h.clock, Metrics: reg,
 	})
 }
 

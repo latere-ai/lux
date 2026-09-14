@@ -414,6 +414,21 @@ What the signal means:
 - `health.mode: none` never makes a target unavailable, which is what
   an upstream with no model list and no error convention needs.
 
+The state a replica acts on is also what an operator scrapes.
+`HealthOptions.Metrics` takes the process's registry and `NewHealth`
+registers `lux_provider_health` of [[019-observability]]'s table in it:
+four series per Provider, read at scrape time from `View`, `1` on the
+state this replica acts on and `0` on the other three, labelled
+`provider` with the Provider's `metadata.name` and `state` with one of
+`Healthy`, `Degraded`, `Unreachable`, and `Unknown`. The Providers are
+the last tick's, so the series of one an operator deleted leave the
+family on the tick that stops acting on it, and a replica that knows no
+Provider writes no series at all, the gauge being per Provider and
+having nothing to hold at zero. `LuxProviderUnreachable` reads it as
+`max by (provider) (lux_provider_health{state="Unreachable"}) == 1`,
+so the alert fires on the first replica that cannot reach a Provider,
+and a Provider the catalogue lost raises none.
+
 ### The upstream client
 
 One `*http.Client` per Provider, built when the Provider is first
@@ -529,6 +544,7 @@ Provider ([[013-tunnelled-runtimes]]).
 | Every transition in the state diagram fires at its threshold in both modes, and a 4xx is a success while a 5xx is a failure; a 401 on the probe leaves the state `Healthy` and writes `credential refused: 401` to `lastError` | `TestHealthTransitions`, table-driven, `TestProbeReportsARefusedCredential` | passing |
 | A replica's own failures downgrade its view below the published state and never raise it above | `TestLocalHealthOnlyDowngrades` | passing |
 | An `Unreachable` Provider's targets leave selection, `Degraded` and `Unknown` do not, and `health.mode: none` never makes a target unavailable | `TestUnreachableLeavesSelection` | passing for the status half: `status.available` and `status.targets[].health` follow the states; the selection that reads them is [[008-routing-and-models]]'s |
+| Every state a replica acts on is one series of `lux_provider_health` per Provider and state, `1` on that state and `0` on the other three, following the transitions and a replica's own downgrade, and the series of a deleted Provider leave the family on the next tick | `TestProviderHealthGauge`, `TestProviderHealthGaugeForgetsADeletedProvider` | passing, `internal/serve`; the metric's row and its alert are [[019-observability]]'s |
 | A caller-sent copy of the credential header and a Provider static header of the same name are both beaten by the injected credential; no `X-Forwarded-*` or `Forwarded` header reaches the upstream | `TestCredentialHeaderWins`, `TestNoForwardedHeaders` | passing for the client half, `gateway`: `InjectCredential` beats both and the transport adds no forwarded header; the door's stripping of the caller's headers is [[004-request-path]]'s |
 | With `HTTPS_PROXY` set in the environment the request still reaches the Provider's host directly | `TestNoProxyEnvironmentHonoured` | passing |
 | A 302 from the stub provider is not followed and reaches the caller as `upstream_error` | `TestRedirectNotFollowed` | passing at the client: the 302 is returned unfollowed; the `upstream_error` mapping is [[004-request-path]]'s |

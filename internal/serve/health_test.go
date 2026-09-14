@@ -6,10 +6,14 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"latere.ai/x/pkg/metrics"
 
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -426,5 +430,133 @@ func TestMachineAndWorse(t *testing.T) {
 	}
 	if defaultHolder() == "" {
 		t.Fatal("no default holder")
+	}
+}
+
+// gaugeSeries is lux_provider_health as the served /metrics renders it,
+// by the series' labels, so a test reads the exposition an operator
+// scrapes and not the collector alone.
+func gaugeSeries(t *testing.T, reg *metrics.Registry) map[string]string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	Metrics(reg).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/metrics answered %d", rec.Code)
+	}
+	body := rec.Body.String()
+	out := map[string]string{}
+	for line := range strings.SplitSeq(body, "\n") {
+		rest, ok := strings.CutPrefix(line, MetricProviderHealth+"{")
+		if !ok {
+			continue
+		}
+		labels, value, _ := strings.Cut(rest, "} ")
+		out[labels] = value
+	}
+	if len(out) > 0 && !strings.Contains(body, "# TYPE "+MetricProviderHealth+" gauge") {
+		t.Fatalf("the exposition carries no gauge type line:\n%s", body)
+	}
+	return out
+}
+
+// wantGauge asserts the whole family: four series per Provider named, 1
+// on its state and 0 on the other three, and no other series.
+func wantGauge(t *testing.T, reg *metrics.Registry, states map[string]v1.HealthState) {
+	t.Helper()
+	want := map[string]string{}
+	for name, state := range states {
+		for _, s := range healthStates {
+			value := "0"
+			if s == state {
+				value = "1"
+			}
+			want[`provider="`+name+`",state="`+string(s)+`"`] = value
+		}
+	}
+	if got := gaugeSeries(t, reg); !maps.Equal(got, want) {
+		t.Errorf("the gauge carries %v, want %v", got, want)
+	}
+}
+
+// TestProviderHealthGauge is spec 019's lux_provider_health at the
+// writer this spec owns: the job registers one series per Provider and
+// state, 1 on the state this replica acts on and 0 on the other three,
+// the series follow every transition of the state machine, a none-mode
+// Provider reads Unknown, and a replica's own downgrade moves its
+// series below the published state, because the gauge reads View.
+func TestProviderHealthGauge(t *testing.T) {
+	h := newHarness(t)
+	reg := metrics.NewRegistry()
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
+	live := serveStub(t, up)
+	p := h.provider(t, "openai", v1.DialectOpenAI, live, nil)
+	quiet := h.provider(t, "quiet", v1.DialectOpenAI, live, func(p *v1.Provider) { p.Spec.Health.Mode = v1.HealthNone })
+	job := h.healthMetered("a", reg)
+	if got := gaugeSeries(t, reg); len(got) != 0 {
+		t.Fatalf("a job that has not ticked carries %v", got)
+	}
+	job.acquire(t.Context())
+	for _, step := range []struct {
+		status int
+		want   v1.HealthState
+	}{
+		{http.StatusOK, v1.HealthHealthy},
+		{http.StatusInternalServerError, v1.HealthDegraded},
+		{http.StatusInternalServerError, v1.HealthDegraded},
+		{http.StatusInternalServerError, v1.HealthUnreachable},
+		{http.StatusOK, v1.HealthHealthy},
+	} {
+		if step.status == http.StatusOK {
+			up.setPages(map[string]string{"": openaiList("gpt-5")})
+		} else {
+			up.set(step.status, "")
+		}
+		job.Tick(t.Context())
+		if got := job.View(p.Status.ID); got != step.want {
+			t.Fatalf("the view after %d = %s, want %s", step.status, got, step.want)
+		}
+		wantGauge(t, reg, map[string]v1.HealthState{"openai": step.want, "quiet": v1.HealthUnknown})
+	}
+	// A replica that does not hold the lease reads its own view, which
+	// its own failures take below the published Healthy.
+	standbyReg := metrics.NewRegistry()
+	standby := h.healthMetered("b", standbyReg)
+	standby.Tick(t.Context())
+	wantGauge(t, standbyReg, map[string]v1.HealthState{"openai": v1.HealthHealthy, "quiet": v1.HealthUnknown})
+	standby.Observe(p.Status.ID, true)
+	wantGauge(t, standbyReg, map[string]v1.HealthState{"openai": v1.HealthDegraded, "quiet": v1.HealthUnknown})
+	if h.get(t, p.Status.ID).Status.Health.State != v1.HealthHealthy {
+		t.Fatal("a standby replica published its own view")
+	}
+	if h.get(t, quiet.Status.ID).Status.Health != nil {
+		t.Fatal("a none-mode Provider was published")
+	}
+}
+
+// TestProviderHealthGaugeForgetsADeletedProvider: the series of a
+// Provider an operator deleted leave the family on the job's next tick,
+// and the family itself is gone when the last Provider is.
+func TestProviderHealthGaugeForgetsADeletedProvider(t *testing.T) {
+	h := newHarness(t)
+	reg := metrics.NewRegistry()
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
+	live := serveStub(t, up)
+	kept := h.provider(t, "kept", v1.DialectOpenAI, live, nil)
+	gone := h.provider(t, "gone", v1.DialectOpenAI, live, nil)
+	job := h.healthMetered("a", reg)
+	job.acquire(t.Context())
+	job.Tick(t.Context())
+	wantGauge(t, reg, map[string]v1.HealthState{"kept": v1.HealthHealthy, "gone": v1.HealthHealthy})
+	if err := h.st.Objects().Delete(t.Context(), v1.KindProvider, gone.Status.ID); err != nil {
+		t.Fatal(err)
+	}
+	job.Tick(t.Context())
+	wantGauge(t, reg, map[string]v1.HealthState{"kept": v1.HealthHealthy})
+	if err := h.st.Objects().Delete(t.Context(), v1.KindProvider, kept.Status.ID); err != nil {
+		t.Fatal(err)
+	}
+	job.Tick(t.Context())
+	if got := gaugeSeries(t, reg); len(got) != 0 {
+		t.Fatalf("the family outlived the last Provider: %v", got)
 	}
 }
