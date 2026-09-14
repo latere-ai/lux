@@ -80,6 +80,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
+		TunnelRegistryTTL: 30 * time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -118,6 +119,10 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		"LUX_MAX_BODY_BYTES":                      "8Mi",
 		"LUX_UPSTREAM_TIMEOUT":                    "2m",
 		"LUX_METERING_FLUSH":                      "500ms",
+		"LUX_TUNNEL_ENABLED":                      "1",
+		"LUX_TUNNEL_REGISTRY_TTL":                 "45s",
+		"LUX_TUNNEL_FORWARD_ADDR":                 "10.0.0.7:9001",
+		"LUX_TUNNEL_FORWARD_SECRET":               secretNew + "," + secretOld,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +151,10 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		MaxBodyBytes:                     8 << 20,
 		UpstreamTimeout:                  2 * time.Minute,
 		MeteringFlush:                    500 * time.Millisecond,
+		TunnelEnabled:                    true,
+		TunnelRegistryTTL:                45 * time.Second,
+		TunnelForwardAddr:                "10.0.0.7:9001",
+		TunnelForwardSecrets:             []string{secretNew, secretOld},
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -166,6 +175,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
+		TunnelRegistryTTL: 30 * time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
