@@ -138,6 +138,13 @@ curl -sS "$LUX_URL/openai/v1/chat/completions" \
   -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
 ```
 
+Without a checkout, [`compose.yaml`](compose.yaml) runs the published
+`luxd` and stub images the same way: `docker compose up`, then the
+requests in [the quick start](docs/quickstart.md) to mint a token,
+declare a provider, a model, and a key, and open a door. The images are
+cut by the release pipeline, so until the first tag they are built from a
+checkout, which the quick start shows.
+
 `make` runs the quality gate and `make run-down` stops the stack. To
 install a release on a cluster, see [Install](docs/install.md).
 
@@ -179,6 +186,7 @@ For running Lux and building on it:
 
 | | |
 |---|---|
+| [Quick start](docs/quickstart.md) | the published images on your machine, no build: `docker compose up` and a few requests to a running gateway |
 | [Install](docs/install.md) | from an empty cluster to a request through a door |
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
 | [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |

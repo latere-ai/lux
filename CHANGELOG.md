@@ -25,6 +25,15 @@ refused before it is pushed.
   per request per route class, opt-in behind `LUX_LATENCY` and never a
   pass/fail gate. `docs/performance.md` says what they measure and how to
   run them; the design is `specs/023-performance-and-benchmarks.md`.
+- `compose.yaml` and [`docs/quickstart.md`](docs/quickstart.md): try
+  `luxd` on your machine with no checkout and no build, `docker compose
+  up` against the published `luxd` and `lux-stubs` images and a few
+  `curl`s to mint a token, declare a Provider, a Model, and a Key, and
+  send one request through a door. It is `make run` without the
+  toolchain, on the memory store, and points at the stub issuer over the
+  compose network with the built-in owner policy. The images are cut by
+  the release pipeline; until the first tag, the doc gives the commands
+  to build them from a checkout.
 - `/metrics` carries `lux_tunnel_sessions`, the number of tunnel
   sessions the scraped replica holds, on every installation: the gauge
   moves with a session opening and closing where the tunnel is on, and
