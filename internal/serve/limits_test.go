@@ -82,8 +82,7 @@ func (h *harness) limiter(st store.Store, budgets budgetSource, defaults manifes
 func reserve(t *testing.T, l *Limiter, k *v1.Key, m *v1.Model, in, out int64) (gateway.Lease, *gateway.Refusal) {
 	t.Helper()
 	lease, err := l.Reserve(t.Context(), gateway.Reservation{Key: k, Model: m, InputTokens: in, OutputTokens: out})
-	var ref *gateway.Refusal
-	if errors.As(err, &ref) {
+	if ref, ok := errors.AsType[*gateway.Refusal](err); ok {
 		return nil, ref
 	}
 	if err != nil {

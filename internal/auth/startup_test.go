@@ -29,6 +29,9 @@ func load(t *testing.T, m map[string]string) config.Config {
 	if m["LUX_MANIFEST_DIR"] == "" {
 		m["LUX_SECRETS_KEK"] = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
 	}
+	if m["LUX_PUBLIC_URL"] == "" {
+		m["LUX_PUBLIC_URL"] = "https://lux.example.com"
+	}
 	cfg, err := config.Load(env(m))
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +50,7 @@ func TestStartupBuildsEachPolicy(t *testing.T) {
 	bob := Caller{Subject: otherSubject, Issuer: fixtureIssuer, Sub: "bob"}
 
 	t.Run("the file mode", func(t *testing.T) {
-		a, err := Startup(t.Context(), load(t, map[string]string{"LUX_MANIFEST_DIR": t.TempDir()}), nil)
+		a, err := Startup(t.Context(), load(t, map[string]string{"LUX_MANIFEST_DIR": t.TempDir()}), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +64,7 @@ func TestStartupBuildsEachPolicy(t *testing.T) {
 	t.Run("the owner policy", func(t *testing.T) {
 		a, err := Startup(t.Context(), load(t, map[string]string{
 			"LUX_OIDC_ISSUERS": iss.URL(), "LUX_ADMIN_SUBJECTS": adminSubject,
-		}), nil)
+		}), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +89,7 @@ func TestStartupBuildsEachPolicy(t *testing.T) {
 		a, err := Startup(t.Context(), load(t, map[string]string{
 			"LUX_OIDC_ISSUERS": iss.URL(), "LUX_AUTHORIZER_URL": s.URL(), "LUX_AUTHORIZER_TOKEN": s.Token(),
 			"LUX_AUTHORIZER_TIMEOUT": "2s", "LUX_ADMIN_SUBJECTS": adminSubject,
-		}), nil)
+		}), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

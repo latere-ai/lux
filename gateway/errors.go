@@ -289,6 +289,18 @@ func writeFailure(w http.ResponseWriter, door v1.Dialect, id string, f *failure)
 	_, _ = w.Write(body)
 }
 
+// WriteRefusal answers a request refused before the handler ran, in the
+// shape of the door path names and in the lux shape for a path under no
+// door: the code's status and fixed sentence, Lux-Error, the developer
+// detail in Lux-Error-Detail and, on the lux shape, in details.detail,
+// and Retry-After when retryAfter is above zero. It is the one way spec
+// 011's per-address bucket, which runs in front of the doors, refuses
+// in a door's own dialect; id is the request id the caller minted.
+func WriteRefusal(w http.ResponseWriter, path, id string, code Code, detail string, retryAfter time.Duration) {
+	d, _ := door(path)
+	writeFailure(w, d, id, &failure{code: code, detail: detail, retryAfter: retryAfter})
+}
+
 // streamErrorFrame is the one error frame that ends a stream which failed
 // after its first byte, in the door's dialect: the OpenAI shape as a data
 // frame and no [DONE] on /openai, event: error with the door's envelope

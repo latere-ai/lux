@@ -37,10 +37,13 @@ build:
 	@echo "built $(OUT_DIR)/$(SERVICE)"
 
 # The gateway on loopback, every state in memory because no LUX_DB_URL and
-# no LUX_MANIFEST_DIR is set. Spec 004 gives the dialect doors their
-# meaning; until then the process serves the probes.
+# no LUX_MANIFEST_DIR is set. The public URL is the loopback address the
+# process listens at, so the URLs in its responses reach it. The issuer
+# and the key encryption key are the operator's: spec 015's stubs and
+# `make run` with them land together.
 run: build
 	LUX_PUBLIC_ADDR=127.0.0.1:8080 LUX_INTERNAL_ADDR=127.0.0.1:8081 \
+		LUX_PUBLIC_URL=http://127.0.0.1:8080 \
 		$(OUT_DIR)/$(SERVICE)
 
 fmt:

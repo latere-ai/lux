@@ -155,3 +155,32 @@ refused before it is pushed.
   `lux_circuit_open` gauge shows an open circuit by provider and upstream
   model. `gateway.NewTargetRouter` is the router for a platform that
   mounts the handler; the doors mount in `luxd serve` with the API.
+- The API: `luxd serve` mounts the four doors and the control plane
+  under `/v1` on the public listener. Apply a `Provider`, `Model`, `Key`,
+  or `Budget` with `PUT /v1/{kind}s/{name}`, a manifest in JSON or YAML
+  with or without its envelope, `201` on create and `200` on update,
+  with `ETag` and `If-Match`, `If-None-Match: *` for create-once; read by
+  id or name; list with `label`, `owner`, `limit`, `cursor`, and for
+  Models `source` and `provider`, paged by `next_cursor`; delete, with
+  `budget_in_use` and `provider_in_use` while something still names the
+  object; `POST /v1/keys/{id-or-name}/rotate` for a new value. A Key's
+  value is in the create and rotate responses and nowhere else; a
+  supplied one shows as `sup_`. Every request carries a bearer from an
+  issuer in `LUX_OIDC_ISSUERS` and asks the authorizer its route's
+  action; every refusal is one JSON envelope with a code from the one
+  error table of both planes, the fixed sentence in `message`, the
+  developer detail in `details.detail`, and `Lux-Request-Id` on every
+  response with a caller's `X-Request-Id` echoed. `GET /v1/self` is the
+  caller as the server sees it, `GET /.well-known/lux` the server before
+  any token, and `GET /v1/openapi.json` the document generated from the
+  Go types, committed as `api/openapi.yaml`. `LUX_PUBLIC_URL` is now
+  required in every mode; `LUX_REQUESTS_PER_MINUTE` (default `600`) is
+  the rate per subject and `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE`
+  (default `60`) the rate of refused credentials per client address on
+  both planes, behind the proxies `LUX_TRUSTED_PROXIES` names;
+  `LUX_MAX_MANIFEST_BYTES` (default `65536`) bounds a manifest;
+  `LUX_UPSTREAM_TIMEOUT` and `LUX_MAX_BODY_BYTES` now reach the resolver
+  and the doors. In file mode `/v1` is read-only on the internal
+  listener and needs no bearer. `/metrics` on the internal listener
+  serves one registry with every family. `GET /v1/usage` and `GET
+  /v1/requests` are not served yet; they land with metering.

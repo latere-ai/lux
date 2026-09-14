@@ -73,8 +73,10 @@ type Auth struct {
 // Startup builds the identity from the configuration: the start-up fetch
 // of every issuer, and the authorizer client when its URL is set. It is
 // the one call serve makes for spec 006, and its error is a start-up
-// failure naming the variable and the issuer.
-func Startup(ctx context.Context, cfg config.Config, client *http.Client) (*Auth, error) {
+// failure naming the variable and the issuer. observe receives every
+// authorizer call's result and duration for spec 019's metric; nil
+// records none.
+func Startup(ctx context.Context, cfg config.Config, client *http.Client, observe func(result string, seconds float64)) (*Auth, error) {
 	return New(ctx, Options{
 		Issuers:           cfg.OIDCIssuers,
 		Audience:          cfg.OIDCAudience,
@@ -83,6 +85,7 @@ func Startup(ctx context.Context, cfg config.Config, client *http.Client) (*Auth
 		AuthorizerTimeout: cfg.AuthorizerTimeout,
 		AdminSubjects:     cfg.AdminSubjects,
 		HTTP:              client,
+		Observe:           observe,
 	})
 }
 

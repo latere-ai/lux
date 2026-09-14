@@ -357,8 +357,8 @@ answer's `filter` is intersected with the query through
 named none, and a `labels` map adds every pair, so a caller outside the
 filter reads an empty result and never a 403 ([[011-api]]); an
 intersection that selects nothing, owners with nothing in common or a
-label the query names with another value, is answered `false` and the
-route writes an empty `items` without a query. Under the owner policy
+label the query names with another value, makes `Intersect` report
+`ok` as false, and the route writes an empty `items` without a query. Under the owner policy
 the filter is the caller's own subject. A parameter outside the table
 is a `*metering.QueryError` naming the parameter in `Field`, which the
 route answers `invalid_field` at that name.

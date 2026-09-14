@@ -22,12 +22,27 @@ import (
 	"latere.ai/x/pkg/authkit/issuertest"
 )
 
+// env reads m, and answers publicURL for LUX_PUBLIC_URL when m does not
+// mention it, since every mode requires the variable and few tests are
+// about it.
 func env(m map[string]string) func(string) string {
-	return func(k string) string { return m[k] }
+	return func(k string) string {
+		if v, ok := m[k]; ok {
+			return v
+		}
+		if k == "LUX_PUBLIC_URL" {
+			return publicURL
+		}
+		return ""
+	}
 }
 
-// kek is one 32-byte key in the variable's syntax.
-const kek = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+// kek is one 32-byte key in the variable's syntax; publicURL is the
+// address every response's URLs are built from.
+const (
+	kek       = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+	publicURL = "https://lux.example.com"
+)
 
 // serveEnv is the smallest environment serve starts under: loopback
 // listeners and one issuer, a stub on loopback so the start-up fetch of

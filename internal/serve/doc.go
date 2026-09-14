@@ -16,6 +16,13 @@
 // and provider.healthy once per transition. StoreCredentials and
 // FileCredentials open a Provider's credential for one request, from the
 // sealed row and the key encryption keys in server mode and from the
-// process environment in file mode. The /v1 routes mount here with spec
-// 011; cmd/luxd wires and nothing more.
+// process environment in file mode. KeyCache and Limiter are spec 007's
+// Key lookup and windows on one replica, Catalog is spec 008's view of
+// desired state for the doors, and RenderKey and RenderBudget fill the
+// read-time status the API returns. For spec 011, ClientAddress and
+// LimitUnauthenticated are the client address rule and the per-address
+// bucket in front of both planes, ObjectOwners answers the owner policy
+// over the store, AppendEvent writes an event of spec 012's shape, and
+// the Recorder prices every record of the doors and writes it (009).
+// The /v1 handlers are internal/api's; cmd/luxd wires and nothing more.
 package serve
