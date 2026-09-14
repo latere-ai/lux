@@ -57,13 +57,13 @@ later.
 | [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | complete | 003, 004, 006, 010 |
 | [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | complete | 003, 005 |
 | [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | complete | 003, 007, 008, 010 |
-| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | testing | 003 |
+| [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | complete | 003 |
 | [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | complete | 003, 004, 006, 007, 010 |
 | [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | complete | 006, 009, 010 |
 | [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | complete | 004, 005 |
 | [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | complete | 003, 011 |
-| [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | testing | 002, 005, 006, 012 |
-| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | testing | 001, 004, 006, 007 |
+| [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | complete | 002, 005, 006, 012 |
+| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | complete | 001, 004, 006, 007 |
 | [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | testing | 002, 015, 018 |
 | [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | complete | 003, 004, 011 |
 | [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | complete | 002, 004, 009 |
