@@ -1,6 +1,6 @@
 ---
 title: "State: desired and observed, the store contract, memory, Postgres, the file mode"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -48,9 +48,19 @@ implementation, by mode.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Phase 2 is built: `internal/store` holds the contract, its errors, the
+cursor, and `Instrument`; `internal/store/memory` the memory store;
+`internal/store/filemode` the directory loader over it with `Reload`;
+`internal/store/storetest` the suite, run against memory from both
+packages; `internal/config` the three rows; and `luxd serve` constructs
+the store the configuration selects, joins its `Ready` to readiness, and
+re-reads the directory on `SIGHUP`. `Usage()` waits for
+[[009-usage-and-metering]]'s types. Phase 6 is not: the Postgres store,
+its migrations, the schema guards, the `depcheck` rows for the driver,
+and the postgres tier's `TestPostgresStoreConformance`; until it lands
+`luxd serve` refuses a configured `LUX_DB_URL` with one line. The
+readings this pass fixed where the text was open are written into the
+Design below, each beside the rule it settles.
 
 ## Design
 
@@ -642,7 +652,7 @@ The mode's other rules:
 | Variable | Default | Rule |
 |---|---|---|
 | `LUX_MANIFEST_DIR` | none | a readable directory; sets the file mode; a configuration error with `LUX_DB_URL` |
-| `LUX_DB_URL` | none | a `postgres://` URL, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store |
+| `LUX_DB_URL` | none | a `postgres://` or `postgresql://` URL, the two spellings the driver takes, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store; never echoed, not even inside the parser's error, because it may carry a password. Until the Postgres store lands, `luxd serve` refuses a configured URL with one line saying so rather than answering with state in memory, because an operator who asked for durability would find out at the first restart |
 | `LUX_DB_MAX_CONNS` | `8` | an integer, at least 1, at most 100; read only with `LUX_DB_URL` |
 
 The three are in [[002-repository-scaffold]]'s table with this spec as
@@ -687,29 +697,29 @@ cost, and the aggregate columns' meaning
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunnelled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | not built |
-| `Put` with a stale version is `ErrVersionConflict` and with the current version advances it by one from 1; two concurrent writers at one version yield one success | `TestOptimisticConcurrency` | not built |
-| A name is unique per kind among objects that are not deleted and is reusable after a delete; a declared Model `Put` at version 0 over a discovered one of that name keeps the id, sets `source` `declared` and the actor's owner, and advances the version rather than `ErrNameTaken` | `TestNamesAreUniqueAmongLiveObjects`, `TestDeclaredReplacesDiscoveredInPlace` | not built |
-| `PutStatus` changes no member of the control plane's column and `Put` changes no member of the observed column, for every member in the table by kind; a read merges both | `TestStatusHalvesAreSeparate`, table-driven over the members | not built |
-| `Transact` commits an object, its journal row, and its hash or credential together, and a failure inside `fn` leaves none of them; a nested `Transact` is `ErrNested` | `TestTransactIsAtomic`, `TestTransactRefusesNesting` | not built |
-| `List` returns a kind ordered by name; a cursor resumes after the last name, a cursor from another kind or filter is `ErrInvalidCursor`, and `Filter.Provider` returns exactly the Models with a target on that Provider | `TestListOrderAndCursor`, `TestFilterByProvider` | not built |
-| `Add` under a thousand concurrent callers loses no delta and returns a total that equals their sum; a zero `expiresAt` is never pruned | `TestCountersAreAtomic`, `TestNoneWindowIsNeverPruned` | not built |
-| A lease is held by one holder; a second acquires only after the TTL lapses; the holder's own `Acquire` renews without losing it | `TestLeases` | not built |
-| `Since` returns every event after a global sequence in order, across objects, and a tailing replica misses none; `Pending` returns at most one event per object, the oldest `Seq` first | `TestJournalTail`, `TestPendingIsOnePerObject` | not built |
-| `Keys.Put` on an existing key id replaces the hash and the old hash is `ErrNotFound` at once; `Credentials.Rewrap` at a stale version is `ErrVersionConflict` and at the current one changes the two wrap columns and no other | `TestKeyHashReplacesOnRotate`, `TestRewrapTouchesTheWrapColumnsOnly` | not built |
-| After a restart with Postgres, every object, key hash, credential, open spend window, and pending event is what it was; with memory, the start-up log names the three consequences | `TestRestartKeepsState`, `TestMemoryStoreLogsItsAssumptions` | not built |
-| `credentials` rows hold no plaintext under any key, the store has no method that returns one, and no package under `internal/store` imports `internal/secrets` | `TestStoreCannotDecrypt` | not built |
+| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunnelled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | passing against memory; the postgres tier waits for phase 6 |
+| `Put` with a stale version is `ErrVersionConflict` and with the current version advances it by one from 1; two concurrent writers at one version yield one success | `TestOptimisticConcurrency` | passing |
+| A name is unique per kind among objects that are not deleted and is reusable after a delete; a declared Model `Put` at version 0 over a discovered one of that name keeps the id, sets `source` `declared` and the actor's owner, and advances the version rather than `ErrNameTaken` | `TestNamesAreUniqueAmongLiveObjects`, `TestDeclaredReplacesDiscoveredInPlace` | passing |
+| `PutStatus` changes no member of the control plane's column and `Put` changes no member of the observed column, for every member in the table by kind; a read merges both | `TestStatusHalvesAreSeparate`, table-driven over the members | passing |
+| `Transact` commits an object, its journal row, and its hash or credential together, and a failure inside `fn` leaves none of them; a nested `Transact` is `ErrNested` | `TestTransactIsAtomic`, `TestTransactRefusesNesting` | passing |
+| `List` returns a kind ordered by name; a cursor resumes after the last name, a cursor from another kind or filter is `ErrInvalidCursor`, and `Filter.Provider` returns exactly the Models with a target on that Provider | `TestListOrderAndCursor`, `TestFilterByProvider` | passing |
+| `Add` under a thousand concurrent callers loses no delta and returns a total that equals their sum; a zero `expiresAt` is never pruned | `TestCountersAreAtomic`, `TestNoneWindowIsNeverPruned` | passing |
+| A lease is held by one holder; a second acquires only after the TTL lapses; the holder's own `Acquire` renews without losing it | `TestLeases` | passing |
+| `Since` returns every event after a global sequence in order, across objects, and a tailing replica misses none; `Pending` returns at most one event per object, the oldest `Seq` first | `TestJournalTail`, `TestPendingIsOnePerObject` | passing |
+| `Keys.Put` on an existing key id replaces the hash and the old hash is `ErrNotFound` at once; `Credentials.Rewrap` at a stale version is `ErrVersionConflict` and at the current one changes the two wrap columns and no other | `TestKeyHashReplacesOnRotate`, `TestRewrapTouchesTheWrapColumnsOnly` | passing |
+| After a restart with Postgres, every object, key hash, credential, open spend window, and pending event is what it was; with memory, the start-up log names the three consequences | `TestRestartKeepsState`, `TestMemoryStoreLogsItsAssumptions` | the memory half passing (`TestMemoryStoreLogsItsAssumptions`); the Postgres half waits for phase 6 |
+| `credentials` rows hold no plaintext under any key, the store has no method that returns one, and no package under `internal/store` imports `internal/secrets` | `TestStoreCannotDecrypt` | passing |
 | A dirty schema and a schema of another major each refuse to start naming the version; a schema ahead within the binary's major starts with one `WARN` naming both and serves; a schema behind is migrated | `TestSchemaGuards`, table-driven over the four rows | not built |
 | Every `.up.sql` of the current major only creates a table, adds a nullable or defaulted column, or adds an index, and no `.down.sql` exists | `TestMigrationsAreAdditive` | not built |
 | Every list, lookup, count, and upsert in the index table uses its index | `TestQueriesUseIndexes` with `EXPLAIN` | not built |
 | No package outside `internal/store/postgres` imports `github.com/jackc/pgx/v5` or `github.com/golang-migrate/migrate/v4`, and both are `depcheck` rows of `./cmd/luxd` and the three role packages | `TestDriverIsConfined`, the `depcheck` gate | not built |
-| Every store method increments `lux_store_operations_total` once with its name and `ok`, `conflict`, or `error` | `TestStoreOperationsAreCounted` | not built |
-| A directory of the four kinds in a deliberately wrong file order resolves in kind order and serves; a file with two documents is a start-up failure naming the file and `multi_document`; a `.yml` file is not read | `TestFileModeResolvesInKindOrder`, `TestFileModeIsOneObjectPerFile` | not built |
-| A Provider credential and a Key value both come from the environment in file mode; a Key value of the wrong shape, and an unset or empty variable for either, is a start-up failure naming the object and the variable and not the value; `Key.spec.value` and `tunnel: true` are each `invalid_field` | `TestFileModeValuesFromEnvironment`, `TestFileModeRefusesServerOnlyFields` | not built |
-| Every `POST`, `PUT`, and `DELETE` on a kind is refused `read_only` with the directory in the detail; reads and the usage surfaces answer; the jobs' writes into the snapshot succeed | `TestFileModeRefusesWrites`, `TestFileModeAdmitsTheJobs` | not built |
-| `SIGHUP` picks up an added, a changed, and a removed file, keeps every unchanged object's id, and carries an unchanged Provider's discovered Models over; a directory that stops resolving leaves the previous snapshot serving and logs the file and path | `TestFileModeReReads`, `TestFileModeIdsSurviveReRead` | not built |
-| A file that fails to resolve at start is a start-up failure naming the file and the path, and nothing is served | `TestFileModeStartupNamesTheFailingFile` | not built |
-| `LUX_MANIFEST_DIR` with `LUX_DB_URL` is a configuration error naming both | `TestFileModeAndDatabaseAreExclusive` | not built |
-| Discovered Models appear in file mode, are read-only, and are owned by `file|manifest-dir` | `TestFileModeDiscovery` | not built |
-| Two file-mode replicas observing one outage each emit one `provider.unreachable`, and the start-up log says so when a sink is set | `TestFileModeEventsArePerReplica` | not built |
+| Every store method increments `lux_store_operations_total` once with its name and `ok`, `conflict`, or `error` | `TestStoreOperationsAreCounted` | passing |
+| A directory of the four kinds in a deliberately wrong file order resolves in kind order and serves; a file with two documents is a start-up failure naming the file and `multi_document`; a `.yml` file is not read | `TestFileModeResolvesInKindOrder`, `TestFileModeIsOneObjectPerFile` | passing |
+| A Provider credential and a Key value both come from the environment in file mode; a Key value of the wrong shape, and an unset or empty variable for either, is a start-up failure naming the object and the variable and not the value; `Key.spec.value` and `tunnel: true` are each `invalid_field` | `TestFileModeValuesFromEnvironment`, `TestFileModeRefusesServerOnlyFields` | passing |
+| Every `POST`, `PUT`, and `DELETE` on a kind is refused `read_only` with the directory in the detail; reads and the usage surfaces answer; the jobs' writes into the snapshot succeed | `TestFileModeRefusesWrites`, `TestFileModeAdmitsTheJobs` | the store half passing (`TestFileModeRefusesWrites`, `TestFileModeAdmitsTheJobs`); the routes wait for 011 |
+| `SIGHUP` picks up an added, a changed, and a removed file, keeps every unchanged object's id, and carries an unchanged Provider's discovered Models over; a directory that stops resolving leaves the previous snapshot serving and logs the file and path | `TestFileModeReReads`, `TestFileModeIdsSurviveReRead` | passing |
+| A file that fails to resolve at start is a start-up failure naming the file and the path, and nothing is served | `TestFileModeStartupNamesTheFailingFile` | passing |
+| `LUX_MANIFEST_DIR` with `LUX_DB_URL` is a configuration error naming both | `TestFileModeAndDatabaseAreExclusive` | passing |
+| Discovered Models appear in file mode, are read-only, and are owned by `file|manifest-dir` | `TestFileModeDiscovery` | the store half passing (`TestFileModeDiscovery`); the discovery job waits for 005 |
+| Two file-mode replicas observing one outage each emit one `provider.unreachable`, and the start-up log says so when a sink is set | `TestFileModeEventsArePerReplica` | the store half passing (`TestFileModeEventsArePerReplica`); the events wait for 012 |
 | `LUX_DB_MAX_CONNS` bounds the pool, its default is 8, and a start holds at most that many plus the migrator's one | `TestPoolIsBounded` | not built |
