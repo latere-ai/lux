@@ -165,6 +165,20 @@ func TestServeFlags(t *testing.T) {
 	if len(got) != 1 || got[0].Method != http.MethodPost {
 		t.Fatalf("-no-apply sent %+v", got)
 	}
+
+	// A refusal whose body is not the envelope is this command's own
+	// unreadable_response, with the status under -v.
+	f.session = func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, "the proxy is not a gateway\n")
+	}
+	r = run(t, env, "serve", "--dialect", "openai", "--upstream", "http://127.0.0.1:11434/v1", "--as", "laptop", "--no-apply", "-v")
+	if r.code != ExitRefused || !strings.HasPrefix(r.stderr, messageUnreadable+"\n") || !strings.Contains(r.stderr, "code: "+codeUnreadable+"\n") {
+		t.Fatalf("exit %d\nstderr %q", r.code, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "detail: the proxy is not a gateway\n") {
+		t.Errorf("the detail does not carry what the body said:\n%s", r.stderr)
+	}
 }
 
 // slicesOf is args with one flag's value replaced, so a table row names
