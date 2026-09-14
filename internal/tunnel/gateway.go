@@ -141,11 +141,25 @@ func New(o Options) *Gateway {
 		g.forward = newForwardClient()
 	}
 	if o.Metrics != nil {
-		o.Metrics.Gauge(MetricSessions, "Tunnel sessions this replica holds.", func() []metrics.LabeledValue {
+		o.Metrics.Gauge(MetricSessions, sessionsHelp, func() []metrics.LabeledValue {
 			return []metrics.LabeledValue{{Labels: map[string]string{}, Value: float64(g.Sessions())}}
 		})
 	}
 	return g
+}
+
+// sessionsHelp is MetricSessions's help text, one string for the
+// Gateway and the idle registration.
+const sessionsHelp = "Tunnel sessions this replica holds."
+
+// RegisterIdle registers MetricSessions reading zero, for a process
+// with the tunnel off, so the registry carries every metric of spec
+// 019's table whether or not the tunnel is on. A process with a
+// Gateway must not call it, since New registers the gauge itself.
+func RegisterIdle(reg *metrics.Registry) {
+	reg.Gauge(MetricSessions, sessionsHelp, func() []metrics.LabeledValue {
+		return []metrics.LabeledValue{{Labels: map[string]string{}, Value: 0}}
+	})
 }
 
 // TTL is the registry's liveness window.
