@@ -196,7 +196,7 @@ func (d *Discovery) Tick(ctx context.Context) {
 		return
 	}
 	for _, p := range list {
-		if p.Spec.Discovery.Mode == v1.DiscoveryAuto && !p.Spec.Tunnel {
+		if p.Spec.Discovery.Mode == v1.DiscoveryAuto {
 			d.List(ctx, p)
 		}
 	}
@@ -232,7 +232,7 @@ func (d *Discovery) Tail(ctx context.Context) {
 			d.o.Logger.ErrorContext(ctx, "discovery: reading a Provider the journal named", "provider", e.ObjectID, "err", err)
 			continue
 		}
-		if p, ok := obj.(*v1.Provider); ok && p.Spec.Discovery.Mode == v1.DiscoveryAuto && !p.Spec.Tunnel {
+		if p, ok := obj.(*v1.Provider); ok && p.Spec.Discovery.Mode == v1.DiscoveryAuto {
 			d.List(ctx, p)
 		}
 	}
