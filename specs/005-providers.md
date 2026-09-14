@@ -1,6 +1,6 @@
 ---
 title: "Providers: dialects, credential custody, discovery, health, the upstream client"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/001-architecture.md
