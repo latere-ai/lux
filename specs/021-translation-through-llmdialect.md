@@ -1,6 +1,6 @@
 ---
 title: "Translation through llmdialect: the codec glue leaves the gateway for an importable bridge"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -59,10 +59,12 @@ this layer: `llmdialect`, `llmdialect/ir`, `llmdialect/anthropic`,
 `llmdialect/openaichat`, `llmdialect/openairesp`, `llmdialect/lux`,
 `llmdialect/tokencount`, and `httpjson`.
 
-The bridge is drafted but not released. This spec waits for a tagged
-`latere.ai/x/pkg/llmdialect/bridge` whose surface is the one below; it
-is not dispatchable before that tag exists, and that dependency is not
-in `depends_on`, which names specs of this repository only.
+The bridge is built and pushed in `latere.ai/x/pkg` at commit
+`2e4ba0359ec37bdf30a753b029c914e35a5bb3fe` and not tagged yet. This
+spec pins that commit, the pseudo-version `go get` writes for it, and
+the tag follows: moving the pin to the tag is one `go get` with no
+other change. That dependency is not in `depends_on`, which names
+specs of this repository only.
 
 ## Design
 
@@ -189,7 +191,9 @@ disappear with the `ir` import.
 
 ### The swap, commit by commit
 
-1. Bump `latere.ai/x/pkg` to the tag that carries the bridge.
+1. Bump `latere.ai/x/pkg` to the commit that carries the bridge,
+   `go get latere.ai/x/pkg@2e4ba0359ec37bdf30a753b029c914e35a5bb3fe &&
+   go mod tidy`, which pins a pseudo-version until the tag exists.
 2. `models.go` and its shapes deleted; `listModels` and `readModel`
    call `bridge.ModelList` and `bridge.ModelEntry`.
 3. `usage.go` deleted; the sniffers become `bridge.UsageScanner` and
