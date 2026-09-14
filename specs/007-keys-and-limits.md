@@ -1,6 +1,6 @@
 ---
 title: "Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -584,3 +584,88 @@ the checks sit in the pipeline and the codes' HTTP statuses
 | A soft Budget never refuses for its amount, emits `budget.exhausted` exactly once per window when reached, and renders `Exhausted` until the reset | `TestSoftBudget` | passing, `internal/serve` |
 | Deleting a Budget a Key names is `budget_in_use`; raising an exhausted Budget's amount serves at the next request; `status.keys`, `spent`, `remaining`, `resetsAt`, and `state` render from the live Keys and the current window's counter | `TestBudgetLifecycle` | the raise and the rendering passing, `internal/serve`; `budget_in_use` is [[011-api]]'s `TestBudgetInUse` |
 | Every record carries the Key's id, prefix, owner, and labels, and the valid `Lux-Labels` pairs as `requestLabels`; a ninth pair, a duplicate key, and a pair outside the syntax are dropped while the rest are kept; the header reaches no provider | `TestAttribution`, `TestRequestLabels` | the syntax passing as [[004-request-path]]'s `TestRequestLabels`, which drops the ninth pair, a duplicate, and a pair outside the alphabet and keeps the rest; the record's fields are [[004-request-path]]'s `TestRecordFields` and the header's absence upstream its `TestCallerCredentialsNeverForwarded`; the e2e run is [[009-usage-and-metering]]'s |
+
+## Outcome
+
+Built on 2026-09-14 in thirteen commits on `main`, over the memory
+store and the file mode of [[010-state]] and beside the door handler of
+[[004-request-path]], and proven by the whole gate, fifteen gates, and
+per-package coverage of 97.8% for `metering`, 97.0% for
+`internal/serve`, 99.4% for `internal/config`, 96.6% for `gateway`, and
+94.6% for `cmd/luxd`. What diverged from the text as dispatched, each
+fixed in the Design above beside the rule it settles:
+
+- The counter key of the `none` window renders the word `none` in place
+  of a start, not the object's `createdAt` as
+  [[009-usage-and-metering]]'s table has it: a duration window that
+  begins at the creation instant, which the first window of every Key
+  created on an aligned boundary does, rendered the same key as the
+  lifetime totals and counted every request twice. That spec's table
+  is its edit to make.
+- `metering.Counters`, the replica's deltas over the store, is built
+  here to [[009-usage-and-metering]]'s stated shape because the Limiter
+  cannot run without it, with three changes that spec should take:
+  `Add` carries the window's expiry, which the store writes when it
+  first sees the key; `CounterStore` uses the store's own method names,
+  `Add` and `Read`, so `Store.Counters()` satisfies it without an
+  adapter; `Known` and `Pending` expose the two terms of the check, and
+  `Claim` is the marker. `Cost` stays that spec's, and the Limiter
+  holds its arithmetic as `costOf` until it lands.
+- The Limiter feeds a Key's three counters, one request at admission,
+  the measured tokens at the settle, and the estimate then the
+  measured cost less it, under the totals and the current window once
+  when the two are one key; [[009-usage-and-metering]]'s Recorder folds
+  the aggregates and adds to none of them, or every admitted request
+  would count twice.
+- A token reservation is bounded by the Key's rate, the bucket's burst,
+  so a request larger than a whole minute's tokens is admitted when the
+  bucket is full and settles into a deficit, rather than refused on
+  every call with a `Retry-After` that never comes true.
+- The request token is given back when the token bucket refuses after
+  the request bucket admitted, so a refusal at this stage debits
+  nothing in either bucket.
+- `status.lastUsedAt` is written by the Limiter's flush for every Key
+  whose request was admitted at stage 7, not by
+  [[009-usage-and-metering]]'s, which does not exist yet and would
+  otherwise have to learn which Keys were used.
+- The Key cache also holds the Budget a Key draws from, dropped by
+  `budget.updated` and `budget.deleted`, because a hard Budget's amount
+  is read on every request and a store round trip there is what the
+  cache exists to remove; a hash whose row is gone is a negative entry;
+  `Reset` is what a file-mode `SIGHUP` calls, since the swap writes no
+  journal row.
+- `Exhausted` renders from the window's spend at or over its amount,
+  and a refusal can precede it when the request's estimate would carry
+  the window over; the marker counter is not read at render time,
+  because a raised amount has to open the object at the next read.
+- The soft Budget's announcement is made by a replica whose flush
+  returned a total at or over the amount, and a replica whose last
+  flush left the window under does not look again, because the replica
+  whose delta crossed always flushes it.
+- The exhaustion events carry `amount` and `spent` as money strings,
+  `resetsAt` only where the window resets, and `hard` on a Budget's;
+  their shape is written in `internal/serve/events.go` until
+  [[012-request-log-and-events]]'s package lands.
+- The `Lux-Labels` syntax row is proven by [[004-request-path]]'s
+  `TestRequestLabels`, which the gateway built with the parser; the row
+  names it rather than a second test of the same function.
+- The value's mint, hash, and prefix are `internal/serve`'s
+  `MintKeyValue`, `HashKeyValue`, and `KeyPrefix`; the cache is
+  `serve.KeyCache`, the Limiter `serve.Limiter`, the renderers
+  `serve.RenderKey` and `serve.RenderBudget`, each for [[011-api]] to
+  call; `luxd serve` starts the cache's tail beside the jobs, empties
+  the cache after a reload, and resolves a file-mode Key under the two
+  rate defaults, and mounts no door.
+
+Left `not built`, owned elsewhere: `TestKeyValueShownOnce` and
+`TestKeyValueNeverAppearsInLogs`, whose responses are [[011-api]]'s and
+whose run through every path is [[015-test-stubs-and-tiers]]'s; the
+route halves of `TestRotateReplacesTheValue` and `TestSuppliedKeyValue`,
+the `invalid_field` mapping of `TestSuppliedValueMustBeUnique`, the
+`/v1` half of `TestPlaneBoundaryHoldsByVerification`, and
+`budget_in_use` in `TestBudgetLifecycle` ([[011-api]]); the delivery
+half of `TestExhaustionIsAnnouncedOnce`
+([[012-request-log-and-events]]); `TestUnpricedModelRefusedUnderABudget`
+and `TestAttribution` ([[009-usage-and-metering]]); and the exposition
+of `lux_key_cache_hits_total` on `/metrics`, whose registry
+[[019-observability]] constructs.
