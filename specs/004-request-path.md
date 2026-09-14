@@ -1,6 +1,6 @@
 ---
 title: "Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -38,9 +38,15 @@ interface to what surrounds it. Target selection is
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built: the `gateway` package is the handler this spec describes, driven
+in its tests through fakes for every interface of `Options` and
+`httptest` servers as the providers, on pkg v0.66.0. It is not mounted
+yet: `internal/serve` satisfies the interfaces from the store and the
+clients and mounts the handler at the four doors under [[011-api]], the
+upstream client and the credential source are [[005-providers]]'s, the
+target order and the circuits [[008-routing-and-models]]'s, the windows
+[[007-keys-and-limits]]'s, and the record's cost
+[[009-usage-and-metering]]'s.
 
 ## Design
 
@@ -58,7 +64,10 @@ what the gateway does with each path. Three route classes:
 - An **opaque** route names no model: files, batches, audio, images,
   fine-tuning, and any path not in the table. The gateway forwards it
   to one provider of the door's dialect, chosen as below, only for a
-  Key with `passthrough: true`, and records a request it cannot price.
+  Key with `passthrough: true`, relays the provider's answer whole, its
+  status and body included, because the caller chose the provider and
+  speaks its API directly, and records a request it cannot price with
+  the upstream status.
 
 | Door | Route | Class | Model from |
 |---|---|---|---|
@@ -81,7 +90,11 @@ what the gateway does with each path. Three route classes:
 A path under a door that is not under the dialect's version prefix, a
 method the table does not list for a translated or model route, and
 anything outside the four doors is `not_found`, 404, in the door's
-envelope. `GET /v1/models` on a door lists the Models whose names match
+envelope; a path under no door has no dialect and is answered in the
+`/lux` door's shape. The record of a model list or read carries the
+route class `served`, the fourth value beside the three above, because
+the gateway answered it and no provider did. `GET /v1/models` on a door
+lists the Models whose names match
 one of the Key's selectors now and whose `status.available` is true,
 so an SDK's model picker shows what the Key can call; a declared and a
 discovered Model appear the same way. The list is in the dialect's own
@@ -95,18 +108,23 @@ shape, exactly:
 
 `GET .../models/{model}` is the one entry, or `model_not_found`;
 `model_not_allowed` when the Key's selectors do not match, so the list
-and the read agree. Names are sorted.
+and the read agree on what the Key may name. The read answers a Model
+whose `status.available` is false, which the list leaves out, because
+the Model exists and the Key may name it. Names are sorted.
 
 A token count that no upstream answers, the `/anthropic` count route
 toward a non-`anthropic` target and the `/lux` count route toward one,
 is `{"input_tokens": <n>}` with `n` from
 `latere.ai/x/pkg/llmdialect/tokencount.Estimate` over the decoded
 request and the response header `Lux-Estimated: true`, so a caller can
-tell a heuristic from a tokenizer's answer. A count runs stages 1 to 7
-of the pipeline with a token reservation of zero, so it costs the Key
-one request from its rate window and nothing from its spend, then
-answers from the estimate or forwards as the table says; its record
-says `ok` with zero tokens and `priced: false`.
+tell a heuristic from a tokenizer's answer. A count, the `/gemini`
+door's `:countTokens` included, runs stages 1 to 7 of the pipeline with
+a token reservation of zero, so it costs the Key one request from its
+rate window and nothing from its spend, then answers from the estimate
+or forwards as the table says; its record says `ok` with zero tokens
+and `priced: false`. The `/lux` count re-encoded toward an `anthropic`
+target carries neither `max_tokens` nor `stream`, which the Messages
+count route does not take and the codec would otherwise write.
 
 ### The Key on a door
 
@@ -227,11 +245,20 @@ flowchart TD
    the request to the next target ([[008-routing-and-models]]). The
    last attempt's failure is the answer: a transport failure is
    `provider_unavailable`, 503; an upstream status the retry table does
-   not retry and that is a `4xx` is `upstream_rejected`, 400; any other
-   upstream status, a `3xx` or a retryable one on the last attempt, is
+   not retry and that is a `4xx` is `upstream_rejected`, 400, except a
+   `401` or a `403`, which is the Provider's credential refused and
+   nothing the caller's request caused; that, any other upstream
+   status, a `3xx`, or a retryable one on the last attempt, is
    `upstream_error`, 502; the Provider's `timeout` passing is
    `upstream_timeout`, 504. Each carries the upstream status and its
-   body's first 1 KiB in the developer detail.
+   body's first 1 KiB in the developer detail. A Key lookup, a catalog
+   read, a target selection, or a reservation the store could not
+   answer, at whichever stage asks it, is `store_unavailable`, 503,
+   [[011-api]]'s code, never a refusal that blames the caller. A body
+   the door's codec must decode is decoded once before stage 7, so the
+   reservation's estimate is the estimator's over the decoded request;
+   the codec's refusal is held to this stage, so a window refusal
+   answers first as the order above says.
 9. Respond: headers, then the body or the stream, in the door's
    dialect.
 10. Settle: the windows are debited with the measured tokens and cost,
@@ -288,7 +315,8 @@ The outbound request toward the target's `baseURL`:
 - Redirects are not followed ([[005-providers]]).
 - Response headers are relayed to the caller except the hop-by-hop
   set, `Set-Cookie`, `Content-Length`, and `Content-Encoding`, which
-  the gateway reframes; on translation the upstream's own dialect
+  the gateway reframes, and any `Lux-*` header of the upstream's, which
+  would pose as the gateway's own; on translation the upstream's own dialect
   headers, `anthropic-*`, `openai-*`, `x-ratelimit-*`, and
   `x-request-id`, are dropped too, because they describe a response
   the caller did not receive. A response whose upstream `Content-Type`
@@ -298,9 +326,16 @@ The outbound request toward the target's `baseURL`:
   browser would render ([[016-security-and-threat-model]]).
 
 Translation is `latere.ai/x/pkg/llmdialect`'s: the door's dialect is
-the `Frontend`, the target's the `Backend`, one `Translator` per
-request, `Translator.Request` and `Translator.Response` for a body and
-`Translator.Stream` for a stream. Every field the target cannot
+the `Frontend`, the target's the `Backend`, one pair per attempt. The
+gateway drives the pair itself rather than through `Translator`, because
+it writes between the two legs what the codecs cannot know:
+`Frontend.DecodeRequest`, then the target's upstream name into
+`ir.Request.Model`, then `Backend.EncodeRequest`; `Backend.DecodeResponse`,
+then the Model's name into `ir.Response.Model`, then
+`Frontend.EncodeResponse`; and for a stream the target's `EventDecoder`
+into the door's `EventEncoder` event by event, the name written on
+`message_start` and the usage read off every event that carries it.
+Every field the target cannot
 represent is in `ir.Request.Loss`, filled by both codecs; the gateway
 returns `Loss.Strings()` as the `Lux-Loss` response header, a comma
 separated list of field paths, and writes the same list to the record
@@ -353,9 +388,9 @@ stream and `application/json` for a `:streamGenerateContent` without
 `alt=sse`, whose body is a JSON array, and the bytes are relayed as
 read, in chunks of at most 64 KiB, without waiting for event
 boundaries. On translation the response is `Content-Type:
-text/event-stream` and `Translator.Stream` decodes each upstream event
-with the target dialect's `EventDecoder` and encodes it with the door's
-`EventEncoder`, flushing per event; a target that answers a stream
+text/event-stream` and the gateway's event loop decodes each upstream
+event with the target dialect's `EventDecoder` and encodes it with the
+door's `EventEncoder`, flushing per event; a target that answers a stream
 request with one JSON body is decoded whole and re-emitted as the
 door's event sequence, so the caller sees a stream either way. The
 record's tokens come from the stream's usage members, the last value
@@ -438,11 +473,12 @@ is the developer detail, truncated.
 | `currency_mismatch` | 400 | the Budget's currency is not the Model's pricing currency |
 | `spend_exceeded` | 429 | the Key's spend window is full; `Retry-After` |
 | `budget_exhausted` | 429 | a hard Budget's window is full; `Retry-After` |
-| `upstream_rejected` | 400 | the last attempt was answered with a `4xx` the retry table of [[008-routing-and-models]] does not retry: the request as forwarded, or the Provider's credential or upstream name, is what the upstream refused |
-| `upstream_error` | 502 | the last attempt was answered with any other error status, a `3xx`, or a retryable status; or a stream failed after its first byte |
+| `upstream_rejected` | 400 | the last attempt was answered with a `4xx` the retry table of [[008-routing-and-models]] does not retry, other than a `401` or a `403`: the request as forwarded, or the Provider's upstream name, is what the upstream refused |
+| `upstream_error` | 502 | the last attempt was answered with a `401` or a `403`, the Provider's credential refused, with any other error status, a `3xx`, or a retryable status; or a stream failed after its first byte |
 | `upstream_timeout` | 504 | the Provider's `timeout` passed |
+| `store_unavailable` | 503 | a Key lookup, a catalog read, a target selection, or a reservation the store could not answer; [[011-api]]'s code, rendered here in the door's shape |
 
-Two more strings appear in a record's `error` and never in a response:
+One more string appears in a record's `error` and never in a response:
 `client_closed`, above, and nothing else; [[011-api]]'s table carries
 every code a caller can receive and [[009-usage-and-metering]] names
 `client_closed` as the one record-only value.
@@ -467,20 +503,70 @@ type Options struct {
 	Recorder    Recorder         // one record per request (009)
 	Clients     ClientSource     // the upstream client per Provider, built by NewClientSource (005)
 	Health      HealthObserver   // outcomes per Provider for passive health (005)
+	Metrics     *metrics.Registry // the three request metrics of 019; nil records none
 	Version     string           // the User-Agent
 	MaxBodyBytes int64
 	Now         func() time.Time
 	NewID       func() string    // req_ ids
 }
+
+// The interfaces, each a few methods, satisfied by internal/serve from
+// the store and the clients, or by a platform from its own. Keys,
+// Catalog, Credentials, Router, and Clients are required; the rest may
+// be nil.
+type KeyLookup interface {
+	ByHash(ctx context.Context, hash string) (*v1.Key, error) // nil, nil for an unknown hash
+}
+type Catalog interface {
+	Model(ctx context.Context, name string) (*v1.Model, error) // exact name; nil, nil for none
+	Models(ctx context.Context) ([]*v1.Model, error)
+	Provider(ctx context.Context, nameOrID string) (*v1.Provider, error)
+}
+type Target struct{ Provider *v1.Provider; Model string }
+type Router interface {
+	Targets(ctx context.Context, m *v1.Model) ([]Target, error) // the attempt order; empty is provider_unavailable
+	Allow(t Target) bool                                       // the half-open probe slot, immediately before an attempt
+	RecordSuccess(t Target)
+	RecordFailure(t Target)
+}
+type Reservation struct {
+	Key          *v1.Key
+	Model        *v1.Model // nil on an opaque route
+	Opaque       bool
+	InputTokens  int64 // the estimate; 0 for a count and an opaque route
+	OutputTokens int64 // the requested maximum, or 1024
+}
+type Limiter interface {
+	Reserve(ctx context.Context, r Reservation) (Lease, error) // a *Refusal error carries the code and Retry-After
+}
+type Lease interface{ Settle(ctx context.Context, t Tokens) }
+type Refusal struct{ Code Code; RetryAfter time.Duration; Detail string }
+type Recorder interface{ Record(r Record) }
+type ClientSource interface {
+	Client(ctx context.Context, p *v1.Provider) (*http.Client, error)
+}
+type CredentialSource interface {
+	Credential(ctx context.Context, providerID string) ([]byte, error)
+}
+type HealthObserver interface{ Observe(providerID string, failed bool) }
 ```
 
-Each interface is a few methods and is satisfied by `internal/serve`
-from the store and the clients, or by a platform from its own. The
-package imports `latere.ai/x/pkg/llmdialect` and its dialects,
-`manifest/v1`, `manifest` for `Match`, `metering`, and the standard
-library; nothing under `internal/`, no database driver, no identity
-library. It dials only through `ClientSource`, which the importer
-constructs toward the providers ([[001-architecture]], invariant 9).
+`Record` is this package's struct of what the pipeline knows when a
+request is done: the id and the timestamps, the Key's id, prefix,
+owner, and labels, the Model's name and id, the answering Provider's
+name and id and the upstream name, the door and target dialects, the
+route template and class, whether the request was translated and the
+loss fields, one `Attempt` per target tried, the outcome and the code,
+the upstream status, the latency and the time to first byte, the
+`Tokens` with `Estimated`, whether a stream was asked, and the request
+labels. [[009-usage-and-metering]]'s `metering.Record` is built from it
+with the cost added; the gateway computes no price and imports no
+`metering`. The package imports `latere.ai/x/pkg/llmdialect` and its
+dialects, `httpjson` for the lux envelope, `metrics`, `manifest/v1`,
+`manifest` for `Match`, and the standard library; nothing under
+`internal/`, no database driver, no identity library. It dials only
+through `ClientSource`, which the importer constructs toward the
+providers ([[001-architecture]], invariant 9).
 
 ### Configuration
 
@@ -503,24 +589,105 @@ tunnel that makes a local runtime a Provider ([[013-tunnelled-runtimes]]).
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every row of the route table dispatches to its class and reads the model from where the table says; every path outside the table is `not_found` in the door's envelope | `TestRouteTable`, table-driven over every row and ten off-table paths | not built |
-| A request through the `/openai` door to an `openai` target with equal names arrives at the stub provider byte-identical, with only the credential, `Host`, `User-Agent`, `Lux-Request-Id`, and the hop-by-hop and `Accept-Encoding` headers changed | `TestSameDialectSameBytes` | not built |
-| A request through the `/anthropic` door to an `openai` target is translated, a field the target cannot represent appears in `Lux-Loss` and in the record, the header is absent when nothing was lost, and the outbound request carries `anthropic-version` when the target is `anthropic` | `TestTranslationReportsLoss`, `TestNoLossNoHeader`, `TestAnthropicVersionInjected` | not built |
-| A `gemini` door to a non-gemini target and a model route across dialects are `dialect_unsupported`; a `lux` door reaches every dialect | `TestDialectBridging`, table-driven over the door and target matrix | not built |
-| Each credential form is accepted on each door in the stated order; the query parameter and every caller credential header are absent from the outbound request; a provider key and an issuer token no Key was registered with are `unauthenticated`, and an issuer token registered as a supplied Key value is served as that Key | `TestKeyExtractionOrder`, `TestCallerCredentialsNeverForwarded`, `TestDoorsTakeKeysOnly`, `TestSuppliedValueOpensTheDoor` | not built |
-| A body that is not a JSON object, one without `model`, and on translation one the codec refuses are each `invalid_request` with the codec's message in the detail; the same undecodable body on a same-dialect passthrough reaches the stub provider untouched | `TestInvalidRequestBodies`, `TestPassthroughForwardsWhatTheCodecCannotRead` | not built |
-| The last attempt's `400`, `404`, and `422` are `upstream_rejected`; its `401`, `403`, `302`, and `529` are `upstream_error`; a refused connection is `provider_unavailable`; a timeout is `upstream_timeout`; each carries the upstream status and body excerpt in `Lux-Error-Detail` and never in the body | `TestUpstreamStatusMapping`, table-driven | not built |
-| A count-tokens request toward an `anthropic` target is forwarded and its answer relayed; toward an `openai` target and on the `/lux` door it is answered from the estimate with `Lux-Estimated: true`, the stub provider sees nothing, and the record says `ok` with zero tokens | `TestCountTokensEmulation` | not built |
-| `GET /v1/models` on each door renders the list shape in the table byte-exactly for a fixed catalog | `TestModelsListShapes`, golden files per door | not built |
-| A streamed `/openai` chat completion toward an `openai` target carries `stream_options.include_usage: true` upstream and the usage chunk reaches the caller; a non-streamed one is byte-identical; the record's tokens are the chunk's | `TestIncludeUsageInjected` | not built |
-| An upstream `text/html` response reaches the caller as `application/octet-stream`, and every door response carries `X-Content-Type-Options: nosniff` | `TestNoHTMLIsEverServed` | not built |
-| Each stage's refusal fires with its code and status before the stub provider sees a request, and in the pipeline's order when two conditions hold at once | `TestRefusalOrder`, table-driven over every code | not built |
-| An opaque route is `route_not_allowed` without `passthrough`, reaches the named `Lux-Provider` with it, picks the sole candidate without the header, and is `provider_required` with two candidates | `TestOpaqueRoutes` | not built |
-| `GET /v1/models` on each door lists exactly the available Models the Key's selectors match, in that dialect's shape, and forwards nothing | `TestModelsListIsTheKeysView` | not built |
-| The body's model name is rewritten to the upstream name on the way out and the Model's name comes back in the response, for each dialect | `TestModelNameRewrite` | not built |
-| A streamed passthrough relays events as they arrive with headers flushed before the first event and the upstream's `Content-Type` kept, a `:streamGenerateContent` JSON array included; a streamed translation re-encodes each event and a JSON answer to a stream request is re-emitted as events; the record's tokens are the last value of each usage member across the stream | `TestStreamingPassthrough`, `TestStreamingTranslation`, `TestStreamUsageIsTheLastValue` | not built |
-| A caller disconnect cancels the upstream request within 100 ms and the record says `client_closed`; an upstream failure after the first byte is not retried and ends the stream with the door's error frame from the table, and with nothing of the gateway's on the `/gemini` door | `TestClientDisconnectCancelsUpstream`, `TestNoRetryAfterFirstByte`, `TestStreamErrorFramePerDoor` | not built |
-| Every code renders in each door's envelope with the fixed sentence, the code in the shape's code member and in `Lux-Error`, and the detail only in `Lux-Error-Detail`; an upstream error body never appears in a caller's body | `TestErrorEnvelopePerDialect`, `TestUpstreamBodyIsDetailOnly` | not built |
-| A body one byte over the limit is `body_too_large` with nothing forwarded | `TestBodyLimit` | not built |
-| Every response, refused or served, carries `Lux-Request-Id` matching its record's id | `TestRequestIDOnEveryResponse` | not built |
-| During one thousand requests the stub authorizer and issuer receive zero calls; `gateway` imports nothing under `internal/` | [[001-architecture]]'s `TestHotPathDialsNoWebhook`, `TestRootPackagesDialNothing` | not built |
+| Every row of the route table dispatches to its class and reads the model from where the table says; every path outside the table is `not_found` in the door's envelope | `TestRouteTable`, table-driven over every row and ten off-table paths | passing |
+| A request through the `/openai` door to an `openai` target with equal names arrives at the stub provider byte-identical, with only the credential, `Host`, `User-Agent`, `Lux-Request-Id`, and the hop-by-hop and `Accept-Encoding` headers changed | `TestSameDialectSameBytes` | passing |
+| A request through the `/anthropic` door to an `openai` target is translated, a field the target cannot represent appears in `Lux-Loss` and in the record, the header is absent when nothing was lost, and the outbound request carries `anthropic-version` when the target is `anthropic` | `TestTranslationReportsLoss`, `TestNoLossNoHeader`, `TestAnthropicVersionInjected` | passing |
+| A `gemini` door to a non-gemini target and a model route across dialects are `dialect_unsupported`; a `lux` door reaches every dialect | `TestDialectBridging`, table-driven over the door and target matrix | passing |
+| Each credential form is accepted on each door in the stated order; the query parameter and every caller credential header are absent from the outbound request; a provider key and an issuer token no Key was registered with are `unauthenticated`, and an issuer token registered as a supplied Key value is served as that Key | `TestKeyExtractionOrder`, `TestCallerCredentialsNeverForwarded`, `TestDoorsTakeKeysOnly`, `TestSuppliedValueOpensTheDoor` | passing |
+| A body that is not a JSON object, one without `model`, and on translation one the codec refuses are each `invalid_request` with the codec's message in the detail; the same undecodable body on a same-dialect passthrough reaches the stub provider untouched | `TestInvalidRequestBodies`, `TestPassthroughForwardsWhatTheCodecCannotRead` | passing |
+| The last attempt's `400`, `404`, and `422` are `upstream_rejected`; its `401`, `403`, `302`, and `529` are `upstream_error`; a refused connection is `provider_unavailable`; a timeout is `upstream_timeout`; each carries the upstream status and body excerpt in `Lux-Error-Detail` and never in the body | `TestUpstreamStatusMapping`, table-driven | passing |
+| A count-tokens request toward an `anthropic` target is forwarded and its answer relayed; toward an `openai` target and on the `/lux` door it is answered from the estimate with `Lux-Estimated: true`, the stub provider sees nothing, and the record says `ok` with zero tokens | `TestCountTokensEmulation` | passing |
+| `GET /v1/models` on each door renders the list shape in the table byte-exactly for a fixed catalog | `TestModelsListShapes`, golden files per door | passing |
+| A streamed `/openai` chat completion toward an `openai` target carries `stream_options.include_usage: true` upstream and the usage chunk reaches the caller; a non-streamed one is byte-identical; the record's tokens are the chunk's | `TestIncludeUsageInjected` | passing |
+| An upstream `text/html` response reaches the caller as `application/octet-stream`, and every door response carries `X-Content-Type-Options: nosniff` | `TestNoHTMLIsEverServed` | passing |
+| Each stage's refusal fires with its code and status before the stub provider sees a request, and in the pipeline's order when two conditions hold at once | `TestRefusalOrder`, table-driven over every code | passing |
+| An opaque route is `route_not_allowed` without `passthrough`, reaches the named `Lux-Provider` with it, picks the sole candidate without the header, and is `provider_required` with two candidates | `TestOpaqueRoutes` | passing |
+| `GET /v1/models` on each door lists exactly the available Models the Key's selectors match, in that dialect's shape, and forwards nothing | `TestModelsListIsTheKeysView` | passing |
+| The body's model name is rewritten to the upstream name on the way out and the Model's name comes back in the response, for each dialect | `TestModelNameRewrite` | passing |
+| A streamed passthrough relays events as they arrive with headers flushed before the first event and the upstream's `Content-Type` kept, a `:streamGenerateContent` JSON array included; a streamed translation re-encodes each event and a JSON answer to a stream request is re-emitted as events; the record's tokens are the last value of each usage member across the stream | `TestStreamingPassthrough`, `TestStreamingTranslation`, `TestStreamUsageIsTheLastValue` | passing |
+| A caller disconnect cancels the upstream request within 100 ms and the record says `client_closed`; an upstream failure after the first byte is not retried and ends the stream with the door's error frame from the table, and with nothing of the gateway's on the `/gemini` door | `TestClientDisconnectCancelsUpstream`, `TestNoRetryAfterFirstByte`, `TestStreamErrorFramePerDoor` | passing |
+| Every code renders in each door's envelope with the fixed sentence, the code in the shape's code member and in `Lux-Error`, and the detail only in `Lux-Error-Detail`; an upstream error body never appears in a caller's body | `TestErrorEnvelopePerDialect`, `TestUpstreamBodyIsDetailOnly` | passing |
+| A body one byte over the limit is `body_too_large` with nothing forwarded | `TestBodyLimit` | passing |
+| Every response, refused or served, carries `Lux-Request-Id` matching its record's id | `TestRequestIDOnEveryResponse` | passing |
+| During one thousand requests the stub authorizer and issuer receive zero calls; `gateway` imports nothing under `internal/` | [[001-architecture]]'s `TestHotPathDialsNoWebhook`, with `TestDataPlaneServesWhileAuthorizerIsDown` as the same proof from the other side, and `TestRootPackagesDialNothing` | passing |
+
+## Outcome
+
+Built on 2026-09-14 as the `gateway` package: `New(Options)` and
+`Handler.ServeHTTP`, the four doors and their route table, the pipeline
+in the order the Design numbers, passthrough and translation through
+`latere.ai/x/pkg/llmdialect`, streaming in both modes, the error
+envelope per door with the fixed sentences of [[011-api]]'s table, the
+model list per dialect, the count emulation, one `Record` per request,
+and the three request metrics of [[019-observability]]. Every row of
+the acceptance table passes in `gateway`'s own tests, against fakes for
+every interface and `httptest` stub providers, at 96% statement
+coverage under the race detector, the hermetic and tempdir gates, and
+the shared lint.
+
+What the build settled, each written into the Design above in the same
+commit:
+
+- The upstream `401` and `403` are `upstream_error`, not
+  `upstream_rejected`: the Design's stage 8 said every non-retried `4xx`
+  was the caller's, the acceptance row said the credential's refusal was
+  the provider's, and the row is right, because nothing in the caller's
+  request causes a Provider's credential to be refused and the sentence
+  of `upstream_rejected` would blame it.
+- `store_unavailable`, [[011-api]]'s code, joins the door's table for a
+  Key lookup, a catalog read, a target selection, or a reservation the
+  store could not answer. The Design had no answer for a store that
+  fails on the hot path, and every code it had would have blamed the
+  caller or the provider for the gateway's own outage. [[011-api]]'s
+  table must name this spec among the code's raisers, which is that
+  spec's edit to make.
+- `Options.Metrics *metrics.Registry` is added, nil by default, and the
+  handler records `lux_requests_total`, `lux_request_duration_seconds`,
+  and `lux_time_to_first_byte_seconds` with [[019-observability]]'s
+  labels and buckets, because the three are this spec's to own and the
+  handler is the one place that knows every label value.
+- The interfaces the Design listed by name alone have their method sets
+  in the package section, and `Record` is this package's struct rather
+  than `metering.Record`, which does not exist yet:
+  [[009-usage-and-metering]] builds its record from `gateway.Record`
+  with the cost added, and `gateway` imports no `metering`.
+- The codecs are driven as a pair rather than through `Translator`,
+  because the upstream name has to be written into the decoded request
+  before the encode and the Model's name into the decoded response
+  before its encode, which [[008-routing-and-models]] requires and
+  `Translator.Request` and `Translator.Response` give no seam for; the
+  stream loop is the gateway's for the same reason and to read the usage
+  off each event.
+- The record's route class has a fourth value, `served`, for the model
+  list and read the gateway answers itself; the three classes name what
+  is done with a body toward a provider and these routes reach none.
+- An opaque route relays the provider's answer whole, its error status
+  and body included, and its record says `ok` with the upstream status:
+  the caller chose the Provider by name and speaks its API directly, so
+  the answer is the caller's to read, and hiding a files API's 404
+  behind `upstream_rejected` would help nobody.
+- The `/gemini` door's `:countTokens` reserves zero tokens like the
+  other counts; the `/lux` count re-encoded toward `anthropic` drops the
+  `max_tokens` and `stream` the codec writes, which the count route does
+  not take; the body a translation must decode is decoded once before
+  stage 7 for the reservation's estimate, and the codec's refusal is
+  held to stage 8 so that a window refusal answers first, as the order
+  says.
+- A path under no door renders the `/lux` door's shape; the `/gemini`
+  door strips `/v1` beside `/v1beta` on an opaque route; the model read
+  answers a Model the list leaves out for being unavailable; an
+  upstream's own `Lux-*` response headers are dropped; a caller that
+  disconnects before the response line is `client_closed` with nothing
+  written; a `408` or `429` is retried for the circuit and is a complete
+  answer for health, as [[005-providers]] says.
+
+What the neighbouring specs must provide, in the shapes above:
+[[005-providers]] the `ClientSource`, `CredentialSource`, and
+`HealthObserver`; [[007-keys-and-limits]] the `KeyLookup` and the
+`Limiter` whose `Reserve` prices `InputTokens` and `OutputTokens` apart
+and refuses with a `*Refusal`; [[008-routing-and-models]] the `Router`,
+whose `Targets` carries each Provider without its credential value;
+[[009-usage-and-metering]] the `Recorder` that turns a `gateway.Record`
+into its own; [[011-api]] the mount at the four doors, the per-address
+unauthenticated rate before the handler, the client address, and the
+`store_unavailable` row's raisers.

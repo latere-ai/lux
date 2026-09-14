@@ -6,6 +6,24 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The request path: the `gateway` package is the data plane as one
+  `http.Handler` for the four doors, `/openai`, `/anthropic`, `/gemini`,
+  and `/lux`, each serving its dialect's own API under its prefix. A
+  request presents a Key in any of the forms the SDKs use, names a
+  model, and is answered by the provider that serves it: byte for byte
+  when the door's dialect and the provider's are the same, translated
+  through `latere.ai/x/pkg/llmdialect` when they differ with every
+  field the provider cannot take named in `Lux-Loss`, streamed as it
+  arrives either way. Every refusal is one fixed code in the door's own
+  error shape with `Lux-Error` beside it, raised before a byte reaches a
+  provider; `GET /v1/models` on a door is the Key's own model list in
+  that dialect's shape; a token count no provider answers is estimated
+  and says so with `Lux-Estimated: true`. Every request ends in one
+  record and counts in `lux_requests_total`,
+  `lux_request_duration_seconds`, and `lux_time_to_first_byte_seconds`.
+  The handler is not mounted yet: the Key lookup, the windows, the
+  routing, the upstream client, and the record's cost are the specs
+  that follow, and `luxd serve` gains the doors when they land.
 - The store: `luxd serve` holds desired state, Key hashes, credential
   rows, spend counters, leases, the event journal, and the tunnel
   registry in memory by default and says so at start in one line, and
