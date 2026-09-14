@@ -1,0 +1,8 @@
+# The LiteLLM venv, if someone points BENCH_VENV_DIR here instead of the
+# default location outside the repo. Never commit it: it is large and its
+# third-party files are not ours to carry.
+.venv/
+# Local driver output, if run outside the default out/bench (which the root
+# .gitignore already excludes).
+*.jsonl
+results/
