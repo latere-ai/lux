@@ -561,11 +561,11 @@ settles:
 - `Store.Usage().AddRows` takes `[]metering.Aggregate`, the hourly row
   with every dimension a member, because a row keyed by a `dimensions`
   map cannot be upserted on its primary key. [[010-state]]'s code block
-  still names the element type `Row` and is that spec's edit to make.
-- The Postgres half of `Usage()` is not built. [[010-state]] owns the
-  store implementations and its Postgres phase is later in the build
-  order; the memory store and the contract suite hold the behaviour in
-  the meantime.
+  names that element type as built.
+- The Postgres half of `Usage()` is [[010-state]]'s and landed with
+  that spec's Postgres phase: the aggregates are a table of its schema,
+  the records a ring the Postgres store borrows from the memory store,
+  and both are held to the same contract suite the memory store runs.
 - `GET /v1/requests` answers `source: memory` alone. The `archive`
   answer, its reader, and the hour-prefixed objects it lists are
   [[012-request-log-and-events]]'s, which closes the other half of the
@@ -587,7 +587,7 @@ reader that makes `source` read `archive`, and with it the durable
 record set this spec's retention rule assumes;
 [[015-test-stubs-and-tiers]] runs the two e2e halves;
 [[019-observability]] holds the metric names in its table;
-[[010-state]] adds the Postgres aggregates and counters and edits its
+[[010-state]] added the Postgres aggregates and counters and the
 `AddRows` signature; [[011-api]] owns the two routes' parsing,
 refusals, and OpenAPI operations, which this spec's parameter tables
 define.

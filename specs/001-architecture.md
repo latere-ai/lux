@@ -437,7 +437,7 @@ that builds the component; the row is complete when that spec's is.
 | 7, one usage record per request: every data plane request in the e2e tier, refused, failed, or successful, has exactly one usage record and the record carries no request or response content | [[009-usage-and-metering]] | `TestEveryRequestHasOneUsageRecord` |
 | 7, money that cannot be counted is not spent: a Key under a hard Budget naming an unpriced Model is refused with `model_unpriced` before any bytes reach a provider | [[007-keys-and-limits]] | `TestUnpricedModelRefusedUnderABudget` |
 | 8, a fork publishes under its own namespace | [[017-release-and-installation]] | `TestReleasePublishesUnderTheOwnersNamespace` |
-| 10, desired state survives: after `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | [[010-state]], [[015-test-stubs-and-tiers]] | the postgres tier's `TestPostgresTwoReplicas` |
+| 10, desired state survives: after `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | [[010-state]], [[015-test-stubs-and-tiers]] | the postgres tier's `TestPostgresTwoReplicas`, which runs against a database since the Postgres store landed |
 
 ## Outcome
 

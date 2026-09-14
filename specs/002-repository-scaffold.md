@@ -153,7 +153,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_PUBLIC_URL` | yes, from 011 | none | the absolute URL callers reach the public listener at; the base of every URL in a response |
 | `LUX_MANIFEST_DIR` | 010 | unset | a directory of manifests read at start: file mode, where desired state comes from disk and the kinds it declares are read-only through the API |
 | the variables a file-mode manifest names in `credential.valueFrom.env` or `Key.spec.valueFrom.env` | 003, 010 | none | the operator's own names, outside the `LUX_` namespace, read once at start in file mode and refused in server mode |
-| `LUX_DB_URL`, `LUX_DB_MAX_CONNS` | 010 | unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory, and until the Postgres store lands a set URL is refused at start rather than answered from memory |
+| `LUX_DB_URL`, `LUX_DB_MAX_CONNS` | 010 | unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory, and a set URL selects the Postgres store, whose migrations `luxd serve` applies at start ([[010-state]]) |
 | `LUX_SECRETS_KEK` | yes for `serve` and `rewrap`, except in file mode, from 005 | none | one to eight 32-byte keys, standard base64, comma separated; the first wraps every new data key, every key is tried to open one, so rotation is prepending a key and running `luxd rewrap` |
 | `LUX_OIDC_ISSUERS` | yes, from 006 | none | comma separated issuer URLs whose tokens are accepted on the control plane |
 | `LUX_OIDC_AUDIENCE` | 006 | `lux` | the audience a caller token must contain |
