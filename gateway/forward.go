@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/llmdialect"
+	"latere.ai/x/pkg/llmdialect/bridge"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -466,8 +467,8 @@ func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Re
 		if t.Model != c.model.Metadata.Name && c.door != v1.DialectGemini {
 			body = rewriteModel(body, c.model.Metadata.Name)
 		}
-		if tokens, ok := bodyUsage(td, body); ok {
-			c.tokens = tokens
+		if u, ok := bridge.UsageOf(wireOf(td), body); ok {
+			c.tokens = tokensOf(u)
 		} else {
 			c.tokens = c.estimatedTokens()
 		}

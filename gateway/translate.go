@@ -147,6 +147,63 @@ func lossHeader(name string) ir.LossField {
 	return ir.LossField("header." + strings.ToLower(name))
 }
 
+// usageParts is the usage of a translated response or stream as the
+// codecs report it, each member a pointer so a member that was reported
+// is told from one that was not. It is read by respondWhole's and
+// streamTranslated's translate arms until those call the bridge, whose
+// Response and Stream return the same reading; step 6 of spec 021
+// deletes it.
+type usageParts struct {
+	prompt, completion, cached, cacheWrite, reasoning *int64
+}
+
+func deref(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// tokens folds the parts into the record's block. ok is false when no
+// usage member was reported at all.
+func (p usageParts) tokens() (Tokens, bool) {
+	if p.prompt == nil && p.completion == nil && p.cached == nil && p.cacheWrite == nil && p.reasoning == nil {
+		return Tokens{}, false
+	}
+	return Tokens{
+		Input:       deref(p.prompt),
+		Output:      deref(p.completion),
+		CachedInput: deref(p.cached),
+		CacheWrite:  deref(p.cacheWrite),
+		Reasoning:   deref(p.reasoning),
+	}, true
+}
+
+// fromIR merges an IR usage, member-wise: a translated stream reports
+// usage on message_start and on message_delta, and a member reported
+// later replaces one reported earlier.
+func (p *usageParts) fromIR(u *ir.Usage) {
+	if u == nil {
+		return
+	}
+	in, out, cached, write, reasoning := u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheWriteInputTokens, u.ReasoningTokens
+	if in > 0 || p.prompt == nil {
+		p.prompt = &in
+	}
+	if out > 0 || p.completion == nil {
+		p.completion = &out
+	}
+	if cached > 0 || p.cached == nil {
+		p.cached = &cached
+	}
+	if write > 0 || p.cacheWrite == nil {
+		p.cacheWrite = &write
+	}
+	if reasoning > 0 || p.reasoning == nil {
+		p.reasoning = &reasoning
+	}
+}
+
 // responseEvents re-emits a whole response as the event sequence a
 // stream would have carried, for a target that answered a stream request
 // with one JSON body: message_start, one block with its deltas per

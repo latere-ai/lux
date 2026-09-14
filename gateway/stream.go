@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 
+	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
 
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -28,8 +29,8 @@ func (e *writeError) Error() string { return "writing to the caller: " + e.err.E
 func (e *writeError) Unwrap() error { return e.err }
 
 // relayChunks copies src to dst in chunks of at most relayChunk, flushing
-// each, and feeds every chunk to the sniffer when there is one.
-func relayChunks(dst *responseWriter, src io.Reader, sn sniffer) error {
+// each, and feeds every chunk to the usage scanner when there is one.
+func relayChunks(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner) error {
 	buf := make([]byte, relayChunk)
 	for {
 		n, err := src.Read(buf)
@@ -55,7 +56,7 @@ func relayChunks(dst *responseWriter, src io.Reader, sn sniffer) error {
 // member of each frame's data to name, flushing per frame. It is the
 // relay of a passthrough stream whose Model's name and upstream name
 // differ, the one case where the bytes cannot be relayed as read.
-func relayFrames(dst *responseWriter, src io.Reader, sn sniffer, name string) error {
+func relayFrames(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner, name string) error {
 	br := bufio.NewReaderSize(src, relayChunk)
 	var frame []byte
 	flush := func() error {
@@ -120,12 +121,11 @@ func rewriteFrame(frame []byte, name string) []byte {
 func (c *call) streamPassthrough(ctx context.Context, t Target, resp *http.Response) *failure {
 	td := t.Provider.Spec.Dialect
 	sse := isSSE(resp.Header.Get("Content-Type"))
-	var sn sniffer
+	framing := bridge.FramingJSON
 	if sse {
-		sn = newSSESniffer(td)
-	} else {
-		sn = newJSONSniffer(td)
+		framing = bridge.FramingSSE
 	}
+	sn := bridge.NewUsageScanner(wireOf(td), framing)
 	c.w.WriteHeader(resp.StatusCode)
 	c.w.Flush()
 	var err error
@@ -142,14 +142,14 @@ func (c *call) streamPassthrough(ctx context.Context, t Target, resp *http.Respo
 	return nil
 }
 
-// streamTokens is the sniffer's answer, or the estimate when the stream
+// streamTokens is the scanner's answer, or the estimate when the stream
 // carried no usage member; a count records zero tokens.
-func (c *call) streamTokens(sn sniffer) Tokens {
+func (c *call) streamTokens(sn *bridge.UsageScanner) Tokens {
 	if c.route.count() {
 		return Tokens{}
 	}
-	if tokens, ok := sn.Tokens(); ok {
-		return tokens
+	if u, ok := sn.Usage(); ok {
+		return tokensOf(u)
 	}
 	return c.estimatedTokens()
 }
