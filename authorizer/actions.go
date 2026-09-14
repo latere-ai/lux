@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package auth
+package authorizer
 
 import (
 	"maps"
@@ -13,9 +13,11 @@ import (
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-// The actions of spec 006's table: the vocabulary luxd sends, and the
-// only thing it adds to the shared contract beside the resource shapes
-// below.
+// The actions of spec 006's table: every question luxd asks an
+// authorizer, and with the resource shapes below the whole of what this
+// module adds to the shared contract's envelope. A constant never
+// changes its string and never disappears; a new action is a new row in
+// that table first and a constant here second.
 const (
 	ActionProviderCreate = "provider.create"
 	ActionProviderRead   = "provider.read"

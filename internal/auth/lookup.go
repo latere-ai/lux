@@ -10,6 +10,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -56,7 +57,7 @@ func (l *Lookup) Provider(ctx context.Context, nameOrID string) (*v1.Provider, e
 	if p == nil {
 		return nil, notFound(detail)
 	}
-	if err := l.allow(ctx, ActionProviderRead, ProviderObject(p), detail); err != nil {
+	if err := l.allow(ctx, authorizer.ActionProviderRead, authorizer.ProviderObject(p), detail); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -72,7 +73,7 @@ func (l *Lookup) Budget(ctx context.Context, nameOrID string) (*v1.Budget, error
 	if b == nil {
 		return nil, notFound(detail)
 	}
-	if err := l.allow(ctx, ActionBudgetDraw, BudgetObject(b), detail); err != nil {
+	if err := l.allow(ctx, authorizer.ActionBudgetDraw, authorizer.BudgetObject(b), detail); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -93,7 +94,7 @@ func (l *Lookup) Models(ctx context.Context, selector string) ([]v1.ModelRef, er
 		refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner})
 	}
 	detail := "selector " + strconv.Quote(selector) + " names no Model the caller may use"
-	if err := l.allow(ctx, ActionModelUse, ModelUse(selector, refs), detail); err != nil {
+	if err := l.allow(ctx, authorizer.ActionModelUse, authorizer.ModelUse(selector, refs), detail); err != nil {
 		return nil, err
 	}
 	return refs, nil

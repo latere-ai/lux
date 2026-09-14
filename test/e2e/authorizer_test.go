@@ -16,6 +16,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	vocabulary "latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 )
 
@@ -118,7 +119,7 @@ func TestE2ECheckAgainstTheStubs(t *testing.T) {
 		t.Fatalf("the check's authorizer row failed against the stub: %v", err)
 	}
 	// The table was in force: an ordinary decision is the allow it names.
-	d, err := c.Authorize(t.Context(), authz.Request{Subject: "s", Action: auth.ActionProviderRead, Resource: authz.NewResource("Provider", "prv_1", nil)})
+	d, err := c.Authorize(t.Context(), authz.Request{Subject: "s", Action: vocabulary.ActionProviderRead, Resource: authz.NewResource("Provider", "prv_1", nil)})
 	if err != nil || !d.Allow {
 		t.Fatalf("an ordinary decision under the allow-everything table: %+v, %v", d, err)
 	}

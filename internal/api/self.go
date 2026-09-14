@@ -9,6 +9,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -54,7 +55,7 @@ func (c *call) self(context.Context) *Error {
 	if g, ok := c.h.grants.get(c.caller.Subject); ok {
 		out.Filter = g.filter
 		l := g.limits
-		if l != (auth.Limits{}) {
+		if l != (authorizer.Limits{}) {
 			out.Limits = &SelfLimits{
 				RequestsPerMinute:       l.RequestsPerMinute,
 				MaxKeyRequestsPerMinute: l.Key.MaxRequestsPerMinute,

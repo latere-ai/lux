@@ -13,6 +13,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
@@ -34,7 +35,7 @@ func NewAuthorizer(a authz.Authorizer) *Authorizer { return &Authorizer{a: a} }
 // Lux's figures, the filter of a list action, and the time the shared
 // client holds the allow for.
 type Decision struct {
-	Limits Limits
+	Limits authorizer.Limits
 	Filter *authz.Filter
 	TTL    time.Duration
 }
@@ -70,7 +71,7 @@ func (z *Authorizer) Decide(ctx context.Context, c Caller, action string, res au
 	if !d.Allow {
 		return Decision{}, refuse(CodeForbidden, "authz deny subject="+c.Subject+" action="+action+" resource="+res.Kind+"/"+res.ID+": "+d.Reason)
 	}
-	limits, err := DecodeLimits(d)
+	limits, err := authorizer.DecodeLimits(d)
 	if err != nil {
 		return Decision{}, refuse(CodeAuthorizerUnavailable, "the answer to "+action+" carries limits this gateway cannot read: "+err.Error())
 	}
@@ -119,5 +120,5 @@ func (z *Authorizer) ask(ctx context.Context, c Caller, action string, res authz
 // holds any deny, under the anonymous subject and the reserved id, which
 // no request about an object ever shares: no object has that id.
 func (z *Authorizer) Check(ctx context.Context) error {
-	return authz.Check(ctx, z.a, ActionProviderRead, v1.KindProvider)
+	return authz.Check(ctx, z.a, authorizer.ActionProviderRead, v1.KindProvider)
 }

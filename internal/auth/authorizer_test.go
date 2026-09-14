@@ -5,7 +5,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"latere.ai/x/pkg/authz/conformance"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -109,7 +109,7 @@ func TestAuthorizerRequestShapes(t *testing.T) {
 
 	s, z := newStubAuthorizer(t)
 	want := shapes(t)
-	for _, action := range Actions() {
+	for _, action := range authorizer.Actions() {
 		t.Run(action, func(t *testing.T) {
 			s.ClearRequests()
 			if _, err := z.Decide(t.Context(), caller, action, resourceOf(t, action), info); err != nil {
@@ -192,7 +192,7 @@ func TestAuthorizerUnavailability(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			z := tc.build(t)
-			_, err := z.Decide(t.Context(), alice, ActionKeyRead, KeyObject(fixtureKey()), info)
+			_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info)
 			e := wantCode(t, err, CodeAuthorizerUnavailable)
 			if !strings.Contains(e.Detail, tc.want) {
 				t.Errorf("detail %q lacks %q", e.Detail, tc.want)
@@ -231,7 +231,7 @@ func TestAuthorizerRetriesOnlyBeforeAResponseLine(t *testing.T) {
 			}
 		}()
 		z := NewAuthorizer(newClient(t, "http://"+ln.Addr().String(), "t", authz.Options{}))
-		_, err = z.Decide(t.Context(), alice, ActionKeyRead, KeyObject(fixtureKey()), info)
+		_, err = z.Decide(t.Context(), alice, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info)
 		wantCode(t, err, CodeAuthorizerUnavailable)
 		if n := accepted.Load(); n != 2 {
 			t.Errorf("%d connection(s), want the call and one retry", n)
@@ -240,7 +240,7 @@ func TestAuthorizerRetriesOnlyBeforeAResponseLine(t *testing.T) {
 	t.Run("a non-200", func(t *testing.T) {
 		s, z := newStubAuthorizer(t)
 		s.Fail(http.StatusBadGateway)
-		_, err := z.Decide(t.Context(), alice, ActionKeyRead, KeyObject(fixtureKey()), info)
+		_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info)
 		wantCode(t, err, CodeAuthorizerUnavailable)
 		if n := len(s.Requests()); n != 1 {
 			t.Errorf("%d request(s), want one and no retry", n)
@@ -250,7 +250,7 @@ func TestAuthorizerRetriesOnlyBeforeAResponseLine(t *testing.T) {
 		s := stub.New(t)
 		s.Hang()
 		z := NewAuthorizer(newClient(t, s.URL(), s.Token(), authz.Options{Timeout: 100 * time.Millisecond}))
-		_, err := z.Decide(t.Context(), alice, ActionKeyRead, KeyObject(fixtureKey()), info)
+		_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, authorizer.KeyObject(fixtureKey()), info)
 		wantCode(t, err, CodeAuthorizerUnavailable)
 		s.Resume()
 		if n := len(s.Requests()); n != 1 {
@@ -265,8 +265,8 @@ func TestAuthorizerRetriesOnlyBeforeAResponseLine(t *testing.T) {
 func TestDenyReasonStaysOutOfTheUserSentence(t *testing.T) {
 	s, z := newStubAuthorizer(t)
 	const reason = "plan free does not include budgets, upgrade at /billing"
-	s.Deny(stub.Rule{Subject: fixtureSubject, Action: ActionBudgetCreate}, reason)
-	_, err := z.Decide(t.Context(), alice, ActionBudgetCreate, BudgetCreate(fixtureBudget(t)), info)
+	s.Deny(stub.Rule{Subject: fixtureSubject, Action: authorizer.ActionBudgetCreate}, reason)
+	_, err := z.Decide(t.Context(), alice, authorizer.ActionBudgetCreate, authorizer.BudgetCreate(fixtureBudget(t)), info)
 	e := wantCode(t, err, CodeForbidden)
 	if e.Message != "You do not have permission to do this." {
 		t.Errorf("message %q", e.Message)
@@ -301,11 +301,11 @@ func TestAuthorizerLimitsReachTheirConsumers(t *testing.T) {
 		"requests_per_minute": 1200, "max_key_requests_per_minute": 600, "max_key_tokens_per_minute": 1000000,
 		"max_key_spend": "50", "max_key_ttl": "720h", "max_keys": 100,
 	}})
-	d, err := z.Decide(t.Context(), alice, ActionKeyCreate, KeyCreate(fixtureKey()), info)
+	d, err := z.Decide(t.Context(), alice, authorizer.ActionKeyCreate, authorizer.KeyCreate(fixtureKey()), info)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Limits{
+	want := authorizer.Limits{
 		RequestsPerMinute: 1200,
 		Key:               manifest.Limits{MaxRequestsPerMinute: 600, MaxTokensPerMinute: 1000000, MaxSpend: *money(t, "50"), MaxTTL: 720 * time.Hour},
 		MaxKeys:           100,
@@ -334,68 +334,28 @@ func TestAuthorizerLimitsReachTheirConsumers(t *testing.T) {
 
 	t.Run("an answer without limits", func(t *testing.T) {
 		s.SetRules()
-		d, err := z.Decide(t.Context(), alice, ActionBudgetCreate, BudgetCreate(fixtureBudget(t)), info)
+		d, err := z.Decide(t.Context(), alice, authorizer.ActionBudgetCreate, authorizer.BudgetCreate(fixtureBudget(t)), info)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d.Limits != (Limits{}) || d.Filter != nil || d.TTL != authz.DefaultTTL {
+		if d.Limits != (authorizer.Limits{}) || d.Filter != nil || d.TTL != authz.DefaultTTL {
 			t.Errorf("decision = %+v", d)
 		}
 	})
 }
 
-// TestDecodeLimits: an absent object and an empty one are the zero
-// figures, a field the gateway does not know is ignored, and a figure
-// below zero, a spend that is not a money string, or a ttl that is not a
-// duration is refused, which Decide reads as no decision.
-func TestDecodeLimits(t *testing.T) {
-	for _, tc := range []struct {
-		name, limits string
-		want         Limits
-		bad          bool
-	}{
-		{"absent", "", Limits{}, false},
-		{"null", "null", Limits{}, false},
-		{"empty", "{}", Limits{}, false},
-		{"an unknown field", `{"max_key_seats": 3, "max_keys": 2}`, Limits{MaxKeys: 2}, false},
-		{"a fraction of money", `{"max_key_spend": "0.5"}`, Limits{Key: manifest.Limits{MaxSpend: 500000}}, false},
-		{"a zero ttl", `{"max_key_ttl": "0s"}`, Limits{}, false},
-		{"a rate below zero", `{"requests_per_minute": -1}`, Limits{}, true},
-		{"a key rate below zero", `{"max_key_requests_per_minute": -5}`, Limits{}, true},
-		{"a token rate below zero", `{"max_key_tokens_per_minute": -5}`, Limits{}, true},
-		{"max_keys below zero", `{"max_keys": -1}`, Limits{}, true},
-		{"a spend as a number", `{"max_key_spend": 50}`, Limits{}, true},
-		{"a spend that is not money", `{"max_key_spend": "fifty"}`, Limits{}, true},
-		{"a ttl that is not a duration", `{"max_key_ttl": "soon"}`, Limits{}, true},
-		{"a ttl below zero", `{"max_key_ttl": "-1h"}`, Limits{}, true},
-		{"not an object", `[1]`, Limits{}, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := authz.Decision{Allow: true}
-			if tc.limits != "" {
-				d.Limits = json.RawMessage(tc.limits)
-			}
-			got, err := DecodeLimits(d)
-			if tc.bad {
-				if err == nil {
-					t.Fatalf("DecodeLimits(%s) = %+v, want an error", tc.limits, got)
-				}
-				return
-			}
-			if err != nil || got != tc.want {
-				t.Fatalf("DecodeLimits(%s) = %+v, %v; want %+v", tc.limits, got, err, tc.want)
-			}
-		})
+// TestDecodeLimitsThroughDecide: an answer whose limits the gateway
+// cannot read is no decision at all, which Decide reports as
+// authorizer_unavailable. The decoding itself is the authorizer
+// package's.
+func TestDecodeLimitsThroughDecide(t *testing.T) {
+	s, z := newStubAuthorizer(t)
+	s.Allow(stub.Rule{Limits: map[string]any{"max_key_spend": 50}})
+	_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyCreate, authorizer.KeyCreate(fixtureKey()), info)
+	e := wantCode(t, err, CodeAuthorizerUnavailable)
+	if !strings.Contains(e.Detail, "limits this gateway cannot read") {
+		t.Errorf("detail %q", e.Detail)
 	}
-	t.Run("through Decide", func(t *testing.T) {
-		s, z := newStubAuthorizer(t)
-		s.Allow(stub.Rule{Limits: map[string]any{"max_key_spend": 50}})
-		_, err := z.Decide(t.Context(), alice, ActionKeyCreate, KeyCreate(fixtureKey()), info)
-		e := wantCode(t, err, CodeAuthorizerUnavailable)
-		if !strings.Contains(e.Detail, "limits this gateway cannot read") {
-			t.Errorf("detail %q", e.Detail)
-		}
-	})
 }
 
 // TestAuthorizerFilter: the filter of an allow on a list action reaches
@@ -404,14 +364,14 @@ func TestDecodeLimits(t *testing.T) {
 func TestAuthorizerFilter(t *testing.T) {
 	s, z := newStubAuthorizer(t)
 	want := &authz.Filter{Owners: []string{fixtureSubject}, Labels: map[string]string{"team": "research"}}
-	s.Allow(stub.Rule{Action: ActionKeyList, Filter: want})
+	s.Allow(stub.Rule{Action: authorizer.ActionKeyList, Filter: want})
 	for _, tc := range []struct {
 		action string
 		res    authz.Resource
 		want   *authz.Filter
 	}{
-		{ActionKeyList, KeyList(), want},
-		{ActionUsageRead, UsageRead(nil, nil), nil},
+		{authorizer.ActionKeyList, authorizer.KeyList(), want},
+		{authorizer.ActionUsageRead, authorizer.UsageRead(nil, nil), nil},
 	} {
 		d, err := z.Decide(t.Context(), alice, tc.action, tc.res, info)
 		if err != nil {
@@ -434,7 +394,7 @@ func TestDecisionCache(t *testing.T) {
 		asked   int  // requests the stub has seen after this step
 		allowed bool // the answer this step
 	}
-	object := KeyObject(fixtureKey())
+	object := authorizer.KeyObject(fixtureKey())
 	for _, tc := range []struct {
 		name  string
 		setup func(s *stub.Server)
@@ -449,7 +409,7 @@ func TestDecisionCache(t *testing.T) {
 			[]step{{0, 1, true}, {599 * time.Second, 1, true}, {2 * time.Second, 2, true}}},
 		{"a deny for 5 s", func(s *stub.Server) { s.Deny(stub.Rule{}, "no") }, object,
 			[]step{{0, 1, false}, {4 * time.Second, 1, false}, {2 * time.Second, 2, false}}},
-		{"a resource with no id never", func(*stub.Server) {}, KeyCreate(fixtureKey()),
+		{"a resource with no id never", func(*stub.Server) {}, authorizer.KeyCreate(fixtureKey()),
 			[]step{{0, 1, true}, {0, 2, true}, {0, 3, true}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -459,7 +419,7 @@ func TestDecisionCache(t *testing.T) {
 			z := NewAuthorizer(newClient(t, s.URL(), s.Token(), authz.Options{Now: clk.Now}))
 			for i, st := range tc.steps {
 				clk.Advance(st.advance)
-				_, err := z.Decide(t.Context(), alice, ActionKeyRead, tc.res, info)
+				_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, tc.res, info)
 				if allowed := err == nil; allowed != st.allowed {
 					t.Fatalf("step %d: err = %v, want allowed %v", i, err, st.allowed)
 				}
@@ -474,14 +434,14 @@ func TestDecisionCache(t *testing.T) {
 		s.Fail(http.StatusServiceUnavailable)
 		z := NewAuthorizer(newClient(t, s.URL(), s.Token(), authz.Options{Now: newClock().Now}))
 		for i := 1; i <= 2; i++ {
-			_, err := z.Decide(t.Context(), alice, ActionKeyRead, object, info)
+			_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, object, info)
 			wantCode(t, err, CodeAuthorizerUnavailable)
 			if n := len(s.Requests()); n != i {
 				t.Fatalf("the stub saw %d request(s), want %d", n, i)
 			}
 		}
 		s.Resume()
-		if _, err := z.Decide(t.Context(), alice, ActionKeyRead, object, info); err != nil {
+		if _, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, object, info); err != nil {
 			t.Fatalf("after the outage: %v", err)
 		}
 	})
@@ -490,16 +450,16 @@ func TestDecisionCache(t *testing.T) {
 		s.Allow(stub.Rule{TTL: 10})
 		clk := newClock()
 		z := NewAuthorizer(newClient(t, s.URL(), s.Token(), authz.Options{Now: clk.Now}))
-		if _, err := z.Decide(t.Context(), alice, ActionKeyRead, object, info); err != nil {
+		if _, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, object, info); err != nil {
 			t.Fatal(err)
 		}
 		s.Deny(stub.Rule{Subject: fixtureSubject}, "revoked")
 		clk.Advance(9 * time.Second)
-		if _, err := z.Decide(t.Context(), alice, ActionKeyRead, object, info); err != nil {
+		if _, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, object, info); err != nil {
 			t.Fatalf("within the ttl the cached allow holds: %v", err)
 		}
 		clk.Advance(2 * time.Second)
-		_, err := z.Decide(t.Context(), alice, ActionKeyRead, object, info)
+		_, err := z.Decide(t.Context(), alice, authorizer.ActionKeyRead, object, info)
 		wantCode(t, err, CodeForbidden)
 	})
 }
@@ -529,7 +489,7 @@ func TestProbeIdIsAlwaysDenied(t *testing.T) {
 		for _, subject := range []string{"", fixtureSubject, admin} {
 			c := Caller{Subject: subject}
 			c.Issuer, c.Sub, _ = authz.SplitSubject(subject)
-			for _, action := range Actions() {
+			for _, action := range authorizer.Actions() {
 				res := resourceOf(t, action)
 				res.ID = authz.ProbeID
 				_, err := tc.z.Decide(t.Context(), c, action, res, info)
@@ -556,9 +516,9 @@ func TestProbeIdIsAlwaysDenied(t *testing.T) {
 
 	t.Run("the stub conforms under the vocabulary", func(t *testing.T) {
 		s := stub.New(t)
-		actions := make([]conformance.Action, 0, len(Actions()))
-		for _, a := range Actions() {
-			actions = append(actions, conformance.Action{Name: a, Kind: Kind(a)})
+		actions := make([]conformance.Action, 0, len(authorizer.Actions()))
+		for _, a := range authorizer.Actions() {
+			actions = append(actions, conformance.Action{Name: a, Kind: authorizer.Kind(a)})
 		}
 		conformance.Run(t, s.URL(), s.Token(), conformance.WithActions(actions...),
 			conformance.WithSubjects(fixtureSubject, fixtureIssuer+"|bob"), conformance.WithHTTPClient(&http.Client{}))

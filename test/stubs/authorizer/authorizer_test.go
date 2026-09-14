@@ -14,6 +14,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	vocabulary "latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -41,24 +42,24 @@ func model(name string) *v1.Model {
 // by id or by * alone.
 func TestAuthorizerStubNamesResourcesLuxsWay(t *testing.T) {
 	s := New(t)
-	s.SetRules(stub.Rule{Action: auth.ActionModelRead, Resource: "Model/gpt-4o", Allow: false, Reason: "named before it existed"})
+	s.SetRules(stub.Rule{Action: vocabulary.ActionModelRead, Resource: "Model/gpt-4o", Allow: false, Reason: "named before it existed"})
 	c := client(t, s, time.Second)
 	caller := auth.Caller{Subject: "https://login.example.com|alice"}
-	d, err := c.Authorize(t.Context(), auth.Request(caller, auth.ActionModelRead, auth.ModelObject(model("gpt-4o")), authz.Caller{}))
+	d, err := c.Authorize(t.Context(), auth.Request(caller, vocabulary.ActionModelRead, vocabulary.ModelObject(model("gpt-4o")), authz.Caller{}))
 	if err != nil || d.Allow || d.Reason != "named before it existed" {
 		t.Fatalf("the named rule did not match: %+v, %v", d, err)
 	}
-	d, err = c.Authorize(t.Context(), auth.Request(caller, auth.ActionModelRead, auth.ModelObject(model("gpt-4o-mini")), authz.Caller{}))
+	d, err = c.Authorize(t.Context(), auth.Request(caller, vocabulary.ActionModelRead, vocabulary.ModelObject(model("gpt-4o-mini")), authz.Caller{}))
 	if err != nil || !d.Allow {
 		t.Fatalf("another name matched the rule: %+v, %v", d, err)
 	}
-	if got := Name(auth.ModelList()); got != "" {
+	if got := Name(vocabulary.ModelList()); got != "" {
 		t.Fatalf("Name of a list resource = %q", got)
 	}
-	if got := Name(auth.KeyObject(&v1.Key{Metadata: v1.ObjectMeta{Name: "dev"}})); got != "Key/dev" {
+	if got := Name(vocabulary.KeyObject(&v1.Key{Metadata: v1.ObjectMeta{Name: "dev"}})); got != "Key/dev" {
 		t.Fatalf("Name = %q", got)
 	}
-	if got := s.Requests(); len(got) != 2 || got[0].Action != auth.ActionModelRead {
+	if got := s.Requests(); len(got) != 2 || got[0].Action != vocabulary.ActionModelRead {
 		t.Fatalf("requests = %+v", got)
 	}
 	// NewHandler carries the same naming, for the binary.
@@ -66,7 +67,7 @@ func TestAuthorizerStubNamesResourcesLuxsWay(t *testing.T) {
 	srv := httptest.NewServer(h.Handler())
 	defer srv.Close()
 	h.SetRules(stub.Rule{Resource: "Model/gpt-4o", Allow: false, Reason: "by name"})
-	if d := h.Decide(authz.Request{Subject: "s", Action: auth.ActionModelRead, Resource: auth.ModelObject(model("gpt-4o"))}); d.Allow {
+	if d := h.Decide(authz.Request{Subject: "s", Action: vocabulary.ActionModelRead, Resource: vocabulary.ModelObject(model("gpt-4o"))}); d.Allow {
 		t.Fatalf("the handler's naming did not match: %+v", d)
 	}
 	if h.Token() != "other" {
@@ -83,13 +84,13 @@ func TestAuthorizerStubFlags(t *testing.T) {
 	c := client(t, s, 300*time.Millisecond)
 	caller := auth.Caller{Subject: "https://login.example.com|alice"}
 	ask := func() (authz.Decision, error) {
-		return c.Authorize(t.Context(), auth.Request(caller, auth.ActionKeyCreate, auth.KeyCreate(&v1.Key{Metadata: v1.ObjectMeta{Name: "dev"}}), authz.Caller{}))
+		return c.Authorize(t.Context(), auth.Request(caller, vocabulary.ActionKeyCreate, vocabulary.KeyCreate(&v1.Key{Metadata: v1.ObjectMeta{Name: "dev"}}), authz.Caller{}))
 	}
 	Deny(s, "")
 	if d, err := ask(); err != nil || !d.Allow {
 		t.Fatalf("Deny of nothing changed the table: %+v, %v", d, err)
 	}
-	Deny(s, auth.ActionKeyCreate)
+	Deny(s, vocabulary.ActionKeyCreate)
 	if d, err := ask(); err != nil || d.Allow || !strings.Contains(d.Reason, "-authorizer-deny key.create") {
 		t.Fatalf("Deny did not deny: %+v, %v", d, err)
 	}
@@ -128,7 +129,7 @@ func TestAuthorizerStubDeniesTheProbe(t *testing.T) {
 	if err := auth.NewAuthorizer(c).Check(t.Context()); err != nil {
 		t.Fatalf("the probe was not denied: %v", err)
 	}
-	if err := authz.Check(t.Context(), c, auth.ActionProviderRead, v1.KindProvider); err != nil {
+	if err := authz.Check(t.Context(), c, vocabulary.ActionProviderRead, v1.KindProvider); err != nil {
 		t.Fatalf("authz.Check: %v", err)
 	}
 }

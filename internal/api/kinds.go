@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -26,10 +26,10 @@ type kind struct {
 
 // kinds are the four, in the route table's order.
 var kinds = []kind{
-	{"providers", v1.KindProvider, v1.PrefixProvider, auth.ActionProviderCreate, auth.ActionProviderRead, auth.ActionProviderUpdate, auth.ActionProviderDelete, auth.ActionProviderList},
-	{"models", v1.KindModel, v1.PrefixModel, auth.ActionModelCreate, auth.ActionModelRead, auth.ActionModelUpdate, auth.ActionModelDelete, auth.ActionModelList},
-	{"keys", v1.KindKey, v1.PrefixKey, auth.ActionKeyCreate, auth.ActionKeyRead, auth.ActionKeyUpdate, auth.ActionKeyDelete, auth.ActionKeyList},
-	{"budgets", v1.KindBudget, v1.PrefixBudget, auth.ActionBudgetCreate, auth.ActionBudgetRead, auth.ActionBudgetUpdate, auth.ActionBudgetDelete, auth.ActionBudgetList},
+	{"providers", v1.KindProvider, v1.PrefixProvider, authorizer.ActionProviderCreate, authorizer.ActionProviderRead, authorizer.ActionProviderUpdate, authorizer.ActionProviderDelete, authorizer.ActionProviderList},
+	{"models", v1.KindModel, v1.PrefixModel, authorizer.ActionModelCreate, authorizer.ActionModelRead, authorizer.ActionModelUpdate, authorizer.ActionModelDelete, authorizer.ActionModelList},
+	{"keys", v1.KindKey, v1.PrefixKey, authorizer.ActionKeyCreate, authorizer.ActionKeyRead, authorizer.ActionKeyUpdate, authorizer.ActionKeyDelete, authorizer.ActionKeyList},
+	{"budgets", v1.KindBudget, v1.PrefixBudget, authorizer.ActionBudgetCreate, authorizer.ActionBudgetRead, authorizer.ActionBudgetUpdate, authorizer.ActionBudgetDelete, authorizer.ActionBudgetList},
 }
 
 // kindOf is the row of a kind name.

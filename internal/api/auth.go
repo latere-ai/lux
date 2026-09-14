@@ -11,6 +11,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/serve"
 )
@@ -96,7 +97,7 @@ type grants struct {
 
 // grant is one subject's last allow.
 type grant struct {
-	limits auth.Limits
+	limits authorizer.Limits
 	filter *authz.Filter
 	until  time.Time
 }

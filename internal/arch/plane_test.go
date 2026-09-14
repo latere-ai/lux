@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/authorizer"
 )
 
 // The spec of the plane document and the document itself, plus the
@@ -118,7 +118,7 @@ func readMechanisms(t *testing.T) mechanisms {
 		tags:      map[string]bool{},
 		binaries:  map[string]bool{},
 	}
-	for _, a := range auth.Actions() {
+	for _, a := range authorizer.Actions() {
 		m.actions[a] = true
 	}
 	for _, name := range goList(t, root(t), "-f", "{{.Name}}", "./...") {

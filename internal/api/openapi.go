@@ -16,6 +16,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
@@ -170,10 +171,10 @@ func openAPIDocument() ordered {
 		paths = append(paths, kindPaths(k)...)
 	}
 	paths = append(paths,
-		member{"/v1/usage", obj("get", operation("readUsage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", auth.ActionUsageRead,
+		member{"/v1/usage", obj("get", operation("readUsage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "by"), ref("parameters", "interval"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel")},
 			nil, response("200", "The rows.", "UsageList")))},
-		member{"/v1/requests", obj("get", operation("listRequests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", auth.ActionUsageRead,
+		member{"/v1/requests", obj("get", operation("listRequests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
 			nil, response("200", "One page of records.", "RecordList")))},
 		member{"/v1/self", obj("get", operation("readSelf", "The caller's identity, who decides permission, and what this replica remembers granting the subject.", "none", nil, nil, response("200", "The caller.", "Self")))},
