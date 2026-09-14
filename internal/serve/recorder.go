@@ -64,6 +64,9 @@ type RecorderOptions struct {
 	Limiter *Limiter
 	// Metrics receives the three metrics; nil records none.
 	Metrics *metrics.Registry
+	// Archive receives every record once it is priced, the request log
+	// of spec 012; nil archives nothing. Its Append never blocks.
+	Archive RecordSink
 	// Flush is LUX_METERING_FLUSH, how often Run writes the aggregates;
 	// zero is metering.DefaultFlush.
 	Flush time.Duration
@@ -71,6 +74,13 @@ type RecorderOptions struct {
 	Logger *slog.Logger
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
+}
+
+// RecordSink is the seam the request log of spec 012 takes a record
+// through, which reqlog.Exporter satisfies: a non-blocking hand-off of
+// the priced record.
+type RecordSink interface {
+	Append(r metering.Record)
 }
 
 // Recorder is spec 004's Recorder as spec 009 builds it: the one
@@ -117,6 +127,9 @@ func NewRecorder(o RecorderOptions) *Recorder {
 // Record implements gateway.Recorder.
 func (r *Recorder) Record(rec gateway.Record) {
 	m := r.convert(rec)
+	if r.o.Archive != nil {
+		r.o.Archive.Append(m)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), pricingTimeout)
 	defer cancel()
 	if err := r.o.Store.Usage().AppendRecord(ctx, m); err != nil {
