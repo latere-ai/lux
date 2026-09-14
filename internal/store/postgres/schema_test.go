@@ -261,13 +261,13 @@ func TestDatabaseDownAtStartup(t *testing.T) {
 	// An ended context is answered before anything is dialled.
 	ended, cancelEnded := context.WithCancel(ctx)
 	cancelEnded()
-	if _, err := open.Schema(ended); err != context.Canceled {
+	if _, err := open.Schema(ended); !errors.Is(err, context.Canceled) {
 		t.Errorf("Schema on an ended context: %v", err)
 	}
-	if err := open.Migrate(ended); err != context.Canceled {
+	if err := open.Migrate(ended); !errors.Is(err, context.Canceled) {
 		t.Errorf("Migrate on an ended context: %v", err)
 	}
-	if _, _, err := open.ConnectionLimits(ended); err != context.Canceled {
+	if _, _, err := open.ConnectionLimits(ended); !errors.Is(err, context.Canceled) {
 		t.Errorf("ConnectionLimits on an ended context: %v", err)
 	}
 	if _, _, err := Connect(ended, Options{URL: "postgres://lux@" + addr + "/lux"}); !errors.Is(err, context.Canceled) {

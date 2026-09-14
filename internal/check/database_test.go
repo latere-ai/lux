@@ -6,6 +6,7 @@ package check
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,9 +114,7 @@ func TestCheckReadsTheDatabase(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := s.serverEnv()
 			m["LUX_DB_URL"] = "postgres://lux:hunter2@db.example.com:5432/lux?sslmode=require"
-			for k, v := range tc.env {
-				m[k] = v
-			}
+			maps.Copy(m, tc.env)
 			st := memory.New()
 			o := Options{Getenv: env(m), open: func(context.Context, config.Config, config.Getenv) (opened, error) {
 				return opened{st: st, db: tc.db}, nil

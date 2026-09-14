@@ -6,6 +6,7 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	"latere.ai/x/lux/internal/store"
@@ -122,9 +123,7 @@ func encode(obj v1.Object) (*encoded, error) {
 	case *v1.Key:
 		delete(e.status, "value")
 	}
-	for k, v := range f.labels {
-		e.labels[k] = v
-	}
+	maps.Copy(e.labels, f.labels)
 	e.spec = []byte(`{"metadata":` + rawOr(doc.Metadata, "{}") + `,"spec":` + rawOr(doc.Spec, "{}") + `}`)
 	return e, nil
 }

@@ -74,7 +74,7 @@ type Store struct {
 // touching the database: the first query opens the first connection.
 // The caller decides about the schema; Connect is the serve role's
 // sequence and check's is Schema alone.
-func Open(_ context.Context, o Options) (*Store, error) {
+func Open(ctx context.Context, o Options) (*Store, error) {
 	if o.MaxConns <= 0 {
 		o.MaxConns = DefaultMaxConns
 	}
@@ -89,7 +89,7 @@ func Open(_ context.Context, o Options) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("LUX_DB_URL: opening the pool: %w", err)
 	}
