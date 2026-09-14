@@ -37,10 +37,12 @@ import (
 
 // The binaries TestMain builds, and the module root. lux is built
 // beside the two servers because spec 020's sandbox composition runs it
-// as the workload inside the sandbox, holding a placeholder alone.
+// as the workload inside the sandbox, holding a placeholder alone, and
+// the example authorizer because that spec runs the endpoint its
+// document prints beside luxd.
 var (
-	luxdBin, stubsBin, luxBin string
-	root                      string
+	luxdBin, stubsBin, luxBin, authorizerBin string
+	root                                     string
 )
 
 // kek is one 32-byte key encryption key in LUX_SECRETS_KEK's syntax.
@@ -65,15 +67,17 @@ func build() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, name := range []string{"luxd", "lux-stubs", "lux"} {
-		cmd := exec.Command("go", "build", "-o", filepath.Join(dir, name), "./cmd/"+name)
+	for _, pkg := range []string{"./cmd/luxd", "./cmd/lux-stubs", "./cmd/lux", "./examples/authorizer"} {
+		name := filepath.Base(pkg)
+		cmd := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("go build ./cmd/%s: %w\n%s", name, err, out)
+			return "", fmt.Errorf("go build %s: %w\n%s", pkg, err, out)
 		}
 	}
 	luxdBin, stubsBin, luxBin = filepath.Join(dir, "luxd"), filepath.Join(dir, "lux-stubs"), filepath.Join(dir, "lux")
+	authorizerBin = filepath.Join(dir, "authorizer")
 	return dir, nil
 }
 

@@ -13,13 +13,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"latere.ai/x/pkg/authkit/issuertest"
+	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/test/conformance"
 	"latere.ai/x/lux/test/stubs/issuer"
 	"latere.ai/x/lux/test/stubs/provider"
 )
@@ -532,6 +535,47 @@ func TestE2EOneCredentialKindPerHop(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestE2EPlaneDocAuthorizerConforms is spec 020's first acceptance row
+// through the stack: the authorizer docs/plane.md prints, compiled and
+// run beside luxd as the installation's LUX_AUTHORIZER_URL, denies the
+// probe id and carries the whole conformance suite, the identity and
+// manifest groups among them. The suite's tokens carry the plan claim
+// the endpoint reads, which is the platform's own claim and no
+// gateway's.
+func TestE2EPlaneDocAuthorizerConforms(t *testing.T) {
+	const token = "the-platform-authorizer-token"
+	s := startStubs(t)
+	port := strconv.Itoa(freePort(t))
+	decider := startProcess(t, authorizerBin, nil, "-addr", "127.0.0.1:"+port, "-token", token)
+	waitFor(t, "the authorizer's output", 10*time.Second, decider.errOut.String, "deciding at")
+
+	// luxd check's own question, asked of the endpoint before the suite:
+	// the reserved id is denied whatever the subject.
+	probe := do(t, http.MethodPost, "http://127.0.0.1:"+port, jsonBearer(token),
+		`{"subject":"http://localhost|dev","action":"key.read","resource":{"kind":"Key","id":"`+authz.ProbeID+`","owner":"http://localhost|dev"}}`)
+	if probe.status != http.StatusOK || !strings.Contains(string(probe.body), `"allow":false`) {
+		t.Fatalf("the probe = %d %s", probe.status, probe.body)
+	}
+
+	gw := startLuxd(t, serverEnv(t, s, map[string]string{
+		"LUX_AUTHORIZER_URL": "http://127.0.0.1:" + port, "LUX_AUTHORIZER_TOKEN": token,
+	}))
+	issuerURL := strings.TrimRight(s.urls["issuer"], "/")
+	conformance.Run(t, conformance.Config{
+		URL:     gw.public,
+		Subject: issuerURL + "|dev",
+		Token: func(subject string) (string, bool) {
+			i := strings.LastIndexByte(subject, '|')
+			if i < 0 || strings.TrimRight(subject[:i], "/") != issuerURL {
+				return "", false
+			}
+			return mintClaims(t, &stack{stubs: s}, issuertest.Claims{
+				Sub: subject[i+1:], Extra: map[string]any{"plan": "admin"},
+			}), true
+		},
+	})
 }
 
 // TestE2EPlaneDocCommand runs the conformance command docs/plane.md
