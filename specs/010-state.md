@@ -550,17 +550,50 @@ start, and preserved by kind and name across a re-read, so an id is
 stable for the life of the process and differs between starts and
 between replicas; a client of the mode addresses by name, and the
 start-up log says so. A `Provider`'s `status.credential.version` is 1
-and `status.owner` is the file subject above.
+and `status.owner` is the file subject above; `status.credential.set`
+is false for a Provider that names no credential. An inline
+`credential.value` in a file is admitted, because
+[[003-manifest-contract]] resolves it in every mode and a manifest means
+one thing on every surface, and is held in memory exactly as a
+variable's value is. A Key that names no `valueFrom.env` is a start-up
+failure naming the Key, and two files that declare one kind and name
+are a start-up failure naming both files.
+
+The package is `internal/store/filemode`: `Load(ctx, Options)` reads
+the directory and returns the `Store` or the start-up failure, with
+`Options` carrying the directory, `Getenv`, the clock, and the three
+resolver options above; `Reload(ctx)` is the `SIGHUP` re-read;
+`Summary()` is what the last read produced, files and objects per
+kind, which the start-up line and `luxd check`'s `manifest dir` row
+print; `Notice()` is that line's substance; `CredentialValue(providerID)`
+is the value a Provider's credential names, held for the life of the
+process, which is the seam `internal/serve` gives the gateway's
+`CredentialSource` in this mode, since `Credentials` refuses every call.
+A re-read is one `Transact` of the memory store beneath: declared
+objects the directory no longer holds are deleted with their hash and,
+for a Provider, its discovered Models; a Provider whose `dialect` or
+`baseURL` changed loses its discovered Models; a changed object is
+written at its row's version, a new one created, and an unchanged one,
+same `metadata` and `spec` in JSON, is left at its version, so an ETag
+moves only when the file did; every Key's hash is put, because the
+variable may have been rotated under an unchanged file; and the deleted
+rows are pruned. A discovered Model written in this mode is owned by
+the file subject whatever its writer set, which is what makes the
+discovery row below true by construction.
 
 The mode's other rules:
 
 - The store is the memory store loaded from the directory, with the
   control plane's writes refused: `Objects.Put` and `Objects.Delete`
   of a `declared` object, `Keys.Put` and `Keys.Delete`, and every
-  `Credentials` method are `ErrReadOnly`. Everything the jobs and the
-  data plane write, discovered Models, `PutStatus`, counters, leases,
-  the journal, and the aggregates, is admitted, because the mode is
-  read-only for callers, not for the gateway.
+  `Credentials` method are `ErrReadOnly`, with the developer detail
+  naming the directory and the refused call; a `Delete` of a row that
+  is not live is `ErrNotFound` first, as in every mode. Everything the
+  jobs and the data plane write, discovered Models, `PutStatus`,
+  counters, leases, the journal, the tunnel registry, and the
+  aggregates, is admitted, because the mode is read-only for callers,
+  not for the gateway. The rules hold on the `Store` a `Transact` hands
+  out as on the outer one.
 - The API serves the four kinds and the usage surfaces read-only, and
   only on the internal listener, which an operator and the cluster reach
   and a caller on the doors does not; with no issuer there is nothing to
