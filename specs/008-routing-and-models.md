@@ -1,6 +1,6 @@
 ---
 title: "Routing and models: targets, weights, priorities, fallback, retries, the circuit per target"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -31,9 +31,14 @@ which target a Model reaches.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built: `gateway/router.go` is the `Router` of [[004-request-path]]'s
+handler, `gateway.TargetRouter`, with the attempt order, one circuit
+per target, and the `lux_circuit_open` gauge;
+`internal/serve/catalog.go` is the handler's `Catalog` over the store
+of [[010-state]], resolving a Model by exact name and a Provider by
+name or id; the observed state of a Model is written by the health job
+of [[005-providers]]. The handler drives both, and [[011-api]] mounts
+it.
 
 ## Design
 
@@ -56,15 +61,25 @@ caller's dialect's and its `model` member is a name in every dialect.
 `model_not_allowed` follows when the Key's selectors do not match the
 resolved name ([[007-keys-and-limits]]).
 
+The resolution is `serve.Catalog.Model`, over `Objects.ByName` of
+[[010-state]]: a name that begins with any kind's id prefix, which no
+name may ([[003-manifest-contract]]), is answered nothing without a
+read, and a store that cannot answer is `store_unavailable` at the door
+rather than `model_not_found`.
+
 ### Target selection
 
 The targets of a Model are put in one attempt order, computed per
 request. Every decision below is this ordering; nothing else selects.
 
-1. A target is a candidate unless its Provider is `Unreachable` on this
-   replica or its circuit does not admit work, read with the breaker's
-   side-effect-free `Admits()`, so ordering takes no probe slot for a
-   target that may never be tried.
+1. A target is a candidate unless its Provider is gone from the
+   catalog, is `Unreachable` on this replica, read through
+   `serve.Health.View` ([[005-providers]]) handed to the router as a
+   `gateway.HealthView`, or has a circuit that does not admit work, read
+   with the breaker's side-effect-free `Admits()`, so ordering takes no
+   probe slot for a target that may never be tried. A target with no
+   `weight` weighs the default `100` here as in
+   [[003-manifest-contract]].
 2. Candidates are grouped by `priority`, ascending, and the groups are
    concatenated in that order.
 3. Inside a group, the targets with `weight` above `0` come first, in
@@ -81,7 +96,7 @@ rest are the fallback order of the next section.
 flowchart TD
   A[model name] --> B{Model exists?}
   B -- no --> E1[model_not_found]
-  B -- yes --> C[drop targets whose provider is Unreachable or whose circuit is open]
+  B -- yes --> C[drop targets whose provider is gone or Unreachable, or whose circuit is open]
   C --> D{any candidate?}
   D -- no --> E2[provider_unavailable, no dial]
   D -- yes --> F[group by priority ascending]
@@ -102,8 +117,12 @@ so a target is retried by traffic rather than by a timer. Immediately
 before an attempt the breaker's `Allow()` is called; it answers false
 when another request took the probe slot in the meantime, and the
 target is then skipped for the next in the order as if it had not been
-a candidate. When step 1 leaves no candidate and no open circuit admits
-a probe, the request is refused `provider_unavailable` without a dial,
+a candidate. A circuit whose probe is in flight admits nothing until
+the probe reports, so a request that orders its targets in that window
+finds the target out of the order rather than refused at `Allow()`; the
+two refusals are one `provider_unavailable`. When step 1 leaves no
+candidate and no open circuit admits a probe, the request is refused
+`provider_unavailable` without a dial,
 which is the cheapest correct answer and the one that does not add
 load to an upstream that is already failing.
 
@@ -170,9 +189,17 @@ and driven with `Admits`, `Allow`, `RecordSuccess`, and
 configuration, because a value an operator would tune per upstream
 belongs on the Provider and no field for it exists yet.
 
-The breaker's state is the `lux_circuit_open` gauge, labelled by
-provider and Model ([[019-observability]]), so an open circuit is
-visible without a request.
+The breaker's state is the `lux_circuit_open` gauge
+([[019-observability]]), `gateway.MetricCircuitOpen`, registered on
+`RouterOptions.Metrics` when one is given: one series per target this
+replica has routed to, labelled `provider`, the Provider's name, and
+`model`, the target's upstream name, which are the two halves of the
+key, so one breaker is one series; `1` while the breaker is not closed,
+a half-open probe in flight included, and `0` once traffic closed it,
+so an open circuit is visible without a request and stays visible until
+one closes it. The opaque route of [[004-request-path]] reports its
+Provider with no upstream model; a Provider alone is no target and has
+no circuit.
 
 | Parameter | Value |
 |---|---|
@@ -283,6 +310,17 @@ therefore carries `modelVersion` as the provider sent it.
 | `Model.status.available` | true when at least one target's Provider is not `Unreachable` | the same |
 | `Model.status.source` | `declared` or `discovered` | the API or discovery |
 
+The writer is [[005-providers]]'s `serve.Health`: on every change of a
+Provider's state it rewrites the status of every Model with a target on
+that Provider, and on every tick it fills the status of a Model that
+has none yet; discovery writes a new Model's status in the list's
+transaction. This spec adds no writer of its own, and
+`TestModelStatusFollowsHealth` reads the result back through
+`serve.Catalog`. A Model applied through the API therefore has no
+`status.available` until the holder's next tick, and a door's model
+list leaves it out until then; whether the apply writes the first
+status is [[011-api]]'s to decide.
+
 ### What the usage record carries about routing
 
 The record of [[009-usage-and-metering]] carries, per request: the
@@ -293,6 +331,26 @@ refused before any target was chosen has an empty `attempts` and no
 provider. Pricing is the Model's, is read by metering, and is not a
 routing input: a target is never chosen for being cheaper, because a
 Model is one price and its targets are one model on several upstreams.
+
+### The package
+
+What this spec adds to `gateway`, beside [[004-request-path]]'s
+handler, and to `internal/serve`, beside [[005-providers]]'s jobs:
+
+| Name | What it is |
+|---|---|
+| `gateway.HealthView` | `func(providerID string) v1.HealthState`; `serve.Health.View` is one |
+| `gateway.RouterOptions` | `Catalog`, required; `Health`, nil is `Unknown` for every Provider; `Metrics`, nil registers no gauge; `Now`; `Rand`, a draw in `[0, 1)` |
+| `gateway.NewTargetRouter(RouterOptions) *TargetRouter` | the `Router` of the handler's `Options`; a nil `Catalog` is a panic |
+| `gateway.CircuitThreshold`, `gateway.CircuitOpen` | `5` and `30s` |
+| `gateway.MetricCircuitOpen` | `lux_circuit_open` |
+| `gateway.OpenAIReasoningFamily(name string) bool` | the predicate of the dialects section, in `gateway/translate.go` since [[004-request-path]] |
+| `serve.Catalog{Objects store.Objects}` | the handler's `Catalog`: `Model` by exact name, `Models`, `Provider` by name or `prv_` id |
+
+`luxd serve` wires them when [[011-api]] mounts the doors:
+`serve.Catalog{Objects: st.Objects()}` and
+`gateway.NewTargetRouter(gateway.RouterOptions{Catalog: catalog,
+Health: healthJob.View, Metrics: registry})`.
 
 ## Not in this spec
 
@@ -306,19 +364,102 @@ cost ([[009-usage-and-metering]]); the target schema and its defaults
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| An exact name, a discovered `<provider>/<upstream>` name, an unknown name, and a `mdl_` id resolve as the table says | `TestModelResolution`, table-driven | not built |
-| The attempt order is priority ascending, then weighted entries, then weight-`0` entries in manifest order; the case of priority 0 with its only weighted target `Unreachable`, a weight-`0` target at priority 0, and a weighted target at priority 1 puts the weight-`0` target first | `TestAttemptOrder`, table-driven | not built |
-| Over ten thousand requests the share each target of one priority receives is within two percent of its weight | `TestWeightedShareMatchesWeights` | not built |
-| A target whose Provider is `Unreachable` and a target whose circuit is open are both out of the order; when neither is admitted the request is refused `provider_unavailable` with no dial; two concurrent requests against one half-open target make one attempt, and the other moves to the next target | `TestExcludedTargets`, `TestHalfOpenAdmitsOne` | not built |
-| `fallback: onError` tries each target at most once in order and stops at the first success; `fallback: never` fails on the first attempt | `TestFallbackWalksTheOrderOnce`, `TestFallbackNever` | not built |
-| Every retryable row of the failure table moves to the next target, `529` among them, and every non-retryable row does not; the last attempt's failure maps to `provider_unavailable`, `upstream_error`, `upstream_rejected`, or `upstream_timeout` as the rules say | `TestRetryableFailures`, `TestLastFailureCode`, table-driven | not built |
-| A stream that fails after its first byte is not retried, ends, and is recorded `failed` with the tokens counted to the cut | `TestMidStreamFailureIsNotRetried` | not built |
-| No attempt sleeps: an order of three failing targets completes within the transport failures' own duration | `TestNoBackoffBetweenAttempts` | not built |
-| Five consecutive retryable failures open a target's circuit, one half-open attempt is admitted after the open duration, a success closes it, a `4xx` resets the failure count and never opens it, an encode refusal and a caller cancellation leave the count unchanged, and two Models on one target share it | `TestCircuitPerTarget` | not built |
-| Every cell of the dialect matrix behaves as the table says on a translated route; a model route across dialects is `dialect_unsupported` whatever the Key allows | `TestDialectMatrix`, table-driven | not built |
-| A `gemini` door to a non-`gemini` target and another door to a `gemini`-only Model are both `dialect_unsupported`, not `model_not_found` | `TestGeminiIsDoorBound` | not built |
-| A translated request toward an `openai` target named `gpt-5`, `o3-mini`, or `GPT-6-turbo` arrives on `/responses`, and one named `gpt-4.1`, `llama3.1`, or `o-ring` on `/chat/completions`; a passthrough arrives on the route it was sent to whatever the name | `TestOpenAITargetRoute`, `TestOpenAIReasoningFamily`, table-driven | not built |
-| The outbound body carries the target's upstream name and the response carries the Model's name, on a translated route, a passthrough with equal names, and a passthrough with differing names | `TestModelNameOnTheWire` | not built |
-| A passthrough request with equal names is byte-identical upstream | [[001-architecture]]'s `TestSameDialectSameBytes` | not built |
-| `status.available` and `status.targets[].health` follow the Providers' published health | `TestModelStatusFollowsHealth` | not built |
-| The usage record of a fallback carries one `attempts` entry per target tried, in order, with the outcome of each | `TestUsageRecordsEveryAttempt` | not built |
+| An exact name, a discovered `<provider>/<upstream>` name, an unknown name, and a `mdl_` id resolve as the table says | `TestModelResolution`, table-driven | passing, `internal/serve` |
+| The attempt order is priority ascending, then weighted entries, then weight-`0` entries in manifest order; the case of priority 0 with its only weighted target `Unreachable`, a weight-`0` target at priority 0, and a weighted target at priority 1 puts the weight-`0` target first | `TestAttemptOrder`, table-driven | passing |
+| Over ten thousand requests the share each target of one priority receives is within two percent of its weight | `TestWeightedShareMatchesWeights` | passing |
+| A target whose Provider is `Unreachable` and a target whose circuit is open are both out of the order; when neither is admitted the request is refused `provider_unavailable` with no dial; two concurrent requests against one half-open target make one attempt, and the other moves to the next target | `TestExcludedTargets`, `TestHalfOpenAdmitsOne` | passing, through the handler |
+| `fallback: onError` tries each target at most once in order and stops at the first success; `fallback: never` fails on the first attempt | `TestFallbackWalksTheOrderOnce`, `TestFallbackNever` | passing, through the handler; [[004-request-path]]'s `TestFallbackWalksTheOrder` over its fake router beside them |
+| Every retryable row of the failure table moves to the next target, `529` among them, and every non-retryable row does not; the last attempt's failure maps to `provider_unavailable`, `upstream_error`, `upstream_rejected`, or `upstream_timeout` as the rules say | `TestRetryableFailures`, `TestLastFailureCode`, table-driven | passing, through the handler |
+| A stream that fails after its first byte is not retried, ends, and is recorded `failed` with the tokens counted to the cut | `TestMidStreamFailureIsNotRetried` | passing, through the handler |
+| No attempt sleeps: an order of three failing targets completes within the transport failures' own duration | `TestNoBackoffBetweenAttempts` | passing |
+| Five consecutive retryable failures open a target's circuit, one half-open attempt is admitted after the open duration, a success closes it, a `4xx` resets the failure count and never opens it, an encode refusal and a caller cancellation leave the count unchanged, and two Models on one target share it | `TestCircuitPerTarget`, through the handler; `TestCircuitStates` and `TestCircuitIsSharedAcrossModels` over the router alone | passing |
+| The gauge reads `1` for a target whose circuit opened, through its half-open probe, and `0` once traffic closed it, one series per target labelled by the Provider's name and the upstream model | `TestCircuitOpenGauge` | passing |
+| Every cell of the dialect matrix behaves as the table says on a translated route; a model route across dialects is `dialect_unsupported` whatever the Key allows | `TestDialectMatrix`, table-driven | passing, through the handler |
+| A `gemini` door to a non-`gemini` target and another door to a `gemini`-only Model are both `dialect_unsupported`, not `model_not_found` | `TestGeminiIsDoorBound` | passing |
+| A translated request toward an `openai` target named `gpt-5`, `o3-mini`, or `GPT-6-turbo` arrives on `/responses`, and one named `gpt-4.1`, `llama3.1`, or `o-ring` on `/chat/completions`; a passthrough arrives on the route it was sent to whatever the name | `TestOpenAITargetRoute`, `TestOpenAIReasoningFamily`, table-driven | passing; the route in [[004-request-path]]'s test, the predicate in this spec's |
+| The outbound body carries the target's upstream name and the response carries the Model's name, on a translated route, a passthrough with equal names, and a passthrough with differing names | `TestModelNameOnTheWire` | passing |
+| A passthrough request with equal names is byte-identical upstream | [[001-architecture]]'s `TestSameDialectSameBytes` | passing, in [[004-request-path]] |
+| `status.available` and `status.targets[].health` follow the Providers' published health | `TestModelStatusFollowsHealth` | passing, `internal/serve`, read through `serve.Catalog` |
+| The usage record of a fallback carries one `attempts` entry per target tried, in order, with the outcome of each | `TestUsageRecordsEveryAttempt` | passing |
+
+## Outcome
+
+Built on 2026-09-14 in seven commits on a branch merged to `main`, proven by
+the whole gate, fifteen gates, and per-package coverage of 96.7% for
+`gateway` and 96.0% for `internal/serve` under the race detector. What
+was built: `gateway/router.go`, the `TargetRouter` with the attempt
+order, one circuit per target, and the `lux_circuit_open` gauge, with
+its tests in `gateway/router_test.go` over the router alone and in
+`gateway/routing_test.go` through the handler of [[004-request-path]]
+with the real router in place of that spec's fake;
+`internal/serve/catalog.go`, the handler's `Catalog` over the store,
+with its tests. What diverged from the text as dispatched, each fixed
+in the Design above beside the rule it settles:
+
+- The health signal reaches the router as a function value,
+  `gateway.HealthView`, which `serve.Health.View` satisfies, because
+  `gateway` imports nothing under `internal/` ([[001-architecture]]) and
+  one method is all it needs.
+- A target whose Provider is gone from the catalog is not a candidate.
+  The Design listed two exclusions; a Provider deleted after the Model
+  named it is a third, and skipping it is the one answer that dials
+  nothing and blames nobody.
+- The gauge's labels are named: `provider` is the Provider's name and
+  `model` the target's upstream name, the two halves of the circuit's
+  key, so one breaker is one series; the text said "provider and
+  Model", which read as the Model object's name and would have shown one
+  breaker twice for two Models on one target. The gauge reads `1` in
+  half-open as well as open, because the circuit is not closed and an
+  operator reading `0` would think it was.
+- A Target naming a Provider with no upstream model, which the opaque
+  route reports, has no circuit: the key has two halves and an opaque
+  request has one.
+- A circuit whose probe is in flight admits nothing, so the second of
+  two requests in that window is refused by the order and not at
+  `Allow()`; the Design described the `Allow()` race alone, which is the
+  window between one request's `Targets` and its `Allow`.
+- No observed-state writer was added: [[005-providers]]'s `serve.Health`
+  already writes `status.available` and `status.targets[].health` on
+  every state change and fills a Model that has none on every tick, and
+  the Design's table said "the health lease holder" and nothing more.
+  `TestModelStatusFollowsHealth` reads the result through
+  `serve.Catalog`.
+- `OpenAIReasoningFamily` and the `/responses` choice were built by
+  [[004-request-path]] in `gateway/translate.go`; this spec adds the
+  predicate's own table, `TestOpenAIReasoningFamily`, which holds
+  `gpt-5.1` and `gpt-5/2026-01` in the family and `openai/gpt-5` out of
+  it, because the part before the slash is compared and a vendor prefix
+  is not a model.
+- A name carrying any kind's id prefix is answered nothing without a
+  store read, not `mdl_` alone: no name of any kind may begin with one
+  ([[003-manifest-contract]]).
+- The rows the handler owns, fallback, the failure table, the last
+  failure's code, the mid-stream cut, the dialect matrix, the name on
+  the wire, and the attempts, are asserted through `gateway.New` with
+  the real router, beside 004's tests over its fake router, so the two
+  halves are proven together once; a draw fixed at zero makes an order
+  over equal weights the manifest's, which is what makes those
+  assertions deterministic.
+- `latere.ai/x/pkg/wait` joined the `gateway` row of the dependency rule
+  in `internal/arch/deps_test.go`: `circuitbreaker` reaches it through
+  `retry`, and it is a cancellable sleep over `context` and `time`.
+- A gauge row joined the acceptance table, `TestCircuitOpenGauge`,
+  because this spec owns the gauge's writer and
+  [[019-observability]]'s `TestCircuitAndTunnelGauges` covers the tunnel
+  half beside it.
+
+What the neighbouring specs must provide or change: [[011-api]] mounts
+the doors with `serve.Catalog{Objects: st.Objects()}` and
+`gateway.NewTargetRouter(gateway.RouterOptions{Catalog, Health:
+healthJob.View, Metrics})`, names this spec's `Router.Targets` among
+`store_unavailable`'s raisers, and decides whether an apply writes a
+Model's first observed status so a door's list does not wait a tick;
+[[019-observability]] reads `lux_circuit_open`'s `model` label as the
+target's upstream name and its value as `1` while not closed;
+[[009-usage-and-metering]] builds `attempts` from
+`gateway.Record.Attempts`, `{Provider, ProviderID, UpstreamModel,
+Status, HTTPStatus, Error, Duration}` per target tried, and the
+answering provider from `Record.Provider`, `ProviderID`, and
+`UpstreamModel`; [[005-providers]] changes nothing, and the other half
+of its `TestUnreachableLeavesSelection` row is `TestExcludedTargets` and
+`TestAttemptOrder` here.

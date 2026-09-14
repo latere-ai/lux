@@ -95,3 +95,15 @@ refused before it is pushed.
   from an authorizer endpoint the operator writes, with a built-in owner
   policy. Dialect translation between OpenAI, Anthropic, Gemini, and the
   lux-native dialect goes through `latere.ai/x/pkg/llmdialect`.
+- Routing: a request to a Model goes to one of its targets by
+  `priority`, then by `weight`, with a weight of `0` kept for when every
+  weighted target at that priority has failed; a target whose provider
+  is `Unreachable` or whose circuit is open is not tried. `fallback:
+  onError` moves a request to the next target on a connection failure, a
+  timeout, or a `408`, `429`, or `5xx` before any byte reached the
+  caller, once per target and with no pause between; `fallback: never`
+  answers the first failure. Five such failures in a row open a target's
+  circuit for 30 seconds, after which one request probes it, and the
+  `lux_circuit_open` gauge shows an open circuit by provider and upstream
+  model. `gateway.NewTargetRouter` is the router for a platform that
+  mounts the handler; the doors mount in `luxd serve` with the API.
