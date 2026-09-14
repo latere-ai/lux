@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# Try luxd with no checkout and no build: the published gateway image and
+# the published stub image, wired the way `make run` wires the two
+# binaries. `docker compose up`, then the curls in docs/quickstart.md.
+#
+# The images are published by the release pipeline of spec 017. Until the
+# first tag is cut they do not exist in the registry yet; build them from
+# a checkout first, as docs/quickstart.md shows, and this file runs them
+# unchanged.
+
+services:
+  # Every stub of spec 015 from one image: a provider per dialect, the
+  # OpenID Connect issuer, the authorizer, and the event sink. Each binds
+  # 0.0.0.0 (the binary defaults to loopback, which no other container
+  # could reach) so luxd dials them by this service's name over the
+  # compose network.
+  #
+  # -issuer-url is the one subtlety: it is the address the issuer stamps
+  # into a token's `iss` claim and serves as the `issuer` of its discovery
+  # document. luxd verifies a token's `iss` against LUX_OIDC_ISSUERS and
+  # fetches that issuer's keys, so the two must be one string that resolves
+  # from inside the luxd container: this service's compose name.
+  lux-stubs:
+    image: ghcr.io/latere-ai/lux-stubs:${LUX_VERSION:-latest}
+    command:
+      - -openai-addr=0.0.0.0:9101
+      - -anthropic-addr=0.0.0.0:9102
+      - -gemini-addr=0.0.0.0:9103
+      - -lux-addr=0.0.0.0:9104
+      - -issuer-addr=0.0.0.0:9105
+      - -authorizer-addr=0.0.0.0:9106
+      - -sink-addr=0.0.0.0:9107
+      - -issuer-url=http://lux-stubs:9105
+    ports:
+      # Published so you can mint a token from the host; nothing else here
+      # needs to leave the compose network.
+      - "9105:9105"
+
+  luxd:
+    image: ghcr.io/latere-ai/luxd:${LUX_VERSION:-latest}
+    command: ["serve"]
+    depends_on:
+      - lux-stubs
+    # luxd fetches each issuer's discovery at start and exits if one is
+    # unreachable, so on a start-order race it restarts until the stubs
+    # answer. Nothing here is durable, so a restart costs nothing.
+    restart: on-failure
+    environment:
+      # The address callers reach the public door at, from the host. Its
+      # host must differ from every Provider's baseURL host, or the loop
+      # check of spec 003 refuses the Provider; the stubs are "lux-stubs",
+      # this is "localhost".
+      LUX_PUBLIC_URL: "http://localhost:8080"
+      # The memory store: no LUX_DB_URL, so nothing survives `down`.
+      # A throwaway key encryption key. Generate your own for anything
+      # that outlives this demo: head -c 32 /dev/urandom | base64
+      LUX_SECRETS_KEK: "HxFnCDhgTwClkERT1jTojAwxu5Kdn5iqvCC/st6dU0M="
+      # The stub issuer, by the same string it stamps into `iss`. It is
+      # http:// off loopback, so it is also listed as insecure to be
+      # accepted.
+      LUX_OIDC_ISSUERS: "http://lux-stubs:9105"
+      LUX_OIDC_INSECURE_ISSUERS: "http://lux-stubs:9105"
+      # The built-in owner policy: the subject "<issuer>|<sub>" a stub
+      # token renders to may declare Providers, Models, and Keys. The stub
+      # authorizer is not wired here on purpose: luxd accepts an authorizer
+      # only over https:// or on loopback, and a compose peer is neither,
+      # so a laptop demo uses the owner policy the way docs/install.md does.
+      LUX_ADMIN_SUBJECTS: "http://lux-stubs:9105|dev"
+      # A Provider's baseURL resolves to a private compose address; admit
+      # it, as the stubs need.
+      LUX_UPSTREAM_ALLOW_PRIVATE: "1"
+    ports:
+      # The public door. The internal door (8081: probes and /metrics)
+      # stays on the compose network.
+      - "8080:8080"
