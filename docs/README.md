@@ -10,6 +10,7 @@ packages.
 | Install | not written yet; owned by the [release and installation spec](../specs/017-release-and-installation.md) |
 | Configuration | the table in the [repository scaffold spec](../specs/002-repository-scaffold.md) until `docs/configuration.md` is generated from the code |
 | Security | what the design protects and what it does not, in the [threat model](../specs/016-security-and-threat-model.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
+| Observability | the metrics on `/metrics`, the spans, the log fields, and the alerts to start with, in the [observability spec](../specs/019-observability.md); the rules file is [`deploy/base/prometheusrule.yaml`](../deploy/base/prometheusrule.yaml) |
 
 Trying it out before there is anything to install takes one command,
 `make run`: the gateway on loopback, serving its probes.
