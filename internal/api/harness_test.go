@@ -83,7 +83,7 @@ func newHarness(t *testing.T, edit func(*Options)) *harness {
 		Store: h.st, Auth: a, Authorizer: a.Authorizer(&serve.ObjectOwners{Objects: h.st.Objects()}),
 		PublicURL: base, Version: "0.1.0-test", RequestsPerMinute: 600, MaxManifestBytes: 4096,
 		Defaults: manifest.Defaults{RequestsPerMinute: 60, TokensPerMinute: 1000, Timeout: 10 * time.Minute},
-		Keys:     keys, Metrics: h.reg, Logger: slog.New(slog.NewTextHandler(h.log, nil)),
+		Keys:     keys, Metrics: h.reg, Logger: slog.New(slog.NewJSONHandler(h.log, nil)),
 		Now: h.clock, NewID: h.newID,
 	}
 	if edit != nil {

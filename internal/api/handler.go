@@ -156,6 +156,9 @@ type call struct {
 	start  time.Time
 	caller auth.Caller // set once authenticated
 	addr   string      // the client address of spec 011
+	action string      // the action asked of the authorizer, for the span and the line
+	kind   string      // the kind the action named
+	code   Code        // the refusal written, empty when the route answered
 }
 
 // handlerFunc is one route: it answers or returns the refusal, under the
@@ -163,18 +166,12 @@ type call struct {
 type handlerFunc func(c *call, ctx context.Context) *Error
 
 // ServeHTTP mints the request id, echoes the caller's X-Request-Id under
-// spec 011's rule, refuses the file mode's writes before any body is
-// read, dispatches, and turns a handler panic into internal.
+// spec 011's rule, opens the lux.api span, refuses the file mode's
+// writes before any body is read, dispatches, turns a handler panic into
+// internal, and ends with the request's one log line and the span.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := &call{h: h, r: r, id: h.o.NewID(v1.PrefixRequest), start: h.o.Now()}
-	c.w = &responseWriter{ResponseWriter: w}
-	hdr := w.Header()
-	hdr.Set(gateway.HeaderRequestID, c.id)
-	hdr.Set("X-Content-Type-Options", "nosniff")
-	if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
-		hdr.Set("X-Request-Id", xid)
-	}
-	ctx := r.Context()
+	c := h.begin(w, r)
+	ctx, span := startAPI(r)
 	defer func() {
 		if p := recover(); p != nil {
 			h.logger.ErrorContext(ctx, "api: handler panic", "request_id", c.id, "method", r.Method, "path", r.URL.Path, "panic", p, "stack", string(debug.Stack()))
@@ -182,6 +179,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				c.fail(refuse(CodeInternal, ""))
 			}
 		}
+		c.end(ctx, span)
 	}()
 	if h.fileMode() && isWrite(r.Method) && underAKind(r.URL.Path) {
 		c.fail(refuse(CodeReadOnly, "desired state is the directory "+h.o.ReadOnlyDir+"; "+r.Method+" "+r.URL.Path+" was refused before the body was read"))
@@ -197,19 +195,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(c.w, r.WithContext(withCall(ctx, c)))
 }
 
+// begin is the call for one request with the two headers every
+// response carries: the request id, and the caller's X-Request-Id
+// echoed under spec 011's rule.
+func (h *Handler) begin(w http.ResponseWriter, r *http.Request) *call {
+	c := &call{h: h, r: r, id: h.o.NewID(v1.PrefixRequest), start: h.o.Now()}
+	c.w = &responseWriter{ResponseWriter: w}
+	hdr := w.Header()
+	hdr.Set(gateway.HeaderRequestID, c.id)
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
+		hdr.Set("X-Request-Id", xid)
+	}
+	return c
+}
+
 // Unmounted is the handler the public listener serves under /v1 in the
 // file mode, where the surface is the internal listener's alone: every
-// path is not_found in the envelope, with a request id.
+// path is not_found in the envelope, with a request id, a span, and a
+// line like any other request's.
 func (h *Handler) Unmounted() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := h.o.NewID(v1.PrefixRequest)
-		w.Header().Set(gateway.HeaderRequestID, id)
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
-			w.Header().Set("X-Request-Id", xid)
-		}
-		h.count(CodeNotFound)
-		writeError(w, id, refuse(CodeNotFound, "the control plane is on the internal listener in the file mode; "+r.URL.Path+" is not mounted here"))
+		c := h.begin(w, r)
+		ctx, span := startAPI(r)
+		defer c.end(ctx, span)
+		c.fail(refuse(CodeNotFound, "the control plane is on the internal listener in the file mode; "+r.URL.Path+" is not mounted here"))
 	})
 }
 
@@ -295,8 +305,10 @@ func (h *Handler) route(methods map[string]handlerFunc) http.Handler {
 	})
 }
 
-// fail writes the refusal and counts it.
+// fail writes the refusal, counts it, and keeps its code for the line
+// and the span.
 func (c *call) fail(e *Error) {
+	c.code = e.Code
 	c.h.count(e.Code)
 	writeError(c.w, c.id, e)
 }
