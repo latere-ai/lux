@@ -74,7 +74,7 @@ status:                                # written by the server, ignored on apply
   owner: https://login.example.com|alice
   credential: {set: true, version: 2, updatedAt: 2026-09-13T10:00:00Z}
   health: {state: Healthy, since: 2026-09-13T10:00:05Z, lastProbeAt: 2026-09-13T10:41:00Z, lastError: ""}
-  discovered: {count: 34, at: 2026-09-13T10:00:05Z}
+  discovered: {count: 34, at: 2026-09-13T10:00:05Z, warnings: []}  # warnings: upstream names the name rule refused (005)
   tunnel: null                         # the block of 013 when spec.tunnel is true
   createdAt: 2026-09-13T10:00:00Z
   updatedAt: 2026-09-13T10:00:00Z

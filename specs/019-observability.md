@@ -64,7 +64,11 @@ pass and one object a test can read; nothing here reaches for a global.
 It is served in the Prometheus text format at `GET /metrics` on the
 internal listener and nowhere else ([[002-repository-scaffold]]). The
 table is the reference: a metric not in it does not exist, and
-`TestMetricsTable` reads this file.
+`TestMetricsTable` reads this file. The gateway emits its three when
+`gateway.Options.Metrics` is set, under the names `gateway.MetricRequests`,
+`MetricRequestDuration`, and `MetricTimeToFirstByte` with the buckets
+`gateway.DurationBuckets` and `TimeToFirstByteBuckets`, which the test
+reads beside this file ([[004-request-path]]).
 
 | Metric | Type | Labels | Owner |
 |---|---|---|---|

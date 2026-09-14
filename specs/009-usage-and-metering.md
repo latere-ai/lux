@@ -46,6 +46,11 @@ configuration, and the gate, on pkg v0.65.0.
 
 ### The record
 
+The gateway hands its `Recorder` a `gateway.Record` carrying everything
+the pipeline knows and no cost ([[004-request-path]]); this package's
+`Record` is built from it by adding the cost from the Model's pricing,
+and `priced: false` follows from a count or an opaque route.
+
 One `metering.Record` per request, emitted after the response is
 finished or refused.
 
