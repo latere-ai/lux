@@ -1,6 +1,6 @@
 ---
 title: "Conformance suite: the contract, the doors, and the API as executable tests, against any server"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -496,3 +496,91 @@ whose own scenario is [[014-agent-client]]'s.
 | The suite runs against an external URL with the documented command, reading no file the caller wrote and no state the server did not serve; the only files it reads are the module's own embedded corpus and fixtures | `TestExternalInvocation` | passing: the command runs every group, and the package's source imports nothing that reads a file |
 | `LUX_TEST_URL` set and `LUX_TEST_TOKEN` unset leaves the suite green on the bearer-free cases and prints the groups it dropped | `TestSkipListWithoutAToken` | passing |
 | Two concurrent runs against one server both pass | `TestConcurrentRuns` | passing |
+
+## Outcome
+
+Built on 2026-09-14 in five commits on a branch: the mutation seams and
+the eight shims in `internal/serve`, then `test/conformance` in four,
+the package, its reference server and acceptance tests, and the lint
+and identity gates' findings. It is proven by the whole gate and by
+coverage under the race detector of 91.7% for `test/conformance` and
+97.1% for `internal/serve`; the package runs in forty seconds and
+starts no process but the mutation check's `go test`.
+
+What was built: `Run`, `Config`, and `TestContract` over the six
+variables of the table; fifty-seven cases in seven groups and the Key
+mint, each named after the spec whose criterion it proves; the
+validation of every `/v1` answer against the served OpenAPI document;
+the run prefix and label with teardown by label; the stubs document
+reader; the fixture group over an embedded release directory; the
+recording `testing.TB` the package's own tests hand a case; the
+reference server assembled in process from the packages `cmd/luxd`
+wires, with the stub issuer and authorizer of `latere.ai/x/pkg` and a
+stub provider per dialect speaking [[015-test-stubs-and-tiers]]'s
+contract; the hollow server every case is red against; and the
+mutation check over the eight tags. The Design above was rewritten to
+what was built; what diverged from the text as dispatched:
+
+- `LUX_TEST_STUBS_URL` names one document, `GET /` with the URL of each
+  stub and the credential they check, rather than one stub; the binary
+  of [[015-test-stubs-and-tiers]] has a listener per stub and the suite
+  could not guess seven ports from one address.
+- `LUX_TEST_INTERNAL_URL` and `Config.InternalURL` exist, because a
+  `file` mode server mounts `/v1` on the internal listener and its
+  `/.well-known/lux` names an `api` under the public address that
+  answers `not_found`; [[002-repository-scaffold]]'s table of the
+  suite's variables gains the row.
+- Every corpus name and every reference to one is prefixed with the
+  run, the golden alike, including a target's `model` equal to its
+  Model's name and a supplied `spec.value` of valid length; without the
+  prefix the suite would replace an operator's `openai` Provider and
+  two runs would collide on the value's hash index.
+- Seven refused cases are unreachable as their code over HTTP and skip
+  by name: `missing_field` without `apiVersion` or `kind`, which the
+  route supplies; the four `reserved_prefix` names, `invalid_field` at
+  the route's id-shaped path segment; and the Model name with a
+  repeated slash, answered by a redirect before `/v1` is reached. The
+  redirect is `cmd/luxd`'s outer mux and not the table of [[011-api]],
+  which says any path outside it is `not_found`; that spec owns the
+  answer.
+- A tunnelled Provider and the Models over it skip, since `spec.tunnel`
+  is refused until [[013-tunnelled-runtimes]] enables it.
+- The mutation check is `go test -tags=<tag> -json` over the reference
+  server's own test rather than a build of `luxd` with one capability
+  removed, and the shims act through three seams `luxd` never calls;
+  `cmd/luxd`'s `run` is package main's and cannot be imported, so the
+  reference server repeats the wiring.
+- `case004RouteTable` proves dispatch by each row's refusal without a
+  Key that can see the Model, and `case007RateLimited`'s first request
+  is refused at the codec after the windows admitted it, so neither
+  needs a stub.
+- `Run` tolerates no drift; the package's own tests carry an
+  unexported ledger of the OpenAPI findings against `luxd`, each with
+  the owner, and fail when a finding stops appearing. It holds one
+  entry: `GET /v1/requests` serves `targetDialect: ""` on a refused
+  record, as [[009-usage-and-metering]]'s table says, and the served
+  enum lacks the empty value; [[011-api]]'s generator owns it.
+- A case's signature is `testing.TB`, so `TestSuiteIsRedAgainstAHollowServer`
+  and the mutation table can hold a case to failing.
+- `TestConcurrentRuns` runs without stubs, since the authorizer outage
+  of `case006AuthorizerUnavailable` is one outage for every caller.
+- The event sink case left the stub table: the sink and its stub are
+  [[012-request-log-and-events]]'s and neither exists.
+
+What the neighbouring specs own from here. [[015-test-stubs-and-tiers]]
+serves the stubs document, starts `luxd` for the integration and
+postgres rows above, and corrects its `lux` dialect stub's usage
+members, which the gateway and `llmdialect` read as `input_tokens` and
+`output_tokens` and its table names `usage.input` and `usage.output`;
+its `make run` on a loopback public URL will also meet the loop check
+of [[003-manifest-contract]], which compares a Provider's host with
+the public URL's host and not its port, so every loopback stub reads
+as this gateway's own host until the check compares the authority.
+[[011-api]] owns the `targetDialect` enum and the redirect. [[002-repository-scaffold]]
+lists `LUX_TEST_INTERNAL_URL`. [[017-release-and-installation]] writes
+the first fixture directory and runs the suite against the images.
+[[020-building-a-plane]] runs it against the example plane. A door's
+model list carries a Model only after the health tick of
+[[005-providers]] has run, so a caller reading the list right after an
+apply waits `LUX_HEALTH_INTERVAL`; the suite does, and that spec may
+want to say so.
