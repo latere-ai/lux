@@ -119,6 +119,11 @@ var rootAllow = map[string]allow{
 			"latere.ai/x/pkg/circuitbreaker",
 			"latere.ai/x/pkg/ratelimit",
 			"latere.ai/x/pkg/retry",
+			// The circuit per target of spec 008 is
+			// latere.ai/x/pkg/circuitbreaker, which reaches retry and,
+			// through it, wait: a cancellable sleep over context and
+			// time that dials nothing.
+			"latere.ai/x/pkg/wait",
 			"latere.ai/x/pkg/semaphore",
 			"latere.ai/x/pkg/otel",
 			"latere.ai/x/pkg/metrics",
