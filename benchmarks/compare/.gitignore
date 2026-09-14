@@ -1,7 +1,10 @@
-# The LiteLLM venv, if someone points BENCH_VENV_DIR here instead of the
-# default location outside the repo. Never commit it: it is large and its
-# third-party files are not ours to carry.
+# The LiteLLM or chart-render venv, if someone points BENCH_VENV_DIR or
+# RENDER_VENV_DIR here instead of the default location outside the repo.
+# Never commit one: it is large and its third-party files are not ours to
+# carry. The default for both is outside the tree (see run.sh, README.md).
 .venv/
+render-venv/
+bench-venv/
 # Local driver output, if run outside the default out/bench (which the root
 # .gitignore already excludes).
 *.jsonl

@@ -31,6 +31,18 @@ Add `./internal/serve/...` for the limiter benchmark. Per package:
     go test -bench . -benchmem ./metering/
     go test -bench BenchmarkLimiterReserveSettle -benchmem ./internal/serve/
 
+A single run is a point, and a point cannot tell the code's cost from the
+scheduler's noise. For numbers worth comparing, repeat each benchmark and
+summarise with `benchstat`, which reports the mean, its variation, and — when
+comparing two inputs — a p-value:
+
+    GOMAXPROCS=8 go test -run '^$' -bench . -benchmem -count=10 \
+      ./gateway/ ./manifest/ ./metering/ ./internal/serve/ > new.txt
+    go run golang.org/x/perf/cmd/benchstat@latest new.txt
+
+Pin `GOMAXPROCS` and keep the machine quiet, so the variation the tool reports
+is the code's and not the operating system's.
+
 The latency distribution is a separate, opt-in test (below).
 
 ## What each benchmark isolates
@@ -90,30 +102,49 @@ serial CPU cost of translation shows in `BenchmarkGatewayTranslated` minus
 is memory: translation allocates about 8 KB more per request than a
 passthrough, on every machine.
 
-## A sample run
+## A measured run
 
-Illustrative output from one developer machine. The CPU is unspecified;
-these are not a guarantee and do not compare across machines. Run the
+From one machine: an Apple M4 Pro (arm64), `GOMAXPROCS=8`, otherwise
+quiescent, each benchmark repeated `-count=10` and summarised with
+`benchstat`. The `±` is benchstat's reported variation over the ten runs.
+These are machine-relative and do not compare across machines; run the
 commands above to get your own.
 
-`go test -bench . -benchmem`:
+`benchstat` of `-count=10`:
 
-| Benchmark | ns/op | B/op | allocs/op |
+| Benchmark | sec/op | B/op | allocs/op |
 |---|---|---|---|
-| `BenchmarkGatewayPassthrough` | 60217 | 29162 | 223 |
-| `BenchmarkGatewayTranslated` | 116608 | 37692 | 370 |
-| `BenchmarkGatewayCount` | 6845 | 14891 | 87 |
-| `BenchmarkGatewayStreaming` | 138051 | 106894 | 303 |
-| `BenchmarkResolve/Provider` | 2606 | 2182 | 23 |
-| `BenchmarkResolve/Model` | 2175 | 1742 | 21 |
-| `BenchmarkResolve/Key` | 2355 | 2309 | 25 |
-| `BenchmarkResolve/Budget` | 1928 | 1468 | 21 |
-| `BenchmarkCost` | 1.7 | 0 | 0 |
-| `BenchmarkWindow` | 28 | 0 | 0 |
-| `BenchmarkCounterKey` | 73 | 80 | 2 |
-| `BenchmarkLimiterReserveSettle` | 1106 | 1488 | 29 |
+| `GatewayPassthrough` | 55.34µs ± 3% | 28.21Ki ± 1% | 223.0 ± 0% |
+| `GatewayTranslated` | 67.15µs ± 2% | 35.87Ki ± 0% | 370.0 ± 0% |
+| `GatewayCount` | 6.580µs ± 1% | 14.99Ki ± 3% | 87.00 ± 0% |
+| `GatewayStreaming` | 83.54µs ± 3% | 101.9Ki ± 0% | 302.0 ± 0% |
+| `Resolve/Provider` | 2.383µs ± 2% | 2.125Ki ± 0% | 23.00 ± 0% |
+| `Resolve/Model` | 2.094µs ± 1% | 1.694Ki ± 0% | 21.00 ± 0% |
+| `Resolve/Key` | 2.234µs ± 0% | 2.244Ki ± 0% | 25.00 ± 0% |
+| `Resolve/Budget` | 1.863µs ± 1% | 1.429Ki ± 0% | 21.00 ± 0% |
+| `Cost` | 1.633ns ± 0% | 0 | 0 |
+| `Window` | 27.41ns ± 2% | 0 | 0 |
+| `CounterKey` | 71.17ns ± 2% | 80.00 ± 0% | 2.000 ± 0% |
+| `LimiterReserveSettle` | 1.081µs ± 2% | 1.453Ki ± 0% | 29.00 ± 0% |
 
-`LUX_LATENCY=1 ... TestGatewayAddedLatency`, 20000 requests at concurrency 8:
+The translation cost is the delta between the passthrough and the translated
+hot path — the number a single run cannot separate from noise. `benchstat`
+comparing the two paths (each `n=10`) can, and it is unambiguous:
+
+| Metric | Passthrough | Translated | Delta | p (n=10) |
+|---|---|---|---|---|
+| sec/op | 55.34µs | 67.15µs | +21.35% | 0.000 |
+| B/op | 28.21Ki | 35.87Ki | +27.14% | 0.000 |
+| allocs/op | 223 | 370 | +65.92% | 0.000 |
+
+Translation adds about 12µs, ~7.7 KB, and ~147 allocations per request over a
+passthrough on this machine — the `pkg/llmdialect` decode-and-re-encode both
+ways. With p ≈ 0 at n=10 that is signal, not scheduler jitter, and it is the
+honest reading of the translation overhead: the serial CPU and memory delta
+here, not the concurrent p50, which the constant round-trip dominates.
+
+`LUX_LATENCY=1 ... TestGatewayAddedLatency` (one illustrative run), 20000
+requests at concurrency 8:
 
 | Class | p50 | p75 | p90 | p95 | p99 | req/s | B/req |
 |---|---|---|---|---|---|---|---|
@@ -139,22 +170,26 @@ model quality, and a Go proxy against a Python one measures the runtimes as
 much as the code; the numbers are machine-relative and prove nothing about
 which proxy routes better.
 
-One measured run, on a 12-core Apple-silicon laptop at concurrency 50
-against the shared mock: for a same-format passthrough, `luxd` added
-about 2 ms of p50 latency over calling the mock directly and sustained
-roughly 19,000 requests per second in a single process at about 42 MB of
-resident memory, while LiteLLM 1.100.1 with one worker added about 115 ms
-of p50 and sustained roughly 400 requests per second at about 330 MB. The
-translated shape held the same ratio, about 3 ms added for `luxd` against
-about 110 ms for LiteLLM, and streaming tracked it, with zero errors on
-every run. Trust the ratios over the absolutes: these are single-process,
-machine-relative figures that compare a Go binary with a Python service
-and measure proxy overhead alone.
+Across 10 independent trials on an Apple M4 Pro at concurrency 50 against the
+shared mock, each with its own warmup and reported as the median with a 95%
+confidence interval: for a same-format passthrough, `luxd` added about 2 ms of
+p50 latency over calling the mock directly and sustained ~20,000 requests per
+second in a single process at ~45 MB of resident memory, while LiteLLM 1.100.1
+with one worker added ~112 ms of p50 and sustained ~420 requests per second at
+~410 MB. The translated shape held the same ratio, ~2–3 ms added for `luxd`
+against ~105 ms for LiteLLM, and streaming tracked it, with zero errors on
+every trial. The gap is **~45–55x** in both latency and throughput, with
+non-overlapping CIs in every condition — an effect size, not a close call, so
+no p-value is reported: with tens of thousands of requests behind each trial a
+significance test would return a vanishingly small p that says nothing about
+whether a 45x difference matters. Trust the ratios over the absolutes: these
+are single-process, machine-relative figures that compare a Go binary with a
+Python service and measure proxy overhead alone.
 
-The runnable harness and its full table live under
-`benchmarks/compare/`: `README.md` for the method, `RESULTS.md` for the
-numbers. That harness is a separate artifact from the in-repo Go
-benchmarks above.
+The runnable harness, its full per-condition table with the CIs, and the
+charts live under `benchmarks/compare/`: `README.md` for the method,
+`RESULTS.md` for the numbers and the figures. That harness is a separate
+artifact from the in-repo Go benchmarks above.
 
 ## Where the design lives
 

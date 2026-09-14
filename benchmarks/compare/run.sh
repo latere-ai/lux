@@ -9,18 +9,27 @@
 # `go test` or CI.
 #
 # Knobs (environment overrides):
+#   TRIALS            independent measurement windows/condition (default 10)
 #   CONCURRENCY       in-flight requests held constant        (default 50)
 #   REQUESTS          measured non-streaming requests/subject (default 20000)
 #   STREAM_REQUESTS   measured streaming requests/subject     (default 10000)
 #   WARMUP            discarded warmup requests/subject       (default 2000)
 #   LITELLM_PORT      port for the LiteLLM proxy              (default 8123)
-#   BENCH_VENV_DIR    venv location, kept OUTSIDE the repo    (default $TMPDIR/lux-bench-venv)
+#   BENCH_VENV_DIR    litellm venv location, OUTSIDE the repo (default $TMPDIR/lux-bench-venv)
+#   RENDER_VENV_DIR   optional chart venv, OUTSIDE the repo   (default $TMPDIR/lux-render-venv)
+#
+# The matrix runs TRIALS times against one steady-state bring-up: each trial
+# is its own measurement window with its own discarded warmup, and every
+# sample line carries its trial index so render.py can aggregate a central
+# value and a 95% confidence interval across trials. A single run proves a
+# point; repeated trials measure the spread.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO"
 
+TRIALS="${TRIALS:-10}"
 CONCURRENCY="${CONCURRENCY:-50}"
 REQUESTS="${REQUESTS:-20000}"
 STREAM_REQUESTS="${STREAM_REQUESTS:-10000}"
@@ -33,6 +42,7 @@ VENV_DIR="${VENV_DIR%/}"
 OUTDIR="$REPO/out/bench"
 RESULTS="$OUTDIR/results.jsonl"
 REPORT="$OUTDIR/table.md"
+CSV="$OUTDIR/results.csv"
 DRIVER="$OUTDIR/driver"
 mkdir -p "$OUTDIR"
 : > "$RESULTS"
@@ -122,40 +132,65 @@ BASE_ANTHROPIC_URL="http://$ANTHROPIC_ADDR/v1/messages"
 LUXD_URL="$LUX_URL/openai/v1/chat/completions"
 LITELLM_URL="http://127.0.0.1:$LITELLM_PORT/chat/completions"
 
-# drun wraps the driver with the pinned concurrency, warmup, and results file.
-# The driver sends one confirm request first and fails loudly if a subject
-# does not answer, so a broken subject never silently produces a number.
+# drun wraps the driver with the pinned concurrency, warmup, trial index, and
+# results file. The driver sends one confirm request first and fails loudly if
+# a subject does not answer, so a broken subject never silently produces a
+# number. TRIAL is the current trial index, set by the loop below.
 drun() {
-  if ! "$DRIVER" run "$@" -concurrency "$CONCURRENCY" -warmup "$WARMUP" -out "$RESULTS"; then
+  if ! "$DRIVER" run "$@" -concurrency "$CONCURRENCY" -warmup "$WARMUP" -trial "$TRIAL" -out "$RESULTS"; then
     echo "!! a subject returned nonzero (errors, or an unreachable endpoint); continuing: $*" >&2
   fi
 }
 
-echo ">> passthrough (OpenAI in, OpenAI upstream)"
-for stream in "" "-stream"; do
-  if [ -z "$stream" ]; then n="$REQUESTS"; else n="$STREAM_REQUESTS"; fi
-  # shellcheck disable=SC2086
-  drun -subject baseline -group passthrough -shape openai $stream -requests "$n" -url "$BASE_OPENAI_URL" -key stub-credential      -model stub-openai -rss-pid 0
-  # shellcheck disable=SC2086
-  drun -subject luxd     -group passthrough -shape openai $stream -requests "$n" -url "$LUXD_URL"        -key "$LUX_KEY"           -model stub-openai -rss-pid "$LUXD_PID"
-  # shellcheck disable=SC2086
-  drun -subject litellm  -group passthrough -shape openai $stream -requests "$n" -url "$LITELLM_URL"     -key "$LITELLM_MASTER_KEY" -model stub-openai -rss-pid "$LITELLM_PID"
-done
+# The matrix runs TRIALS times against the one bring-up above. Each trial is a
+# fresh measurement window (its own warmup, its own peak-RSS sample), tagged
+# with its trial index, so the trials aggregate into a distribution rather
+# than a single point.
+for TRIAL in $(seq 1 "$TRIALS"); do
+  echo ">> trial $TRIAL/$TRIALS"
 
-echo ">> translated (OpenAI in, Anthropic upstream)"
-for stream in "" "-stream"; do
-  if [ -z "$stream" ]; then n="$REQUESTS"; else n="$STREAM_REQUESTS"; fi
-  # shellcheck disable=SC2086
-  drun -subject baseline -group translated -shape anthropic $stream -requests "$n" -url "$BASE_ANTHROPIC_URL" -key stub-credential      -model stub-anthropic         -rss-pid 0
-  # shellcheck disable=SC2086
-  drun -subject luxd     -group translated -shape openai    $stream -requests "$n" -url "$LUXD_URL"           -key "$LUX_KEY"           -model xlate-openai-anthropic -rss-pid "$LUXD_PID"
-  # shellcheck disable=SC2086
-  drun -subject litellm  -group translated -shape openai    $stream -requests "$n" -url "$LITELLM_URL"        -key "$LITELLM_MASTER_KEY" -model xlate-openai-anthropic -rss-pid "$LITELLM_PID"
+  echo ">> passthrough (OpenAI in, OpenAI upstream)"
+  for stream in "" "-stream"; do
+    if [ -z "$stream" ]; then n="$REQUESTS"; else n="$STREAM_REQUESTS"; fi
+    # shellcheck disable=SC2086
+    drun -subject baseline -group passthrough -shape openai $stream -requests "$n" -url "$BASE_OPENAI_URL" -key stub-credential      -model stub-openai -rss-pid 0
+    # shellcheck disable=SC2086
+    drun -subject luxd     -group passthrough -shape openai $stream -requests "$n" -url "$LUXD_URL"        -key "$LUX_KEY"           -model stub-openai -rss-pid "$LUXD_PID"
+    # shellcheck disable=SC2086
+    drun -subject litellm  -group passthrough -shape openai $stream -requests "$n" -url "$LITELLM_URL"     -key "$LITELLM_MASTER_KEY" -model stub-openai -rss-pid "$LITELLM_PID"
+  done
+
+  echo ">> translated (OpenAI in, Anthropic upstream)"
+  for stream in "" "-stream"; do
+    if [ -z "$stream" ]; then n="$REQUESTS"; else n="$STREAM_REQUESTS"; fi
+    # shellcheck disable=SC2086
+    drun -subject baseline -group translated -shape anthropic $stream -requests "$n" -url "$BASE_ANTHROPIC_URL" -key stub-credential      -model stub-anthropic         -rss-pid 0
+    # shellcheck disable=SC2086
+    drun -subject luxd     -group translated -shape openai    $stream -requests "$n" -url "$LUXD_URL"           -key "$LUX_KEY"           -model xlate-openai-anthropic -rss-pid "$LUXD_PID"
+    # shellcheck disable=SC2086
+    drun -subject litellm  -group translated -shape openai    $stream -requests "$n" -url "$LITELLM_URL"        -key "$LITELLM_MASTER_KEY" -model xlate-openai-anthropic -rss-pid "$LITELLM_PID"
+  done
 done
 
 echo
-echo "=== results (litellm $LITELLM_VERSION, $GO_VERSION, concurrency $CONCURRENCY) ==="
+echo "=== results (litellm $LITELLM_VERSION, $GO_VERSION, concurrency $CONCURRENCY, trials $TRIALS) ==="
 "$DRIVER" report -in "$RESULTS" -md "$REPORT"
+"$DRIVER" csv -in "$RESULTS" -out "$CSV"
 cat "$REPORT"
 echo ">> raw samples: $RESULTS"
 echo ">> markdown table: $REPORT"
+echo ">> tidy per-trial csv: $CSV"
+
+# Optionally render the charts, if a Python venv with the plotting deps is
+# present. A missing venv is not a failure: the run's numbers stand on their
+# own, and README.md > Charts says how to make the venv. The charts render
+# from this run's fresh CSV into the committed figures directory.
+RENDER_VENV_DIR="${RENDER_VENV_DIR:-${TMPDIR:-/tmp}/lux-render-venv}"
+RENDER_VENV_DIR="${RENDER_VENV_DIR%/}"
+RENDER_PY="$RENDER_VENV_DIR/bin/python"
+if [ -x "$RENDER_PY" ] && "$RENDER_PY" -c 'import seaborn, pandas, matplotlib' >/dev/null 2>&1; then
+  echo ">> rendering charts with $RENDER_PY"
+  "$RENDER_PY" "$SCRIPT_DIR/render.py" --csv "$CSV" --figures "$SCRIPT_DIR/figures"
+else
+  echo ">> skipping charts: no render venv at $RENDER_VENV_DIR (see README.md > Charts)"
+fi
