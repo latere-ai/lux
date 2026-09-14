@@ -435,7 +435,7 @@ func TestOvershootBound(t *testing.T) {
 		for i := range ls {
 			ls[i] = h.limiter(h.st, nil, manifest.Defaults{})
 		}
-		rng := rand.New(rand.NewPCG(uint64(run), 7)) //nolint:gosec // a seeded simulation, not a secret
+		rng := rand.New(rand.NewPCG(uint64(run), 7))
 		refused := make([]bool, replicas)
 		for done := 0; done < replicas; {
 			for _, i := range rng.Perm(replicas) {

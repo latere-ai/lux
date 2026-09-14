@@ -37,6 +37,7 @@ import (
 	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
 	"latere.ai/x/lux/internal/version"
+	"latere.ai/x/lux/manifest"
 )
 
 // Shutdown timing of spec 002: readiness answers 503 at once, the drain
@@ -85,8 +86,9 @@ func subcommand(args []string) (string, []string) {
 }
 
 // serveCmd is the node: the two listeners and the probes of spec 002,
-// the store and the identity, and the two jobs of spec 005. The dialect
-// doors, the API, and the routing of later specs mount here.
+// the store and the identity, the two jobs of spec 005, and the Key
+// cache of spec 007 with its journal tail. The dialect doors, the API,
+// and the routing of later specs mount here.
 func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("luxd serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -110,8 +112,15 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	defer func() { _ = st.Close() }()
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	logger := slog.New(slog.NewTextHandler(stderr, nil))
+
+	// The Key cache of spec 007: the door's lookup, invalidated by the
+	// journal tail below, and emptied after a file-mode re-read, which
+	// swaps the snapshot without a journal row. The door handler that
+	// reads through it mounts with spec 011.
+	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: cfg.KeyCache, Logger: logger})
 	if files != nil {
-		stopHUP := reloadOnHUP(ctx, files, stdout, stderr)
+		stopHUP := reloadOnHUP(ctx, files, stdout, stderr, keys.Reset)
 		defer stopHUP()
 	}
 
@@ -134,9 +143,9 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 
-	// The two jobs of spec 005 run for the life of the process and stop
-	// with it, after the listeners have drained.
-	logger := slog.New(slog.NewTextHandler(stderr, nil))
+	// The two jobs of spec 005 and the Key cache's journal tail run for
+	// the life of the process and stop with it, after the listeners have
+	// drained.
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
 	discovery := serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
 	healthJob := serve.NewHealth(serve.HealthOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.HealthInterval, Logger: logger})
@@ -144,6 +153,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	var jobs sync.WaitGroup
 	jobs.Go(func() { discovery.Run(jobsCtx) })
 	jobs.Go(func() { healthJob.Run(jobsCtx) })
+	jobs.Go(func() { keys.Run(jobsCtx) })
 	defer func() {
 		stopJobs()
 		jobs.Wait()
@@ -228,7 +238,10 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (st
 	case cfg.DBURL != "":
 		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
 	case cfg.ManifestDir != "":
-		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate})
+		// The resolver's defaults are spec 007's two rates, so a Key the
+		// directory declares without limits gets the operator's.
+		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute}
+		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate})
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -281,8 +294,9 @@ func rewrapCmd(args []string, getenv config.Getenv, stderr io.Writer) int {
 // reloadOnHUP re-reads the directory on every SIGHUP until ctx ends or
 // the returned stop is called, printing what was read, or the file and
 // the path that stopped the read while the previous snapshot keeps
-// serving.
-func reloadOnHUP(ctx context.Context, files *filemode.Store, stdout, stderr io.Writer) (stop func()) {
+// serving. afterReload runs after a successful re-read: the Key cache's
+// Reset, because the swap writes no journal row for the tail to see.
+func reloadOnHUP(ctx context.Context, files *filemode.Store, stdout, stderr io.Writer, afterReload func()) (stop func()) {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	quit, done := make(chan struct{}), make(chan struct{})
@@ -299,6 +313,7 @@ func reloadOnHUP(ctx context.Context, files *filemode.Store, stdout, stderr io.W
 					_, _ = fmt.Fprintf(stderr, "luxd: reload failed, the previous snapshot keeps serving: %v\n", err)
 					continue
 				}
+				afterReload()
 				_, _ = fmt.Fprintf(stdout, "luxd: reloaded %s\n", files.Notice())
 			}
 		}
