@@ -1,6 +1,6 @@
 ---
 title: "Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/003-manifest-contract.md
