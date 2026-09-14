@@ -92,12 +92,15 @@ define render-examples
 	done
 endef
 
-# wait-for polls a URL with curl until it answers 2xx, for up to ten
-# seconds, and fails naming the log to read.
+# wait-for polls a URL with curl until it answers 2xx, for up to thirty
+# seconds, and fails naming the log to read. Thirty, not ten: under the
+# integration tier's load a stub issuer has taken longer than ten to
+# answer its first request, while a process that never comes up is
+# reported by its own log.
 define wait-for
 	i=0; until curl -fsS -o /dev/null "$(1)" 2>/dev/null; do \
 	  i=$$((i+1)); \
-	  if [ $$i -ge 100 ]; then echo "$(1) did not answer; see $(2)" >&2; exit 1; fi; \
+	  if [ $$i -ge 300 ]; then echo "$(1) did not answer; see $(2)" >&2; exit 1; fi; \
 	  sleep 0.1; \
 	done
 endef
