@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/pkg/metrics"
+
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/memory"
@@ -77,6 +79,19 @@ func TestSessionsGauge(t *testing.T) {
 	}
 	if r.g.TTL() != DefaultTTL {
 		t.Errorf("TTL %s", r.g.TTL())
+	}
+}
+
+// TestRegisterIdleReadsZero: a process with the tunnel off still
+// exposes lux_tunnel_sessions, at zero, so spec 019's metric table
+// holds whether or not the tunnel is on.
+func TestRegisterIdleReadsZero(t *testing.T) {
+	reg := metrics.NewRegistry()
+	RegisterIdle(reg)
+	var out strings.Builder
+	reg.WritePrometheus(&out)
+	if !strings.Contains(out.String(), MetricSessions+" 0") {
+		t.Fatalf("registry lacks %s at zero:\n%s", MetricSessions, out.String())
 	}
 }
 
