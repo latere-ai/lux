@@ -38,8 +38,10 @@ var forbidden = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)decisions/20\d\d-|infrastructure/identity|open-cores\.md|platform-surface\.md|\bid-(0[1-9]|10)-[a-z]`),
 }
 
-// skipDirs are never released and never read.
-var skipDirs = map[string]bool{".git": true, "out": true, "node_modules": true, "dist": true}
+// skipDirs are never released and never read: the repository's own
+// metadata, build output, and the worktrees an agent tool checks out
+// under .claude, each a tree of its own with its own copy of this test.
+var skipDirs = map[string]bool{".git": true, ".claude": true, "out": true, "node_modules": true, "dist": true}
 
 // TestNoLatereCoordinatesInReleasedArtifacts is spec 001's invariant 8
 // as a test over the whole tree: no document, manifest, workflow,

@@ -20,3 +20,7 @@ coverage.out
 # binary at the repository root is always a stray from a bare `go build`.
 /lux
 /luxd
+
+# An agent tool's worktrees, checked out under the repository and never
+# part of it.
+.claude/
