@@ -14,10 +14,11 @@ import (
 	"testing"
 	"time"
 
-	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
 	"latere.ai/x/pkg/metrics"
+
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // TestNewRequiresOptions is the builder's precision: a handler without
