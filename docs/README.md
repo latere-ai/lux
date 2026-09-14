@@ -18,6 +18,7 @@ Trying it out before there is anything to install takes one command,
 
 | Page | |
 |---|---|
+| The `lux` command | what `lux -help` prints, command by command, in [`cli.md`](cli.md); the skill that teaches an agent the command is [`skills/lux/SKILL.md`](../skills/lux/SKILL.md) |
 | Manifest reference | the schema in the [manifest contract spec](../specs/003-manifest-contract.md) |
 | API | the endpoints and error codes in the [API spec](../specs/011-api.md), and the webhooks an operator writes in the [identity spec](../specs/006-identity.md) |
 | The packages | the [architecture spec](../specs/001-architecture.md) names the exported packages and what each promises |
