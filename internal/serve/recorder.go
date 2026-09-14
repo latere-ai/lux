@@ -32,7 +32,17 @@ const (
 	// shows as a growing gauge before any limit is wrong by more than the
 	// bound.
 	MetricFlushLag = "lux_metering_flush_lag_seconds"
+	// MetricOutputTokensPerSecond is a served request's output tokens
+	// over the time they took, by provider and model: a stream's from its
+	// first byte to its last, a non-stream's over its upstream duration.
+	// Spec 019 places the emission here, beside the other three, because
+	// the record is the one place that has the tokens and both times.
+	MetricOutputTokensPerSecond = "lux_output_tokens_per_second"
 )
+
+// OutputTokensPerSecondBuckets are the boundaries of
+// MetricOutputTokensPerSecond, in tokens per second, spec 019's row.
+var OutputTokensPerSecondBuckets = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000}
 
 // pricingTimeout bounds the catalog read that prices one record. The
 // read runs after the response is finished, so it adds nothing to the
@@ -86,6 +96,7 @@ type Recorder struct {
 	o      RecorderOptions
 	tokens *metrics.Counter
 	spend  *metrics.Counter
+	tps    *metrics.Histogram
 
 	mu        sync.Mutex
 	rows      map[metering.AggregateKey]*metering.Aggregate
@@ -107,6 +118,7 @@ func NewRecorder(o RecorderOptions) *Recorder {
 	if o.Metrics != nil {
 		r.tokens = o.Metrics.Counter(MetricTokens, "Tokens metered by direction: input, output, cached_input, cache_write.")
 		r.spend = o.Metrics.Counter(MetricSpend, "Spend metered in micro-units of the currency, priced records only.")
+		r.tps = o.Metrics.Histogram(MetricOutputTokensPerSecond, "Output tokens per second of a served request by provider and model.", OutputTokensPerSecondBuckets)
 		o.Metrics.Gauge(MetricFlushLag, "Seconds since this replica last flushed its spend counters and usage aggregates.", func() []metrics.LabeledValue {
 			return []metrics.LabeledValue{{Labels: map[string]string{}, Value: r.lag().Seconds()}}
 		})
@@ -206,6 +218,27 @@ func (r *Recorder) observe(m metering.Record) {
 	if m.Cost.Priced && m.Cost.Amount > 0 {
 		r.spend.Add(map[string]string{"currency": m.Cost.Currency}, uint64(m.Cost.Amount))
 	}
+	if secs := generationSeconds(m); secs > 0 {
+		r.tps.Observe(map[string]string{"provider": m.Provider.Name, "model": m.Model.Name}, float64(m.Tokens.Output)/secs)
+	}
+}
+
+// generationSeconds is the time a served request's output tokens took:
+// a stream's from its first byte to its last, a non-stream's the
+// answering attempt's duration. Zero is no observation: a refusal, a
+// failure, a request with no output, a count, or a time too short to
+// measure in milliseconds.
+func generationSeconds(m metering.Record) float64 {
+	if m.Status != metering.StatusOK || m.Tokens.Output <= 0 || m.Provider.Name == "" || m.Model.Name == "" {
+		return 0
+	}
+	var ms int64
+	if m.Stream {
+		ms = m.LatencyMs - m.TTFBMs
+	} else if n := len(m.Attempts); n > 0 {
+		ms = m.Attempts[n-1].DurationMs
+	}
+	return float64(ms) / 1000
 }
 
 // Flush upserts this replica's hourly deltas through Store.Usage() and
