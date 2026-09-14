@@ -77,7 +77,7 @@ func TestIdentityRules(t *testing.T) {
 			`LUX_ADMIN_SUBJECTS entry "alice" is not a rendered subject of the form <issuer>|<sub>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Load(env(tc.env))
+			_, err := Load(env(withKEK(tc.env)))
 			switch {
 			case tc.want == "" && err != nil:
 				t.Fatalf("Load() = %v, want no problem", err)
@@ -97,6 +97,7 @@ func TestIdentityProblemsJoinTheOneMessage(t *testing.T) {
 		"LUX_PUBLIC_ADDR":        "nope",
 		"LUX_AUTHORIZER_URL":     "https://authz.example.com",
 		"LUX_AUTHORIZER_TIMEOUT": "soon",
+		"LUX_SECRETS_KEK":        kek,
 	}))
 	if err == nil {
 		t.Fatal("Load() accepted four problems")

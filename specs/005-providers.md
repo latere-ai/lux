@@ -1,6 +1,6 @@
 ---
 title: "Providers: dialects, credential custody, discovery, health, the upstream client"
-status: dispatched
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -36,9 +36,20 @@ What happens to a request once a target is chosen is
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built, over the memory store and the file mode of [[010-state]]:
+`internal/secrets` holds the custody; `internal/config` the four
+rows and the rewrap role's two; `gateway/upstream.go` the client
+builder, the credential injection, and the errors the door maps;
+`internal/serve` the discovery and health jobs and the two credential
+sources; `internal/rewrap` the run of the rewrap role; and `luxd serve`
+checks the keys against every stored row, starts the two jobs after the
+store and the identity, and stops them with the process, while
+`luxd rewrap` reads its two variables and, until the Postgres store of
+[[010-state]]'s phase 6 lands, says there is no stored row to re-wrap.
+The door handler that takes the client and the credential source is
+[[004-request-path]]'s and is built beside this. The readings this pass
+fixed where the text was open are written into the Design below, each
+beside the rule it settles.
 
 ## Design
 
@@ -126,22 +137,34 @@ not a byte a reader has to switch on.
 | additional data, on both AEADs | | the UTF-8 bytes of `<provider id>:<credential version>`, the id with its `prv_` prefix and the version in decimal, `prv_01J9ZK2P7Q8R9S0T1U2V3W4X5Y:2`; a row copied onto another Provider or onto another version fails to open |
 
 The four byte strings and the version are the `Sealed` row of
-[[010-state]]. `internal/secrets` holds the key encryption keys and
-owns `Seal(providerID string, version int, value []byte) (store.Sealed,
-error)`, `Open(providerID string, s store.Sealed) ([]byte, error)`, and
-`Rewrap(providerID string, s store.Sealed) (store.Sealed, bool, error)`,
-which returns the row with a new wrapped key under the first KEK and
-`false` when it was already under it. `internal/store` holds the row
-and returns it as ciphertext, and imports nothing of `internal/secrets`
+[[010-state]]. `internal/secrets` holds the key encryption keys as a
+`*Keyring`, which `Parse(raw string) (*Keyring, error)` reads from the
+variable, and owns them as its methods: `Seal(providerID string,
+version int, value []byte) (store.Sealed, error)`, `Open(providerID
+string, s store.Sealed) ([]byte, error)`, `Rewrap(providerID string, s
+store.Sealed) (store.Sealed, bool, error)`, which returns the row with
+a new wrapped key under the first KEK and `false` when it was already
+under it, and `Unwrap(providerID string, s store.Sealed) (position
+int, err error)`, which opens the wrapped data key alone and says which
+listed key did, so the start-up check and `luxd rewrap` never touch a
+value. `Check(ctx, store.Credentials, *Keyring) (int, error)` is the
+start-up check over every stored row. The data key is zeroed before
+each call returns. `internal/store` holds the row and returns it as
+ciphertext, and imports nothing of `internal/secrets`
 ([[010-state]]). `gateway` receives a plaintext only through the
 `CredentialSource` interface of [[004-request-path]], which
-`internal/serve` satisfies from `store.Credentials()` and
-`secrets.Open`, only for the Provider a chosen target names, and only
-for the life of one outbound request ([[001-architecture]]); the
-discovery and health jobs open the same way for the models route. In
-file mode the seam is `filemode.Store.CredentialValue` ([[010-state]]),
-which hands back the value read from the environment, and nothing is
-opened. The value is redacted by type, not by discipline: it is decoded into a
+`internal/serve` satisfies with `StoreCredentials` from
+`store.Credentials()` and `Keyring.Open`, only for the Provider a
+chosen target names, and only for the life of one outbound request
+([[001-architecture]]); the discovery and health jobs open the same way
+for the models route. A Provider that stores no credential answers a
+nil value, and the door and the jobs then inject no header. In file
+mode the seam is `filemode.Store.CredentialValue` ([[010-state]]),
+which `serve.FileCredentials` hands back as the value read from the
+environment, and nothing is opened. An excerpt of an upstream body a job
+keeps in a status has the value redacted from it first, because an
+upstream that echoes the header it was sent must not put the credential
+into `status.health.lastError`. The value is redacted by type, not by discipline: it is decoded into a
 field the JSON and YAML encoders skip ([[003-manifest-contract]]), so
 no object that carries it can be serialized into a response, an event,
 a log line, or a request log record.
@@ -170,8 +193,8 @@ failure naming the Provider and the variable, never a value.
 
 | Variable | Default | Rule |
 |---|---|---|
-| `LUX_SECRETS_KEK` | none | one or more 32-byte keys, each standard base64 with padding (RFC 4648 section 4, 44 characters), comma separated, at most 8; the first wraps every new data key, every key is tried to open one; required by `serve` and `rewrap` in every mode but file mode, where it is read and unused |
-| `LUX_UPSTREAM_ALLOW_PRIVATE` | unset | `1` sets `Options.AllowPrivateUpstreams` ([[003-manifest-contract]]) and admits a private destination at dial, below |
+| `LUX_SECRETS_KEK` | none | one or more 32-byte keys, each standard base64 with padding (RFC 4648 section 4, 44 characters), comma separated, at most 8, a blank entry ignored; the first wraps every new data key, every key is tried to open one; required by `serve` and `rewrap` in every mode but file mode, where it is read, checked when set, and unused |
+| `LUX_UPSTREAM_ALLOW_PRIVATE` | unset | `1` sets `Options.AllowPrivateUpstreams` ([[003-manifest-contract]]) and admits a private destination at dial, below; blank is unset and any other value is a configuration error |
 | `LUX_DISCOVERY_INTERVAL` | `1h` | Go duration, at least `1m`, at most `24h` |
 | `LUX_HEALTH_INTERVAL` | `30s` | Go duration, at least `5s`, at most `10m` |
 
@@ -184,11 +207,13 @@ variable naming the same thing.
 
 `luxd serve` refuses to start without `LUX_SECRETS_KEK` in every mode
 but file mode, and reports which of the listed keys failed to decode to
-32 bytes, by position and never by value. It then opens the wrapped
-data key, not the value, of every stored credential and refuses to
-start naming the Providers whose data key no key in the list opens, so
-a deployment carrying the wrong key fails at start rather than on the
-first request through a door. With the memory store there is nothing
+32 bytes, by position and never by value, in the one configuration
+line. It then opens the wrapped data key, not the value, of every
+stored credential through `secrets.Check` and refuses to start naming
+the Providers whose data key no key in the list opens, so a deployment
+carrying the wrong key fails at start rather than on the first request
+through a door; the start-up log then names how many keys were listed
+and how many rows they open. With the memory store there is nothing
 stored at start and the variable is still required, because the first
 `Provider` applied is sealed under it.
 
@@ -196,10 +221,16 @@ stored at start and the variable is still required, because the first
 
 `luxd rewrap` is the third role of the server binary, its own package
 under `internal/rewrap` with its own dependency allow list. It reads
-`LUX_SECRETS_KEK` and `LUX_DB_URL` and nothing else of the table;
-without `LUX_DB_URL` it exits 1 with a configuration error naming the
-variable, because the memory store survives no process and the file
-mode seals nothing, so there is nothing durable to re-wrap. It applies
+`LUX_SECRETS_KEK` and `LUX_DB_URL`, through `config.LoadRewrap`, and
+nothing else of the table; without `LUX_DB_URL` it exits 1 with a
+configuration error naming the variable, because the memory store
+survives no process and the file mode seals nothing, so there is
+nothing durable to re-wrap. The run itself, `rewrap.Run(ctx,
+store.Credentials, *secrets.Keyring, report io.Writer) (Summary,
+error)`, works over the interface and is proven against the memory
+store; until the Postgres store of [[010-state]]'s phase 6 lands, the
+role with `LUX_DB_URL` set exits 1 saying the store is not in this
+build, as `serve` does. It applies
 no migration and refuses a schema that is not at the binary's version
 ([[010-state]]). For every row of `Credentials.List` it tries the
 first key against the wrapped data key: a row that opens under it is
@@ -207,8 +238,9 @@ already current and is skipped; a row that opens under a later key is
 re-wrapped under the first with a fresh `wrapped_nonce` and written
 through `Credentials.Rewrap` with the version it read, so a value
 applied through the API during the run is never overwritten by a stale
-wrap; a row no listed key opens is reported by provider id and the run
-continues. The value ciphertext is never touched, never decrypted, and
+wrap, and the row whose version moved counts as already current, since
+the apply sealed it under the first key; a row no listed key opens is
+reported by provider id, one line on stderr, and the run continues. The value ciphertext is never touched, never decrypted, and
 never re-encrypted, which is why the two are separate columns. The run
 is idempotent and resumable: an interrupted run is repeated rather
 than repaired. It prints one line, `rewrap: <n> re-wrapped, <m> already
@@ -235,18 +267,25 @@ flowchart LR
   U --> D[delete discovered Models the list no longer carries]
 ```
 
-The job is `internal/serve`'s, over the store interfaces of
-[[010-state]] and the client below, and runs on one replica at a time,
-under the store lease named `discovery`, because a list that two
-replicas resolve concurrently would race on the same object versions to
-write the same result. The tick is `LUX_DISCOVERY_INTERVAL` with up to
-ten percent jitter. The lease holder also tails the journal
-([[010-state]], `Since`) and lists a Provider at once when it reads a
-`provider.created`, or a `provider.updated` whose changed paths include
-`spec.baseURL` or `spec.credential`, so a new Provider's Models appear
-within seconds rather than at the next tick. The list request is sent
-through the Provider's upstream client with its credential injected, as
-any request is.
+The job is `internal/serve`'s, `serve.Discovery`, over the store
+interfaces of [[010-state]] and the client below, and runs on one
+replica at a time, under the store lease named `discovery`, renewed at
+a third of its TTL, because a list that two replicas resolve
+concurrently would race on the same object versions to write the same
+result. The tick is `LUX_DISCOVERY_INTERVAL` with up to ten percent
+jitter, and the first tick is at start. The lease holder also tails
+the journal ([[010-state]], `Since`) once a second and lists a Provider
+at once when it reads a `provider.created`, or a `provider.updated`
+whose changed paths include `spec.baseURL` or a path under
+`spec.credential`, so a new Provider's Models appear within seconds
+rather than at the next tick; the changed paths are read from the
+event's `data` as a list of paths or as an object whose `paths` member
+is one, and a replica that takes the lease skips the journal to its
+end first so the past is not replayed as lists. A tunnelled Provider
+is skipped until [[013-tunnelled-runtimes]] gives it a client. The list
+request is sent through the Provider's upstream client with its
+credential injected, as any request is, within the Provider's
+`timeout`.
 
 | Dialect | Models route | Names read from | Pagination |
 |---|---|---|---|
@@ -274,8 +313,20 @@ presence and shape and a field an operator can declare is better
 absent than wrong. A discovered Model is unpriced and carries no
 limits until an operator declares it. Discovery calls the same
 function the API calls, so a name the schema refuses is refused here
-too and is recorded in `Provider.status.warnings` rather than stored,
-one warning per refused name naming the upstream name and the rule.
+too and is recorded in `Provider.status.discovered.warnings` rather
+than stored, one warning per refused name naming the upstream name and
+the rule. The warnings sit in the observed half of status, a member
+this spec adds to [[003-manifest-contract]]'s `DiscoveredStatus`,
+rather than in `status.warnings`, because that member is the control
+plane's, written by `Put`, which the file mode refuses for a declared
+Provider and which would move the Provider's version and ETag on every
+list. The writes of one list are one `Transact`: the created Models
+with a `model.discovered` event each, the deleted ones with a
+`model.removed` each ([[012-request-log-and-events]]), an unchanged
+Model left at its version, and `status.discovered`. A new Model's
+`status.available` and `status.targets[].health` are written from the
+Providers' published states in the same transaction, so a door's model
+list carries it before the health holder's next tick.
 
 The rules that make the catalogue safe to recompute:
 
@@ -305,8 +356,8 @@ that is not never overrides the published state upward.
 
 | Mode | Published by | Failure is | Success is |
 |---|---|---|---|
-| `probe` | the replica holding the `health` lease, every `LUX_HEALTH_INTERVAL`, calling the dialect's models route, first page only, through the Provider's client with a 5 second budget in place of the Provider's `timeout` | a transport error, a timeout, or a 5xx | any other complete response, including a 4xx: the upstream answered. A 401 or 403 is a success for health, which measures reachability, and is written to `status.health.lastError` as `credential refused: <status>`, so a revoked credential is visible without a request through a door |
-| `passive` | the replica holding the `health` lease, from its own data plane outcomes | a transport error, a timeout, or a 5xx from the upstream | any other complete response |
+| `probe` | the replica holding the `health` lease, every `LUX_HEALTH_INTERVAL` and once at start, calling the dialect's models route, first page only, through the Provider's client with a 5 second budget in place of the Provider's `timeout` (`serve.Health.Probe`) | a transport error, a timeout, or a 5xx | any other complete response, including a 4xx: the upstream answered. A 401 or 403 is a success for health, which measures reachability, and is written to `status.health.lastError` as `credential refused: <status>`, so a revoked credential is visible without a request through a door |
+| `passive` | the replica holding the `health` lease, from its own data plane outcomes through `serve.Health.Observe(providerID, failed)`, which is [[004-request-path]]'s `HealthObserver`; an outcome moves the state and `since` and leaves `lastError` and `lastProbeAt` to the probe | a transport error, a timeout, or a 5xx from the upstream | any other complete response |
 | any mode, `tunnel: true` | the tunnel registry ([[013-tunnelled-runtimes]]): a Provider with no live session is `Unreachable` whatever the mode says, and the mode's own signal applies while one is open | a missing or expired registry row | a live row |
 | `none` | nobody; the state is `Unknown` forever | nothing | nothing |
 
@@ -326,11 +377,18 @@ The thresholds are exact: one failure moves `Healthy` to `Degraded`,
 the third consecutive failure moves `Degraded` to `Unreachable`, and
 one success returns the state to `Healthy` and resets the counter.
 `status.health.since` is stamped on every change of state and
-`lastProbeAt` on every probe.
+`lastProbeAt` on every probe. The counter is the lease holder's own: a
+replica that takes the lease starts every count at zero and takes the
+stored state as authoritative, so a handover never moves a state by
+itself. A Provider turned to `mode: none` is written `Unknown` once, on
+the holder's next tick, and left alone after.
 
 Under `probe` the counter is fed by probes and by traffic both, so a
 Provider that fails ten requests inside one probe interval is
-`Unreachable` before the next probe. Under `passive` there is no probe
+`Unreachable` before the next probe. Every replica's `Observe` feeds
+its own view; the holder's feeds the published state too. The state a
+replica acts on is `serve.Health.View(providerID)`, the worse of the
+two, which [[008-routing-and-models]]'s selection reads. Under `passive` there is no probe
 to recover with; a Provider marked `Unreachable` is left out of
 selection and is re-admitted by the per-target circuit's half-open
 attempt succeeding ([[008-routing-and-models]]), which is the only
@@ -346,34 +404,53 @@ What the signal means:
   Both are written by the replica holding the `health` lease, which
   also raises `provider.unreachable` and `provider.healthy` at the two
   transitions, once per transition across replicas
-  ([[012-request-log-and-events]]).
+  ([[012-request-log-and-events]]); `provider.healthy` fires on every
+  entry into `Healthy` from another state, the first probe of a new
+  Provider included, as that spec's table reads, with
+  `wasUnreachableFor` set when the state left was `Unreachable`. The
+  holder also fills the status of a Model that has none yet on every
+  tick, so a Model declared through the API is available before any
+  Provider changes state.
 - `health.mode: none` never makes a target unavailable, which is what
   an upstream with no model list and no error convention needs.
 
 ### The upstream client
 
-One `*http.Client` per Provider, built when the Provider is loaded and
-rebuilt when `baseURL`, `timeout`, or `concurrency` changes. The
-builder is `gateway.NewClientSource(gateway.ClientOptions) ClientSource`,
-exported from `gateway` so that `internal/serve` and a platform that
-imports the handler construct the same client under the same rules,
-and [[004-request-path]]'s `ClientSource` has one implementation in
-the tree. A tunnelled Provider's client is the same shape over the
-carrier transport of [[013-tunnelled-runtimes]].
+One `*http.Client` per Provider, built when the Provider is first
+asked for and rebuilt when `baseURL`, `timeout`, or `concurrency`
+changes, the old pool's idle connections closed. The builder is
+`gateway.NewClientSource(gateway.ClientOptions) *gateway.Clients`, whose
+`Client(ctx, *v1.Provider) (*http.Client, error)` is the one method of
+[[004-request-path]]'s `ClientSource`, so that interface has one
+implementation in the tree and `internal/serve` and a platform that
+imports the handler construct the same client under the same rules;
+`Revoke(providerID)` forgets a deleted Provider's client.
+`ClientOptions` carries `AllowPrivate` and `Version`, the User-Agent's,
+and the seams a test needs, a resolver, a dial function, a root pool,
+and a clock, none of which turns a rule off. The two failures the client
+raises before any dial are its exported errors, `gateway.ErrHostPinned`
+and `gateway.ErrProviderBusy`, for the door to map to `upstream_error`
+and `provider_unavailable`; `gateway.ErrPrivateAddress` surfaces as the
+dial's error. `gateway.InjectCredential(http.Header, *v1.Provider,
+value []byte)` is the custody rule below in code: it strips the
+credential header and writes the value under the scheme last, and a
+tunnelled Provider is `gateway.ErrTunnelled` until
+[[013-tunnelled-runtimes]] gives it a client over its carrier
+transport.
 
 | Property | Value | Reason |
 |---|---|---|
-| transport | `latere.ai/x/pkg/otel.Transport` over the `*http.Transport` the rows below configure | every outbound hop is a client span carrying the trace context; the shared bar's `otel-client` gate refuses an `&http.Client{}` literal without a `Transport` and any use of `http.DefaultClient`, and this tree waives nothing under `otel_client.skip` |
+| transport | `otelhttp.NewTransport` over the `*http.Transport` the rows below configure, which is what `latere.ai/x/pkg/otel.Transport` wraps, reached directly because that package also carries the SDK and its exporters, which a root package's importer sets up and which reach `os/exec` | every outbound hop is a client span carrying the trace context; the shared bar's `otel-client` gate refuses an `&http.Client{}` literal without a `Transport` and any use of `http.DefaultClient`, and this tree waives nothing under `otel_client.skip` |
 | `Proxy` | nil | a proxy variable in the environment would move a credential-bearing request to a host no manifest names, and terminate its TLS; an operator that needs an egress proxy declares it as the `baseURL` |
 | `CheckRedirect` | `http.ErrUseLastResponse` | a 3xx is an upstream asking for the credential at another location; the response is returned to the caller as `upstream_error` instead |
 | `TLSClientConfig` | minimum TLS 1.2, verification on, the system roots, no field turns it off; `TLSHandshakeTimeout` 10s | a Provider is a public host by the upstream host rule; a local runtime with its own certificate is [[013-tunnelled-runtimes]]'s case |
-| `DialContext` | resolves the name, then refuses any loopback, link-local, unique-local, or private address among the answers unless `LUX_UPSTREAM_ALLOW_PRIVATE`; connects only to the admitted addresses; 10s connect timeout | the parse-time rule of [[003-manifest-contract]] is on the name; this is on the address, which is what closes a public name that resolves inward |
+| `DialContext` | resolves the name, then drops every loopback, link-local, unique-local, private, unspecified, or multicast address among the answers unless `LUX_UPSTREAM_ALLOW_PRIVATE`, and refuses the dial with `ErrPrivateAddress` when none is left; connects only to the admitted addresses, in order; 10s connect timeout | the parse-time rule of [[003-manifest-contract]] is on the name; this is on the address, which is what closes a public name that resolves inward |
 | host pin | the `RoundTripper` refuses, before dialling, a request whose URL scheme, host, or port differs from the Provider's `baseURL`, with an error the door reports as `upstream_error` | invariant 2 of [[001-architecture]] in code: a bug that builds a URL wrongly cannot carry the credential to another host |
 | `ForceAttemptHTTP2` | true; `MaxIdleConnsPerHost` 32, `IdleConnTimeout` 90s | one pool per Provider, so a slow upstream cannot starve another's connections |
 | `DisableCompression` | true | the transport adds no `Accept-Encoding` of its own and decodes nothing, so [[004-request-path]]'s rule that the header is removed on translated and model routes and kept on opaque ones holds byte for byte |
-| deadline | `Provider.spec.timeout`, defaulted from `LUX_UPSTREAM_TIMEOUT`, over the whole request including its stream, as the request context's deadline; no `http.Client.Timeout` and no `ResponseHeaderTimeout` | a stream that stalls is cut rather than held; there is no idle timeout between events, because the one deadline is the one knob an operator sets |
-| response cap | a response body the gateway reads whole, a non-streaming response on a translated or model route, is read through `io.LimitReader` at `LUX_MAX_BODY_BYTES` ([[004-request-path]]) and one byte more is `upstream_error` with the detail naming the cap; a stream is relayed and never buffered, so it has no cap | a provider cannot exhaust a replica's memory with one answer |
-| concurrency | `latere.ai/x/pkg/semaphore` of `spec.concurrency` slots per Provider per replica, `0` is no limit; `Acquire` waits at most the request's remaining deadline | a wait that outlives the request's own deadline is `provider_unavailable` |
+| deadline | `Provider.spec.timeout`, defaulted from `LUX_UPSTREAM_TIMEOUT`, over the whole request including its stream, as the request context's deadline the caller sets; no `http.Client.Timeout` and no `ResponseHeaderTimeout`; the jobs use `10m` for a Provider whose `timeout` is empty, which the file mode leaves so until [[004-request-path]] wires the default | a stream that stalls is cut rather than held; there is no idle timeout between events, because the one deadline is the one knob an operator sets |
+| response cap | a response body the gateway reads whole, a non-streaming response on a translated or model route, is read by the door through `io.LimitReader` at `LUX_MAX_BODY_BYTES` ([[004-request-path]]) and one byte more is `upstream_error` with the detail naming the cap; a stream is relayed and never buffered, so it has no cap; the jobs cap one page of a model list at 16 MiB | a provider cannot exhaust a replica's memory with one answer |
+| concurrency | `latere.ai/x/pkg/semaphore` of `spec.concurrency` slots per Provider per replica, `0` is no limit; `Acquire` waits at most the request's remaining deadline, and a slot is held until the response body is closed, so a stream in flight counts | a wait that outlives the request's own deadline is `provider_unavailable`, `ErrProviderBusy`, whichever of the timer and the context fired first; only a cancelled caller is its own error |
 
 The outbound header set is [[004-request-path]]'s, which owns what is
 forwarded and what is removed. Two of its rules are this spec's,
@@ -399,10 +476,10 @@ under the cap above.
 |---|---|---|
 | `status.id`, `status.owner`, `status.createdAt` | the API, or the file mode at start | at create |
 | `status.version` | the store ([[010-state]]) | at every write of the row |
-| `status.updatedAt`, `status.warnings` | the API | at every apply; the `discovery` lease holder appends the refused-name warnings of a list |
+| `status.updatedAt`, `status.warnings` | the API | at every apply |
 | `status.credential` | the API | at create and at every apply that carries a value; `version` counts values, not wraps, so a re-wrap leaves it alone; the shape is `{set, version, updatedAt}` as the custody section says |
-| `status.health` | the `health` lease holder | at every change of state, and `lastProbeAt` at every probe |
-| `status.discovered` | the `discovery` lease holder | at every successful list |
+| `status.health` | the `health` lease holder | at every change of state, and `lastProbeAt` at every probe; the `discovery` lease holder writes `lastError` alone after a failed list, keeping the other members |
+| `status.discovered` | the `discovery` lease holder | at every successful list: `count`, `at`, and the refused-name `warnings` |
 
 Deleting a Provider that a declared Model still targets is refused with
 `provider_in_use`, 409 ([[011-api]]), so a Model never points at
@@ -415,10 +492,13 @@ it finishes or fails on its own timeout.
 
 | Line | Passes when |
 |---|---|
-| `secrets kek` | `LUX_SECRETS_KEK` is set and every listed key decodes to 32 bytes |
-| `credentials` | every stored credential's wrapped data key opens under one of the listed keys; the line names the count and the version, never a value |
-| `providers` | every Provider's `baseURL` resolves, its address is admitted by the private-address rule, and its models route answers inside the health budget; one row per Provider with its state |
-| `dialects` | every Provider's dialect has the codec its Models' routes need, or every Model on it is reachable only through an unmodelled route |
+| `secrets kek` | `LUX_SECRETS_KEK` is set and every listed key decodes to 32 bytes: `secrets.Parse` |
+| `credentials` | every stored credential's wrapped data key opens under one of the listed keys; the line names the count and the version, never a value: `secrets.Check` |
+| `providers` | every Provider's `baseURL` resolves, its address is admitted by the private-address rule, and its models route answers inside the health budget; one row per Provider with its state: `serve.Health.Probe` over the client |
+| `dialects` | every Provider's dialect has the codec its Models' routes need, or every Model on it is reachable only through an unmodelled route: [[004-request-path]]'s route table |
+
+The functions are this spec's; the role that prints the lines is
+[[017-release-and-installation]]'s.
 
 ## Not in this spec
 
@@ -434,28 +514,101 @@ Provider ([[013-tunnelled-runtimes]]).
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| A canary credential appears in no response body, event, log line, or request log record, and reaches the stub provider's headers only on requests routed to that Provider | `TestProviderCredentialNeverLeavesTheGateway` | not built |
-| A stored credential row holds no plaintext under any key; the value ciphertext and the wrapped data key are separate columns; both AEADs fail to open when the provider id or the version in the additional data is changed and open when neither is; `Seal` twice over one value yields two ciphertexts and two nonces | `TestCredentialRowsAreSealed`, `TestSealedAdditionalData`, `TestSealIsNeverDeterministic` | not built |
-| `status.credential` carries `set`, `version`, and `updatedAt` and no substring of the value, for a canary value on create, read, list, and every event | `TestCredentialStatusCarriesNoValue` | not built |
-| `luxd rewrap` under `new,old` re-wraps every data key, leaves every value ciphertext byte unchanged, opens under `new` alone afterwards, and is a no-op on a second run; a value applied through the API during the run keeps its newer wrap; a row no key opens is named and the exit code is 1 while the others are still re-wrapped; without `LUX_DB_URL` it exits 1 naming the variable | `TestRewrapUnderANewKEK`, `TestRewrapDoesNotOverwriteANewerValue`, `TestRewrapReportsUnopenableRows`, `TestRewrapNeedsTheStore` | not built |
-| `luxd serve` refuses to start with `LUX_SECRETS_KEK` absent, with a key that is not 32 bytes, and with a key that opens no stored credential, naming the failing Providers and the failing key by position and never by value; with the memory store the variable is still required; in file mode it is not | `TestStartupRequiresAWorkingKEK` | not built |
-| A Provider whose `valueFrom.env` variable is unset or empty is a start-up failure in file mode naming the Provider and the variable | [[010-state]]'s `TestFileModeValuesFromEnvironment` | not built |
-| A successful list adds new discovered Models, removes those the upstream dropped, and applies `include` before `exclude`; a discovered Model has one target, `weight` 100, `priority` 0, `fallback` `never`, no pricing, default modalities, and no `contextWindow` or `maxOutputTokens` | `TestDiscoveryAddsAndRemoves`, `TestDiscoveredModelShape` | not built |
-| An `anthropic` list of three pages by `has_more` and a `gemini` list of three pages by `nextPageToken` are read whole; a list past 20 pages is a failed list | `TestDiscoveryPaginates` | not built |
-| The lease holder lists a Provider within one second of reading its `provider.created`, or a `provider.updated` naming `spec.baseURL` or `spec.credential`, from the journal | `TestDiscoveryFollowsProviderChanges` | not built |
-| A failed, empty, or unparseable list changes no object and records `lastError` | `TestDiscoveryFailureKeepsTheCatalogue` | not built |
-| Discovery never writes or deletes a Model whose source is `declared`; a declared Model shadows the discovered one and deleting it lets the next run restore it | `TestDeclaredModelSurvivesDiscovery` | not built |
-| Two replicas with the lease contended run one list per interval between them | `TestDiscoveryRunsOnOneReplica` | not built |
-| Every transition in the state diagram fires at its threshold in both modes, and a 4xx is a success while a 5xx is a failure; a 401 on the probe leaves the state `Healthy` and writes `credential refused: 401` to `lastError` | `TestHealthTransitions`, table-driven, `TestProbeReportsARefusedCredential` | not built |
-| A replica's own failures downgrade its view below the published state and never raise it above | `TestLocalHealthOnlyDowngrades` | not built |
-| An `Unreachable` Provider's targets leave selection, `Degraded` and `Unknown` do not, and `health.mode: none` never makes a target unavailable | `TestUnreachableLeavesSelection` | not built |
-| A caller-sent copy of the credential header and a Provider static header of the same name are both beaten by the injected credential; no `X-Forwarded-*` or `Forwarded` header reaches the upstream | `TestCredentialHeaderWins`, `TestNoForwardedHeaders` | not built |
-| With `HTTPS_PROXY` set in the environment the request still reaches the Provider's host directly | `TestNoProxyEnvironmentHonoured` | not built |
-| A 302 from the stub provider is not followed and reaches the caller as `upstream_error` | `TestRedirectNotFollowed` | not built |
-| A public name resolving to a private address is refused at dial without `LUX_UPSTREAM_ALLOW_PRIVATE` and admitted with it | `TestPrivateAddressRefusedAtDial` | not built |
-| A request handed to a Provider's client toward another scheme, host, or port is refused before any dial and reaches the caller as `upstream_error` | `TestHostPin` | not built |
-| Every client `gateway.NewClientSource` builds carries `otel.Transport`, the outbound request to the stub provider carries `traceparent`, and no `Accept-Encoding` the caller did not send reaches it | `TestUpstreamClientIsInstrumented`, `TestNoCompressionAdded`, the `otel-client` gate | not built |
-| A non-streaming upstream response one byte over `LUX_MAX_BODY_BYTES` is `upstream_error` naming the cap; a stream of twice that size is relayed whole | `TestResponseBodyCap`, `TestStreamsAreNotCapped` | not built |
-| `concurrency: 2` holds a third request until one finishes, and a wait past the request deadline is `provider_unavailable` | `TestConcurrencyLimitsInFlight` | not built |
-| Every operation in the dialect table reaches the upstream path the table names, and a model list route is reached by the jobs alone | `TestUpstreamPaths`, table-driven | not built |
-| A `Provider` with `credential.scheme` `raw` and `credential.header` `api-key` reaches the stub with that one header carrying the bare value; `bearer` on any header prefixes `Bearer ` | `TestCredentialSchemes`, table-driven over the dialect defaults and one custom header | not built |
+| A canary credential appears in no response body, event, log line, or request log record, and reaches the stub provider's headers only on requests routed to that Provider | `TestProviderCredentialNeverLeavesTheGateway` | passing, the package half in `internal/serve`: the canary reaches the upstream on the jobs' requests and no stored object, encoding, event payload, status, or log line; the door and stub-provider half is [[015-test-stubs-and-tiers]]'s |
+| A stored credential row holds no plaintext under any key; the value ciphertext and the wrapped data key are separate columns; both AEADs fail to open when the provider id or the version in the additional data is changed and open when neither is; `Seal` twice over one value yields two ciphertexts and two nonces | `TestCredentialRowsAreSealed`, `TestSealedAdditionalData`, `TestSealIsNeverDeterministic` | passing, `internal/secrets` |
+| `status.credential` carries `set`, `version`, and `updatedAt` and no substring of the value, for a canary value on create, read, list, and every event | `TestCredentialStatusCarriesNoValue` | passing for the custody half, `internal/secrets`: the three members and a read and a list through the store; the API's create and the events are [[011-api]]'s and [[012-request-log-and-events]]'s |
+| `luxd rewrap` under `new,old` re-wraps every data key, leaves every value ciphertext byte unchanged, opens under `new` alone afterwards, and is a no-op on a second run; a value applied through the API during the run keeps its newer wrap; a row no key opens is named and the exit code is 1 while the others are still re-wrapped; without `LUX_DB_URL` it exits 1 naming the variable | `TestRewrapUnderANewKEK`, `TestRewrapDoesNotOverwriteANewerValue`, `TestRewrapReportsUnopenableRows`, `TestRewrapNeedsTheStore` | passing, `internal/rewrap` against the memory store and `cmd/luxd` |
+| `luxd serve` refuses to start with `LUX_SECRETS_KEK` absent, with a key that is not 32 bytes, and with a key that opens no stored credential, naming the failing Providers and the failing key by position and never by value; with the memory store the variable is still required; in file mode it is not | `TestStartupRequiresAWorkingKEK` | passing, in `cmd/luxd` for the absent and the short key and the file mode, and in `internal/secrets` for the key that opens no stored credential |
+| A Provider whose `valueFrom.env` variable is unset or empty is a start-up failure in file mode naming the Provider and the variable | [[010-state]]'s `TestFileModeValuesFromEnvironment` | passing |
+| A successful list adds new discovered Models, removes those the upstream dropped, and applies `include` before `exclude`; a discovered Model has one target, `weight` 100, `priority` 0, `fallback` `never`, no pricing, default modalities, and no `contextWindow` or `maxOutputTokens` | `TestDiscoveryAddsAndRemoves`, `TestDiscoveredModelShape` | passing, `internal/serve` |
+| An `anthropic` list of three pages by `has_more` and a `gemini` list of three pages by `nextPageToken` are read whole; a list past 20 pages is a failed list | `TestDiscoveryPaginates` | passing |
+| The lease holder lists a Provider within one second of reading its `provider.created`, or a `provider.updated` naming `spec.baseURL` or `spec.credential`, from the journal | `TestDiscoveryFollowsProviderChanges` | passing |
+| A failed, empty, or unparseable list changes no object and records `lastError` | `TestDiscoveryFailureKeepsTheCatalogue` | passing |
+| Discovery never writes or deletes a Model whose source is `declared`; a declared Model shadows the discovered one and deleting it lets the next run restore it | `TestDeclaredModelSurvivesDiscovery` | passing |
+| Two replicas with the lease contended run one list per interval between them | `TestDiscoveryRunsOnOneReplica` | passing |
+| Every transition in the state diagram fires at its threshold in both modes, and a 4xx is a success while a 5xx is a failure; a 401 on the probe leaves the state `Healthy` and writes `credential refused: 401` to `lastError` | `TestHealthTransitions`, table-driven, `TestProbeReportsARefusedCredential` | passing |
+| A replica's own failures downgrade its view below the published state and never raise it above | `TestLocalHealthOnlyDowngrades` | passing |
+| An `Unreachable` Provider's targets leave selection, `Degraded` and `Unknown` do not, and `health.mode: none` never makes a target unavailable | `TestUnreachableLeavesSelection` | passing for the status half: `status.available` and `status.targets[].health` follow the states; the selection that reads them is [[008-routing-and-models]]'s |
+| A caller-sent copy of the credential header and a Provider static header of the same name are both beaten by the injected credential; no `X-Forwarded-*` or `Forwarded` header reaches the upstream | `TestCredentialHeaderWins`, `TestNoForwardedHeaders` | passing for the client half, `gateway`: `InjectCredential` beats both and the transport adds no forwarded header; the door's stripping of the caller's headers is [[004-request-path]]'s |
+| With `HTTPS_PROXY` set in the environment the request still reaches the Provider's host directly | `TestNoProxyEnvironmentHonoured` | passing |
+| A 302 from the stub provider is not followed and reaches the caller as `upstream_error` | `TestRedirectNotFollowed` | passing at the client: the 302 is returned unfollowed; the `upstream_error` mapping is [[004-request-path]]'s |
+| A public name resolving to a private address is refused at dial without `LUX_UPSTREAM_ALLOW_PRIVATE` and admitted with it | `TestPrivateAddressRefusedAtDial` | passing |
+| A request handed to a Provider's client toward another scheme, host, or port is refused before any dial and reaches the caller as `upstream_error` | `TestHostPin` | passing at the client: `ErrHostPinned` before any dial; the `upstream_error` mapping is [[004-request-path]]'s |
+| Every client `gateway.NewClientSource` builds carries `otel.Transport`, the outbound request to the stub provider carries `traceparent`, and no `Accept-Encoding` the caller did not send reaches it | `TestUpstreamClientIsInstrumented`, `TestNoCompressionAdded`, the `otel-client` gate | passing |
+| A non-streaming upstream response one byte over `LUX_MAX_BODY_BYTES` is `upstream_error` naming the cap; a stream of twice that size is relayed whole | `TestResponseBodyCap`, `TestStreamsAreNotCapped` | not built: the cap is applied where the door reads a body whole, in [[004-request-path]]'s handler |
+| `concurrency: 2` holds a third request until one finishes, and a wait past the request deadline is `provider_unavailable` | `TestConcurrencyLimitsInFlight` | passing at the client: the third request waits and a wait past the deadline is `ErrProviderBusy`; the `provider_unavailable` mapping is [[004-request-path]]'s |
+| Every operation in the dialect table reaches the upstream path the table names, and a model list route is reached by the jobs alone | `TestUpstreamPaths`, table-driven | passing for the model-list rows, `internal/serve`; the door operations' paths are [[004-request-path]]'s |
+| A `Provider` with `credential.scheme` `raw` and `credential.header` `api-key` reaches the stub with that one header carrying the bare value; `bearer` on any header prefixes `Bearer ` | `TestCredentialSchemes`, table-driven over the dialect defaults and one custom header | passing, `gateway` |
+
+## Outcome
+
+Built on 2026-09-14 in fourteen commits on `main`, over the memory
+store and the file mode of [[010-state]], and proven by the whole gate,
+fifteen gates, and per-package coverage of 94.6% for `internal/secrets`,
+97.7% for `gateway`, 95.8% for `internal/serve`, 96.2% for
+`internal/rewrap`, 99.4% for `internal/config`, and 94.3% for
+`cmd/luxd`. What diverged from the text as dispatched, each fixed in
+the Design above beside the rule it settles:
+
+- The three custody functions are methods on `*secrets.Keyring`, which
+  `secrets.Parse` builds from the variable, with `Unwrap` and `Check`
+  beside them; the key material has one home and no encoding.
+- A refused upstream name is a warning in `status.discovered.warnings`,
+  a member added to `manifest/v1.DiscoveredStatus`, and not in
+  `status.warnings`: that member is the control plane's, written by
+  `Put`, which the file mode refuses for a declared Provider and which
+  would move the Provider's version on every list.
+- The upstream client's transport is `otelhttp.NewTransport`, reached
+  directly rather than through `latere.ai/x/pkg/otel.Transport`, which
+  wraps the same constructor but carries the SDK and its exporters into
+  a root package and, through the SDK's resource detection, `os/exec`,
+  which spec 001's rule forbids `gateway`. The `gateway` row of
+  `internal/arch/deps_test.go` admits the instrumentation's three
+  modules for it.
+- The builder returns the concrete `*gateway.Clients`, which satisfies
+  [[004-request-path]]'s `ClientSource`; that interface is declared
+  there. The client exports `ErrHostPinned`, `ErrProviderBusy`,
+  `ErrPrivateAddress`, and `ErrTunnelled` for the door to map, and
+  `InjectCredential` for the custody rule.
+- The private-address rule at dial drops the refused answers and
+  connects to the admitted ones, refusing the dial only when none is
+  left, which is the reading of "connects only to the admitted
+  addresses".
+- A concurrency wait that ends with the request's deadline is
+  `ErrProviderBusy` whichever of the timer and the context fired first;
+  only a cancelled caller is the context's own error.
+- `luxd rewrap` with `LUX_DB_URL` set exits 1 saying the Postgres
+  store is not in this build, as `serve` does, until [[010-state]]'s
+  phase 6; the run is proven over `store.Credentials` against the
+  memory store.
+- The jobs redact the credential value from an upstream body's excerpt
+  before keeping it in `status.health.lastError`, because an upstream
+  that echoes the header it was sent would otherwise put the value into
+  a status.
+- Passive outcomes move the state and `since` and leave `lastError`
+  and `lastProbeAt` to the probe; a lease handover starts the counters
+  at zero with the stored state authoritative; `provider.healthy` fires
+  on the first entry into `Healthy` too, as [[012-request-log-and-events]]'s
+  table reads; a Provider turned to `mode: none` is written `Unknown`
+  once.
+- Discovery writes a new Model's observed status in the list's
+  transaction and the health holder fills any Model that has none on
+  its tick; the two `model.*` events of [[012-request-log-and-events]]
+  are raised in the same transaction; the event record's shape is that
+  spec's, written here in `internal/serve/events.go` until its package
+  lands.
+- A tunnelled Provider is skipped by both jobs and refused by the client
+  until [[013-tunnelled-runtimes]] gives it a carrier transport.
+
+Left `not built`, owned elsewhere: `TestResponseBodyCap` and
+`TestStreamsAreNotCapped`, which live in [[004-request-path]]'s
+handler; the door halves of `TestCredentialHeaderWins`,
+`TestNoForwardedHeaders`, `TestRedirectNotFollowed`, `TestHostPin`,
+`TestConcurrencyLimitsInFlight`, and `TestUpstreamPaths`; the
+selection half of `TestUnreachableLeavesSelection`
+([[008-routing-and-models]]); the API and event halves of
+`TestCredentialStatusCarriesNoValue` ([[011-api]],
+[[012-request-log-and-events]]); the e2e half of
+`TestProviderCredentialNeverLeavesTheGateway`
+([[015-test-stubs-and-tiers]]); and the `luxd check` lines, whose
+functions are here and whose role is [[017-release-and-installation]]'s.

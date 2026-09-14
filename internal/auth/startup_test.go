@@ -21,9 +21,14 @@ func env(m map[string]string) config.Getenv {
 	return func(k string) string { return m[k] }
 }
 
-// load is config.Load over the map, failing the test on a problem.
+// load is config.Load over the map, failing the test on a problem. The
+// key of spec 005 is added in server mode, since Load requires it there
+// and no case here is about it.
 func load(t *testing.T, m map[string]string) config.Config {
 	t.Helper()
+	if m["LUX_MANIFEST_DIR"] == "" {
+		m["LUX_SECRETS_KEK"] = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+	}
 	cfg, err := config.Load(env(m))
 	if err != nil {
 		t.Fatal(err)

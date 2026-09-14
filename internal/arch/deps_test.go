@@ -104,7 +104,11 @@ var rootAllow = map[string]allow{
 	// gateway is the data plane and dials one thing, the providers; it
 	// reaches the store and the credentials through interfaces, so it
 	// imports no store implementation and no identity library. Spec 004
-	// refines this row as it lands.
+	// refines this row as it lands. The three rows after golang.org/x/
+	// are what the OpenTelemetry HTTP instrumentation pulls in behind
+	// otelhttp.NewTransport, which spec 005's upstream client carries on
+	// every hop; the SDK and its exporters stay out, because they reach
+	// os/exec and the package's importer, not the package, exports.
 	"gateway": {
 		module: []string{module + "/manifest", module + "/metering", module + "/gateway"},
 		external: []string{
@@ -120,6 +124,9 @@ var rootAllow = map[string]allow{
 			"latere.ai/x/pkg/metrics",
 			"go.opentelemetry.io/",
 			"golang.org/x/",
+			"github.com/felixge/httpsnoop",
+			"github.com/cespare/xxhash",
+			"github.com/go-logr/",
 			// The lux door writes latere.ai/x/pkg/httpjson's envelope,
 			// and that package reaches github.com/google/uuid for its
 			// path helpers; the same row admits it for luxd in
