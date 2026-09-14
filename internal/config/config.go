@@ -133,6 +133,28 @@ type Config struct {
 	// UpstreamTimeout is LUX_UPSTREAM_TIMEOUT, the Defaults.Timeout a
 	// Provider without spec.timeout gets at resolve.
 	UpstreamTimeout time.Duration
+
+	// The event and request log variables of spec 012.
+
+	// EventsURL is LUX_EVENTS_URL, the operator's event sink; empty is
+	// events off. EventsSecret is LUX_EVENTS_SECRET, the HMAC-SHA256 key
+	// of every delivery's Lux-Signature, required with the URL and never
+	// echoed.
+	EventsURL    string
+	EventsSecret string
+	// RequestLogExporter is LUX_REQUESTLOG_EXPORTER: none or s3.
+	RequestLogExporter string
+	// S3Endpoint, S3Region, S3Bucket, S3AccessKey, S3SecretKey, and
+	// S3Prefix are the archive's LUX_S3_* rows; the endpoint, the bucket,
+	// the access key, and the secret key are required with s3, the region
+	// is us-east-1 and the prefix lux/ by default. The keys are never
+	// echoed.
+	S3Endpoint  string
+	S3Region    string
+	S3Bucket    string
+	S3AccessKey string
+	S3SecretKey string
+	S3Prefix    string
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -188,6 +210,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadKeys(getenv)...)
 	problems = append(problems, c.loadMetering(getenv)...)
 	problems = append(problems, c.loadAPI(getenv)...)
+	problems = append(problems, c.loadEvents(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))
