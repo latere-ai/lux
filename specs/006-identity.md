@@ -536,9 +536,12 @@ What other specs carry from this: [[011-api]] maps `auth.Error`'s three
 codes to 401, 403, and 503, reads `Decision.Limits.RequestsPerMinute`
 for the rate bucket and `Decision.Limits.MaxKeys` at `key.create`,
 passes `Decision.Limits.Key` as `Options.Limits`, and reports
-`Auth.Policy` in `/v1/self`; a `Catalog` failure inside `Resolve` passes
-through as the store's own error, which the API answers as
-`store_unavailable`.Error` to carry its cause first. [[017-release-and-installation]]
+`Auth.Policy` in `/v1/self` beside the `limits` and `filter` of the
+subject's last allow, which that spec's surface memoises itself rather
+than reading from the shared client's cache, since that cache is keyed
+by subject, action, and resource id and cannot be read by subject
+alone; a `Catalog` failure inside `Resolve` passes through as the
+store's own error, which the API answers as `store_unavailable`. [[017-release-and-installation]]
 says the probe's answer is not entered in the decision cache; the
 shared client holds its deny for five seconds like any deny, under the
 anonymous subject and the reserved id, which no request about an object
