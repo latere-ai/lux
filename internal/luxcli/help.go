@@ -123,6 +123,18 @@ func init() {
 			plane: planeDoor, run: runModels,
 		},
 		{
+			name:  "serve",
+			brief: "attach a local model runtime as a Provider",
+			usage: "lux serve -dialect <d> -upstream <u> -as <n> [flags]",
+			summary: "Attach a model runtime on this machine to the gateway as a tunnelled\n" +
+				"Provider, which the gateway reaches over the session this command\n" +
+				"holds open. The runtime's URL stays on this machine. The command runs\n" +
+				"until it is stopped, connecting again when the session breaks, and\n" +
+				"exits 1 when the gateway ends the session for a reason a retry cannot\n" +
+				"fix.",
+			plane: planeControl, setup: serveFlags,
+		},
+		{
 			name:    "whoami",
 			brief:   "say who the token belongs to",
 			usage:   "lux whoami [flags]",

@@ -131,6 +131,25 @@ lux models
 The answer is the OpenAI list shape, `{"object":"list","data":[...]}`,
 with one entry per model this Key may call now.
 
+## Attaching a runtime on this machine
+
+A model server running here becomes a provider without opening a port
+to it: `lux serve` holds one session open to the gateway, and the
+gateway sends each request down that session.
+
+```sh
+lux serve --dialect openai --upstream http://127.0.0.1:11434/v1 --as laptop
+```
+
+It applies the `Provider`, its models are discovered, and it runs until
+you stop it, connecting again whenever the session breaks. `--include`
+and `--exclude` take globs of model ids, `--label k=v` labels the
+Provider, `--carriers n` sets how many streams wait at the gateway, and
+`--no-apply` attaches to a Provider that already exists. Exit 1 means
+the gateway ended the session for good: another agent took the
+provider, the Provider was deleted, or the token expired with no
+`LUX_TOKEN_FILE` to read a fresh one from.
+
 ## Reading a refusal
 
 | Code | Next step |

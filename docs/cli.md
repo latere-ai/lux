@@ -36,6 +36,7 @@ Commands:
   usage             read usage aggregates
   requests          read request records
   models            list the models a Key may call, through the door
+  serve             attach a local model runtime as a Provider
   whoami            say who the token belongs to
   keys create       create a Key from flags
   providers create  create a Provider from flags
@@ -287,6 +288,48 @@ Flags:
     	a token from your issuer, for the /v1 commands; LUX_TOKEN when unset
   -token-file string
     	a file holding the token, read on every request; LUX_TOKEN_FILE when unset
+  -url string
+    	the gateway's URL; LUX_URL when unset
+  -v	on a refusal, add the code, the paths, the detail, and the request id
+```
+
+## lux serve
+
+```
+Usage: lux serve -dialect <d> -upstream <u> -as <n> [flags]
+
+Attach a model runtime on this machine to the gateway as a tunnelled
+Provider, which the gateway reaches over the session this command
+holds open. The runtime's URL stays on this machine. The command runs
+until it is stopped, connecting again when the session breaks, and
+exits 1 when the gateway ends the session for a reason a retry cannot
+fix.
+
+Flags:
+  -as string
+    	the Provider to apply and attach; required
+  -carriers int
+    	streams parked at the gateway (default 4)
+  -dialect string
+    	the dialect the local runtime speaks: openai, anthropic, gemini, or lux; required
+  -exclude value
+    	a glob of model ids to leave out, written into the Provider; repeatable
+  -include value
+    	a glob of model ids to discover, written into the Provider; repeatable
+  -key string
+    	a Key value, for lux models; LUX_KEY when unset
+  -label value
+    	a label on the Provider, k=v; repeatable
+  -no-apply
+    	attach to an existing Provider instead of applying one
+  -o string
+    	the output: json, yaml, table, or wide (default "json")
+  -token string
+    	a token from your issuer, for the /v1 commands; LUX_TOKEN when unset
+  -token-file string
+    	a file holding the token, read on every request; LUX_TOKEN_FILE when unset
+  -upstream string
+    	the runtime's base URL on this machine, which stays on this machine; required
   -url string
     	the gateway's URL; LUX_URL when unset
   -v	on a refusal, add the code, the paths, the detail, and the request id

@@ -22,33 +22,43 @@ const (
 	planeNone
 )
 
-// controlClient is the client of a /v1 command: LUX_URL and a token from
-// LUX_TOKEN or LUX_TOKEN_FILE, one of them. A Key alone is a usage
-// error naming the boundary, since the gateway's answer would be about
-// the server and not about the mistake.
-func (a *app) controlClient() (*luxclient.Client, error) {
-	url := first(a.url, a.o.Getenv(EnvURL))
-	if url == "" {
-		return nil, &usageError{msg: "Set " + EnvURL + " to the gateway's URL."}
-	}
+// bearerSource is where a /v1 command's bearer comes from: the flags
+// first and the environment after them, one of the two and never both.
+// A Key alone is a usage error naming the boundary, since the gateway's
+// answer would be about the server and not about the mistake.
+// refreshable reports a token file, whose bytes a long lux serve reads
+// again for every request and every heartbeat.
+func (a *app) bearerSource() (source luxclient.TokenSource, refreshable bool, err error) {
 	token, tokenFile := a.token, a.tokenFile
 	if token == "" && tokenFile == "" {
 		token, tokenFile = a.o.Getenv(EnvToken), a.o.Getenv(EnvTokenFile)
 	}
 	switch {
 	case token != "" && tokenFile != "":
-		return nil, &usageError{msg: "Set one of " + EnvToken + " and " + EnvTokenFile + ", not both."}
+		return nil, false, &usageError{msg: "Set one of " + EnvToken + " and " + EnvTokenFile + ", not both."}
 	case token == "" && tokenFile == "" && first(a.key, a.o.Getenv(EnvKey)) != "":
-		return nil, &usageError{msg: EnvKey + " opens a door, not /v1. Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
+		return nil, false, &usageError{msg: EnvKey + " opens a door, not /v1. Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
 	case token == "" && tokenFile == "":
-		return nil, &usageError{msg: "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
+		return nil, false, &usageError{msg: "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
+	case tokenFile != "":
+		return luxclient.FileToken(tokenFile), true, nil
+	}
+	return luxclient.StaticToken(token), false, nil
+}
+
+// controlClient is the client of a /v1 command: LUX_URL and the bearer
+// of bearerSource.
+func (a *app) controlClient() (*luxclient.Client, error) {
+	url := first(a.url, a.o.Getenv(EnvURL))
+	if url == "" {
+		return nil, &usageError{msg: "Set " + EnvURL + " to the gateway's URL."}
+	}
+	source, _, err := a.bearerSource()
+	if err != nil {
+		return nil, err
 	}
 	c := a.client(url)
-	if tokenFile != "" {
-		c.Token = luxclient.FileToken(tokenFile)
-	} else {
-		c.Token = luxclient.StaticToken(token)
-	}
+	c.Token = source
 	return c, nil
 }
 

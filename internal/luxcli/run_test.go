@@ -106,7 +106,8 @@ func TestUnknownCommandAndFlagAreUsageErrors(t *testing.T) {
 	}{
 		{nil, "A command is required."},
 		{[]string{"frobnicate"}, `There is no command "frobnicate".`},
-		{[]string{"serve", "--dialect", "openai"}, `There is no command "serve --dialect".`},
+		{[]string{"serve", "--dialect", "openai"}, "lux serve needs -dialect, -upstream, and -as."},
+		{[]string{"serve", "frobnicate"}, "lux serve takes no argument."},
 		{[]string{"keys", "frobnicate"}, `There is no command "keys frobnicate".`},
 		{[]string{"-frobnicate"}, "flag provided but not defined: -frobnicate."},
 		{[]string{"get", "-frobnicate", "key", "x"}, "flag provided but not defined: -frobnicate."},
