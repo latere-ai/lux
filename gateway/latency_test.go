@@ -50,13 +50,7 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 	if n == 0 {
 		return 0
 	}
-	rank := int(math.Ceil(p / 100 * float64(n)))
-	if rank < 1 {
-		rank = 1
-	}
-	if rank > n {
-		rank = n
-	}
+	rank := min(max(int(math.Ceil(p/100*float64(n))), 1), n)
 	return sorted[rank-1]
 }
 
