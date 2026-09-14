@@ -408,9 +408,15 @@ func TestSessionRefusals(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != "not_found" {
 		t.Errorf("a connect to no Provider: %v", err)
 	}
+	// A context that ended before the connect is a stop that landed
+	// early: a clean stop, nil, and no session anywhere.
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := agent.Run(ctx, agent.Options{Gateway: r.public.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1/v1", Token: func() (string, error) { return r.mint("alice", time.Hour), nil }, Client: r.client()}); err == nil {
-		t.Error("a connect under an ended context succeeded")
+	before := r.g.Sessions()
+	if err := agent.Run(ctx, agent.Options{Gateway: r.public.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1/v1", Token: func() (string, error) { return r.mint("alice", time.Hour), nil }, Client: r.client()}); err != nil {
+		t.Errorf("a connect under an ended context returned %v, want the clean nil", err)
+	}
+	if r.g.Sessions() != before {
+		t.Errorf("a connect under an ended context left a session held")
 	}
 }

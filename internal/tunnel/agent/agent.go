@@ -168,6 +168,9 @@ func Run(ctx context.Context, o Options) error {
 	resp, err := a.client.Do(req)
 	if err != nil {
 		_ = pw.Close()
+		if ctx.Err() != nil {
+			return nil // stopped while connecting: a clean stop all the same
+		}
 		return fmt.Errorf("agent: connecting to %s: %w", req.URL.Redacted(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -179,6 +182,9 @@ func Run(ctx context.Context, o Options) error {
 	var ready wire.Frame
 	if err := wire.ReadLine(rd, &ready); err != nil {
 		_ = pw.Close()
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("agent: reading the ready frame: %w", err)
 	}
 	if ready.Type != wire.TypeReady || ready.Session == "" {

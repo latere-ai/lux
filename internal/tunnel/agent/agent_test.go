@@ -497,3 +497,43 @@ func TestRunReturnsAfterItsGoroutines(t *testing.T) {
 		t.Fatal("a record was handled after Run returned")
 	}
 }
+
+// TestRunStopsCleanlyWhileConnecting: a stop that lands while the
+// connect is still in flight, before the gateway has answered, is a
+// clean stop and returns nil, not the transport's "context canceled":
+// a caller that stopped the agent is not told its connect failed.
+func TestRunStopsCleanlyWhileConnecting(t *testing.T) {
+	arrived := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/providers/{name}/tunnel", func(_ http.ResponseWriter, r *http.Request) {
+		close(arrived)
+		<-r.Context().Done() // never answers; the connect ends with the caller's stop
+	})
+	srv := httptest.NewUnstartedServer(mux)
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	srv.Config.Protocols = protocols
+	srv.Start()
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, Options{Gateway: srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: func() (string, error) { return "t1", nil }, Logger: slog.New(slog.DiscardHandler)})
+	}()
+	select {
+	case <-arrived:
+	case err := <-done:
+		t.Fatalf("Run returned %v before the connect reached the gateway", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the connect never reached the gateway")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("a stop while connecting returned %v, want nil", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return after the stop")
+	}
+}
