@@ -73,6 +73,25 @@ depcheck:
           the YAML decoder spec 003 names, reached through manifest by the
           file mode of spec 010, which decodes a directory of manifests at
           start
+    # Spec 014's build list for the agent client: the standard library,
+    # latere.ai/x/pkg/httpjson for the error envelope, and this module's
+    # manifest and manifest/v1, which pull in the one YAML library. No HTTP
+    # client library, no command line framework, no OpenTelemetry SDK, no
+    # identity library, no store driver, no provider SDK: the command is a
+    # person's process and exports nothing.
+    latere.ai/x/lux/cmd/lux:
+      decision: >-
+        the lux command reaches the standard library, the error envelope
+        of latere.ai/x/pkg/httpjson, and this module's manifest packages
+        with the YAML library they decode with, and nothing else without a
+        row here (spec 014)
+      allow:
+        latere.ai/x/pkg/httpjson: the error envelope every refusal is decoded from (spec 014)
+        github.com/google/uuid: request ids in latere.ai/x/pkg/httpjson, reached through the envelope
+        github.com/goccy/go-yaml: >-
+          the YAML decoder spec 003 names, reached through manifest by lux
+          apply, which decodes every document with the server's own Decode;
+          its encoder renders -o yaml
 
 license:
   spdx: Apache-2.0
