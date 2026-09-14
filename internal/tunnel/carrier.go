@@ -139,7 +139,7 @@ func (s *session) exchange(ctx context.Context, req wire.Request, body io.Reader
 		select {
 		case c = <-s.parked:
 		case <-ctx.Done():
-			return wire.Response{}, nil, fmt.Errorf("%w: session %s: %v", ErrNoCarrier, s.id, ctx.Err())
+			return wire.Response{}, nil, fmt.Errorf("%w: session %s: %w", ErrNoCarrier, s.id, ctx.Err())
 		case <-s.done:
 			return wire.Response{}, nil, fmt.Errorf("%w: session %s", ErrSessionClosed, s.id)
 		}
@@ -150,7 +150,7 @@ func (s *session) exchange(ctx context.Context, req wire.Request, body io.Reader
 		case <-c.gone:
 			// This carrier left while it was parked; the next one.
 		case <-ctx.Done():
-			return wire.Response{}, nil, fmt.Errorf("%w: session %s: %v", ErrNoCarrier, s.id, ctx.Err())
+			return wire.Response{}, nil, fmt.Errorf("%w: session %s: %w", ErrNoCarrier, s.id, ctx.Err())
 		case <-s.done:
 			return wire.Response{}, nil, fmt.Errorf("%w: session %s", ErrSessionClosed, s.id)
 		}

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -95,7 +94,7 @@ func TestTunnelDiscovery(t *testing.T) {
 	}})
 	discovery = serve.NewDiscovery(serve.DiscoveryOptions{
 		Store: st, Clients: r.g, Credentials: noCredentials{}, Interval: time.Hour,
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: slog.New(slog.DiscardHandler),
 	})
 	p := tunnelProvider(t, st, "laptop", nil)
 	rt := newRuntime(t)

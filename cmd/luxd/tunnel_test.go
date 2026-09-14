@@ -103,7 +103,7 @@ func TestServeTunnelsARuntime(t *testing.T) {
 		result <- agent.Run(ctx, agent.Options{
 			Gateway: srv.publicURL, Provider: "laptop", Upstream: rt.srv.URL + "/v1", UserAgent: "lux/test",
 			Token:  func() (string, error) { return token, nil },
-			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger: slog.New(slog.DiscardHandler),
 		})
 	}()
 	provider := func() map[string]any {

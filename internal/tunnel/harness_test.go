@@ -132,7 +132,7 @@ func newReplica(t *testing.T, st store.Store, o replicaOptions) *replica {
 		r.public.StartTLS()
 	}
 	t.Cleanup(r.public.Close)
-	t.Cleanup(r.g.Drain)
+	t.Cleanup(func() { r.g.Drain(context.Background()) })
 	return r
 }
 
@@ -194,9 +194,6 @@ func (r *replica) mint(sub string, lifetime time.Duration) string {
 	return r.iss.Mint(issuertest.Claims{Sub: sub, Exp: time.Now().Add(lifetime).Unix()})
 }
 
-// subject is sub's rendered subject.
-func (r *replica) subject(sub string) string { return r.iss.URL() + "|" + sub }
-
 // client is an HTTP/2 client toward the public listener.
 func (r *replica) client() *http.Client {
 	if r.public.TLS == nil {
@@ -217,7 +214,7 @@ func (r *replica) attach(t *testing.T, name, upstream string, token func() (stri
 	go func() {
 		done <- agent.Run(ctx, agent.Options{
 			Gateway: r.public.URL, Provider: name, Upstream: upstream, Token: token, Client: r.client(), UserAgent: "lux/test",
-			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger: slog.New(slog.DiscardHandler),
 		})
 	}()
 	// The session is held once the registry names a session that was not

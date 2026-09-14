@@ -375,7 +375,7 @@ The row lapses at `ExpiresAt`, which is the last heartbeat plus
 renews on every heartbeat the agent sends, which is every third of the
 TTL, and unregisters at once when the session ends for any reason, so a
 clean disconnect is visible immediately and a replica that died is
-visible within the TTL. A `Heartbeat` that answers `false` is read
+visible within the TTL. A `Heartbeat` that comes back `false` is read
 twice: when `Get` still finds a row, another session holds it and this
 one is closed with `superseded`; when it finds none, the row lapsed and
 was removed behind a live session, which is registered again, because
@@ -739,7 +739,7 @@ authorizer payload and the owner policy the exception amends
 | `/internal/tunnel/{id}` without the secret, with a wrong secret, and on the public listener are each refused | `TestForwardRouteNeedsTheSecret` | passing |
 | Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalogue | `TestTunnelDiscovery` | passing |
 | Every request through a tunnel has one usage record with the Provider, the upstream model, and the runtime's reported tokens | `TestTunnelRequestsAreMetered` | the counted request with the Provider and the runtime's tokens passes at the wiring in `TestServeTunnelsARuntime`; the record's fields are [[015-test-stubs-and-tiers]]'s e2e |
-| The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | passing at the wiring in `TestServeTunnelsARuntime` through the openai door, and at the carrier in `TestCarrierCarriesTheGivenHeadersOnly`; every door is [[015-test-stubs-and-tiers]]'s |
+| The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | passing at the wiring in `TestServeTunnelsARuntime` through the openai door, and at the carrier in `TestTunnelCarriesNoCredential`; every door is [[015-test-stubs-and-tiers]]'s |
 | Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | passing, in `internal/api` |
 | The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | passing against memory; Postgres is [[010-state]]'s phase 6 |
 | `internal/tunnel` imports the standard library and `latere.ai/x/pkg/httpjson` only, and `./cmd/lux`'s build list is unchanged by `lux serve` | the `depcheck` gate | passing for `./cmd/luxd`; the `./cmd/lux` row is written with the command ([[014-agent-client]]) |

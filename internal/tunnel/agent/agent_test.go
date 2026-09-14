@@ -178,7 +178,7 @@ func TestRunServesAndReturnsTheCloseReason(t *testing.T) {
 		}
 		return "t1", nil
 	}
-	err := Run(t.Context(), Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: rt.URL + "/v1/", Token: token, UserAgent: "lux/test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	err := Run(t.Context(), Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: rt.URL + "/v1/", Token: token, UserAgent: "lux/test", Logger: slog.New(slog.DiscardHandler)})
 	var ce *CloseError
 	if !errors.As(err, &ce) || ce.Reason != wire.ReasonDraining || !strings.Contains(ce.Error(), "draining") {
 		t.Fatalf("Run returned %v, want the close reason draining", err)
@@ -237,7 +237,7 @@ func TestRunReportsAnUnreachableRuntime(t *testing.T) {
 		}
 		return "t1", nil
 	}
-	err := Run(t.Context(), Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:9/v1", Token: token, Carriers: 1, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	err := Run(t.Context(), Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:9/v1", Token: token, Carriers: 1, Logger: slog.New(slog.DiscardHandler)})
 	var ce *CloseError
 	if !errors.As(err, &ce) || ce.Reason != wire.ReasonSuperseded {
 		t.Fatalf("Run returned %v", err)
@@ -301,7 +301,7 @@ func TestRunRefusals(t *testing.T) {
 			srv.Config.Protocols = protocols
 			srv.Start()
 			defer srv.Close()
-			err := Run(t.Context(), Options{Gateway: srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: ok, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+			err := Run(t.Context(), Options{Gateway: srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: ok, Logger: slog.New(slog.DiscardHandler)})
 			if err == nil {
 				t.Fatal("Run returned nil")
 			}
@@ -335,7 +335,7 @@ func TestRunStopsCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: func() (string, error) { return "t1", nil }, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		done <- Run(ctx, Options{Gateway: g.srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: func() (string, error) { return "t1", nil }, Logger: slog.New(slog.DiscardHandler)})
 	}()
 	deadline := time.Now().Add(5 * time.Second)
 	for len(g.heartbeats()) == 0 {

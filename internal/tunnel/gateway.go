@@ -185,13 +185,13 @@ func (g *Gateway) sessionByRef(ref string) *session {
 
 // attach makes s the Provider's session on this replica and closes the
 // one it replaces with superseded: the newest session wins.
-func (g *Gateway) attach(s *session) {
+func (g *Gateway) attach(ctx context.Context, s *session) {
 	g.mu.Lock()
 	old := g.sessions[s.provider.Status.ID]
 	g.sessions[s.provider.Status.ID] = s
 	g.mu.Unlock()
 	if old != nil {
-		old.close(wire.ReasonSuperseded)
+		old.close(ctx, wire.ReasonSuperseded)
 	}
 }
 
@@ -206,8 +206,9 @@ func (g *Gateway) detach(s *session) {
 
 // Drain closes every session with draining, so each agent reconnects
 // at once and lands on another replica. The serve role calls it when
-// the stop signal fires, before the listeners close.
-func (g *Gateway) Drain() {
+// the stop signal fires, before the listeners close, on a context that
+// outlives the signal.
+func (g *Gateway) Drain(ctx context.Context) {
 	g.mu.Lock()
 	all := make([]*session, 0, len(g.sessions))
 	for _, s := range g.sessions {
@@ -215,7 +216,7 @@ func (g *Gateway) Drain() {
 	}
 	g.mu.Unlock()
 	for _, s := range all {
-		s.close(wire.ReasonDraining)
+		s.close(ctx, wire.ReasonDraining)
 	}
 }
 
@@ -225,7 +226,7 @@ func (g *Gateway) Drain() {
 // internal/api's ClientRevoker in place of *gateway.Clients.
 func (g *Gateway) Revoke(providerID string) {
 	if s := g.session(providerID); s != nil {
-		s.close(wire.ReasonProviderDeleted)
+		s.close(context.Background(), wire.ReasonProviderDeleted)
 	}
 	g.mu.Lock()
 	delete(g.clients, providerID)

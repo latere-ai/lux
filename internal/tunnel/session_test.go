@@ -291,7 +291,7 @@ func TestDrainAndRevoke(t *testing.T) {
 	if _, ok := r.g.clients[p1.Status.ID]; ok {
 		t.Error("the revoked Provider's client was kept")
 	}
-	r.g.Drain()
+	r.g.Drain(t.Context())
 	select {
 	case err := <-two:
 		if closeReason(err) != wire.ReasonDraining {

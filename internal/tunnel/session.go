@@ -82,8 +82,8 @@ func (g *Gateway) ServeSession(w http.ResponseWriter, r *http.Request, sr Sessio
 		cancel()
 		return refuse(CodeStoreUnavailable, "registering session "+s.id+" of Provider "+p.Status.ID+": "+err.Error())
 	}
-	g.attach(s)
-	defer s.close("")
+	g.attach(ctx, s)
+	defer s.close(ctx, "")
 	h := w.Header()
 	h.Set("Content-Type", "application/x-ndjson")
 	h.Set("Cache-Control", "no-store")
@@ -96,7 +96,7 @@ func (g *Gateway) ServeSession(w http.ResponseWriter, r *http.Request, sr Sessio
 	if g.o.OnConnect != nil {
 		go g.o.OnConnect(ctx, p)
 	}
-	go s.readFrames(r.Body)
+	go s.readFrames(ctx, r.Body)
 	s.run(r.Context(), out)
 	return nil
 }
@@ -116,7 +116,7 @@ func (s *session) run(ctx context.Context, out io.Writer) {
 			return
 		case f := <-s.outbox:
 			if err := wire.WriteLine(out, f); err != nil {
-				s.close("")
+				s.close(ctx, "")
 				return
 			}
 		case <-tick.C:
@@ -126,15 +126,15 @@ func (s *session) run(ctx context.Context, out io.Writer) {
 			s.mu.Unlock()
 			switch {
 			case !now.Before(expiresAt):
-				s.close(wire.ReasonTokenExpired)
+				s.close(ctx, wire.ReasonTokenExpired)
 			case now.Sub(lastBeat) > s.g.ttl:
 				// The agent stopped heartbeating: its stream is dead
 				// whatever the socket says, and the row lapses with it.
 				s.g.logger.WarnContext(ctx, "tunnel: no heartbeat within the TTL", "session", s.id, "provider", s.provider.Status.ID, "last_heartbeat_at", lastBeat.UTC(), "ttl", s.g.ttl)
-				s.close("")
+				s.close(ctx, "")
 			}
 		case <-ctx.Done():
-			s.close("")
+			s.close(ctx, "")
 			return
 		}
 	}
@@ -143,22 +143,22 @@ func (s *session) run(ctx context.Context, out io.Writer) {
 // readFrames reads the agent's frames until its stream ends, which
 // ends the session: a clean stop and a broken network look the same
 // from here, and the registry row goes at once either way.
-func (s *session) readFrames(body io.Reader) {
+func (s *session) readFrames(ctx context.Context, body io.Reader) {
 	rd := bufio.NewReader(body)
 	for {
 		var f wire.Frame
 		if err := wire.ReadLine(rd, &f); err != nil {
 			if !errors.Is(err, io.EOF) {
-				s.g.logger.InfoContext(s.ctx, "tunnel: the agent's stream ended", "session", s.id, "provider", s.provider.Status.ID, "err", err)
+				s.g.logger.InfoContext(ctx, "tunnel: the agent's stream ended", "session", s.id, "provider", s.provider.Status.ID, "err", err)
 			}
-			s.close("")
+			s.close(ctx, "")
 			return
 		}
 		if f.Type != wire.TypeHeartbeat {
-			s.g.logger.WarnContext(s.ctx, "tunnel: a frame the session does not take was ignored", "session", s.id, "type", f.Type)
+			s.g.logger.WarnContext(ctx, "tunnel: a frame the session does not take was ignored", "session", s.id, "type", f.Type)
 			continue
 		}
-		s.beat(f.Token)
+		s.beat(ctx, f.Token)
 	}
 }
 
@@ -166,26 +166,26 @@ func (s *session) readFrames(body io.Reader) {
 // at connect and made the session's expiry when it names the session's
 // subject; the registry row renewed; superseded when another session
 // took the row; and the acknowledgement queued.
-func (s *session) beat(token string) {
+func (s *session) beat(ctx context.Context, token string) {
 	g := s.g
 	now := g.now()
 	if token != "" {
 		c, err := g.o.Verifier.Verify(token)
 		switch {
 		case err != nil:
-			g.logger.WarnContext(s.ctx, "tunnel: a heartbeat's token was ignored", "session", s.id, "provider", s.provider.Status.ID, "err", err)
+			g.logger.WarnContext(ctx, "tunnel: a heartbeat's token was ignored", "session", s.id, "provider", s.provider.Status.ID, "err", err)
 		case c.Subject != s.subject:
-			g.logger.WarnContext(s.ctx, "tunnel: a heartbeat's token was ignored", "session", s.id, "provider", s.provider.Status.ID, "err", "the token names subject "+c.Subject+", not the session's "+s.subject)
+			g.logger.WarnContext(ctx, "tunnel: a heartbeat's token was ignored", "session", s.id, "provider", s.provider.Status.ID, "err", "the token names subject "+c.Subject+", not the session's "+s.subject)
 		default:
 			if exp := expiryOf(c); exp.After(now) {
 				s.mu.Lock()
 				s.expiresAt = exp
 				s.mu.Unlock()
-				g.logger.InfoContext(s.ctx, "tunnel: the session's token was refreshed", "session", s.id, "provider", s.provider.Status.ID, "expires_at", exp.UTC())
+				g.logger.InfoContext(ctx, "tunnel: the session's token was refreshed", "session", s.id, "provider", s.provider.Status.ID, "expires_at", exp.UTC())
 			}
 		}
 	}
-	ctx, cancel := context.WithTimeout(s.ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	held, err := g.o.Store.Tunnels().Heartbeat(ctx, s.provider.Status.ID, s.id, g.ttl)
 	switch {
@@ -196,7 +196,7 @@ func (s *session) beat(token string) {
 		// re-registered, because the session is alive and the row is
 		// what says so; replaced is superseded.
 		if _, gerr := g.o.Store.Tunnels().Get(ctx, s.provider.Status.ID); !errors.Is(gerr, store.ErrNotFound) {
-			s.close(wire.ReasonSuperseded)
+			s.close(ctx, wire.ReasonSuperseded)
 			return
 		}
 		row := store.Tunnel{ProviderID: s.provider.Status.ID, Session: s.id, Replica: g.o.Replica, Subject: s.subject, Agent: s.agent}
@@ -228,8 +228,10 @@ func expiryOf(c auth.Caller) time.Time {
 // close ends the session once: the reason is kept for the close frame,
 // every in-flight carrier is cancelled, the session leaves the map, and
 // the registry row goes at once, so a clean disconnect is visible
-// immediately rather than at the TTL.
-func (s *session) close(reason string) {
+// immediately rather than at the TTL. The row's removal runs on ctx's
+// values with its cancellation lifted, because the caller's context may
+// be the very stream that just ended.
+func (s *session) close(ctx context.Context, reason string) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -240,7 +242,7 @@ func (s *session) close(reason string) {
 	s.mu.Unlock()
 	s.g.detach(s)
 	close(s.done)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	if err := s.g.o.Store.Tunnels().Unregister(ctx, s.provider.Status.ID, s.id); err != nil {
 		s.g.logger.ErrorContext(ctx, "tunnel: unregistering the session", "session", s.id, "provider", s.provider.Status.ID, "err", err)

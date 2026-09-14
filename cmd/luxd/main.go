@@ -333,12 +333,12 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// The stop signal has fired, so the shutdown runs on a context that
 	// keeps the request's values and outlives its cancellation.
 	close(draining)
+	stopping := context.WithoutCancel(ctx)
 	if tun != nil {
 		// Every agent is told to reconnect at once and lands on another
 		// replica, before the listeners close under it.
-		tun.Drain()
+		tun.Drain(stopping)
 	}
-	stopping := context.WithoutCancel(ctx)
 	sleepCtx(stopping, drainDelay)
 	shutdownCtx, cancel := context.WithTimeout(stopping, gracePeriod)
 	defer cancel()

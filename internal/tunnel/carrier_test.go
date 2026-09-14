@@ -217,10 +217,10 @@ counting:
 	<-served
 }
 
-// TestCarrierCarriesTheGivenHeadersOnly: what reaches the runtime is
+// TestTunnelCarriesNoCredential: what reaches the runtime is
 // the header set the request carried, the User-Agent, the request id,
 // and the length, and nothing else: no bearer is added by the tunnel.
-func TestCarrierCarriesTheGivenHeadersOnly(t *testing.T) {
+func TestTunnelCarriesNoCredential(t *testing.T) {
 	st := memory.New()
 	r := newReplica(t, st, replicaOptions{})
 	p := tunnelProvider(t, st, "laptop", nil)
