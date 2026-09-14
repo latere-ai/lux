@@ -122,10 +122,14 @@ type HealthStatus struct {
 	LastError   string      `json:"lastError"`
 }
 
-// DiscoveredStatus is the last successful model list.
+// DiscoveredStatus is the last successful model list: how many Models it
+// left, when, and one warning per upstream name the schema refused,
+// naming the name and the rule, so a name that cannot be a Model is
+// visible without being stored.
 type DiscoveredStatus struct {
-	Count int       `json:"count"`
-	At    time.Time `json:"at,omitzero"`
+	Count    int       `json:"count"`
+	At       time.Time `json:"at,omitzero"`
+	Warnings []string  `json:"warnings,omitempty"`
 }
 
 // TunnelStatus is the session of a tunnelled Provider.
