@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -403,5 +404,96 @@ func TestHelpers(t *testing.T) {
 	}
 	if a.o.UserAgent != "lux" {
 		t.Errorf("default User-Agent %q", a.o.UserAgent)
+	}
+}
+
+// holdingHandler is a slog.Handler that holds the first carrier warning
+// it is given until released, and notes a record that arrived after the
+// test marked Run as returned.
+type holdingHandler struct {
+	held     chan struct{} // closed when a carrier warning is being held
+	release  chan struct{} // closed by the test to let it through
+	once     sync.Once
+	returned atomic.Bool // set by the test the moment Run returned
+	late     atomic.Bool // a record was handled after Run returned
+}
+
+func (h *holdingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *holdingHandler) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *holdingHandler) WithGroup(string) slog.Handler            { return h }
+func (h *holdingHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Message == "agent: a carrier ended without work" {
+		h.once.Do(func() { close(h.held) })
+		<-h.release
+	}
+	if h.returned.Load() {
+		h.late.Store(true)
+	}
+	return nil
+}
+
+// TestRunReturnsAfterItsGoroutines: Run's return is the end of every
+// goroutine it started, so a caller may write to whatever the agent's
+// logger writes to, its stderr, the moment Run returns. A gateway that
+// refuses every carrier makes a carrier goroutine log a warning; the
+// test's handler holds that record, the gateway closes the session
+// while it is held, and Run must not return before the release.
+func TestRunReturnsAfterItsGoroutines(t *testing.T) {
+	closeNow := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/providers/{name}/tunnel", func(w http.ResponseWriter, r *http.Request) {
+		out := wire.Flushing(w)
+		w.WriteHeader(http.StatusOK)
+		_ = wire.WriteLine(out, wire.Frame{Type: wire.TypeReady, Session: "tun_1", TTL: "1s", Carriers: 2})
+		select {
+		case <-closeNow:
+		case <-r.Context().Done():
+			return
+		}
+		_ = wire.WriteLine(out, wire.Frame{Type: wire.TypeClose, Reason: wire.ReasonTokenExpired})
+	})
+	mux.HandleFunc("POST /v1/providers/{name}/tunnel/carry", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"error":{"code":"unauthenticated","message":"This request needs a valid credential.","details":{}}}`)
+	})
+	srv := httptest.NewUnstartedServer(mux)
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	srv.Config.Protocols = protocols
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	h := &holdingHandler{held: make(chan struct{}), release: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(t.Context(), Options{Gateway: srv.URL, Provider: "laptop", Upstream: "http://127.0.0.1:1", Token: func() (string, error) { return "t1", nil }, Logger: slog.New(h)})
+	}()
+	select {
+	case <-h.held:
+	case err := <-done:
+		t.Fatalf("Run returned %v before a carrier was refused", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("no carrier was refused")
+	}
+	close(closeNow)
+	select {
+	case err := <-done:
+		t.Fatalf("Run returned %v while a goroutine it started was still logging", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(h.release)
+	select {
+	case err := <-done:
+		h.returned.Store(true)
+		var ce *CloseError
+		if !errors.As(err, &ce) || ce.Reason != wire.ReasonTokenExpired {
+			t.Fatalf("Run returned %v, want the close reason", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return once the record was released")
+	}
+	if h.late.Load() {
+		t.Fatal("a record was handled after Run returned")
 	}
 }

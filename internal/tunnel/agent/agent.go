@@ -27,6 +27,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -135,6 +136,7 @@ type agent struct {
 	logger   *slog.Logger
 	session  string
 	inFlight atomic.Int32
+	wg       sync.WaitGroup // the carriers and the heartbeat, joined before Run returns
 }
 
 // Run opens one session and serves it until it ends. It returns nil
@@ -142,14 +144,18 @@ type agent struct {
 // *CloseError when the gateway closed the session, with the reason the
 // caller acts on; a *RefusedError when the connect was refused; and the
 // transport's error when the stream broke, which a caller retries with
-// backoff.
+// backoff. Every goroutine Run started has ended when it returns, so
+// nothing writes to the logger after the caller has its answer.
 func Run(ctx context.Context, o Options) error {
 	a, err := newAgent(o)
 	if err != nil {
 		return err
 	}
 	sctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	defer func() {
+		cancel()
+		a.wg.Wait()
+	}()
 	token, err := a.o.Token()
 	if err != nil {
 		return fmt.Errorf("agent: reading the token: %w", err)
@@ -193,9 +199,9 @@ func Run(ctx context.Context, o Options) error {
 	}
 	a.logger.InfoContext(ctx, "agent: session ready", "session", a.session, "provider", a.o.Provider, "ttl", ttl, "carriers", carriers)
 	for range carriers {
-		go a.park(sctx)
+		a.wg.Go(func() { a.park(sctx) })
 	}
-	go a.heartbeat(sctx, pw, ttl, token)
+	a.wg.Go(func() { a.heartbeat(sctx, pw, ttl, token) })
 	for {
 		var f wire.Frame
 		if err := wire.ReadLine(rd, &f); err != nil {
@@ -396,7 +402,7 @@ func (a *agent) carry(ctx context.Context) (replaced bool, err error) {
 		}
 		return false, fmt.Errorf("reading the request line: %w", err)
 	}
-	go a.park(ctx)
+	a.wg.Go(func() { a.park(ctx) })
 	a.serve(ctx, wreq, rd, pw)
 	// The request body ends here, which is this side's half of the
 	// stream; the gateway's half ends once the caller has consumed the

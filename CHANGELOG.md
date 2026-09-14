@@ -6,6 +6,9 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `lux serve`: a session's carriers and heartbeat have ended when the
+  session ends, so nothing of a session that closed writes to stderr
+  after the command printed its close reason or connected again.
 - The conformance suite: `test/conformance` runs the acceptance
   criteria of the manifest contract, the `/v1` API, the doors, the
   Keys, the identity boundary, and the usage records against any
