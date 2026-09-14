@@ -466,7 +466,10 @@ func case004Streaming(t testing.TB, c *client) {
 			t.Errorf("the translated stream lacks %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "events-3") {
+	// The stub's assistant text names the upstream model by design (it
+	// is stub:<dialect>:<model>:<digest>), so the leak to look for is a
+	// model member carrying the upstream name, not the name anywhere.
+	if strings.Contains(text, `"model":"events-3"`) {
 		t.Error("the upstream name reached the caller")
 	}
 }

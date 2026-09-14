@@ -286,11 +286,22 @@ func (s *stubProvider) sse(w http.ResponseWriter, r *http.Request, frames []stri
 	}
 }
 
+// pieces cuts content into events deltas that join back to it, as a
+// stub's stream does, so a case that reads the joined text meets what
+// a real stub serves.
+func pieces(content string, events int) []string {
+	out := make([]string, events)
+	for i := range events {
+		out[i] = content[len(content)*i/events : len(content)*(i+1)/events]
+	}
+	return out
+}
+
 // openaiChunks are events content chunks, one usage chunk, and [DONE].
 func openaiChunks(model, content string, in, out, events int) []string {
 	var frames []string
-	for range events {
-		frames = append(frames, `data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"`+model+`","choices":[{"index":0,"delta":{"content":"`+content[:1]+`"},"finish_reason":null}]}`+"\n\n")
+	for _, piece := range pieces(content, events) {
+		frames = append(frames, `data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"`+model+`","choices":[{"index":0,"delta":{"content":"`+piece+`"},"finish_reason":null}]}`+"\n\n")
 	}
 	frames = append(frames, `data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"`+model+`","choices":[],"usage":{"prompt_tokens":`+itoa(in)+`,"completion_tokens":`+itoa(out)+`}}`+"\n\n")
 	return append(frames, "data: [DONE]\n\n")
@@ -303,8 +314,8 @@ func anthropicEvents(model, content string, in, out, events int) []string {
 		"event: message_start\ndata: " + `{"type":"message_start","message":{"id":"msg_stub","type":"message","role":"assistant","model":"` + model + `","content":[],"usage":{"input_tokens":` + itoa(in) + `,"output_tokens":1}}}` + "\n\n",
 		"event: content_block_start\ndata: " + `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}` + "\n\n",
 	}
-	for range events {
-		frames = append(frames, "event: content_block_delta\ndata: "+`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"`+content[:1]+`"}}`+"\n\n")
+	for _, piece := range pieces(content, events) {
+		frames = append(frames, "event: content_block_delta\ndata: "+`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"`+piece+`"}}`+"\n\n")
 	}
 	return append(frames,
 		"event: content_block_stop\ndata: "+`{"type":"content_block_stop","index":0}`+"\n\n",
@@ -317,8 +328,8 @@ func anthropicEvents(model, content string, in, out, events int) []string {
 func luxEvents(model, content string, in, out, events int) []string {
 	frames := []string{"event: message_start\ndata: " + `{"type":"message_start","id":"lux-stub","model":"` + model + `","usage":{"input_tokens":` + itoa(in) + `}}` + "\n\n",
 		"event: block_start\ndata: " + `{"type":"block_start","index":0,"block":{"type":"text"}}` + "\n\n"}
-	for range events {
-		frames = append(frames, "event: text_delta\ndata: "+`{"type":"text_delta","index":0,"delta":"`+content[:1]+`"}`+"\n\n")
+	for _, piece := range pieces(content, events) {
+		frames = append(frames, "event: text_delta\ndata: "+`{"type":"text_delta","index":0,"delta":"`+piece+`"}`+"\n\n")
 	}
 	return append(frames,
 		"event: block_stop\ndata: "+`{"type":"block_stop","index":0}`+"\n\n",
