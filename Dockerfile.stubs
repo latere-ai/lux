@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# The stub image of spec 017: lux-stubs, the stub providers, issuer,
+# authorizer, and sink of spec 015 in one image, published beside luxd
+# under the same tag so the release pipeline's conformance job and an
+# operator's first installation run a released, signed stub rather than a
+# checkout. It is a test image and never part of an installation. The
+# runtime stage is the developer image's between the two markers, byte
+# for byte, because a stub on another base would make a conformance run
+# against the published images prove less than one against the checkout.
+
+# >>> shared runtime base <<<
+# luxd forks no binary of its own, so the runtime stage is distroless,
+# pinned by digest. It dials the providers, the OIDC issuers, and the
+# authorizer and event webhooks over TLS, so the base carries the CA roots
+# and nothing else, and runs as the image's non-root user with both
+# listeners' ports exposed.
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+EXPOSE 8080 8081
+USER nonroot:nonroot
+# <<< shared runtime base >>>
+ARG TARGETARCH
+COPY dist/lux-stubs_linux_${TARGETARCH} /usr/local/bin/lux-stubs
+ENTRYPOINT ["/usr/local/bin/lux-stubs"]
