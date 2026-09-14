@@ -98,6 +98,16 @@ func (c *Counters) Total(key string) int64 {
 	return 0
 }
 
+// Known is the store's total for key as of this replica's last flush.
+func (c *Counters) Known(key string) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if r, ok := c.rows[key]; ok {
+		return r.known
+	}
+	return 0
+}
+
 // Pending is this replica's unflushed delta for key.
 func (c *Counters) Pending(key string) int64 {
 	c.mu.Lock()

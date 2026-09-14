@@ -23,6 +23,7 @@ import (
 const (
 	reasonDiscovery = "discovery"
 	reasonProbe     = "probe"
+	reasonLimit     = "limit"
 )
 
 // The event types this package raises.
@@ -31,6 +32,8 @@ const (
 	eventProviderHealthy     = "provider.healthy"
 	eventModelDiscovered     = "model.discovered"
 	eventModelRemoved        = "model.removed"
+	eventKeyExhausted        = "key.exhausted"
+	eventBudgetExhausted     = "budget.exhausted"
 )
 
 type eventRecord struct {
@@ -80,6 +83,10 @@ func labelsOf(obj v1.Object) map[string]string {
 	case *v1.Provider:
 		return x.Metadata.Labels
 	case *v1.Model:
+		return x.Metadata.Labels
+	case *v1.Key:
+		return x.Metadata.Labels
+	case *v1.Budget:
 		return x.Metadata.Labels
 	}
 	return nil

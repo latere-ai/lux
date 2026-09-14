@@ -52,7 +52,7 @@ func TestWindowEpochs(t *testing.T) {
 }
 
 // TestCounterKeyScheme: the key is <kind>:<id>:<counter>:<start unix
-// seconds>, one per scope, and the totals' key carries createdAt.
+// seconds>, one per scope, and the totals' key carries none.
 func TestCounterKeyScheme(t *testing.T) {
 	for _, c := range []struct {
 		scope Scope
@@ -69,11 +69,16 @@ func TestCounterKeyScheme(t *testing.T) {
 			t.Errorf("%s = %s, want %s", c.scope, got, c.want)
 		}
 	}
-	if got := CounterKey(ScopeKeySpend, "key_1", v1.WindowNone, at, created); got != "key:key_1:spend:1788251400" {
+	if got := CounterKey(ScopeKeySpend, "key_1", v1.WindowNone, at, created); got != "key:key_1:spend:none" || got != TotalKey(ScopeKeySpend, "key_1") {
 		t.Errorf("the totals key = %s", got)
 	}
-	if got := KeyAt(ScopeBudgetSpend, "bud_9", time.Unix(60, 0)); got != "budget:bud_9:spend:60" {
-		t.Errorf("KeyAt = %s", got)
+	// A duration window that begins at the creation instant does not
+	// share the totals' key.
+	if CounterKey(ScopeKeySpend, "key_1", "1h", created, created) == TotalKey(ScopeKeySpend, "key_1") {
+		t.Error("a window aligned to createdAt collides with the totals")
+	}
+	if got := CounterKey(ScopeKeySpend, "key_1", "1h", created, created); got != "key:key_1:spend:1788249600" {
+		t.Errorf("an aligned window's key = %s", got)
 	}
 }
 
@@ -178,7 +183,7 @@ func TestCountersDeltaAndFlush(t *testing.T) {
 	resets := at.Add(time.Hour)
 	a.Add("k", 5, resets)
 	a.Add("k", 7, resets)
-	if a.Total("k") != 12 || a.Pending("k") != 12 || st.adds != 0 || a.Total("other") != 0 || a.Pending("other") != 0 {
+	if a.Total("k") != 12 || a.Known("k") != 0 || a.Pending("k") != 12 || st.adds != 0 || a.Total("other") != 0 || a.Pending("other") != 0 || a.Known("other") != 0 {
 		t.Fatalf("before the flush: total %d, pending %d, adds %d", a.Total("k"), a.Pending("k"), st.adds)
 	}
 	b.Add("k", 100, resets)
@@ -191,7 +196,7 @@ func TestCountersDeltaAndFlush(t *testing.T) {
 	if err := a.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if a.Total("k") != 112 || a.Pending("k") != 0 || st.adds != 2 || !st.expires["k"].Equal(resets) {
+	if a.Total("k") != 112 || a.Known("k") != 112 || a.Pending("k") != 0 || st.adds != 2 || !st.expires["k"].Equal(resets) {
 		t.Fatalf("after the flush: total %d, pending %d, adds %d, expires %s", a.Total("k"), a.Pending("k"), st.adds, st.expires["k"])
 	}
 	// A refused key keeps its delta and the error names it; the other

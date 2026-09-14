@@ -44,16 +44,24 @@ func Window(w v1.Window, at, createdAt time.Time) (start, resetsAt time.Time) {
 // object id under window w at instant at: <kind>:<id>:<counter>:<start>
 // with start the window's start as Unix seconds, so one key names
 // exactly one window and a finished window's row is prunable by its own
-// name. For the totals w is none and start is createdAt.
+// name. A none window renders the word none in place of a start: it is
+// the lifetime counter, and a duration window that happens to begin at
+// the object's creation instant must not share its key.
 func CounterKey(s Scope, id string, w v1.Window, at, createdAt time.Time) string {
+	if w == v1.WindowNone {
+		return TotalKey(s, id)
+	}
 	start, _ := Window(w, at, createdAt)
-	return KeyAt(s, id, start)
+	return keyOf(s, id, strconv.FormatInt(start.Unix(), 10))
 }
 
-// KeyAt is CounterKey for a window whose start is already known.
-func KeyAt(s Scope, id string, start time.Time) string {
+// TotalKey is the key of the lifetime counter for scope s of the object
+// id, which is CounterKey under window none.
+func TotalKey(s Scope, id string) string { return keyOf(s, id, "none") }
+
+func keyOf(s Scope, id, start string) string {
 	kind, counter, _ := strings.Cut(string(s), ":")
-	return kind + ":" + id + ":" + counter + ":" + strconv.FormatInt(start.Unix(), 10)
+	return kind + ":" + id + ":" + counter + ":" + start
 }
 
 // RetryAfter is the wait a window refusal names: the time from now to
