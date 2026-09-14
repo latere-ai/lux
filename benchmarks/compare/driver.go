@@ -9,15 +9,19 @@
 // it out of go build ./..., go test ./..., and the coverage gate); run it
 // with `go run driver.go <subcommand>`.
 //
-// Two subcommands:
+// Three subcommands:
 //
 //	run     drive one subject at a fixed concurrency for a fixed request
 //	        count, after a discarded warmup, recording every request's
 //	        wall latency and, optionally, the peak resident set of a pid
-//	        tree sampled while the load runs. Appends one JSON line to -out.
+//	        tree sampled while the load runs. Appends one JSON line to -out,
+//	        tagged with its -trial index so repeated trials aggregate.
 //	report  read the JSON lines of a run file and print a Markdown table
 //	        per scenario (request group x streaming mode), one row per
 //	        subject.
+//	csv     read the JSON lines of a run file and write tidy per-trial CSV
+//	        (trial,shape,mode,subject,metric,value), the data the chart
+//	        renderer reads and aggregates across trials.
 //
 // Nothing here fabricates a number: a subject that cannot be driven fails
 // the run and writes no line, and the runner script records why.
@@ -26,6 +30,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -45,6 +50,7 @@ import (
 // sample is one subject-scenario measurement, the JSON line the run
 // subcommand appends and the report subcommand reads.
 type sample struct {
+	Trial       int     `json:"trial"`        // 1-based measurement window; trials repeat the matrix
 	Subject     string  `json:"subject"`      // baseline | luxd | litellm
 	Group       string  `json:"group"`        // passthrough | translated
 	Mode        string  `json:"mode"`         // nonstream | stream
@@ -67,7 +73,7 @@ type sample struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: driver <run|report> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: driver <run|report|csv> [flags]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -75,6 +81,8 @@ func main() {
 		os.Exit(runCmd(os.Args[2:]))
 	case "report":
 		os.Exit(reportCmd(os.Args[2:]))
+	case "csv":
+		os.Exit(csvCmd(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "driver: unknown subcommand %q\n", os.Args[1])
 		os.Exit(2)
@@ -95,6 +103,7 @@ func runCmd(args []string) int {
 	requests := fs.Int("requests", 20000, "measured requests")
 	warmup := fs.Int("warmup", 2000, "warmup requests, discarded")
 	rssPID := fs.Int("rss-pid", 0, "root pid whose process tree RSS is sampled; 0 disables")
+	trial := fs.Int("trial", 1, "1-based trial index recorded on the sample line so trials aggregate")
 	out := fs.String("out", "", "file to append the JSON sample line to; empty is stdout")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -141,6 +150,7 @@ func runCmd(args []string) int {
 
 	sort.Float64s(lat)
 	s := sample{
+		Trial:   *trial,
 		Subject: *subject, Group: *group, Mode: mode, Shape: *shape,
 		URL: *url, Model: *model, Concurrency: *concurrency,
 		Requests: *requests, Warmup: *warmup, Errors: errs,
@@ -427,4 +437,109 @@ func reportCmd(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// csvCmd reads a run file of JSON sample lines and writes tidy per-trial CSV:
+// one row per (sample, metric), columns trial, shape, mode, subject, metric,
+// value, where shape is the request group (passthrough or translated). The
+// baseline has no proxy process, so its peak_rss_mb row is omitted rather
+// than written as the -1 sentinel. Rows are sorted so the file is stable
+// across runs regardless of the order the trials were appended in.
+func csvCmd(args []string) int {
+	fs := flag.NewFlagSet("csv", flag.ContinueOnError)
+	in := fs.String("in", "", "run file of JSON sample lines")
+	out := fs.String("out", "-", "CSV output path; - is stdout")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *in == "" {
+		fmt.Fprintln(os.Stderr, "csv: -in is required")
+		return 2
+	}
+	samples, err := readSamples(*in)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csv: %v\n", err)
+		return 1
+	}
+
+	subjectOrder := map[string]int{"baseline": 0, "luxd": 1, "litellm": 2}
+	groupOrder := map[string]int{"passthrough": 0, "translated": 1}
+	modeOrder := map[string]int{"nonstream": 0, "stream": 1}
+	sort.SliceStable(samples, func(i, j int) bool {
+		a, b := samples[i], samples[j]
+		if a.Trial != b.Trial {
+			return a.Trial < b.Trial
+		}
+		if a.Group != b.Group {
+			return groupOrder[a.Group] < groupOrder[b.Group]
+		}
+		if a.Mode != b.Mode {
+			return modeOrder[a.Mode] < modeOrder[b.Mode]
+		}
+		return subjectOrder[a.Subject] < subjectOrder[b.Subject]
+	})
+
+	type metric struct {
+		name string
+		val  float64
+		have bool
+	}
+	var b bytes.Buffer
+	w := csv.NewWriter(&b)
+	_ = w.Write([]string{"trial", "shape", "mode", "subject", "metric", "value"})
+	for _, s := range samples {
+		for _, m := range []metric{
+			{"p50_ms", s.P50ms, true},
+			{"p75_ms", s.P75ms, true},
+			{"p90_ms", s.P90ms, true},
+			{"p95_ms", s.P95ms, true},
+			{"p99_ms", s.P99ms, true},
+			{"reqs_per_sec", s.Throughput, true},
+			{"peak_rss_mb", s.PeakRSSMB, s.PeakRSSMB >= 0},
+		} {
+			if !m.have {
+				continue
+			}
+			_ = w.Write([]string{
+				strconv.Itoa(s.Trial), s.Group, s.Mode, s.Subject,
+				m.name, strconv.FormatFloat(m.val, 'f', -1, 64),
+			})
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		fmt.Fprintf(os.Stderr, "csv: %v\n", err)
+		return 1
+	}
+
+	if *out == "-" {
+		fmt.Print(b.String())
+		return 0
+	}
+	if err := os.WriteFile(*out, b.Bytes(), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "csv: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// readSamples reads a run file of JSON sample lines, skipping blank lines.
+func readSamples(path string) ([]sample, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var samples []sample
+	for _, ln := range strings.Split(string(data), "\n") {
+		ln = strings.TrimSpace(ln)
+		if ln == "" {
+			continue
+		}
+		var s sample
+		if err := json.Unmarshal([]byte(ln), &s); err != nil {
+			return nil, fmt.Errorf("bad line: %w", err)
+		}
+		samples = append(samples, s)
+	}
+	return samples, nil
 }
