@@ -344,7 +344,7 @@ type received struct {
 	Body   []byte
 }
 
-func newStub(t *testing.T) *stub {
+func newStub(t testing.TB) *stub {
 	t.Helper()
 	s := &stub{}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -415,7 +415,7 @@ func (s *stub) host() string { return strings.TrimPrefix(s.URL, "http://") }
 // world is one handler with its fakes and its four stub providers, one
 // per dialect, and a fixed catalog.
 type world struct {
-	t        *testing.T
+	t        testing.TB
 	h        *Handler
 	keys     *fakeKeys
 	catalog  *fakeCatalog
@@ -454,7 +454,7 @@ const (
 	openaiReasonerName = "reasoner"
 )
 
-func newWorld(t *testing.T) *world {
+func newWorld(t testing.TB) *world {
 	t.Helper()
 	w := &world{
 		t:        t,

@@ -11,6 +11,7 @@ packages.
 | Configuration | every `LUX_*` variable `luxd` reads, its meaning, default, and when it is required, in [`configuration.md`](configuration.md); [`.env.example`](../.env.example) is the same set as a file to copy |
 | Security | what the design protects and what it does not, in the [threat model](../specs/016-security-and-threat-model.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
 | Observability | the metrics on `/metrics`, the spans, the log fields, and the alerts to start with, in the [observability spec](../specs/019-observability.md); the rules file is [`deploy/base/prometheusrule.yaml`](../deploy/base/prometheusrule.yaml) |
+| Performance | what the gateway's own overhead costs and how to measure it, in [`performance.md`](performance.md); the design behind the benchmarks is the [performance and benchmarks spec](../specs/023-performance-and-benchmarks.md) |
 
 Trying it out before there is anything to install takes one command,
 `make run`: the gateway on loopback, serving its probes.

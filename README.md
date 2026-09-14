@@ -168,6 +168,9 @@ install a release on a cluster, see [Install](docs/install.md).
   any other.
 - The Go packages a platform imports: `manifest`, `gateway`, `metering`.
 - The `lux` command, and a skill file that teaches an agent to drive it.
+- Benchmarks that measure the gateway's own overhead per request, in
+  process against a stub upstream, so what Lux adds on top of a provider
+  call is a number and not a guess.
 - Signed images, SBOMs, and build provenance on every release.
 
 ## Documentation
@@ -180,6 +183,7 @@ For running Lux and building on it:
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
 | [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |
 | [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |
+| [Performance](docs/performance.md) | what the gateway's own overhead costs per request, and how to measure it |
 | [All documentation](docs/README.md) | the full index for operators and platform builders |
 
 ## Contributing

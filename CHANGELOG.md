@@ -15,6 +15,16 @@ refused before it is pushed.
   than shipping one. Both are generated from `internal/config` and held
   current by a test that fails if either omits a variable the binary reads
   or names one it does not, so they cannot drift from the code.
+- `go test -bench` benchmarks measure the gateway's own overhead per
+  request, in process against a stub upstream and isolated from the
+  provider and the network: one per route class over the handler
+  (`gateway`), `Resolve` per kind (`manifest`), cost and window
+  arithmetic (`metering`), and the limiter's reserve-and-settle cycle
+  (`internal/serve`). A percentile latency-and-throughput harness in
+  `gateway` reports p50/p75/p90/p95/p99, requests per second, and bytes
+  per request per route class, opt-in behind `LUX_LATENCY` and never a
+  pass/fail gate. `docs/performance.md` says what they measure and how to
+  run them; the design is `specs/023-performance-and-benchmarks.md`.
 - `/metrics` carries `lux_tunnel_sessions`, the number of tunnel
   sessions the scraped replica holds, on every installation: the gauge
   moves with a session opening and closing where the tunnel is on, and

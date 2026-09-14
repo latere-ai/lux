@@ -70,6 +70,7 @@ later.
 | [020](020-building-a-plane.md) | Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access | small | complete | 001, 004, 006, 018 |
 | [021](021-translation-through-llmdialect.md) | Translation through llmdialect: the codec glue leaves the gateway for an importable bridge | medium | complete | 004, 018 |
 | [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | complete | 001, 003, 006 |
+| [023](023-performance-and-benchmarks.md) | Performance and benchmarks: the gateway's own overhead, in process against a stub upstream | small | complete | 004 |
 
 ## Dependency graph
 
@@ -102,6 +103,7 @@ flowchart BT
   S020[020 building a plane]
   S021[021 translation through llmdialect]
   S022[022 authorizer vocabulary as a package]
+  S023[023 performance + benchmarks]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -129,6 +131,7 @@ flowchart BT
   S020 --> S018
   S021 --> S018
   S022 --> S006
+  S023 --> S004
 ```
 
 ## Build order
@@ -143,6 +146,7 @@ flowchart BT
 | 6 | 010 (Postgres), 017, 020, 013 | durable state across replicas, the first release, the plane document, local runtimes through the tunnel |
 | 7 | 021 | the translation layer as an import: the gateway's codec glue replaced by `latere.ai/x/pkg/llmdialect/bridge`, with the doors answering the same bytes |
 | 8 | 022 | the authorizer vocabulary as an import: the actions, the resource shapes, and the `limits` names a platform's authorizer is written against |
+| 9 | 023 | the benchmarks and the performance document: the gateway's own overhead, measured in process against a stub upstream |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
