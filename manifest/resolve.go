@@ -462,16 +462,24 @@ func sameWindow(a, b v1.Window) bool {
 	return a == b
 }
 
-// lookupError turns a Lookup's answer into the refusal at the field.
-func lookupError(err error, path string) *Error {
+// lookupError turns a Lookup's answer into the refusal at the field: a
+// not_found or authorizer_unavailable Error, or the two sentinels, become
+// that refusal at the path. Any other error is the Lookup's own failure,
+// its catalog or its store, and is returned wrapped and unchanged in
+// kind, so a caller that maps refusals by *Error sees no refusal and
+// answers with its own code for a store it cannot reach.
+func lookupError(err error, path string) error {
 	var e *Error
 	if errors.As(err, &e) && (e.Code == CodeNotFound || e.Code == CodeAuthorizerUnavailable) {
 		return refuse(e.Code, e.Detail, path)
 	}
-	if errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
 		return refuse(CodeNotFound, err.Error(), path)
+	case errors.Is(err, ErrAuthorizerUnavailable):
+		return refuse(CodeAuthorizerUnavailable, err.Error(), path)
 	}
-	return refuse(CodeAuthorizerUnavailable, err.Error(), path)
+	return fmt.Errorf("manifest: %s: the Lookup failed: %w", path, err)
 }
 
 // cloneAs copies one kind through its JSON form. The write-only values do

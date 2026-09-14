@@ -4,6 +4,7 @@
 package manifest
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -208,6 +209,29 @@ func TestNameGeneration(t *testing.T) {
 	}
 }
 
+// TestLookupFailurePassesThrough: a Lookup error that is neither a
+// refusal nor one of the two sentinels is the Lookup's own failure, a
+// catalog or a store that could not answer, and Resolve returns it as a
+// plain error and not as a refusal, so the API answers for the store and
+// not for the authorizer.
+func TestLookupFailurePassesThrough(t *testing.T) {
+	o := corpusOptions(t)
+	lookup := corpusLookup(t)
+	lookup.refused = map[string]error{"broken/*": errors.New("catalog: the store is not reachable")}
+	o.Lookup = lookup
+	_, err := Resolve(context.Background(), mustDecode(t, head(v1.KindKey, "k")+"spec:\n  models: [\"broken/*\"]\n"), o)
+	if err == nil {
+		t.Fatal("Resolve accepted a Key whose Lookup failed")
+	}
+	var e *Error
+	if errors.As(err, &e) {
+		t.Fatalf("a Lookup failure was turned into the refusal %s", e.Code)
+	}
+	if !strings.Contains(err.Error(), "spec.models[0]") || !strings.Contains(err.Error(), "not reachable") {
+		t.Fatalf("err = %v, wants the path and the cause", err)
+	}
+}
+
 func TestLookupErrors(t *testing.T) {
 	o := corpusOptions(t)
 	lookup := corpusLookup(t)
@@ -215,7 +239,8 @@ func TestLookupErrors(t *testing.T) {
 		"denied-provider": ErrNotFound,
 		"refused-budget":  refuse(CodeNotFound, "budget.draw denied", "x"),
 		"down-provider":   ErrAuthorizerUnavailable,
-		"down/*":          errors.New("dial tcp: connection refused"),
+		"down/*":          fmt.Errorf("%w: dial tcp: connection refused", ErrAuthorizerUnavailable),
+		"broken/*":        errors.New("catalog: the store is not reachable"),
 		"gone/*":          refuse(CodeAuthorizerUnavailable, "timeout", "y"),
 	}
 	o.Lookup = lookup

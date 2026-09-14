@@ -500,7 +500,10 @@ The stages, in order, each one total before the next begins:
    copy, so the caller's object is never changed.
 3. References, through `Lookup`: every target's provider, the budget,
    and every selector. A `not_found` or `authorizer_unavailable` is
-   returned with the field's path. For a Key, the models each selector
+   returned with the field's path; any other error `Lookup` returns is
+   its own failure, a catalog or a store that could not answer, and is
+   returned wrapped with the path and not as a refusal, so the API
+   answers `store_unavailable` for it ([[011-api]]). For a Key, the models each selector
    matched now are recorded in `status.selectors[]` as
    `{selector, matched: [names]}`, and a selector that matched nothing
    is a warning, not an error, because a discovered model may appear
@@ -700,7 +703,7 @@ where `Defaults` come from ([[002-repository-scaffold]]) and `Limits`
 | The upstream host rule: an IP literal is accepted; a single label, a loopback, link-local, and private address, `.local`, `.internal`, `http://`, userinfo, query, and fragment are `invalid_field`; with `AllowPrivateUpstreams` the private forms resolve with a warning; the `PublicURL` host is refused in both modes | `TestUpstreamHostRule` | passing |
 | `credential.value` is absent from the JSON and YAML encodings of a decoded Provider and present through the accessor; `valueFrom` is `invalid_field` in server mode and accepted in file mode | `TestCredentialValueNeverEncodes`, `TestValueFromIsFileModeOnly` | passing |
 | `Key.spec.value` of 32 bytes resolves and of 31 or 4097 is `invalid_field`; it is absent from the JSON and YAML encodings of the decoded Key and present through the accessor; with `valueFrom.env` it is `exclusive_fields`; in file mode it is `invalid_field`; on an update, equal to the stored value or not, it is `immutable_field` at `spec.value` | `TestSuppliedValueSchema`, table-driven | passing |
-| `Lookup` returning not-found and refused both surface as `not_found` with the field's path; unavailable surfaces as `authorizer_unavailable`; a selector matching nothing is a warning and the resolved Key records every selector's matches | `TestLookupErrors`, `TestSelectorsRecordTheirMatches` | passing |
+| `Lookup` returning not-found and refused both surface as `not_found` with the field's path; unavailable surfaces as `authorizer_unavailable`; any other `Lookup` error passes through as a plain error and never as a refusal; a selector matching nothing is a warning and the resolved Key records every selector's matches | `TestLookupErrors`, `TestLookupFailurePassesThrough`, `TestSelectorsRecordTheirMatches` | passing |
 | Every immutable field changed on update is named in one `immutable_field` error; a Provider update without a value keeps the stored one and with a value bumps the version | `TestImmutableFields`, `TestCredentialUpdate` | passing |
 | Limits refuse with the field and the limit; a zero limit is no limit | `TestLimits` | passing |
 | The glob matcher: `*` matches across `/`, a selector without `*` is exact, and the same function accepts a selector and matches a name | `TestGlob`, table-driven | passing |
@@ -785,3 +788,9 @@ of `0` under an authorizer's ceilings refuse every defaulted Key;
 [[018-conformance-suite]] applies the accepted corpus in kind order,
 `PUT`s the nameless Key case to `fixed-name-0000`, and expects the
 `platform-dev` case to carry a supplied value.
+
+Amended 2026-09-14, after the identity build: a `Lookup` error that is
+neither a refusal nor one of the two sentinels passes through `Resolve`
+unchanged in kind, where before it read as `authorizer_unavailable`, so
+a store that cannot answer is reported as the store and not as the
+authorizer (`TestLookupFailurePassesThrough`).
