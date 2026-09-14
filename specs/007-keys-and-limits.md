@@ -666,7 +666,7 @@ fixed in the Design above beside the rule it settles:
 Left `not built`, owned elsewhere: `TestKeyValueShownOnce` and
 `TestKeyValueNeverAppearsInLogs`, whose responses are [[011-api]]'s and
 whose run through every path is [[015-test-stubs-and-tiers]]'s; the
-route halves of `TestRotateReplacesTheValue` and `TestSuppliedKeyValue`,
+route halves of `TestRevocationPropagates` and `TestSuppliedKeyValue`,
 the `invalid_field` mapping of `TestSuppliedValueMustBeUnique`, the
 `/v1` half of `TestPlaneBoundaryHoldsByVerification`, and
 `budget_in_use` in `TestBudgetLifecycle` ([[011-api]]); the delivery
