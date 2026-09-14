@@ -1,6 +1,6 @@
 ---
 title: "Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access"
-status: validated
+status: dispatched
 track: core
 depends_on:
   - specs/001-architecture.md

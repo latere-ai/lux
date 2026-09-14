@@ -1,6 +1,6 @@
 ---
 title: "Translation through llmdialect: the codec glue leaves the gateway for an importable bridge"
-status: drafted
+status: dispatched
 track: core
 depends_on:
   - specs/004-request-path.md
