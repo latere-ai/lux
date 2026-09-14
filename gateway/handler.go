@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"latere.ai/x/pkg/llmdialect/ir"
 	"latere.ai/x/pkg/llmdialect/tokencount"
@@ -42,6 +45,7 @@ type Handler struct {
 	maxBody int64
 	ua      string
 	metrics *requestMetrics
+	logger  *slog.Logger
 }
 
 // New builds the handler. A nil required option is a panic, because a
@@ -60,9 +64,12 @@ func New(o Options) *Handler {
 			panic("gateway.New: Options." + r.name + " is nil")
 		}
 	}
-	h := &Handler{o: o, now: o.Now, newID: o.NewID, maxBody: o.MaxBodyBytes, metrics: newRequestMetrics(o.Metrics)}
+	h := &Handler{o: o, now: o.Now, newID: o.NewID, maxBody: o.MaxBodyBytes, metrics: newRequestMetrics(o.Metrics), logger: o.Logger}
 	if h.now == nil {
 		h.now = time.Now
+	}
+	if h.logger == nil {
+		h.logger = slog.Default()
 	}
 	if h.newID == nil {
 		h.newID = func() string { return v1.NewID(v1.PrefixRequest, h.now(), nil) }
@@ -95,6 +102,7 @@ type call struct {
 	r     *http.Request
 	id    string
 	start time.Time
+	span  trace.Span // lux.request, ended by finish
 
 	door      v1.Dialect
 	route     route
@@ -110,8 +118,9 @@ type call struct {
 	rec       Record
 }
 
-// ServeHTTP runs the pipeline, answers the caller, settles the windows,
-// and writes the record.
+// ServeHTTP runs the pipeline inside the lux.request span, answers the
+// caller, settles the windows, writes the log line and the record, and
+// ends the span, so a streamed response's span lasts the stream's life.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := &call{h: h, r: r, id: h.newID(), start: h.now()}
 	c.w = &responseWriter{ResponseWriter: w, rc: http.NewResponseController(w), now: h.now}
@@ -122,7 +131,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hdr.Set("X-Request-Id", xid)
 	}
 	c.rec = Record{ID: c.id, At: c.start}
-	ctx := r.Context()
+	ctx, span := startRequest(r)
+	c.span = span
 	c.finish(ctx, c.run(ctx))
 }
 
@@ -170,6 +180,12 @@ func (c *call) finish(ctx context.Context, f *failure) {
 	}
 	c.rec.Tokens = c.tokens
 	c.h.metrics.observe(c.rec)
+	// The line is written inside the span, so it carries the trace and
+	// span ids; the span's attributes are the record's and never the
+	// Key's identity.
+	logRequest(ctx, c.h.logger, c.rec)
+	c.span.SetAttributes(requestAttributes(c.rec)...)
+	c.span.End()
 	if c.h.o.Recorder != nil {
 		c.h.o.Recorder.Record(c.rec)
 	}

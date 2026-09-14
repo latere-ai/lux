@@ -287,18 +287,24 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	p := t.Provider
 	started := c.h.now()
 	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, UpstreamModel: t.Model, Status: StatusOK}
+	// One lux.upstream span per target tried, the parent of the client
+	// span the instrumented transport opens; it ends with the attempt,
+	// which on a stream is the stream's end.
+	sctx, span := startUpstream(parent, p.Metadata.Name, len(c.rec.Attempts)+1, c.r.Method, c.urlTemplate(t, m))
+	var ttfb time.Duration
 	defer func() {
 		at.Duration = c.h.now().Sub(started)
 		if f != nil {
 			at.Status, at.Error = StatusFailed, f.code
 		}
-		c.rec.Attempts = append(c.rec.Attempts, at)
+		c.addAttempt(at)
 		c.rec.UpstreamStatus = at.HTTPStatus
+		endUpstream(span, at, ttfb)
 	}()
 	c.rec.Provider, c.rec.ProviderID, c.rec.UpstreamModel = p.Metadata.Name, p.Status.ID, t.Model
 	c.rec.TargetDialect, c.rec.Translated = p.Spec.Dialect, m == modeTranslate
 
-	ctx, cancel := context.WithTimeout(parent, providerTimeout(p))
+	ctx, cancel := context.WithTimeout(sctx, providerTimeout(p))
 	defer cancel()
 	req, loss, f := c.outbound(ctx, t, m)
 	if f != nil {
@@ -315,6 +321,7 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	if err != nil {
 		return c.transportFailure(ctx, t, err), false
 	}
+	ttfb = c.h.now().Sub(started)
 	at.HTTPStatus = resp.StatusCode
 	switch {
 	case retryable(resp.StatusCode):
@@ -552,11 +559,18 @@ func (c *call) chooseProvider(ctx context.Context) (*v1.Provider, *failure) {
 func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	c.rec.Provider, c.rec.ProviderID, c.rec.TargetDialect = p.Metadata.Name, p.Status.ID, p.Spec.Dialect
 	c.tokens = Tokens{Estimated: true}
+	// The one lux.upstream span of an opaque request, under the route's
+	// template rather than the caller's path, which is the caller's own.
+	sctx, span := startUpstream(parent, p.Metadata.Name, 1, c.r.Method, c.route.template)
+	started := c.h.now()
+	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, Status: StatusOK}
+	var ttfb time.Duration
+	defer func() { endUpstream(span, at, ttfb) }()
 	base, err := url.Parse(p.Spec.BaseURL)
 	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": baseURL: "+err.Error())
 	}
-	ctx, cancel := context.WithTimeout(parent, providerTimeout(p))
+	ctx, cancel := context.WithTimeout(sctx, providerTimeout(p))
 	defer cancel()
 	u := *base
 	u.Path = strings.TrimSuffix(base.Path, "/") + passthroughPath(c.door, c.route.rest)
@@ -576,18 +590,17 @@ func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	if err := c.inject(ctx, req, p); err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": credential: "+err.Error())
 	}
-	started := c.h.now()
-	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, Status: StatusOK}
 	resp, err := client.Do(req)
 	if err != nil {
 		f := c.transportFailure(ctx, Target{Provider: p}, err)
 		at.Status, at.Error, at.Duration = StatusFailed, f.code, c.h.now().Sub(started)
-		c.rec.Attempts = append(c.rec.Attempts, at)
+		c.addAttempt(at)
 		return f
 	}
 	defer func() { _ = resp.Body.Close() }()
-	at.HTTPStatus, at.Duration = resp.StatusCode, c.h.now().Sub(started)
-	c.rec.Attempts = append(c.rec.Attempts, at)
+	ttfb = c.h.now().Sub(started)
+	at.HTTPStatus, at.Duration = resp.StatusCode, ttfb
+	c.addAttempt(at)
 	c.rec.UpstreamStatus = resp.StatusCode
 	c.observe(p, resp.StatusCode >= 500)
 	relayHeaders(c.w.Header(), resp.Header, false)
