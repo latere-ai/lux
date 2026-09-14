@@ -69,7 +69,7 @@ later.
 | [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | testing | 002, 004, 009 |
 | [020](020-building-a-plane.md) | Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access | small | testing | 001, 004, 006, 018 |
 | [021](021-translation-through-llmdialect.md) | Translation through llmdialect: the codec glue leaves the gateway for an importable bridge | medium | testing | 004, 018 |
-| [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | drafted | 001, 003, 006 |
+| [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | dispatched | 001, 003, 006 |
 
 ## Dependency graph
 

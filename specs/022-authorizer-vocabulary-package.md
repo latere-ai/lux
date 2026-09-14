@@ -1,12 +1,12 @@
 ---
 title: "The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against"
-status: drafted
+status: dispatched
 track: core
 depends_on:
   - specs/001-architecture.md
   - specs/003-manifest-contract.md
   - specs/006-identity.md
-affects: [authorizer/, internal/auth/, internal/api/, internal/tunnel/, internal/events/, internal/luxcli/, internal/arch/, cmd/luxd/, test/, docs/plane.md, examples/authorizer/]
+affects: [authorizer/, internal/auth/, internal/api/, internal/arch/, test/, docs/plane.md, examples/authorizer/, .gitignore]
 effort: small
 created: 2026-09-14
 updated: 2026-09-14
@@ -49,13 +49,23 @@ and `ResourceFor(action, object)`. `internal/auth/limits.go` holds
 `latere.ai/x/pkg/authz`, `manifest`, `manifest/v1`, and the standard
 library; neither reaches the verifier, the client, or the store.
 
-Eleven packages import `internal/auth`; those that use only the
-vocabulary are `internal/tunnel`, `internal/events`,
-`internal/luxcli`, `test/stubs/authorizer`, `test/stubs/issuer`,
-`test/conformance`, and `test/e2e`. `internal/api` uses both halves.
-A platform's authorizer, outside this module, holds a checked-in copy
-of the action list and of the `limits` wire names, held to
+Ten packages import `internal/auth`. `internal/arch` names the
+vocabulary alone, `Actions()` in `plane_test.go`; `internal/api`,
+`test/stubs/authorizer`, and `test/e2e` name both halves; `cmd/luxd`,
+`internal/events`, `internal/luxcli`, `internal/tunnel`,
+`test/conformance`, and `test/stubs/issuer` name none of the moved
+symbols, so the move does not touch them. `internal/auth` itself names
+the constants in `policy.go` and `lookup.go`, three builders in
+`lookup.go`, and `Limits` and `DecodeLimits` in `authorizer.go`. A
+platform's authorizer, outside this module, holds a checked-in copy of
+the action list and of the `limits` wire names, held to
 [[006-identity]]'s table by a test that reads a copy of the table.
+
+One thing is in the way. The module root carries a tracked file named
+`authorizer`: a stray executable a bare `go build ./examples/authorizer`
+left behind and commit `1d00e2c` recorded, which `.gitignore` does not
+cover because its stray-binary rule names `/lux` and `/luxd` alone. The
+directory this spec adds cannot exist beside it.
 
 ## Design
 
@@ -120,11 +130,18 @@ type WireLimits struct {
 ```
 
 `WireLimits` is the one addition: the wire struct `DecodeLimits` reads
-today is unexported, and an authorizer that renders `limits` wants the
-type `luxd` decodes rather than six string literals. Its members carry
-`omitempty`, because an absent member grants nothing and takes nothing
-away ([[006-identity]]), so an authorizer that sets two ceilings sends
-two. `DecodeLimits` decodes into it and keeps every rule it has: an
+today is unexported and carries no `omitempty`, and an authorizer that
+renders `limits` wants the type `luxd` decodes rather than six string
+literals. Its members carry `omitempty` so that an authorizer setting
+two ceilings sends two and the other four stay absent, which grants
+nothing and takes nothing away ([[006-identity]]). Five are pointers,
+so a member deliberately set to zero is still sent and still decodes
+to zero, which is the same grant as absence; `MaxKeyTTL` is a
+`v1.Duration`, which is a string, so its absent case is the empty
+string, exactly what `omitempty` omits and what `DecodeLimits` already
+skips. The two conventions therefore agree: for every member, absent
+and zero are one grant. `DecodeLimits` decodes into it and keeps every
+rule it has: an
 object that does not parse, a negative figure, a spend that is not a
 money string, or a ttl that is not a duration is an error, and the
 caller treats the answer as no decision.
@@ -145,38 +162,77 @@ this, and says it is written for an authorizer's author.
 |---|---|
 | `actions.go`: the constants, `KindUsage`, `actions`, `Actions`, `Kind`, `Known`, `verb`, the fourteen builders, `ResourceFor` | `authorizer/actions.go`, unchanged but for the package clause and its documentation |
 | `limits.go`: `Limits`, `wireLimits`, `DecodeLimits` | `authorizer/limits.go`, with `wireLimits` exported as `WireLimits` |
-| `actions_test.go` and the limits half of the tests | the package's tests, unchanged in what they hold |
+| `actions_test.go` but for `TestCodesHaveOneSentence`, which holds `errors.go`'s codes and stays; `TestDecodeLimits` out of `authorizer_test.go` but for its `through Decide` case, which holds the client and stays | the package's tests, holding the same shapes and the same figures |
 | `authorizer.go`, `verifier.go`, `policy.go`, `lookup.go`, `startup.go`, `errors.go`, `doc.go` | stay: the client, the verifier, the owner policy, the lookup, the startup checks, and the errors are `luxd`'s |
 
 Every importer of the moved names switches to the package in the
 commit that moves them; `internal/auth` keeps no forwarding name, as
 the repository's convention says. `internal/auth` imports the package
-for `DecodeLimits` and `Known`, which its client and policy use.
+for `Limits` and `DecodeLimits`, which its `Decision` and its client
+carry; for `Known` and the action constants of its owner policy; and
+for `ProviderObject`, `BudgetObject`, and `ModelUse`, which its
+`Lookup` builds. Nothing in the package imports `internal/auth` back,
+and `manifest`, which the package imports, reaches only `manifest/v1`
+and the YAML decoder, so neither direction is a cycle.
 
 ### The dependency rule
 
 The package imports `latere.ai/x/pkg/authz` for `Resource` and
 `Decision`, `manifest` for `Limits`, `manifest/v1` for the kinds, and
-the standard library. It imports nothing under `internal/`, no HTTP
-client of its own, no database driver, and no identity library, and it
-dials nothing: the `authz` package it imports carries a client, but
-this package calls none of it, and [[001-architecture]]'s dependency
-test holds the package's own imports to the list above and its closure
-to what `manifest` already reaches plus `latere.ai/x/pkg/authz`.
-[[001-architecture]]'s package table gains the row; [[006-identity]]'s
-sentence naming `internal/auth` as the home of the builders names the
-package instead. Both edits are made by this spec.
+the standard library. It imports nothing under `internal/`, no
+database driver, and no identity library, and it dials nothing: it
+constructs no client and calls none of `authz`'s.
+
+Its build list is another matter, and the rule as written today would
+refuse it. `latere.ai/x/pkg/authz` carries the shared authorizer
+client, so importing it reaches `net/http`, `crypto/tls`, and
+`latere.ai/x/pkg/cache`, none of which `manifest` reaches; and
+`internal/arch`'s `rootForbid` names `latere.ai/x/pkg/authz` among the
+prefixes no root package may reach whatever its row says. A vocabulary
+that cannot name `authz.Resource` is not the seam this spec is for, so
+[[001-architecture]] and its tests take four edits, all of them made
+here:
+
+- the package table gains the row for `authorizer`;
+- the root-package rule, which says three trees at the root and no
+  HTTP client outside `gateway`, says four and excepts this one, whose
+  HTTP client is a type it never constructs;
+- `rootDirs` and `TestRootPackagesAreTheThree` accept `authorizer` at
+  the module root, and the test's message names four trees;
+- `rootAllow` gains an `authorizer` row, the module prefixes
+  `latere.ai/x/lux/manifest` and `latere.ai/x/lux/authorizer`, the
+  external prefixes `latere.ai/x/pkg/authz`, `latere.ai/x/pkg/cache`,
+  and `github.com/goccy/go-yaml`, and the `noStd` entries
+  `database/sql` and `os/exec`; `rootForbid` excepts `authorizer` from
+  its `latere.ai/x/pkg/authz` prefix, and refuses it everything else,
+  `internal/`, `cmd/`, `authkit`, and the store drivers included.
+
+The alternative, splitting the envelope out of `latere.ai/x/pkg/authz`
+so the types come without the client, is a change to another module
+and is not in this spec's reach. [[006-identity]]'s sentence naming
+`internal/auth` as the home of the builders names the package instead.
+
+The directory needs the tracked file of the same name deleted first,
+and `.gitignore`'s stray-binary rule gains `/authorizer`.
 
 ### Who imports it
 
-- `internal/api`, `internal/tunnel`, `internal/events`,
-  `internal/luxcli`, `cmd/luxd`, and the test tiers, in place of the
-  moved names.
-- `examples/authorizer` ([[020-building-a-plane]]) decides over
-  `authorizer.Actions()` and answers the probe with the package's
-  action names, so the document a platform team copies uses the
-  vocabulary by name and not by string; `docs/plane.md` names the
-  package in the sentence that introduces the minimal authorizer.
+- `internal/auth`, `internal/api`, `internal/arch`, and the two test
+  tiers that name the vocabulary, `test/stubs/authorizer` and
+  `test/e2e`, in place of the moved names. `test/stubs/authorizer` is
+  itself `package authorizer`, which is legal beside this import and
+  reads badly, so it takes the import under the alias `vocabulary`.
+- `examples/authorizer` ([[020-building-a-plane]]) switches on
+  `authorizer.Kind` where `decide` tests a `provider.` or `model.`
+  prefix today, and names `authorizer.ActionModelUse` where it spells
+  `"model.use"`, so the program a platform team copies uses the
+  vocabulary by name and not by string. The example imports nothing of
+  this module today, by design: it is the whole program `docs/plane.md`
+  prints. It gains one import, and the document's sentence that
+  introduces the minimal authorizer names the package and says a reader
+  who copies the block runs `go get latere.ai/x/lux` first. The Go
+  block stays the file word for word, which is what
+  [[020-building-a-plane]]'s `TestPlaneDocIsCurrent` holds.
 - A platform's authorizer outside this module imports it for the
   action constants, `ResourceFor` in its tests, and `WireLimits` for
   its answers, and deletes its copies.
@@ -193,11 +249,12 @@ A vocabulary for another core.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| `authorizer.Actions()` is [[006-identity]]'s table, in its order, and `Kind` and `Known` answer for every row and refuse a string outside it | `TestActionsAreTheTable`, `TestKindPerAction`, moved with the code and unchanged in what they hold | not built |
-| Every builder renders exactly the members [[006-identity]]'s resource table names for its row, lists and maps present and never null, and `ResourceFor` picks the row for an action on a manifest object and refuses the rest | `TestResourceShapes`, `TestResourceFor`, moved and unchanged | not built |
-| `DecodeLimits` reads the six wire names into the six figures, refuses a negative figure, a spend that is not money, and a ttl that is not a duration, and a `WireLimits` rendered with two members decodes to those two and zero elsewhere | `TestDecodeLimits`, `TestWireLimitsRoundTrip` | not built |
-| The package's direct imports are `latere.ai/x/pkg/authz`, `manifest`, `manifest/v1`, and the standard library, and its closure adds `latere.ai/x/pkg/authz` and nothing else to what `manifest` reaches | `TestAuthorizerPackageImports` in `internal/arch`, an explicit list against `go list` | not built |
-| No file outside `authorizer/` and its tests spells an action as a string literal, and `internal/auth` exports none of the moved names | `TestVocabularyHasOneHome`, reading the tree | not built |
-| `examples/authorizer` imports the package and `docs/plane.md` names it where it introduces the minimal authorizer | [[020-building-a-plane]]'s `TestPlaneDocIsCurrent`, unchanged, over the edited block; `TestExampleAuthorizerUsesTheVocabulary` | not built |
+| `authorizer.Actions()` is [[006-identity]]'s twenty-four actions, each distinct and handed out as a copy, `Kind` answers the kind of every one, and both `Kind` and `Known` refuse `""`, `key`, `key.rotate`, `usage.write`, and `Provider.read` | `TestActionsAndKinds`, moved with the code and unchanged in what it holds | not built |
+| Every builder renders exactly the members [[006-identity]]'s resource table names for its row, a create carries no id, lists and maps are present and never null, and `ResourceFor` picks the row for an action on a manifest object and refuses a wrong kind, a nil object, `model.use`, `usage.read`, and a string outside the vocabulary | `TestResourceShapes`, `TestResourceListsAreNeverNull`, `TestResourceForRefusesTheWrongKind`, moved and unchanged | not built |
+| `DecodeLimits` reads the six wire names into the six figures, refuses a negative figure, a spend that is not money, and a ttl that is not a duration, and a `WireLimits` with two members set renders exactly those two names and decodes back to those two figures with the other four zero | `TestDecodeLimits`, moved but for its `through Decide` case; `TestWireLimitsRoundTrip` | not built |
+| The package's direct imports are `latere.ai/x/pkg/authz`, `manifest`, `manifest/v1`, and the standard library; its build list adds `latere.ai/x/pkg/cache` and the standard library `authz`'s client reaches, and reaches no package under `internal/` or `cmd/`, no `authkit`, no database driver, and no store driver | [[001-architecture]]'s `TestRootPackagesDialNothing`, in its `authorizer` sub-test against the new `rootAllow` row, with `TestRootPackagesAreTheThree` accepting the fourth tree | not built |
+| `internal/auth` exports none of the moved names, and no package outside `authorizer/` declares an action constant or its own copy of the six `limits` wire names; the action strings that remain in the tree are JSON fixtures and subtest names inside tests | `TestVocabularyHasOneHome`, over the tree's declarations | not built |
+| `examples/authorizer` reaches every action it decides on through the package rather than through a string literal, and `docs/plane.md` names the package where it introduces the minimal authorizer | `TestExampleAuthorizerUsesTheVocabulary`; [[020-building-a-plane]]'s `TestPlaneDocIsCurrent` and `TestPlaneDocAuthorizerConforms`, unedited, over the edited program | not built |
+| The module root holds the `authorizer` package directory and no file of that name, and a stray binary at the root from any `go build` of this module is ignored | the gate's build, which cannot produce the directory while the file is tracked, and `git status` clean after `go build ./examples/authorizer` | not built |
 | `internal/auth` and `authorizer` each clear the coverage floor after the move | the coverage gate | not built |
 | Every acceptance row of [[006-identity]] and [[011-api]] still passes | their suites, unedited but for the import paths | not built |
