@@ -103,9 +103,10 @@ deploy with `LUX_SECRETS_KEK=new,old`, run `luxd rewrap`, deploy with
 ## The gateway
 
 The kind overlay in the deploy archive is one replica on the memory
-store behind the NodePort. Your own kustomization over it names your
-issuer, the subject that may declare upstreams, and the image, and is
-what you apply, now and after every edit. A plain `http://` issuer
+store behind the NodePort, without the alert rules, since a laptop
+cluster runs no Prometheus Operator to read them. Your own kustomization
+over it names your issuer, the subject that may declare upstreams, and
+the image, and is what you apply, now and after every edit. A plain `http://` issuer
 inside the cluster is a lab's and is listed as insecure so the gateway
 accepts it; a real issuer speaks TLS and the second line is empty.
 
@@ -142,7 +143,12 @@ kubectl -n lux rollout status deployment/luxd --timeout=180s
 The Deployment rolls one replica at a time and never surges, because
 each replica opens `LUX_DB_MAX_CONNS` connections to a Postgres store
 and a surge would ask for a third replica's worth; on the memory store
-that costs nothing and changes nothing.
+that costs nothing and changes nothing. The base's network policy lets
+the gateway reach DNS, TLS endpoints, Postgres, and its own replicas and
+nothing else; the kind overlay widens that to every destination, since
+a laptop's issuer and model runtime listen on ports of their own over
+plain HTTP, and kind enforces the policy. A real installation keeps the
+base's list and adds the port of any endpoint of its own.
 
 ## The first check
 
@@ -207,7 +213,10 @@ never the content.
 
 - Set `LUX_DB_URL` in the Secret and apply `deploy/overlays/generic`
   for two replicas over Postgres, once that store is in the release you
-  run; the [state spec](../specs/010-state.md) says what it holds.
+  run; the [state spec](../specs/010-state.md) says what it holds. That
+  overlay keeps the alert rules, a `PrometheusRule` the Prometheus
+  Operator reads; a cluster without the operator drops it the way the
+  kind overlay does.
 - Point `LUX_AUTHORIZER_URL` at an endpoint you write, so permission is
   your decision rather than the built-in owner policy; the
   [identity spec](../specs/006-identity.md) is the contract.

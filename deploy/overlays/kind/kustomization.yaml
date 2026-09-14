@@ -26,6 +26,21 @@ patches:
     target:
       kind: Service
       name: luxd
+  # The lab's endpoints listen on ports of their own over plain HTTP,
+  # and kind enforces network policies, so egress is widened here.
+  - path: networkpolicy-lab.yaml
+    target:
+      kind: NetworkPolicy
+      name: luxd
+  # A laptop cluster runs no Prometheus Operator, so the alert rules,
+  # whose kind is that operator's CRD, are dropped here; a cluster that
+  # has the operator keeps them, as the generic overlay does.
+  - patch: |-
+      apiVersion: monitoring.coreos.com/v1
+      kind: PrometheusRule
+      metadata:
+        name: luxd
+      $patch: delete
 configMapGenerator:
   - name: luxd
     envs:

@@ -204,8 +204,22 @@ func TestOverlaysRender(t *testing.T) {
 			t.Run("kubectl", func(t *testing.T) {
 				rendered := kubectlRender(t, filepath.Join(dir, rel))
 				d := find(t, rendered, "Deployment", "luxd")
+				rules := 0
+				for _, o := range rendered {
+					if o.kind() == "PrometheusRule" {
+						rules++
+					}
+				}
+				egress := list(dig(find(t, rendered, "NetworkPolicy", "luxd"), "spec", "egress"))
 				switch rel {
 				case "deploy/overlays/kind":
+					// kind enforces network policies and the lab's endpoints
+					// listen on ports of their own, so the overlay admits
+					// every destination; the install walk found the check
+					// process cut off from the issuer without it.
+					if len(egress) != 1 || len(egress[0].(map[string]any)) != 0 {
+						t.Errorf("the kind overlay admits every egress destination with one empty rule, got %v", egress)
+					}
 					if got := dig(d, "spec", "replicas"); fmt.Sprint(got) != "1" {
 						t.Errorf("the kind overlay runs one replica, got %v", got)
 					}
@@ -213,9 +227,20 @@ func TestOverlaysRender(t *testing.T) {
 					if dig(s, "spec", "type") != "NodePort" || fmt.Sprint(dig(list(dig(s, "spec", "ports"))[0], "nodePort")) != "30080" {
 						t.Error("the kind overlay serves the public port on NodePort 30080")
 					}
-				case "deploy/overlays/generic":
+					// A laptop cluster runs no Prometheus Operator, whose CRD
+					// the rules are; the install walk found the apply refused.
+					if rules != 0 {
+						t.Errorf("the kind overlay renders %d PrometheusRule(s); a kind cluster refuses the kind", rules)
+					}
+				default:
 					if got := dig(d, "spec", "replicas"); fmt.Sprint(got) != "2" {
-						t.Errorf("the generic overlay keeps the base's two replicas, got %v", got)
+						t.Errorf("%s keeps the base's two replicas, got %v", rel, got)
+					}
+					if rules != 1 {
+						t.Errorf("%s renders %d PrometheusRule(s), want the base's one", rel, rules)
+					}
+					if len(egress) < 3 {
+						t.Errorf("%s admits DNS, the TLS endpoints and the store, and the other replicas on egress, got %d rule(s)", rel, len(egress))
 					}
 				}
 				if rel != "deploy/base" {
@@ -283,6 +308,12 @@ func hardening(t *testing.T, objects []object) {
 	pod := dig(d, "spec", "template", "spec")
 	if dig(pod, "securityContext", "runAsNonRoot") != true {
 		t.Error("the pod runs as non-root")
+	}
+	// The image's user is distroless's nonroot by name, which a kubelet
+	// cannot verify against runAsNonRoot, so the uid is named too; the
+	// install walk found the pod in CreateContainerConfigError without it.
+	if fmt.Sprint(dig(pod, "securityContext", "runAsUser")) != "65532" || fmt.Sprint(dig(pod, "securityContext", "runAsGroup")) != "65532" {
+		t.Errorf("the pod names uid and gid 65532, distroless's nonroot, got %v:%v", dig(pod, "securityContext", "runAsUser"), dig(pod, "securityContext", "runAsGroup"))
 	}
 	if dig(pod, "securityContext", "seccompProfile", "type") != "RuntimeDefault" {
 		t.Error("the pod uses the RuntimeDefault seccomp profile")
@@ -352,14 +383,13 @@ func hardening(t *testing.T, objects []object) {
 	if !slices.Contains(types, any("Ingress")) || !slices.Contains(types, any("Egress")) {
 		t.Errorf("the NetworkPolicy holds both directions, got %v", types)
 	}
-	if len(list(dig(np, "spec", "egress"))) < 3 || len(list(dig(np, "spec", "ingress"))) < 2 {
-		t.Error("the NetworkPolicy names DNS, the endpoints, and the other replicas on egress, and the public port and the other replicas on ingress")
+	if len(list(dig(np, "spec", "ingress"))) < 2 {
+		t.Error("the NetworkPolicy admits the public port and the other replicas on ingress")
 	}
 	pdb := find(t, objects, "PodDisruptionBudget", "luxd")
 	if fmt.Sprint(dig(pdb, "spec", "minAvailable")) != "1" {
 		t.Errorf("minAvailable is %v, want 1", dig(pdb, "spec", "minAvailable"))
 	}
-	find(t, objects, "PrometheusRule", "luxd")
 	svc := find(t, objects, "Service", "luxd")
 	var names []string
 	for _, p := range list(dig(svc, "spec", "ports")) {

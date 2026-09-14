@@ -11,8 +11,10 @@
 # to its controller's namespace with a `from` entry, adds the port of a
 # plaintext endpoint inside its own network to the last egress rule, and
 # adds its monitoring namespace to the internal port's rule for the
-# scrape. A cluster whose network plugin does not enforce policies, as a
-# laptop's kind cluster does not, applies this object and ignores it.
+# scrape. A cluster whose network plugin does not enforce policies
+# applies this object and ignores it; kind's does enforce them, so the
+# kind overlay widens egress for a lab whose endpoints listen on ports of
+# their own over plain HTTP.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
