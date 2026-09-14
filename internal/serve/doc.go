@@ -22,7 +22,7 @@
 // read-time status the API returns. For spec 011, ClientAddress and
 // LimitUnauthenticated are the client address rule and the per-address
 // bucket in front of both planes, ObjectOwners answers the owner policy
-// over the store, AppendEvent writes an event of spec 012's shape, and
+// over the store, AppendEvent journals an event through internal/events, and
 // the Recorder prices every record of the doors and writes it (009).
 // The /v1 handlers are internal/api's; cmd/luxd wires and nothing more.
 package serve

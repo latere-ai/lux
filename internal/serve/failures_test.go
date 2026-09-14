@@ -267,12 +267,6 @@ func TestHealthSurvivesStoreFailures(t *testing.T) {
 
 // TestHelpers covers the small pure functions' remaining branches.
 func TestHelpers(t *testing.T) {
-	if labelsOf(&v1.Key{}) != nil {
-		t.Fatal("labels of a Key")
-	}
-	if got := labelsOf(&v1.Model{Metadata: v1.ObjectMeta{Labels: map[string]string{"a": "b"}}}); got["a"] != "b" {
-		t.Fatal("labels of a Model")
-	}
 	if string(redact([]byte("abc"), nil)) != "abc" || string(redact([]byte("a-sk-b"), []byte("sk"))) != "a-[redacted]-b" {
 		t.Fatal("redact")
 	}
