@@ -1,6 +1,6 @@
 ---
 title: "Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
