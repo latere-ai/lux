@@ -39,7 +39,7 @@ configuration, and the gate, on pkg v0.65.0.
 
 ## Design
 
-### Two doors
+### The two doors
 
 | Door | The platform runs | The platform writes | It gets |
 |---|---|---|---|
