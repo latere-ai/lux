@@ -475,6 +475,20 @@ wins over both the caller's headers and the Provider's static
 because the caller's network location is not the provider's business
 and a gateway that forwards it makes itself a tracking relay.
 
+The client's own two metrics are this spec's rows in
+[[019-observability]]'s table, written by the gateway's attempt rather
+than by the builder, because the attempt is the one place that knows
+the Provider, the duration, and the outcome together:
+`lux_upstream_requests_total`, a counter labelled `provider` and
+`status`, and `lux_upstream_duration_seconds`, a histogram labelled
+`provider` over that spec's duration buckets, one observation of each
+per target tried. `status` is a closed set of three: `timeout` for the
+Provider's own deadline, `error` for a transport failure, a 5xx, a
+refused credential, or a redirect, and `ok` for everything else, the
+upstream's refusal of the caller's own request and a caller that left
+included, so `LuxUpstreamErrorRateHigh` names a provider that is
+failing and not a caller that is. A nil registry records neither.
+
 Bodies are buffered where [[004-request-path]] says and nowhere else.
 A request body on a translated or model route is read whole by the
 door, within `LUX_MAX_BODY_BYTES`, because the door decodes it or reads
