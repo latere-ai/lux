@@ -249,7 +249,15 @@ func TestBearerAcceptance(t *testing.T) {
 	now := time.Now()
 
 	valid := rs.Mint(issuertest.Claims{Sub: "alice"})
-	tampered := valid[:len(valid)-2] + map[bool]string{true: "AA", false: "BB"}[strings.HasSuffix(valid, "BB")]
+	// The first character of the signature segment is flipped: every one
+	// of its six bits is signature, where the last character's low bits
+	// are base64url padding and a flip there can leave the bytes intact.
+	sigStart := strings.LastIndexByte(valid, '.') + 1
+	flipped := byte('A')
+	if valid[sigStart] == 'A' {
+		flipped = 'B'
+	}
+	tampered := valid[:sigStart] + string(flipped) + valid[sigStart+1:]
 
 	for _, tc := range []struct {
 		name    string
