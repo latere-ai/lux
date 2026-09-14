@@ -65,7 +65,7 @@ later.
 | [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | validated | 002, 005, 006, 012 |
 | [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | testing | 001, 004, 006, 007 |
 | [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | validated | 002, 015, 018 |
-| [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | in-progress | 003, 004, 011 |
+| [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | testing | 003, 004, 011 |
 | [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | dispatched | 002, 004, 009 |
 | [020](020-building-a-plane.md) | Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access | small | validated | 001, 004, 006, 018 |
 | [021](021-translation-through-llmdialect.md) | Translation through llmdialect: the codec glue leaves the gateway for an importable bridge | medium | drafted | 004, 018 |
