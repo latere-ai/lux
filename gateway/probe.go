@@ -243,3 +243,41 @@ func setIncludeUsage(b []byte) []byte {
 	}
 	return insertMember(b, vs, "include_usage", []byte("true"))
 }
+
+// removeMember deletes the member named key from the top-level object,
+// with the comma that joined it to its neighbours, and returns the body
+// unchanged when the member is absent or the body cannot be read.
+func removeMember(b []byte, key string) []byte {
+	vs, ve, ok, err := member(b, 0, key)
+	if err != nil || !ok {
+		return b
+	}
+	// Walk back from the value over the colon and the key string to the
+	// key's opening quote.
+	ks := vs - 1
+	for ks > 0 && (isSpace(b[ks]) || b[ks] == ':') {
+		ks--
+	}
+	for ks > 0 && b[ks] != '"' {
+		ks--
+	}
+	for ks > 0 {
+		ks--
+		if b[ks] == '"' {
+			break
+		}
+	}
+	start, end := ks, ve
+	if next := skipSpace(b, end); next < len(b) && b[next] == ',' {
+		end = next + 1
+	} else {
+		prev := start - 1
+		for prev > 0 && isSpace(b[prev]) {
+			prev--
+		}
+		if prev > 0 && b[prev] == ',' {
+			start = prev
+		}
+	}
+	return splice(b, start, end, nil)
+}
