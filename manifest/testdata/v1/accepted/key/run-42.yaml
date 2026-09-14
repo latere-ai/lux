@@ -1,0 +1,40 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: run-42
+  labels:
+    run: r_42
+spec:
+  models: ["gpt-5", "anthropic/*"]     # required, non-empty: exact names or globs
+  # value: eyJhbGciOi...               # optional, write-once, never returned: a value the caller supplies (007)
+  limits:
+    requestsPerMinute: 60              # 0 is none; default from configuration
+    tokensPerMinute: 100000
+    spend:                             # absent is no spend limit on the key itself
+      amount: "5"
+      currency: USD
+      window: 24h                      # a duration, month, or none
+  budget: team-research                # a Budget the caller may draw from
+  ttl: 168h                            # or expiresAt; from createdAt; absent is never
+  allowUnpriced: false                 # an unpriced Model under a spend limit or a Budget
+  passthrough: false                   # routes the gateway does not translate
+  disabled: false
+status:
+  id: key_01J9ZK2P7Q8R9S0T1U2V3W4X60
+  version: 1
+  owner: https://login.example.com|alice
+  prefix: lux_ab12cd34ef56             # the first twelve characters of a minted value; sup_ and eight hex for a supplied one
+  value: lux_ab12cd34ef56...           # in the response that created the key, and nowhere else; absent when the caller supplied the value
+  state: Active                        # Active | Disabled | Expired | Exhausted
+  selectors:                           # what each selector matched at resolve; the data plane matches again at request time
+    - {selector: gpt-5, matched: [gpt-5]}
+    - {selector: "anthropic/*", matched: [anthropic/claude-sonnet-4, anthropic/claude-opus-4]}
+  budget: {name: team-research, id: bud_01J9...}
+  usage:
+    window: {requests: 12, tokens: 48210, spend: "0.61", resetsAt: 2026-09-14T00:00:00Z}
+    total: {requests: 12, tokens: 48210, spend: "0.61"}
+  lastUsedAt: 2026-09-13T10:41:00Z
+  expiresAt: 2026-09-20T10:00:00Z
+  createdAt: 2026-09-13T10:00:00Z
+  updatedAt: 2026-09-13T10:00:00Z
+  warnings: []

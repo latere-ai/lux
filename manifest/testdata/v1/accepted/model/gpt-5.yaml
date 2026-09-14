@@ -1,0 +1,41 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: gpt-5
+  labels:
+    family: gpt
+spec:
+  targets:                             # required, at least one
+    - provider: openai                 # a Provider the caller may see
+      model: gpt-5                     # the upstream's name; default metadata.name
+      weight: 100                      # spread among healthy targets of one priority; 0 is fallback only
+      priority: 0                      # lower tried first; equal priorities share by weight
+    - provider: azure
+      model: gpt-5
+      weight: 0
+      priority: 1
+  fallback: onError                    # onError | never
+  pricing:                             # absent is unpriced
+    currency: USD
+    per: 1000000                       # tokens
+    input: "1.25"                      # decimal strings, at most 6 fraction digits
+    output: "10"
+    cachedInput: "0.125"
+    cacheWrite: "1.25"
+  modalities:
+    input: [text, image]
+    output: [text]
+  contextWindow: 400000
+  maxOutputTokens: 128000
+status:
+  id: mdl_01J9ZK2P7Q8R9S0T1U2V3W4X5Z
+  version: 1
+  owner: https://login.example.com|alice
+  source: declared                     # declared | discovered
+  available: true                      # at least one target's provider is not Unreachable
+  targets:
+    - {provider: openai, model: gpt-5, health: Healthy}
+    - {provider: azure, model: gpt-5, health: Unknown}
+  createdAt: 2026-09-13T10:00:00Z
+  updatedAt: 2026-09-13T10:00:00Z
+  warnings: []

@@ -1,0 +1,21 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: team-research
+spec:
+  amount: "500"                        # required
+  currency: USD
+  window: month                        # a duration, month, or none
+  hard: true                           # refuse at the limit; false records and continues
+status:
+  id: bud_01J9ZK2P7Q8R9S0T1U2V3W4X61
+  version: 2
+  owner: https://login.example.com|alice
+  state: Open                          # Open | Exhausted
+  spent: "123.45"
+  remaining: "376.55"
+  resetsAt: 2026-10-01T00:00:00Z
+  keys: 12                             # keys drawing from it now
+  createdAt: 2026-09-13T10:00:00Z
+  updatedAt: 2026-09-13T10:00:00Z
+  warnings: []
