@@ -6,6 +6,32 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Tunnelled runtimes: a model server on a developer's or an operator's
+  machine becomes a `Provider` with `spec.tunnel: true`, no `baseURL`
+  and no credential, and is reached through one outbound HTTP/2
+  connection its agent opens, so no inbound port, public name, or
+  certificate is needed. With `LUX_TUNNEL_ENABLED=1` the gateway serves
+  `POST /v1/providers/{id-or-name}/tunnel`, the session, which asks
+  `provider.tunnel` at connect and lives as long as the bearer that
+  opened it, refreshed by a heartbeat carrying a fresh token, and
+  `POST /v1/providers/{id-or-name}/tunnel/carry`, the carriers the
+  agent parks and the gateway hands requests to; a session ends with
+  `superseded`, `token_expired`, `provider_deleted`, or `draining`, each
+  telling the agent what to do next. Under the owner policy any
+  subject may create, update, delete, and tunnel a `Provider` it owns
+  with `tunnel: true`. Discovery lists the runtime's models at connect
+  and on the interval, health reads the registry, so a tunnel that is
+  gone is `Unreachable` and `status.tunnel.state` `Disconnected` within
+  `LUX_TUNNEL_REGISTRY_TTL` (default `30s`, between `5s` and `5m`), and
+  the doors, routing, limits, and metering treat a tunnelled Provider
+  as any other. With several replicas, `LUX_TUNNEL_FORWARD_ADDR` is the
+  address other replicas reach this one's internal listener at and
+  `LUX_TUNNEL_FORWARD_SECRET` the comma separated bearers of
+  `POST /internal/tunnel/{id}`, the first sent, every one accepted, so
+  a rotation is a rolling deploy; the address without the secret, or
+  either without the tunnel on, refuses to start. `lux_tunnel_sessions`
+  is the sessions a replica holds. The agent side is a package the
+  `lux serve` command of spec 014 wraps.
 - Usage and metering: every request through a door ends in one usage
   record, the gateway's record with the cost the Model's `pricing` gives
   its tokens, an integer count of micro-units and never a float: one
