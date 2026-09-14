@@ -1,6 +1,6 @@
 ---
 title: "Security and threat model: what Lux protects, against whom, and how"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -35,22 +35,24 @@ says a test is missing after that test lands.
 
 ## Current state
 
-Most of the data plane is built. The kinds and their validation
-([[003-manifest-contract]]), the doors and the pipeline
+Every mechanism the table names is built. The kinds and their
+validation ([[003-manifest-contract]]), the doors and the pipeline
 ([[004-request-path]]), the sealed credential and the pinned upstream
 client ([[005-providers]]), the verifier, the authorizer, and the owner
 policy ([[006-identity]]), the Key value, its cache, and the limits
 ([[007-keys-and-limits]]), routing and the circuit
-([[008-routing-and-models]]), and the store contract with its memory
-and file modes ([[010-state]]) are in the tree with their tests. The
-control plane is not: `/v1` ([[011-api]]), the events and the request
-log ([[012-request-log-and-events]]), the usage record
-([[009-usage-and-metering]]), the telemetry ([[019-observability]]),
-the tunnel ([[013-tunnelled-runtimes]]), the stubs and the tiers
-([[015-test-stubs-and-tiers]]), and the release
-([[017-release-and-installation]]) are dispatched or validated. So the
-threat table below is read twice: once for the rows the tree already
-proves, and once for the rows that name the spec that owes the test.
+([[008-routing-and-models]]), the usage record
+([[009-usage-and-metering]]), the three store modes ([[010-state]]),
+`/v1` ([[011-api]]), the events and the request log
+([[012-request-log-and-events]]), the tunnel
+([[013-tunnelled-runtimes]]), the stubs and the tiers
+([[015-test-stubs-and-tiers]]), the release and the hardened deploy
+manifests ([[017-release-and-installation]]), the telemetry
+([[019-observability]]), and the plane document
+([[020-building-a-plane]]) are all in the tree with their tests. So
+the threat table below is read once, against the tree, and every row
+names a test that is there; the one exception is the release row,
+whose control is made at a tag.
 
 ## Design
 
@@ -138,15 +140,15 @@ the data plane.
 
 | Threat | How the design answers it | Owner | Test | State |
 |---|---|---|---|---|
-| A subject changes a Provider's `baseURL` to a host it controls and collects the credential | `provider.update` is an authorizer decision with the old object in the `resource`; the new `baseURL` is held to the upstream host rule again at resolve; the credential is injected only toward the current `baseURL` and nowhere else, which the client's host pin enforces on every hop; a host change emits `provider.updated` with the changed path, so a sink sees it | [[003-manifest-contract]], [[005-providers]], [[006-identity]], [[011-api]], [[012-request-log-and-events]] | `TestUpstreamHostRule`, `TestHostPin`, `TestBaseURLChangeIsAuthorizedAndAudited` (not built, [[011-api]], [[012-request-log-and-events]]) | not built, 011, 012 |
+| A subject changes a Provider's `baseURL` to a host it controls and collects the credential | `provider.update` is an authorizer decision with the old object in the `resource`; the new `baseURL` is held to the upstream host rule again at resolve; the credential is injected only toward the current `baseURL` and nowhere else, which the client's host pin enforces on every hop; a host change emits `provider.updated` with the changed path, so a sink sees it | [[003-manifest-contract]], [[005-providers]], [[006-identity]], [[011-api]], [[012-request-log-and-events]] | `TestUpstreamHostRule`, `TestHostPin`, `TestBaseURLChangeIsAuthorizedAndAudited` | built |
 | A Key is used on the control plane to read or change desired state | a `/v1` bearer must be a JWS a listed issuer signed; a value beginning with `lux_` is not one and is `unauthenticated` | [[006-identity]] | `TestPlanesRefuseEachOthersCredential` | built |
 | An issuer token is used on a door, so a person's credential ends up in a workload | a door authenticates by hash alone: it hashes whatever credential it was presented and asks the store, and a value that hashes to no stored Key is `unauthenticated`, whatever the value looks like. No door verifies a signature, reads a claim, or dials an issuer, so a token is a Key only where an operator deliberately registered that exact string as a Key's `spec.value` ([[007-keys-and-limits]]), which is an operator's act on the control plane and not a caller's | [[004-request-path]], [[006-identity]], [[007-keys-and-limits]] | `TestDoorsTakeKeysOnly`, `TestSuppliedValueOpensTheDoor` | built |
-| A platform key registered as a Key's `spec.value` is a long-lived credential the gateway never expires | the gateway does not treat it as a token and reads no `exp` from it, so the bounds are the Key's own and are the same as any Key's: `spec.ttl` or `expiresAt`, `spec.disabled`, the spend limit, the Budget, `POST /v1/keys/{id}/rotate`, which replaces the hash with a minted `lux_` value and stops the supplied one, and the platform's own `DELETE`. `spec.value` is write-once, refused on an update, and returned by no read, list, event, record, or log line, so registering a credential does not publish it; `status.prefix` of a supplied value is `sup_` and eight hex characters of its hash, never its own first bytes | [[007-keys-and-limits]], [[011-api]] | `TestSuppliedKeyValue`, `TestSuppliedValuePrefix`, `TestRotateReplacesTheValue` (not built, [[011-api]]) | not built, 011 |
+| A platform key registered as a Key's `spec.value` is a long-lived credential the gateway never expires | the gateway does not treat it as a token and reads no `exp` from it, so the bounds are the Key's own and are the same as any Key's: `spec.ttl` or `expiresAt`, `spec.disabled`, the spend limit, the Budget, `POST /v1/keys/{id}/rotate`, which replaces the hash with a minted `lux_` value and stops the supplied one, and the platform's own `DELETE`. `spec.value` is write-once, refused on an update, and returned by no read, list, event, record, or log line, so registering a credential does not publish it; `status.prefix` of a supplied value is `sup_` and eight hex characters of its hash, never its own first bytes | [[007-keys-and-limits]], [[011-api]] | `TestSuppliedKeyValue`, `TestSuppliedValuePrefix`, `TestRotate`, `TestE2EPlatformCredentialAsKey` | built |
 | A Provider `baseURL` names a service inside the cluster, making the gateway an SSRF primitive | the upstream host rule refuses a single label, a loopback, link-local, or private address, `.local`, and `.internal` at resolve, and the client refuses a resolved private address at dial; both are off unless `LUX_UPSTREAM_ALLOW_PRIVATE` is set | [[003-manifest-contract]], [[005-providers]] | `TestUpstreamHostRule`, `TestPrivateAddressRefusedAtDial` | built |
 | A Provider names the gateway's own URL, so a request loops until something breaks | a `baseURL` whose host is `Options.PublicURL`'s is `invalid_field`, in both modes, private upstreams allowed or not | [[003-manifest-contract]] | `TestUpstreamHostRule` | built |
 | Prompts or completions reach a log, a metric, a span, an event, or a usage record | the record the pipeline hands the Recorder is scalars, enumerations, and two string maps with no `any` member, and [[009-usage-and-metering]]'s `metering.Record` is that with the cost added; no body, header value, or credential is ever a log argument; no identity is a span attribute; a label value is from a closed set or an object's name | [[004-request-path]], [[009-usage-and-metering]], [[012-request-log-and-events]], [[019-observability]] | `TestRecordFields`, `TestRecordCarriesNoContent`, `TestEventsCarryNoSecrets`, `TestTelemetryCarriesNoSecrets` | built |
 | A Key value is guessed | 240 bits from a cryptographically secure source; a negative cache bounded to `LUX_KEY_CACHE` keeps a flood off the store; `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` bounds the flood per client address on both planes | [[007-keys-and-limits]], [[011-api]] | `TestKeyValueShape`, `TestNegativeCache`, `TestRateLimits` | built |
-| A Key value leaks and is used by someone else | `POST /v1/keys/{id}/rotate` replaces the value with no grace period; `spec.disabled` refuses at once; `ttl` bounds the window; the spend limit and the Budget bound the loss in money; every refusal and every success is a record with the Key's prefix | [[007-keys-and-limits]], [[011-api]] | `TestKeyStates`, `TestSpendWindow`, `TestRotateReplacesTheValue` (not built, [[011-api]]) | not built, 011 |
+| A Key value leaks and is used by someone else | `POST /v1/keys/{id}/rotate` replaces the value with no grace period; `spec.disabled` refuses at once; `ttl` bounds the window; the spend limit and the Budget bound the loss in money; every refusal and every success is a record with the Key's prefix | [[007-keys-and-limits]], [[011-api]] | `TestKeyStates`, `TestSpendWindow`, `TestRotate`, `TestRevocationPropagates` | built |
 | A hash lookup leaks the stored value through timing | the gateway compares nothing: it hashes the presented value with SHA-256 and asks the store for that hash, and the store answers from an index. There is no comparison to time, and an index probe with a 240-bit input leaks nothing an attacker can walk | [[007-keys-and-limits]], [[010-state]] | `TestStoreConformance`, `TestKeyLookupComparesNothing` | built |
 | A replica is compromised | the blast radius is stated rather than denied: the KEK in that process's memory, the credentials it opened for requests in flight, the store connection, and the Key hashes, which are not values. It does not hold a Key value, a person's password, or a token it could mint. Recovery is `luxd rewrap` under a new KEK and a rotation of every Provider credential, which the deploy documentation names as the incident step | [[005-providers]], [[010-state]], [[017-release-and-installation]] | `TestRewrapUnderANewKEK` | built |
 | The authorizer is down or slow, and a caller hopes that means allow | every non-200, unparseable body, body without `allow`, TLS failure, refused connection, and timeout is `authorizer_unavailable`, 503, and never an allow; the one retry is the connection that failed before a response line arrived, never a non-200, a parse failure, or a timeout after the request was sent, so a slow endpoint is not multiplied; availability is not a readiness check, so the data plane keeps serving | [[006-identity]] | `TestAuthorizerUnavailability`, `TestDataPlaneServesWhileAuthorizerIsDown` | built |
@@ -159,7 +161,7 @@ the data plane.
 | A caller learns another caller's network location from a provider, or a provider learns a caller's | every `X-Forwarded-*` and `Forwarded` header from the caller is dropped and the gateway adds none; the record carries no caller address; no span carries one | [[004-request-path]], [[009-usage-and-metering]], [[019-observability]] | `TestNoForwardedHeaders`, `TestRecordFields`, `TestSpansCarryNoIdentity` | built |
 | A caller exhausts the gateway with size or volume | `LUX_MAX_BODY_BYTES` on a door and `LUX_MAX_MANIFEST_BYTES` on `/v1`, each refused before the body is read further; the YAML decoder's 1 MiB alias and 64 level nesting limits; a 64 KiB annotation cap; per-Key rate windows; per-subject and per-address rate limits; `LUX_UPSTREAM_TIMEOUT` and `Provider.spec.timeout`; `spec.concurrency` per Provider per replica | [[003-manifest-contract]], [[004-request-path]], [[007-keys-and-limits]], [[011-api]] | `TestBodyLimit`, `TestYAMLLimits`, `TestRequestBucket`, `TestConcurrencyLimitsInFlight`, `TestRateLimits` | built |
 | A caller spends more than an operator agreed to | a hard Budget and a Key spend limit refuse before any bytes reach a provider, from the store's counter plus the replica's own delta; the overshoot is bounded by a stated formula rather than assumed to be zero; an unpriced Model under either is `model_unpriced` unless `allowUnpriced` is set | [[007-keys-and-limits]], [[009-usage-and-metering]] | `TestOvershootBound`, `TestUnpricedRule`, `TestUnpricedModelRefusedUnderABudget` | built |
-| A forged event is delivered to the operator's sink | `Lux-Signature` is `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">` under `LUX_EVENTS_SECRET` over the exact bytes; a sink refuses a `t` more than five minutes from its own clock and compares in constant time, which the stub sink demonstrates | [[012-request-log-and-events]] | `TestSignature` | not built, 012 |
+| A forged event is delivered to the operator's sink | `Lux-Signature` is `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">` under `LUX_EVENTS_SECRET` over the exact bytes; a sink refuses a `t` more than five minutes from its own clock and compares in constant time, which the stub sink demonstrates | [[012-request-log-and-events]] | `TestSignature`, `TestSinkVerifiesSignature` | built |
 | A credential is readable in the store, a backup, or a dump | AES-256-GCM under a per-credential data key, the data key wrapped under a KEK held only in the environment, with the provider id and the credential version as additional data so a row copied onto another Provider fails to open; the store has no method that returns a plaintext and does not import the sealing package | [[005-providers]], [[010-state]] | `TestCredentialRowsAreSealed`, `TestSealedAdditionalData`, `TestStoreCannotDecrypt` | built |
 | A KEK leaks and every credential must be re-wrapped | `LUX_SECRETS_KEK` is a list, so the new key and the old are live together; `luxd rewrap` re-wraps every data key without touching a value ciphertext and is idempotent; `luxd serve` refuses to start when a stored credential opens under no listed key | [[005-providers]] | `TestRewrapUnderANewKEK`, `TestStartupRequiresAWorkingKEK` | built |
 | A credential is written to disk in the clear by the gateway | the gateway writes no local state; a credential is decoded into a field the JSON and YAML encoders skip, so no object carrying one can be serialized at all; in file mode a Provider names `credential.valueFrom.env` and the value is read from the environment and held in memory, never written | [[003-manifest-contract]], [[005-providers]], [[010-state]] | `TestCredentialValueNeverEncodes`, `TestWriteOnlyValuesNeverEncode`, `TestFileModeValuesFromEnvironment` | built |
@@ -168,18 +170,22 @@ the data plane.
 | An unauthorized machine attaches itself as a Provider | `provider.tunnel` is an authorizer decision with `tunnel: true` in the `resource`; under the owner policy a subject may attach a Provider it owns and may not declare one with a credential | [[006-identity]], [[013-tunnelled-runtimes]] | `TestTunnelOwnerPolicyException` | built |
 | A browser page is tricked into calling the API with an ambient credential | no `Access-Control-*` header is written on either plane and `OPTIONS` is `not_found`, so a browser cannot make a cross-origin call at all; neither credential is one a page should hold | [[011-api]] | `TestNoCORS` | built |
 | A manifest claims a name the gateway reserves | labels and annotations under `lux.latere.ai/` are `reserved_prefix`; a reserved header in `headers` is the same; a caller's `Lux-Request-Id` is ignored and replaced on both planes | [[003-manifest-contract]], [[011-api]] | `TestExclusiveMissingAndDuplicates`, `TestRequestIDOnEveryResponse` | built |
-| The request log archive becomes a corpus of prompts | an archived object is newline-delimited records of the one struct [[009-usage-and-metering]] defines, which has no body, header, prompt, or completion member and no `any` member that could hold one, so the canary test is over the same type the gateway writes; the bucket, its encryption, and its retention are the operator's, named by `LUX_S3_*` and by nothing this project ships | [[009-usage-and-metering]], [[012-request-log-and-events]] | `TestArchiveCarriesNoContent`, `TestRecordCarriesNoContent` | not built, 012 |
+| The request log archive becomes a corpus of prompts | an archived object is newline-delimited records of the one struct [[009-usage-and-metering]] defines, which has no body, header, prompt, or completion member and no `any` member that could hold one, so the canary test is over the same type the gateway writes; the bucket, its encryption, and its retention are the operator's, named by `LUX_S3_*` and by nothing this project ships | [[009-usage-and-metering]], [[012-request-log-and-events]] | `TestArchiveCarriesNoContent`, `TestRecordCarriesNoContent` | built |
 | A fresh installation with no authorizer is taken over by whoever presents a token first | with `LUX_AUTHORIZER_URL` unset the owner policy decides, and only a subject listed in `LUX_ADMIN_SUBJECTS` may create, update, or delete a `Provider` or a `Model`; with the list empty no subject may, so an installation with no bootstrap declares no upstream and holds no credential to steal. Every other subject may create a Key or a Budget it owns and read its own, which is a policy with tests and not an allow-all. With an authorizer set the variable is read and unused, so a bootstrap cannot outlive the endpoint that replaced it | [[006-identity]] | `TestOwnerPolicy`, `TestAdminSubjectsIgnoredUnderAnAuthorizer` | built |
 | The store connection is read on the wire, or a backup of it is taken | a credential is sealed before it reaches the store and opens only under a `LUX_SECRETS_KEK` the store never sees, so the wire and the backup carry ciphertext; a Key row carries a hash and not a value; desired state and the counters are readable, which is what the operator's own transport security on `LUX_DB_URL` and the egress policy in the hardening table below are for | [[005-providers]], [[010-state]] | `TestCredentialRowsAreSealed`, `TestStoreCannotDecrypt` | built |
-| A sandbox running untrusted code reads the credential it calls a model with | it holds neither: the platform applies a Key for the run, hands the value to the sandbox's egress gateway, and puts a per-sandbox placeholder in the sandbox, so reading the sandbox's environment, file system, and memory yields a placeholder and the Key is substituted outside it; the Key's `ttl`, its Budget, and its `models` bound what one run can do even if the egress gateway is the thing that leaks | [[007-keys-and-limits]], [[020-building-a-plane]] | `TestSandboxCompositionEndToEnd` (not built, [[020-building-a-plane]]) | not built, 020 |
-| The authorizer or the sink is the adversary | the authorizer is told the verified claims, the action, and the resource, and never a Key value, a credential, a request body, or a response body, so a hostile endpoint learns who called and not what they said; it can widen only within the schema's own ceilings, because its `limits` reach `Resolve` as `Limits` and cap rather than replace what a manifest may ask; it cannot mint or read a Key value, which only the API's own mint does. The sink receives the signed event bodies of [[012-request-log-and-events]], which carry no secret and no content. Beyond that, an endpoint the operator wrote is the operator's, as the list below says | [[006-identity]], [[012-request-log-and-events]] | `TestAuthorizerRequestShapes`, `TestAuthorizerTokenStaysOnItsEndpoint`, `TestAuthorizerLimitsReachTheirConsumers`, `TestEventsCarryNoSecrets` | not built, 012 |
-| A released image or binary is not what this repository built | multi-arch images and archives are signed with cosign keyless against the workflow identity, with an SPDX bill of materials and a build provenance attestation per image, so `gh attestation verify` answers for the image about to run; the module graph is checked for known vulnerabilities on every push; the `depcheck` allow list makes a new dependency a reviewed row | [[002-repository-scaffold]], [[017-release-and-installation]] | the `vuln` gate and the `depcheck` gate; the `release-verify` job (not built, [[017-release-and-installation]]) | not built, 017 |
+| A sandbox running untrusted code reads the credential it calls a model with | it holds neither: the platform applies a Key for the run, hands the value to the sandbox's egress gateway, and puts a per-sandbox placeholder in the sandbox, so reading the sandbox's environment, file system, and memory yields a placeholder and the Key is substituted outside it; the Key's `ttl`, its Budget, and its `models` bound what one run can do even if the egress gateway is the thing that leaks | [[007-keys-and-limits]], [[020-building-a-plane]] | `TestE2ESandboxComposition` | built |
+| The authorizer or the sink is the adversary | the authorizer is told the verified claims, the action, and the resource, and never a Key value, a credential, a request body, or a response body, so a hostile endpoint learns who called and not what they said; it can widen only within the schema's own ceilings, because its `limits` reach `Resolve` as `Limits` and cap rather than replace what a manifest may ask; it cannot mint or read a Key value, which only the API's own mint does. The sink receives the signed event bodies of [[012-request-log-and-events]], which carry no secret and no content. Beyond that, an endpoint the operator wrote is the operator's, as the list below says | [[006-identity]], [[012-request-log-and-events]] | `TestAuthorizerRequestShapes`, `TestAuthorizerTokenStaysOnItsEndpoint`, `TestAuthorizerLimitsReachTheirConsumers`, `TestEventsCarryNoSecrets` | built |
+| A released image or binary is not what this repository built | multi-arch images and archives are signed with cosign keyless against the workflow identity, with an SPDX bill of materials and a build provenance attestation per image, so `gh attestation verify` answers for the image about to run; the module graph is checked for known vulnerabilities on every push; the `depcheck` allow list makes a new dependency a reviewed row | [[002-repository-scaffold]], [[017-release-and-installation]] | the `vuln` gate and the `depcheck` gate; the release pipeline's `release-verify` job of [[017-release-and-installation]], which downloads every asset onto a clean runner and runs `cosign verify`, `cosign verify-blob`, and `gh attestation verify` | the two gates built; the signatures and the attestations exist at a tag, so the job is proven at the first tag, 017 |
 
 A row's State is `built` when every test it names is in the tree. A test
 that is not there yet carries, in parentheses after its name, the spec
 that owes it, and the row's State repeats those numbers. So a row fails
 two ways: when it names a test the tree does not hold without saying who
 owes it, and when it still marks a test as owed after that test lands.
+Every row is `built` as of 2026-09-14 but the release row, whose
+control is a signature made at a tag and verified by a job rather than
+by a test the gate can run; its State says so and names the spec that
+owns the job.
 
 ### What `SECURITY.md` promises
 
@@ -270,15 +276,18 @@ and changed where the tree disagreed with it.
   removed the fixed set only until 2026-09-14, when the headers the
   upstream's own `Connection` names joined it and
   `TestHopByHopHeadersAreRemovedBothWays` landed in `gateway`.
-- `TestBaseURLChangeIsAuthorizedAndAudited` is named by this spec and
-  by no other; it carries the specs that owe it, so the name is a
-  request rather than a claim. `TestHopByHopHeadersAreRemovedBothWays`
-  and `TestKeyLookupComparesNothing`, named the same way, landed the
-  same day in `gateway` and `internal/serve`.
+- `TestBaseURLChangeIsAuthorizedAndAudited` was named by this spec and
+  by no other, carrying the specs that owed it, so the name was a
+  request rather than a claim. It landed in `internal/api` once those
+  specs were built, as `TestHopByHopHeadersAreRemovedBothWays` and
+  `TestKeyLookupComparesNothing`, named the same way, had landed in
+  `gateway` and `internal/serve`.
 - `SECURITY.md` states its properties as a list, and each is a row of
   the promises table above with the threat it answers. The property
-  about one usage record per request left the document, because the
-  record is [[009-usage-and-metering]]'s and is not built.
+  about one usage record per request left the document, because one
+  record per request is invariant 7 of [[001-architecture]] rather than
+  a security property, and it is proven there by
+  [[009-usage-and-metering]]'s `TestEveryRequestHasOneUsageRecord`.
 
 ## Not in this spec
 
@@ -295,35 +304,81 @@ reporting address and the response times (`SECURITY.md`).
 | Every property `SECURITY.md` states is a row of the promises table, word for word, whose threat is a row of the threat table, and the document states no property that table does not answer | `TestSecurityDocumentMatchesTheModel`, `internal/arch`, reading both files | passing |
 | No Go file outside `internal/secrets` imports `crypto/aes` or `crypto/cipher`, so one package holds the envelope, its mode, and its additional data | `TestSealingIsOnePackage`, `internal/arch`, over every `.go` of the tree | passing |
 | Every `http.Client` built outside a test sets a `Transport`, and no file outside a test reaches `http.DefaultClient` or `http.DefaultTransport`, so no outbound call escapes the host pin, the private-address refusal, the TLS floor, and the instrumentation | `TestEveryHTTPClientIsPinned`, `internal/arch`, parsing every `.go` of the tree | passing |
-| A canary provider credential reaches a stub provider only in that Provider's own header, appears in the encoding of no stored object, and is `[redacted]` in the excerpt a failed probe leaves in `status.health` | [[005-providers]]'s `TestProviderCredentialNeverLeavesTheGateway` | passing at the unit tier; the sweep over an e2e run is not built, 015 |
-| A canary Key value appears in no read, list, event, record, log line, metric, or span, and a value written to a log argument is truncated to twelve characters | [[007-keys-and-limits]]'s `TestKeyValueNeverAppearsInLogs`, [[019-observability]]'s `TestLogRedactsKeyValues` | not built, 011, 015, 019 |
-| A canary prompt and completion appear in no record, event, archived object, log line, metric, or span | [[009-usage-and-metering]]'s `TestRecordCarriesNoContent`, [[019-observability]]'s `TestTelemetryCarriesNoSecrets` | not built, 009, 019 |
+| A canary provider credential reaches a stub provider only in that Provider's own header, appears in the encoding of no stored object, and is `[redacted]` in the excerpt a failed probe leaves in `status.health` | [[005-providers]]'s `TestProviderCredentialNeverLeavesTheGateway`, and over a run [[015-test-stubs-and-tiers]]'s `TestE2EProviderCredentialNeverLeavesTheGateway` | passing at the unit tier and over a run against the stubs |
+| A canary Key value appears in no read, list, event, record, log line, metric, or span, and a value written to a log argument is truncated to twelve characters | [[011-api]]'s `TestSecretsNeverInResponses` over the reads, the lists, the OpenAPI document, the journal, and the log; [[019-observability]]'s `TestLogRedactsKeyValues` for the truncation and `TestTelemetryCarriesNoSecrets` for the metrics and the spans; [[009-usage-and-metering]]'s `TestRecordFields` for the record | passing |
+| A canary prompt and completion appear in no record, event, archived object, log line, metric, or span | [[009-usage-and-metering]]'s `TestRecordCarriesNoContent`, [[012-request-log-and-events]]'s `TestArchiveCarriesNoContent` and `TestEventsCarryNoSecrets`, [[019-observability]]'s `TestTelemetryCarriesNoSecrets` | passing |
 | A Key on `/v1` and an issuer token on a door are each `unauthenticated`, on every route and every door | [[006-identity]]'s `TestPlanesRefuseEachOthersCredential`, [[004-request-path]]'s `TestDoorsTakeKeysOnly` | passing |
-| Changing a Provider's `baseURL` to another host is authorized, re-validated against the host rule, and emits `provider.updated` naming the path; the credential is sent to the new host only after the change is stored | `TestBaseURLChangeIsAuthorizedAndAudited`; the host rule and the pin are [[003-manifest-contract]]'s `TestUpstreamHostRule` and [[005-providers]]'s `TestHostPin` | not built, 011, 012 |
+| Changing a Provider's `baseURL` to another host is authorized, re-validated against the host rule, and emits `provider.updated` naming the path; the credential is sent to the new host only after the change is stored | `TestBaseURLChangeIsAuthorizedAndAudited`, `internal/api`; the host rule and the pin are [[003-manifest-contract]]'s `TestUpstreamHostRule` and [[005-providers]]'s `TestHostPin` | passing |
 | The key lookup path contains no comparison of a presented value against a stored one, and the store answers a hash by index | `TestKeyLookupComparesNothing`, reading the call graph from the door to the store; the index half is [[010-state]]'s `TestStoreConformance` | passing |
 | No route on either plane returns a body whose content type is `text/html`: an upstream `text/html` body reaches the caller as `application/octet-stream`, streamed or whole, and every door response carries `X-Content-Type-Options: nosniff` | [[004-request-path]]'s `TestNoHTMLIsEverServed` | passing |
 | Every hop-by-hop header, and every header named by `Connection`, is removed from the request toward the provider and from the response toward the caller | `TestHopByHopHeadersAreRemovedBothWays`; the request direction is [[004-request-path]]'s `TestSameDialectSameBytes` | passing |
 | With the authorizer refusing, timing out, and answering a body without `allow`, every control plane request is refused and every data plane request with a valid Key is served | [[006-identity]]'s `TestAuthorizerUnavailability`, [[004-request-path]]'s `TestDataPlaneServesWhileAuthorizerIsDown` | passing |
 | An object a subject may not see is `not_found` whether it exists or not, through every reference a manifest can name | [[006-identity]]'s `TestLookupDenyIsNotFound` | passing |
 | The rendered Deployment carries every property in the hardening table, and the container runs as a non-root user with a read-only root file system | [[017-release-and-installation]]'s `TestBaseIsConfined` | passing, `internal/arch`, over the rendered base |
-| A Key created with a JWT as `spec.value` opens a door by hash, is refused on `/v1`, is returned by no read, list, event, record, or log line, and stops working at rotate, expiry, disable, and delete | [[007-keys-and-limits]]'s `TestSuppliedKeyValue` and `TestKeyStates`, [[004-request-path]]'s `TestSuppliedValueOpensTheDoor` | passing at the door, the store, and the cache; rotate and delete are not built, 011 |
+| A Key created with a JWT as `spec.value` opens a door by hash, is refused on `/v1`, is returned by no read, list, event, record, or log line, and stops working at rotate, expiry, disable, and delete | [[007-keys-and-limits]]'s `TestSuppliedKeyValue` and `TestKeyStates`, [[004-request-path]]'s `TestSuppliedValueOpensTheDoor`, [[011-api]]'s `TestRotate` and `TestSuppliedValueIsNotEchoed`, and `TestRevocationPropagates` for the delete | passing |
 | No header on an outbound request came from the caller's body or query, and the headers the caller's own request contributes are the ones the removal list of [[004-request-path]] leaves | [[004-request-path]]'s `TestSameDialectSameBytes`, `TestCallerCredentialsNeverForwarded`, and `TestProviderHeadersAndCredentialSchemes` | passing |
-| A name, label value, and model string carrying newlines, ANSI escapes, and JSON control characters produce one escaped log line and one valid event body each, and add no field | `TestLogFieldsAreTheTable` with [[019-observability]]'s field tables | not built, 012, 019 |
+| A name, label value, and model string carrying newlines, ANSI escapes, and JSON control characters produce one escaped log line and one valid event body each, and add no field | `TestLogFieldsAreTheTable` with [[019-observability]]'s field tables, in `cmd/luxd` over a run's own lines | passing |
 | With `LUX_AUTHORIZER_URL` unset and `LUX_ADMIN_SUBJECTS` empty, no subject can apply a `Provider` or a `Model`; with an authorizer set the variable changes no decision | [[006-identity]]'s `TestOwnerPolicy` and `TestAdminSubjectsIgnoredUnderAnAuthorizer` | passing |
 
-The four criteria this spec owns pass, and so does every criterion whose
-mechanism is in the tree. What keeps the spec at `testing` is the
-criteria whose test belongs to a spec that is not built:
-[[009-usage-and-metering]] owes the record canary,
-[[011-api]] owes the rotate, route, and rate limit halves and the
-`TestKeyValueNeverAppearsInLogs` paths,
-[[012-request-log-and-events]] owes the event signature and the archive,
-[[013-tunnelled-runtimes]] owes the tunnel rows,
-[[015-test-stubs-and-tiers]] owes the e2e sweep of the canaries,
-[[017-release-and-installation]] owes the hardened Deployment,
-[[019-observability]] owes the log and span canaries, and
-[[020-building-a-plane]] owes the sandbox composition. Two tests owed by
-specs that were already complete landed as cross-spec fixes the same
-day: [[004-request-path]]'s `TestHopByHopHeadersAreRemovedBothWays`,
-with the response-direction fix it needed, and
-[[007-keys-and-limits]]'s `TestKeyLookupComparesNothing`.
+Every criterion above passes. The four this spec owns are
+`internal/arch`'s, and the rest are the owning specs', each named with
+the test that proves it: the record canary is
+[[009-usage-and-metering]]'s, the rotate and the responses
+[[011-api]]'s, the signature and the archive
+[[012-request-log-and-events]]'s, the tunnel rows
+[[013-tunnelled-runtimes]]'s, the e2e sweep of the credential canary
+[[015-test-stubs-and-tiers]]'s, the hardened Deployment
+[[017-release-and-installation]]'s, the log and span canaries
+[[019-observability]]'s, and the sandbox composition
+[[020-building-a-plane]]'s. Three tests this spec named and no other
+landed where the spec that owns the mechanism lives:
+[[004-request-path]]'s `TestHopByHopHeadersAreRemovedBothWays`, with
+the response-direction fix it needed, [[007-keys-and-limits]]'s
+`TestKeyLookupComparesNothing`, and `TestBaseURLChangeIsAuthorizedAndAudited`
+in `internal/api`, which holds the update's decision to the stored
+object, the host rule to the new `baseURL`, and the `provider.updated`
+row to the one path that moved.
+
+## Outcome
+
+2026-09-14. Built as four tests in `internal/arch` and a table read
+against the tree: `TestThreatTableIsGrounded`, one sub-test per row of
+the threat table; `TestSecurityDocumentMatchesTheModel`, which holds
+`SECURITY.md`'s property list and the promises table to each other word
+for word; `TestSealingIsOnePackage`, which keeps `crypto/aes` and
+`crypto/cipher` inside `internal/secrets`; and
+`TestEveryHTTPClientIsPinned`, which refuses an `http.Client` without a
+`Transport` and any reach for `http.DefaultClient`. The mechanisms are
+each their own spec's; what this spec adds is that no row of the table
+is a claim without a test, and that the test fails in both directions,
+on a row naming a test the tree does not hold and on a row still
+marking a test as owed after it lands.
+
+Every row of the threat table is `built` and every criterion above
+passes. The last markers went as their specs closed: the rotate rows
+name [[011-api]]'s `TestRotate`, the Key revocation
+`TestRevocationPropagates`, the event signature `TestSignature` beside
+the stub sink's `TestSinkVerifiesSignature`, the archive
+`TestArchiveCarriesNoContent`, the sandbox
+[[020-building-a-plane]]'s `TestE2ESandboxComposition` and the platform
+key `TestE2EPlatformCredentialAsKey`, and the credential canary's e2e
+half [[015-test-stubs-and-tiers]]'s
+`TestE2EProviderCredentialNeverLeavesTheGateway`.
+
+Two things the close settled, each carried above:
+
+- `TestBaseURLChangeIsAuthorizedAndAudited`, the one test this spec
+  named that no other spec owned, landed in `internal/api`: the update
+  is decided with the object as it was stored, so an authorizer sees
+  the host the Provider is being moved away from; a private address is
+  `invalid_field` at `spec.baseURL` on an update as on a create, which
+  is the host rule running again at resolve; and the change raises one
+  `provider.updated` naming `spec.baseURL`, with no payload carrying
+  the credential value.
+- The release row is the one row whose control no test in the tree can
+  run: cosign signatures and the two attestations exist at a tag, and
+  what verifies them is [[017-release-and-installation]]'s
+  `release-verify` job from a clean runner. The row says so rather than
+  claiming `built`, and the guard admits it because the row's State
+  names the spec that owns the job. A row like it in a later spec is
+  written the same way.
