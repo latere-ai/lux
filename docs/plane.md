@@ -131,6 +131,8 @@ import (
 	"syscall"
 	"time"
 
+	"latere.ai/x/pkg/authz"
+
 	"latere.ai/x/lux/authorizer"
 )
 
@@ -155,9 +157,10 @@ type resp struct {
 	Filter map[string]any `json:"filter,omitempty"`
 }
 
-// probeID is authz.ProbeID: every authorizer denies it, so luxd check
-// can tell an endpoint that reads the request from one that does not.
-const probeID = "00000000-0000-0000-0000-000000000001"
+// probeID is the reserved id every authorizer denies, so luxd check can
+// tell an endpoint that reads the request from one that does not. It is
+// the contract's own value rather than a copy of it.
+const probeID = authz.ProbeID
 
 // spendCap is the ceiling one Key may ask for, by the plan the
 // platform's issuer stamps into the token. An administrator is under no

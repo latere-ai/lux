@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/tunnel"
 	"latere.ai/x/lux/internal/tunnel/wire"
@@ -54,8 +53,7 @@ func (c *call) tunnelSession(ctx context.Context, ref string) *Error {
 	if err != nil {
 		return err
 	}
-	res, _ := authorizer.ResourceFor(authorizer.ActionProviderTunnel, p)
-	if _, err := c.authorize(ctx, authorizer.ActionProviderTunnel, res); err != nil {
+	if err := c.authorizeTunnel(ctx, p); err != nil {
 		return err
 	}
 	if e := c.h.o.Tunnel.ServeSession(c.w, c.r, tunnel.SessionRequest{

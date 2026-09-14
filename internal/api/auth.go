@@ -14,6 +14,7 @@ import (
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/serve"
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // authenticate is the bearer through internal/auth and the per-subject
@@ -71,6 +72,16 @@ func (c *call) authorize(ctx context.Context, action string, res authz.Resource)
 	}
 	c.h.grants.put(c.caller.Subject, d)
 	return d, nil
+}
+
+// authorizeTunnel asks provider.tunnel for one Provider, whose resource
+// is the object shape spec 006's table names, the same one a read is
+// asked with. It sits here beside the other asks so one file names the
+// vocabulary for this package.
+func (c *call) authorizeTunnel(ctx context.Context, p *v1.Provider) *Error {
+	res, _ := authorizer.ResourceFor(authorizer.ActionProviderTunnel, p)
+	_, err := c.authorize(ctx, authorizer.ActionProviderTunnel, res)
+	return err
 }
 
 // lookup is the Lookup Resolve asks for this request: the store's
