@@ -61,7 +61,7 @@ later.
 | [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | complete | 003, 004, 006, 007, 010 |
 | [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | dispatched | 006, 009, 010 |
 | [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | dispatched | 004, 005 |
-| [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | in-progress | 003, 011 |
+| [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | testing | 003, 011 |
 | [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | validated | 002, 005, 006, 012 |
 | [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | testing | 001, 004, 006, 007 |
 | [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | validated | 002, 015, 018 |
