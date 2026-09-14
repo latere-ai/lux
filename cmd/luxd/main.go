@@ -40,8 +40,10 @@ import (
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
+	"latere.ai/x/lux/internal/tunnel"
 	"latere.ai/x/lux/internal/version"
 	"latere.ai/x/lux/manifest"
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // Shutdown timing of spec 002: readiness answers 503 at once, the drain
@@ -198,8 +200,23 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// metering flushes run for the life of the process and stop with it,
 	// after the listeners have drained.
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
-	discovery := serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
-	healthJob := serve.NewHealth(serve.HealthOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.HealthInterval, Logger: logger})
+	// The tunnel of spec 013 stands in front of the clients when it is
+	// on: a tunnelled Provider is answered from its session and every
+	// other Provider is the clients' own, so the doors and the jobs reach
+	// both through one seam. A session that opens lists the Provider's
+	// models and ticks health at once, so a laptop's models are callable
+	// as soon as it attaches rather than at the next interval.
+	var discovery *serve.Discovery
+	var healthJob *serve.Health
+	clientSource, revoker, tun, notice := composeTunnel(cfg, st, identity, clients, reg, logger, func(ctx context.Context, p *v1.Provider) {
+		if p.Spec.Discovery.Mode == v1.DiscoveryAuto {
+			discovery.List(ctx, p)
+		}
+		healthJob.Tick(ctx)
+	})
+	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	discovery = serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
+	healthJob = serve.NewHealth(serve.HealthOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.HealthInterval, TunnelTTL: cfg.TunnelRegistryTTL, Logger: logger})
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	var jobs sync.WaitGroup
 	jobs.Go(func() { discovery.Run(jobsCtx) })
@@ -244,7 +261,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Router:       gateway.NewTargetRouter(gateway.RouterOptions{Catalog: catalog, Health: healthJob.View, Metrics: reg}),
 		Limiter:      limiter,
 		Recorder:     recorder,
-		Clients:      clients,
+		Clients:      clientSource,
 		Health:       healthJob,
 		Metrics:      reg,
 		Version:      version.Version,
@@ -265,8 +282,10 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		MaxManifestBytes:      cfg.MaxManifestBytes,
 		Defaults:              defaults,
 		AllowPrivateUpstreams: cfg.UpstreamAllowPrivate,
+		TunnelEnabled:         tun != nil,
 		Keys:                  cfg.SecretsKEK,
-		Clients:               clients,
+		Clients:               revoker,
+		Tunnel:                tunnelRoutes(tun),
 		ReadOnlyDir:           cfg.ManifestDir,
 		Archive:               archive,
 		Metrics:               reg,
@@ -301,6 +320,12 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// file mode.
 	internal := http.NewServeMux()
 	internal.Handle("/", probes)
+	// The forward route of spec 013 is on the internal listener alone,
+	// and only when this replica advertises an address other replicas
+	// reach it at; without one, no replica would forward here.
+	if tun != nil && cfg.TunnelForwardAddr != "" {
+		internal.Handle(tunnel.ForwardPattern, tun.Forward())
+	}
 	if files == nil {
 		planes.Handle("/v1/", control)
 		_, _ = fmt.Fprintf(stdout, "luxd: control plane at %s/v1 on the public listener\n", cfg.PublicURL)
@@ -340,6 +365,17 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		{Handler: public, ReadHeaderTimeout: 10 * time.Second},
 		{Handler: internal, ReadHeaderTimeout: 10 * time.Second},
 	}
+	if tun != nil {
+		// The tunnel needs HTTP/2, and a plaintext listener behind an
+		// ingress that terminates TLS, or on a developer's machine, gets
+		// it unencrypted: the session and the carriers on the public
+		// listener, the forward hop on the internal one (spec 013).
+		for _, s := range servers {
+			s.Protocols = new(http.Protocols)
+			s.Protocols.SetHTTP1(true)
+			s.Protocols.SetUnencryptedHTTP2(true)
+		}
+	}
 	errc := make(chan error, len(servers))
 	for i, ln := range []net.Listener{publicLn, internalLn} {
 		go func(s *http.Server, ln net.Listener) {
@@ -358,6 +394,11 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// keeps the request's values and outlives its cancellation.
 	close(draining)
 	stopping := context.WithoutCancel(ctx)
+	if tun != nil {
+		// Every agent is told to reconnect at once and lands on another
+		// replica, before the listeners close under it.
+		tun.Drain(stopping)
+	}
 	sleepCtx(stopping, drainDelay)
 	shutdownCtx, cancel := context.WithTimeout(stopping, gracePeriod)
 	defer cancel()
@@ -416,6 +457,49 @@ func openCredentials(ctx context.Context, cfg config.Config, st store.Store, fil
 	}
 	return &serve.StoreCredentials{Credentials: st.Credentials(), Keys: cfg.SecretsKEK},
 		fmt.Sprintf("credentials: %d key(s) in LUX_SECRETS_KEK, %d stored row(s) open under them", cfg.SecretsKEK.Len(), n), nil
+}
+
+// composeTunnel is the wiring of spec 013. With LUX_TUNNEL_ENABLED in
+// server mode the tunnel Gateway stands in front of spec 005's clients
+// and is the client source the doors and the jobs dial through, the
+// revoker the API tells of a deleted Provider, and the handler behind
+// the tunnel routes and the forward listener; otherwise the clients
+// serve both seams and there is no Gateway. In the file mode there is
+// no issuer to verify a session's bearer, so the tunnel stays off. The
+// returned notice is the start-up line: it names the forward address or
+// says tunnelled Providers serve on the holding replica alone, which an
+// installation past one replica reads as the cause of an intermittent
+// provider_unavailable.
+func composeTunnel(cfg config.Config, st store.Store, identity *auth.Auth, clients *gateway.Clients, reg *metrics.Registry, logger *slog.Logger, onConnect func(context.Context, *v1.Provider)) (gateway.ClientSource, api.ClientRevoker, *tunnel.Gateway, string) {
+	switch {
+	case !cfg.TunnelEnabled:
+		return clients, clients, nil, "tunnel: off; LUX_TUNNEL_ENABLED=1 serves the tunnel routes and admits spec.tunnel"
+	case identity.Verifier == nil:
+		return clients, clients, nil, "tunnel: off in the file mode, which has no issuer to verify a session's bearer"
+	}
+	tun := tunnel.New(tunnel.Options{
+		Store: st, Verifier: identity.Verifier, Clients: clients,
+		Replica: cfg.TunnelForwardAddr, Secrets: cfg.TunnelForwardSecrets, TTL: cfg.TunnelRegistryTTL,
+		Version: version.Version, Metrics: reg, Logger: logger, OnConnect: onConnect,
+	})
+	notice := fmt.Sprintf("tunnel: on, registry TTL %s", cfg.TunnelRegistryTTL)
+	if cfg.TunnelForwardAddr == "" {
+		notice += "; tunnelled Providers are served by the holding replica only, and an installation with more than one replica sets LUX_TUNNEL_FORWARD_ADDR"
+		if cfg.DBURL != "" {
+			notice = "WARN " + notice
+		}
+		return tun, tun, tun, notice
+	}
+	return tun, tun, tun, notice + fmt.Sprintf("; other replicas forward to this one at %s with %d secret(s)", cfg.TunnelForwardAddr, len(cfg.TunnelForwardSecrets))
+}
+
+// tunnelRoutes is the Gateway as the API's option, or a nil interface
+// when there is none, which the API reads as the tunnel off.
+func tunnelRoutes(tun *tunnel.Gateway) api.TunnelRoutes {
+	if tun == nil {
+		return nil
+	}
+	return tun
 }
 
 // rewrapCmd is the rewrap role: it reads LUX_SECRETS_KEK and LUX_DB_URL

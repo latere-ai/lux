@@ -155,6 +155,21 @@ type Config struct {
 	S3AccessKey string
 	S3SecretKey string
 	S3Prefix    string
+
+	// The tunnel variables of spec 013.
+
+	// TunnelEnabled serves the tunnel routes and admits spec.tunnel.
+	TunnelEnabled bool
+	// TunnelRegistryTTL is the liveness window of a registry row; the
+	// agent heartbeats at a third of it.
+	TunnelRegistryTTL time.Duration
+	// TunnelForwardAddr is the host:port other replicas reach this one's
+	// internal listener at; empty serves a tunnelled Provider on the
+	// holding replica only.
+	TunnelForwardAddr string
+	// TunnelForwardSecrets are the bearers of the forward route: the
+	// first is sent, every one is accepted. Never echoed.
+	TunnelForwardSecrets []string
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -211,6 +226,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadMetering(getenv)...)
 	problems = append(problems, c.loadAPI(getenv)...)
 	problems = append(problems, c.loadEvents(getenv)...)
+	problems = append(problems, c.loadTunnel(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))

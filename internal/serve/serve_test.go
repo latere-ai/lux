@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -96,6 +97,50 @@ func (s *stub) all() []*http.Request {
 	defer s.mu.Unlock()
 	return append([]*http.Request(nil), s.requests...)
 }
+
+// lastHeader is a header of the last request the stub saw, "" when none.
+func (s *stub) lastHeader(name string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.requests) == 0 {
+		return ""
+	}
+	return s.requests[len(s.requests)-1].Header.Get(name)
+}
+
+// tunnelClients stands in for spec 013's carrier transport in front of
+// spec 005's clients: a tunnelled Provider, which has no baseURL, gets a
+// client that sends its host-less requests to the stub; every other
+// Provider is the inner source's.
+type tunnelClients struct {
+	url   string
+	inner clientSource
+}
+
+func (c tunnelClients) Client(ctx context.Context, p *v1.Provider) (*http.Client, error) {
+	if !p.Spec.Tunnel {
+		return c.inner.Client(ctx, p)
+	}
+	return &http.Client{Transport: rewriteHost(c.url)}, nil
+}
+
+// rewriteHost is a transport that points every request at base.
+type rewriteHost string
+
+func (base rewriteHost) RoundTrip(req *http.Request) (*http.Response, error) {
+	u, err := url.Parse(string(base))
+	if err != nil {
+		return nil, err
+	}
+	out := req.Clone(req.Context())
+	out.URL.Scheme, out.URL.Host = u.Scheme, u.Host
+	return http.DefaultTransport.RoundTrip(out)
+}
+
+// noCredentials is the credential source of a tunnelled Provider: none.
+type noCredentials struct{}
+
+func (noCredentials) Credential(context.Context, string) ([]byte, error) { return nil, nil }
 
 // openaiList is the openai and lux list shape for the names.
 func openaiList(names ...string) string {

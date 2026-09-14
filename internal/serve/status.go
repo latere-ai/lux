@@ -55,6 +55,20 @@ func (m *machine) step(failed bool) bool {
 	return m.state != prev
 }
 
+// force moves the machine to state without counting, the registry's
+// verdict on a tunnelled Provider (spec 013), and reports whether the
+// state changed. Unreachable carries the count that would have reached
+// it, so the next success returns to Healthy as after any run of
+// failures.
+func (m *machine) force(state v1.HealthState) bool {
+	prev := m.state
+	m.state = state
+	if state == v1.HealthUnreachable {
+		m.failures = unreachableAfter
+	}
+	return m.state != prev
+}
+
 // rank orders the states so worse can pick: Unknown carries no
 // information and loses to any other state.
 func rank(s v1.HealthState) int {

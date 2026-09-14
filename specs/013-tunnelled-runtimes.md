@@ -1,6 +1,6 @@
 ---
 title: "Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel"
-status: dispatched
+status: complete
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -46,9 +46,20 @@ are [[004-request-path]]'s.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+The gateway side is built as `internal/tunnel`, the wire format as
+`internal/tunnel/wire`, and the agent side as `internal/tunnel/agent`,
+which the `lux serve` command of [[014-agent-client]] wraps. The
+manifest field and its rules are [[003-manifest-contract]]'s and were
+in the tree; the registry is [[010-state]]'s and was in the tree; the
+owner-policy exception and the `provider.tunnel` action are
+[[006-identity]]'s and were in the tree. This spec added the four
+configuration rows, the session and carrier routes to [[011-api]]'s
+surface, the registry as a source of health and the `status.tunnel`
+writer to [[005-providers]]'s jobs, and the wiring in `cmd/luxd`. The
+paragraphs below say what was built where it differs from what was
+first written; the acceptance table says which rows pass here and which
+belong to [[014-agent-client]], [[015-test-stubs-and-tiers]], and
+[[010-state]]'s Postgres phase.
 
 ## Design
 
@@ -196,7 +207,15 @@ fresh token on the first heartbeat after its token source yields one
 reason), and a session runs for as long as the agent can obtain tokens.
 
 `LUX_TUNNEL_ENABLED` unset makes all three routes `not_found`, the
-answer [[011-api]] gives any path outside the route table.
+answer [[011-api]] gives any path outside the route table. So is a
+session for a Provider whose `tunnel` is `false`: the tunnel routes are
+a tunnelled Provider's, and a dialled one has none, with the detail
+saying so. The carrier route is outside the subject's request bucket of
+[[011-api]], because one carrier is spent per proxied request and the
+bucket is the control plane's; the session route is inside it like any
+other. A carrier loads no object: the path's id or name is matched
+against the sessions this replica holds, so a carrier costs the store
+nothing.
 
 ### The session and the carriers
 
@@ -252,21 +271,48 @@ has none; `provider_deleted` means the object is gone, so it stops;
 once and lands on another.
 
 A carrier is one `POST` the agent opens and the gateway holds until it
-has work. The framing is one line each way, then bytes to the end of the
-stream, so nothing is buffered and no length is known in advance. A
-parked carrier receives one empty line every `ttl/3` until it is given
-work, so an ingress idle timeout between the agent and the gateway does
-not cut it; the agent skips empty lines before the header line.
+has work. The framing is one line each way, then the body in HTTP
+chunked encoding, so nothing is buffered and no length is known in
+advance. The body is chunked rather than run to the end of the stream
+because the end has to be marked in band: an HTTP/2 server cannot end
+its response while it still reads the request, so the gateway cannot
+half-close its direction after the request body, and the last chunk is
+what tells the agent the body is over; the encoding also tells a body
+that finished from a stream that broke, which a stream of model tokens
+cannot tell on its own. A parked carrier receives one empty line every
+`ttl/3` until it is given work, so an ingress idle timeout between the
+agent and the gateway does not cut it; the gateway commits the
+carrier's 200 with the first such line, which is how the agent knows it
+is parked, and the agent skips empty lines before the header line.
 
 ```
 gateway to agent, on the carrier's response body:
 {"id":"req_01J9...","method":"POST","path":"/chat/completions","query":"","headers":{"content-type":["application/json"]},"stream":true}
-<the request body, streamed>
+<the request body, in chunks, ending with the zero-length chunk>
 
 agent to gateway, on the carrier's request body:
 {"status":200,"headers":{"content-type":["text/event-stream"]}}
-<the response body, streamed>
+<the response body, in chunks, ending with the zero-length chunk>
+
+agent to gateway, when the runtime could not be reached:
+{"error":"dial tcp the runtime: connection refused"}
 ```
+
+The response line's `error` member is the agent's word that it could
+not send the request to the runtime at all; the gateway reports it as
+the transport failure it is, `provider_unavailable`, retryable, counted
+against the Provider's health, with the runtime's address replaced by
+the words `the runtime`, so nothing that leaves the agent's machine
+names an address on it. `stream` is advisory: the agent flushes every
+chunk whatever it says. The header set the gateway writes is the
+request's, plus `User-Agent` `luxd/<version>`, `Lux-Request-Id`, and
+`Content-Length` when the length is known; the agent puts
+`Content-Length` back on the request toward the runtime and sends a
+`GET` without a body rather than with an empty chunked one, which some
+runtimes refuse. When the agent's carrier is spent it ends its request
+body, then drains the gateway's response to its end before closing it,
+because closing a stream under a caller still reading its answer would
+reset it.
 
 `path` is the dialect's operation path under the agent's `--upstream`,
 which the agent joins to its own base URL; the gateway never learns the
@@ -326,10 +372,17 @@ type Tunnel struct {
 
 The row lapses at `ExpiresAt`, which is the last heartbeat plus
 `LUX_TUNNEL_REGISTRY_TTL` (default `30s`). The replica holding a session
-renews at a third of the TTL while the agent's heartbeats are fresh, and
-unregisters at once when the session ends for any reason, so a clean
-disconnect is visible immediately and a replica that died is visible
-within the TTL.
+renews on every heartbeat the agent sends, which is every third of the
+TTL, and unregisters at once when the session ends for any reason, so a
+clean disconnect is visible immediately and a replica that died is
+visible within the TTL. A `Heartbeat` that comes back `false` is read
+twice: when `Get` still finds a row, another session holds it and this
+one is closed with `superseded`; when it finds none, the row lapsed and
+was removed behind a live session, which is registered again, because
+the session is alive and the row is what says so. An agent whose
+heartbeats stop for a whole TTL while its stream stays open is dropped
+by the holder all the same, without a close frame, since its stream is
+dead whatever the socket says.
 
 ### Health and liveness
 
@@ -347,15 +400,40 @@ of [[005-providers]] and only for a tunnelled Provider:
 
 `status.tunnel.state` is `Connected` while a row is live and
 `Disconnected` otherwise; the replica holding the `health` lease writes
-it, as it writes `status.health`. Loss and return of a tunnel raise
+it on its tick, as it writes `status.health`, from the row: `session`,
+`subject`, `agent`, `since` the row's connect time, and
+`lastHeartbeatAt` the row's expiry less the TTL, which is why the
+health job is told `LUX_TUNNEL_REGISTRY_TTL`. `Disconnected` carries
+`since` the tick that found no row. Loss and return of a tunnel raise
 `provider.unreachable` and `provider.healthy`
 ([[012-request-log-and-events]]); this spec adds no event type.
+
+Two refinements make the return of a tunnel prompt and complete. The
+replica that accepts a session ticks its health job at once after the
+ready frame, so when it also holds the health lease, which the
+single-replica memory store guarantees, the Provider is `Connected` and
+selectable the moment the agent attaches rather than at the next
+interval; on another replica the next interval does it. And a live row
+folds one success into the counter when the Provider was `Unreachable`
+or `Unknown` and the mode is not `probe`: a `passive` Provider that left
+selection would otherwise never observe the success that brings it
+back, and a `none` Provider has no signal but the row, so under `none`
+a tunnelled Provider reads `Healthy` while its row is live where a
+dialled one reads `Unknown`. Under `probe` the probe alone decides, so a
+live row over a runtime that stopped stays `Unreachable` until the
+runtime answers, and one that answers and then stops is caught by the
+thresholds while `status.tunnel` stays `Connected`. [[005-providers]]'s
+health table wants this refinement in its `tunnel: true` row.
 
 ### Discovery, routing, and metering
 
 Nothing is special. Discovery calls the dialect's models route
 ([[005-providers]]) over a carrier on the discovery interval, and once
-at connect, and declares one Model per surviving upstream name,
+at connect, when the replica that accepted the session lists the
+Provider itself after the ready frame, whether or not it holds the
+discovery lease, because the list is one transaction with versioned
+writes and a second lister loses nothing but a conflict it logs, and
+declares one Model per surviving upstream name,
 `my-laptop/llama3.1` and its siblings, under the Provider's owner,
 through the same `manifest.Resolve`. The runtime is therefore expected
 to serve its dialect's models route at `--upstream`: Ollama, vLLM,
@@ -453,9 +531,24 @@ The rules that keep it bounded:
   otherwise let anything on the Pod network reach a runtime. The
   variable is a comma separated list, shaped like `LUX_SECRETS_KEK`
   ([[005-providers]]): a replica sends the first entry and accepts any
-  entry, so a rotation is a rolling deploy with `new,old`, then one
-  with `new`, and no forward fails in between. Every replica of one
-  installation carries the same list.
+  entry, and a holder that answers `unauthenticated` is asked again
+  with each next entry, so a rotation is a rolling deploy with
+  `new,old`, then one with `new`, and no forward fails in between: a
+  replica still on `old` accepts the retry, and a replica already on
+  `new,old` accepts `old` sent first. Every replica of one installation
+  carries the same list.
+- The hop is sequenced so a refused secret costs nothing but a round
+  trip. The forwarder sends the header line first and waits for the
+  holder's answer; the holder checks the secret and finds the session
+  before it reads a byte, refuses with the envelope when either fails,
+  and otherwise commits its 200 once it has read the header line, which
+  is the forwarder's signal to stream the body. A failure after the
+  commit, a session that closed or no carrier before the forwarder's
+  deadline, travels in band as the response line's `error` member,
+  because the holder learns no deadline from the forwarder and cannot
+  answer with a status once the 200 is out. The forwarder speaks
+  unencrypted HTTP/2 to the holder's internal listener, which serves
+  it, because the hop streams both ways as the carrier does.
 - `LUX_TUNNEL_ENABLED` set without `LUX_TUNNEL_FORWARD_ADDR` is not a
   start-up failure, because the memory store is single-replica by
   construction ([[010-state]]). It is a start-up line and a `luxd check`
@@ -546,7 +639,20 @@ the rest of the design depends on.
 
 [[002-repository-scaffold]] owns the variable table and carries all
 four with this spec as their owner; the meanings above are the ones its
-rows point to.
+rows point to. Two rules beyond the table, both start-up failures
+naming the variables: `LUX_TUNNEL_FORWARD_SECRET` set without
+`LUX_TUNNEL_FORWARD_ADDR`, because the secret locks the route the
+address advertises, and either forward variable set without
+`LUX_TUNNEL_ENABLED`, because the forward route serves the tunnel. A
+secret entry below 32 bytes is named by position, never by value. In
+the file mode the tunnel stays off whatever `LUX_TUNNEL_ENABLED` says,
+because there is no issuer to verify a session's bearer against, and
+the start-up line says so.
+
+The start-up line names the mode: `tunnel: off` with the variable that
+turns it on, or `tunnel: on` with the TTL and either the forward
+address and how many secrets lock it, or the statement that tunnelled
+Providers are served by the holding replica only.
 
 ### `luxd check`
 
@@ -558,14 +664,47 @@ One row, beside the rows [[005-providers]] and [[010-state]] own:
 
 ### The packages
 
-`internal/tunnel` holds both halves and the wire types: the gateway
-side, which is the three handlers, the registry client, the carrier
-pool per session, and the `http.RoundTripper` that `gateway`'s
-`ClientSource` hands back for a tunnelled Provider; and the agent side,
-which is `lux serve`'s loop. It imports the standard library and
-`latere.ai/x/pkg/httpjson` and nothing else, so `./cmd/lux` importing
-its agent half leaves that binary's build list what
-[[014-agent-client]] says it is.
+Three packages, because the gateway half reaches the store, the
+verifier, and spec 005's clients, and the agent half must not.
+
+`internal/tunnel/wire` is the protocol as bytes: the frames, the two
+header lines, the chunked body, and the flushing writer. It imports the
+standard library alone.
+
+`internal/tunnel` is the gateway side: `Gateway`, built by `New` over
+the store, the verifier, spec 005's `*gateway.Clients`, the forward
+address and secrets, the TTL, and the registry; `ServeSession` and
+`ServeCarrier`, which [[011-api]]'s handler calls after authenticating
+and, for the session, authorizing, each returning a refusal before its
+stream is committed and nil after; `Forward`, the handler of
+`/internal/tunnel/{id}` at `ForwardPattern`; `Client`, spec 004's
+`ClientSource` answering a tunnelled Provider with the carrier
+transport and every other from the clients; `Revoke`, which closes a
+deleted Provider's session with `provider_deleted` and tells the
+clients; `Drain`, which closes every session with `draining`; and the
+`lux_tunnel_sessions` gauge. `OnConnect` is the seam the wiring lists
+the models and ticks health through.
+
+`internal/tunnel/agent` is the agent side, which `lux serve` wraps:
+`Run(ctx, Options)` opens one session with `Gateway`, `Provider`,
+`Upstream`, and a `Token` source read per request, parks `Carriers`,
+serves each request against the upstream, sends a fresh token in the
+next heartbeat when the source yields one, and returns nil when `ctx`
+ends, a `*CloseError` with the gateway's `Reason`, a `*RefusedError`
+with the status and the envelope's code when the connect was refused,
+or the transport's error when the stream broke; `FileToken(path)` is
+the source `--token-file` needs. It imports the standard library, the
+wire package, and `latere.ai/x/pkg/httpjson` for the envelope, so
+`./cmd/lux` importing it leaves that binary's build list what
+[[014-agent-client]] says it is; the `depcheck` row for `./cmd/lux` is
+written when the command is.
+
+`cmd/luxd` composes them: with the tunnel on, the `Gateway` is the
+client source the doors, discovery, and health dial through and the
+revoker the API tells of a delete; the forward route is on the internal
+listener only when `LUX_TUNNEL_FORWARD_ADDR` is set; both listeners
+speak unencrypted HTTP/2 beside HTTP/1.1; and the stop signal drains
+the sessions before the listeners close.
 
 ## Not in this spec
 
@@ -585,22 +724,86 @@ authorizer payload and the owner policy the exception amends
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| A `Provider` with `tunnel: true` resolves without `baseURL` and without `credential`; either one present is `exclusive_fields`; `tunnel` changed on update is `immutable_field`; `tunnel: true` with the tunnel off is `invalid_field` at `spec.tunnel` | `TestTunnelProviderSchema`, table-driven | not built |
-| `lux serve` applies the Provider, connects, and a request through a door reaches a stub provider run on loopback as the runtime and comes back, on every dialect the matrix allows | `TestTunnelEndToEnd` | not built |
-| The carrier framing is one header line then the body in each direction, headers flushed before the body, and a streamed response reaches the caller event by event with no buffering | `TestCarrierFraming`, `TestTunnelStreamsWithoutBuffering` | not built |
-| A connect negotiating HTTP/1.1 is refused with `not_found` and the HTTP/2 detail; over plaintext h2c the same connect succeeds | `TestTunnelRequiresHTTP2` | not built |
-| A second session for one Provider supersedes the first, the first is closed with `superseded` within one heartbeat, and the second serves | `TestNewestSessionWins` | not built |
-| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a carrier with a newer token of the session's subject is accepted; a session whose bearer expires with no fresh token is closed with `token_expired` and its in-flight carriers are cancelled | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | not built |
-| A heartbeat carrying a fresh bearer of the session's subject moves the session's expiry to the new `exp` and the session serves past the old one; a bearer of another subject or one that fails to verify is ignored and the old expiry stands | `TestSessionTokenRefresh`, with the stub issuer minting a 2 s and then a 60 s token | not built |
-| A carrier parked for three times `ttl` with no work receives an empty line every `ttl/3` and is still given work afterwards | `TestParkedCarrierKeepalive` | not built |
-| With `LUX_TUNNEL_FORWARD_SECRET` `new,old` on one replica and `old` on another, forwards succeed in both directions; with `new` alone against `old` alone they are refused | `TestForwardSecretRotation` | not built |
-| Killing the agent makes the Provider `Unreachable` and `status.tunnel.state` `Disconnected` within `LUX_TUNNEL_REGISTRY_TTL`, every target leaves selection, and `provider.unreachable` is emitted once | `TestTunnelLossIsUnreachableWithinTheTTL` | not built |
-| A clean `lux serve` shutdown unregisters at once, so the Provider is `Unreachable` before the TTL lapses | `TestCleanDisconnectIsImmediate` | not built |
-| With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas`, `TestForwardIsOneHop` | not built |
-| `/internal/tunnel/{id}` without the secret, with a wrong secret, and on the public listener are each refused | `TestForwardRouteNeedsTheSecret` | not built |
-| Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalogue | `TestTunnelDiscovery` | not built |
-| Every request through a tunnel has one usage record with the Provider, the upstream model, and the runtime's reported tokens | `TestTunnelRequestsAreMetered` | not built |
-| The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | not built |
-| Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | not built |
-| The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | not built |
-| `internal/tunnel` imports the standard library and `latere.ai/x/pkg/httpjson` only, and `./cmd/lux`'s build list is unchanged by `lux serve` | the `depcheck` gate | not built |
+| A `Provider` with `tunnel: true` resolves without `baseURL` and without `credential`; either one present is `exclusive_fields`; `tunnel` changed on update is `immutable_field`; `tunnel: true` with the tunnel off is `invalid_field` at `spec.tunnel` | `TestTunnelProviderSchema`, table-driven | passing, in `manifest` |
+| `lux serve` applies the Provider, connects, and a request through a door reaches a stub provider run on loopback as the runtime and comes back, on every dialect the matrix allows | `TestTunnelEndToEnd` | the `lux serve` half is [[014-agent-client]]'s and the stub providers [[015-test-stubs-and-tiers]]'s; the gateway half, through `run` with the agent package over h2c and the openai door, passes as `TestServeTunnelsARuntime` in `cmd/luxd` |
+| The carrier framing is one header line then the body in each direction, headers flushed before the body, and a streamed response reaches the caller event by event with no buffering | `TestCarrierFraming`, `TestTunnelStreamsWithoutBuffering` | passing, in `internal/tunnel/wire` and `internal/tunnel` |
+| A connect negotiating HTTP/1.1 is refused with `not_found` and the HTTP/2 detail; over plaintext h2c the same connect succeeds | `TestTunnelRequiresHTTP2` | passing |
+| A second session for one Provider supersedes the first, the first is closed with `superseded` within one heartbeat, and the second serves | `TestNewestSessionWins` | passing, on one replica and across two over one store |
+| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a carrier with a newer token of the session's subject is accepted; a session whose bearer expires with no fresh token is closed with `token_expired` and its in-flight carriers are cancelled | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | passing |
+| A heartbeat carrying a fresh bearer of the session's subject moves the session's expiry to the new `exp` and the session serves past the old one; a bearer of another subject or one that fails to verify is ignored and the old expiry stands | `TestSessionTokenRefresh`, with the stub issuer minting a 2 s and then a 60 s token | passing, with `issuertest` minting the two tokens |
+| A carrier parked for three times `ttl` with no work receives an empty line every `ttl/3` and is still given work afterwards | `TestParkedCarrierKeepalive` | passing |
+| With `LUX_TUNNEL_FORWARD_SECRET` `new,old` on one replica and `old` on another, forwards succeed in both directions; with `new` alone against `old` alone they are refused | `TestForwardSecretRotation` | passing, two Gateways over one memory store |
+| Killing the agent makes the Provider `Unreachable` and `status.tunnel.state` `Disconnected` within `LUX_TUNNEL_REGISTRY_TTL`, every target leaves selection, and `provider.unreachable` is emitted once | `TestTunnelLossIsUnreachableWithinTheTTL` | passing in `internal/serve` with the row lapsed by the clock; the agent's stop through `run` in `TestServeTunnelsARuntime` |
+| A clean `lux serve` shutdown unregisters at once, so the Provider is `Unreachable` before the TTL lapses | `TestCleanDisconnectIsImmediate` | passing for the agent package's stop; `lux serve`'s signal handling is [[014-agent-client]]'s |
+| With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas`, `TestForwardIsOneHop` | passing as `TestForwardingAcrossReplicas`, two Gateways over one memory store, the one hop included; Postgres is [[010-state]]'s phase 6 |
+| `/internal/tunnel/{id}` without the secret, with a wrong secret, and on the public listener are each refused | `TestForwardRouteNeedsTheSecret` | passing |
+| Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalogue | `TestTunnelDiscovery` | passing |
+| Every request through a tunnel has one usage record with the Provider, the upstream model, and the runtime's reported tokens | `TestTunnelRequestsAreMetered` | the counted request with the Provider and the runtime's tokens passes at the wiring in `TestServeTunnelsARuntime`; the record's fields are [[015-test-stubs-and-tiers]]'s e2e |
+| The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | passing at the wiring in `TestServeTunnelsARuntime` through the openai door, and at the carrier in `TestTunnelCarriesNoCredential`; every door is [[015-test-stubs-and-tiers]]'s |
+| Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | passing, in `internal/api` |
+| The registry's four methods behave the same on memory and on Postgres, including a lapsed row and a superseded heartbeat | `storetest.Run`'s tunnel group ([[010-state]]) | passing against memory; Postgres is [[010-state]]'s phase 6 |
+| `internal/tunnel` imports the standard library and `latere.ai/x/pkg/httpjson` only, and `./cmd/lux`'s build list is unchanged by `lux serve` | the `depcheck` gate | passing for `./cmd/luxd`; the `./cmd/lux` row is written with the command ([[014-agent-client]]) |
+
+## Outcome
+
+Built as `internal/tunnel`, `internal/tunnel/wire`, and
+`internal/tunnel/agent`, with the four configuration rows in
+`internal/config`, the two routes in `internal/api`, the registry as a
+source of health and the `status.tunnel` writer in `internal/serve`,
+the wiring in `cmd/luxd`, and `TestTunnelProviderSchema` in
+`manifest`. Every acceptance row of this spec's own passes; the rows
+that name `lux serve` are [[014-agent-client]]'s, the rows that run the
+stub providers through every door are [[015-test-stubs-and-tiers]]'s,
+and the rows that name Postgres are [[010-state]]'s phase 6, each
+marked so in the table. The gate passes whole with every package above
+90%.
+
+What was built differs from the first writing in these points, each
+carried in the Design above:
+
+- One package became three: the gateway half reaches the store, the
+  verifier, and spec 005's clients, which the agent half must not, so
+  the wire format sits in `internal/tunnel/wire` for both and the
+  agent in `internal/tunnel/agent`.
+- A body is carried in chunked encoding rather than to the end of the
+  stream, because an HTTP/2 server cannot end its response while it
+  still reads the request; the response line gained an `error` member
+  for a runtime the agent could not reach.
+- The forward hop sends the header line, waits for the holder's 200,
+  then streams the body, and retries a refused secret with the next
+  entry before any body byte, which is what makes the `new,old`
+  against `old` rotation hold in both directions; a failure after the
+  200 travels in band.
+- A heartbeat that finds its row gone re-registers it rather than
+  reading a supersede; an agent silent for a TTL is dropped by the
+  holder.
+- The replica that accepts a session lists the Provider's models and
+  ticks its health job at once, so a laptop is callable when it
+  attaches; a live row folds one success under `passive` and `none` so a
+  Provider that left selection can return, while `probe` decides on its
+  own.
+- A session for a Provider with `tunnel: false` is `not_found`; the
+  carrier route is outside the subject's request bucket and loads no
+  object.
+- Two configuration rules beyond the table: the secret without the
+  address, and either forward variable without `LUX_TUNNEL_ENABLED`,
+  are start-up failures; the tunnel stays off in the file mode.
+- `internal/api` gained one option, `Options.Tunnel`, beside the one
+  route registration, because the handler needs the gateway side and
+  has no other seam to receive it through.
+- The threat table of [[016-security-and-threat-model]] marked
+  `TestTunnelCarriesNoCredential`, `TestForwardRouteNeedsTheSecret`, and
+  `TestTunnelOwnerPolicyException` as owed by this spec; the tree's own
+  test for that table required the markers dropped once the tests
+  landed, and they were.
+
+What other specs carry from here: [[014-agent-client]] builds
+`lux serve` over `agent.Run` and `agent.FileToken` and writes the
+`./cmd/lux` `depcheck` row; [[005-providers]]'s health table wants the
+fold rule in its `tunnel: true` row; [[015-test-stubs-and-tiers]] owns
+`TestTunnelEndToEnd` and the every-door forms of the metering and
+credential rows; [[010-state]]'s Postgres phase runs the forwarding
+and registry rows across processes; [[017-release-and-installation]]
+owns the `tunnels` line of `luxd check`; [[011-api]] decides whether
+the two streaming routes join the OpenAPI document, which does not
+carry them.

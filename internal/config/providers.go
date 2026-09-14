@@ -64,14 +64,7 @@ func parseKEK(raw, unset string, problems []string) (*secrets.Keyring, []string)
 // allowPrivate reads LUX_UPSTREAM_ALLOW_PRIVATE: 1 sets it, blank leaves
 // it unset, and any other value is a problem rather than a silent no.
 func allowPrivate(raw string, problems []string) (bool, []string) {
-	switch strings.TrimSpace(raw) {
-	case "":
-		return false, problems
-	case "1":
-		return true, problems
-	default:
-		return false, append(problems, "LUX_UPSTREAM_ALLOW_PRIVATE is "+strconv.Quote(raw)+", and 1 is the one value that sets it")
-	}
+	return flag("LUX_UPSTREAM_ALLOW_PRIVATE", raw, problems)
 }
 
 // interval reads a Go duration within bounds, or the default when blank.

@@ -28,6 +28,10 @@ type HealthOptions struct {
 	Credentials credentialSource
 	// Interval is LUX_HEALTH_INTERVAL, the probe period.
 	Interval time.Duration
+	// TunnelTTL is LUX_TUNNEL_REGISTRY_TTL, which places a tunnelled
+	// Provider's last heartbeat at its row's expiry less the window;
+	// zero is thirty seconds (spec 013).
+	TunnelTTL time.Duration
 	// Holder names this replica in the lease row; empty is the host and
 	// the process id.
 	Holder string
@@ -70,8 +74,14 @@ func NewHealth(o HealthOptions) *Health {
 	if o.NewID == nil {
 		o.NewID = newEventID(o.Now)
 	}
+	if o.TunnelTTL <= 0 {
+		o.TunnelTTL = defaultTunnelTTL
+	}
 	return &Health{o: o, providers: providers{}, published: map[string]v1.HealthStatus{}, machines: map[string]*machine{}, local: map[string]*machine{}}
 }
+
+// defaultTunnelTTL is LUX_TUNNEL_REGISTRY_TTL's default (spec 013).
+const defaultTunnelTTL = 30 * time.Second
 
 // Run acquires and renews the lease, ticks on the interval, and releases
 // the lease when ctx ends.
@@ -164,7 +174,13 @@ func (h *Health) Tick(ctx context.Context) {
 	}
 	for _, p := range list {
 		if p.Spec.Tunnel {
-			continue // the tunnel registry publishes a tunnelled Provider's state (spec 013)
+			// The registry is a tunnelled Provider's fourth source of health
+			// (spec 013): no live row is Unreachable at once, and a live
+			// row is what the mode's own signal applies over. Only the
+			// probe has a signal of its own to add on this tick.
+			if !h.tunnelTick(ctx, p) || p.Spec.Health.Mode != v1.HealthProbe {
+				continue
+			}
 		}
 		switch p.Spec.Health.Mode {
 		case v1.HealthProbe:
@@ -220,7 +236,7 @@ func (h *Health) Observe(providerID string, failed bool) {
 	defer h.mu.Unlock()
 	h.observeLocal(providerID, failed)
 	p := h.providers[providerID]
-	if !h.held || p == nil || p.Spec.Health.Mode == v1.HealthNone || p.Spec.Tunnel {
+	if !h.held || p == nil || p.Spec.Health.Mode == v1.HealthNone {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeBudget)
@@ -261,14 +277,36 @@ func (h *Health) View(providerID string) v1.HealthState {
 // the state and leaves the probe's detail alone. The caller holds the
 // lock.
 func (h *Health) record(ctx context.Context, p *v1.Provider, failed bool, lastError string, probed bool) {
+	changed := h.machineFor(p.Status.ID).step(failed)
+	h.publish(ctx, p, changed, lastError, probed)
+}
+
+// recordUnreachable is the registry's verdict on a tunnelled Provider
+// with no live session: Unreachable at once, without the probe counter,
+// published exactly as a counted transition is.
+func (h *Health) recordUnreachable(ctx context.Context, p *v1.Provider, lastError string) {
+	changed := h.machineFor(p.Status.ID).force(v1.HealthUnreachable)
+	h.publish(ctx, p, changed, lastError, true)
+}
+
+// machineFor is the holder's counter for a Provider, started at the
+// published state. The caller holds the lock.
+func (h *Health) machineFor(id string) *machine {
+	m := h.machines[id]
+	if m == nil {
+		m = &machine{state: h.published[id].State}
+		h.machines[id] = m
+	}
+	return m
+}
+
+// publish writes status.health after the machine moved, and on a change
+// of state refreshes the Models and raises the event. The caller holds
+// the lock.
+func (h *Health) publish(ctx context.Context, p *v1.Provider, changed bool, lastError string, probed bool) {
 	id := p.Status.ID
 	prev := h.published[id]
 	m := h.machines[id]
-	if m == nil {
-		m = &machine{state: prev.State}
-		h.machines[id] = m
-	}
-	changed := m.step(failed)
 	now := h.o.Now().UTC()
 	next := prev
 	next.State = m.state
@@ -307,6 +345,65 @@ func (h *Health) record(ctx context.Context, p *v1.Provider, failed bool, lastEr
 			h.o.Logger.ErrorContext(ctx, "health: raising the event", "provider", id, "err", err)
 		}
 	}
+}
+
+// tunnelTick is the registry's reading of a tunnelled Provider on the
+// holder: status.tunnel is written from the row, or Disconnected when
+// there is none; no live row is Unreachable at once, without the probe
+// counter; and a live row lets the mode's own signal apply, folding one
+// success first when the Provider was Unreachable or Unknown, because a
+// passive Provider that left selection would otherwise never observe
+// the success that brings it back, and a none-mode Provider has no
+// other signal than the row. live reports whether a row is live.
+func (h *Health) tunnelTick(ctx context.Context, p *v1.Provider) (live bool) {
+	row, err := h.o.Store.Tunnels().Get(ctx, p.Status.ID)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		h.publishTunnel(ctx, p, nil)
+		h.recordUnreachable(ctx, p, "no live tunnel session")
+		return false
+	case err != nil:
+		h.o.Logger.ErrorContext(ctx, "health: reading the tunnel registry", "provider", p.Status.ID, "err", err)
+		return false
+	}
+	h.publishTunnel(ctx, p, &row)
+	if p.Spec.Health.Mode != v1.HealthProbe {
+		switch h.machineFor(p.Status.ID).state {
+		case v1.HealthUnknown, v1.HealthUnreachable, "":
+			h.record(ctx, p, false, "", true)
+		}
+	}
+	return true
+}
+
+// publishTunnel writes status.tunnel when it differs from what is
+// stored: Connected with the row's session, subject, agent, connect
+// time, and last heartbeat, or Disconnected since this tick. The caller
+// holds the lock.
+func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.Tunnel) {
+	now := h.o.Now().UTC()
+	next := v1.TunnelStatus{State: v1.TunnelDisconnected, Since: now}
+	if row != nil {
+		next = v1.TunnelStatus{
+			State: v1.TunnelConnected, Session: row.Session, Subject: row.Subject, Agent: row.Agent,
+			Since: row.ConnectedAt.UTC(), LastHeartbeatAt: row.ExpiresAt.Add(-h.o.TunnelTTL).UTC(),
+		}
+	}
+	if prev := p.Status.Tunnel; prev != nil {
+		if prev.State == v1.TunnelDisconnected && next.State == v1.TunnelDisconnected {
+			return
+		}
+		if prev.State == v1.TunnelConnected && next.State == v1.TunnelConnected && prev.Session == next.Session && prev.LastHeartbeatAt.Equal(next.LastHeartbeatAt) {
+			return
+		}
+	}
+	if err := h.o.Store.Objects().PutStatus(ctx, v1.KindProvider, p.Status.ID, store.ProviderObserved{Tunnel: &next}); err != nil {
+		h.o.Logger.ErrorContext(ctx, "health: writing status.tunnel", "provider", p.Status.ID, "state", next.State, "err", err)
+		return
+	}
+	p.Status.Tunnel = &next
 }
 
 // resetToUnknown writes Unknown once for a Provider whose mode is none

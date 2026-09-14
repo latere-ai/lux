@@ -81,6 +81,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
+		TunnelRegistryTTL: 30 * time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -128,6 +129,10 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		"LUX_S3_ACCESS_KEY":                       "AKIDEXAMPLE",
 		"LUX_S3_SECRET_KEY":                       "wJalrXUtnFEMI",
 		"LUX_S3_PREFIX":                           "gateways/a/",
+		"LUX_TUNNEL_ENABLED":                      "1",
+		"LUX_TUNNEL_REGISTRY_TTL":                 "45s",
+		"LUX_TUNNEL_FORWARD_ADDR":                 "10.0.0.7:9001",
+		"LUX_TUNNEL_FORWARD_SECRET":               secretNew + "," + secretOld,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +170,10 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		S3AccessKey:                      "AKIDEXAMPLE",
 		S3SecretKey:                      "wJalrXUtnFEMI",
 		S3Prefix:                         "gateways/a/",
+		TunnelEnabled:                    true,
+		TunnelRegistryTTL:                45 * time.Second,
+		TunnelForwardAddr:                "10.0.0.7:9001",
+		TunnelForwardSecrets:             []string{secretNew, secretOld},
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -186,6 +195,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
+		TunnelRegistryTTL: 30 * time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
