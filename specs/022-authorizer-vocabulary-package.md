@@ -1,6 +1,6 @@
 ---
 title: "The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -272,3 +272,25 @@ Each row is a departure from the design above, with the reason.
 | The module root holds the `authorizer` package directory and no file of that name, and a stray binary at the root from any `go build` of this module is ignored | the gate's build, which cannot produce the directory while the file is tracked, and `git status` clean after `go build ./examples/authorizer` | passing; the file was deleted before this spec was built, and a bare build of the example now refuses rather than writing a stray |
 | `internal/auth` and `authorizer` each clear the coverage floor after the move | the coverage gate | passing: 100% of `authorizer` and 99.1% of `internal/auth` |
 | Every acceptance row of [[006-identity]] and [[011-api]] still passes | their suites, unedited but for the import paths | passing |
+
+
+## Outcome
+
+Built on 2026-09-14 in four commits on a branch: `actions.go` and
+`limits.go` move to the root package `latere.ai/x/lux/authorizer` with
+`WireLimits` exported, every importer switching in the same commit;
+`internal/arch` gains the fourth root tree, the `authorizer` allow-list
+row, and `TestVocabularyHasOneHome`; `examples/authorizer` and
+`docs/plane.md` name the package; and the edits to [[001-architecture]],
+[[006-identity]], and [[020-building-a-plane]] the move required. It is
+proven by the whole gate and by coverage of 100% for `authorizer` and
+99.1% for `internal/auth`.
+
+Nothing changed on the wire: `DecodeLimits` keeps every rule, and
+`WireLimits`'s `omitempty` affects only what an authorizer renders,
+never what `luxd` accepts. A platform's authorizer imports the
+vocabulary it is written against instead of holding a copy, and the
+one exception, [[011-api]]'s `SelfLimits`, is named in
+`TestVocabularyHasOneHome`. The stray root binary that would have
+blocked the package directory was removed and `.gitignore`'s
+stray-binary rule widened to every program the tree builds.

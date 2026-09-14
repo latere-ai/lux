@@ -1,6 +1,6 @@
 ---
 title: "Translation through llmdialect: the codec glue leaves the gateway for an importable bridge"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -266,3 +266,27 @@ one byte moves.
 | The allow list for `gateway` in [[001-architecture]]'s dependency test gains nothing: the bridge dials nothing and reaches no package that does | `TestRootPackagesDialNothing`, unchanged in its rule; the `gateway` row's comment names the bridge and loses the `llmjson` entry nothing ever reached | passing |
 | `gateway`'s statement coverage stays at or above the 90% floor after the deletions | the coverage gate | passing |
 | The bridge's seven failure codes each map to the code [[004-request-path]]'s table names, and a decode refusal is `invalid_request` whatever its `RefusalScope` | `TestBridgeFailuresMapToCodes`, table-driven over the seven, in `gateway` | passing |
+
+
+## Outcome
+
+Built on 2026-09-14 in the swap order the Design gives, one commit per
+step, each leaving the tree green: the model list and entry, the usage
+readers, the JSON probe and the member edits, the error envelope and
+the stream frame, and the request, response, and stream legs move to
+`latere.ai/x/pkg/llmdialect/bridge`, and `internal/arch` gains the two
+guards. It is proven by the whole gate and by `gateway` coverage of
+96.6% under the race detector.
+
+`gateway`'s six codec files fell from 1438 non-test lines to 618;
+`models.go`, `usage.go`, and `probe.go` are gone; the import list is
+`llmdialect/bridge` and `llmdialect/ir` alone. The doors answer the
+same bytes, held by the six byte-identical behaviours and by
+[[018-conformance-suite]]'s `doors` group run against a `luxd` built
+before the swap and after it with an identical list of passing and
+skipped cases. Two follow-ups after the merge restored the pre-swap
+behaviour the move had shifted: a translated stream's status is written
+when the upstream answers rather than at its first event, and the
+input estimate reads the route's dialect through `bridge.CountTokensFor`
+so a Responses body is not sent to the byte heuristic. The module pins
+a pseudo-version of `latere.ai/x/pkg`'s main until the bridge is tagged.

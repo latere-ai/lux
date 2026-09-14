@@ -1,6 +1,6 @@
 ---
 title: "Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -306,7 +306,7 @@ Each row is a departure from the design above, with the reason.
 | the minimal authorizer | the twenty lines of `decide` | that, plus the `POST` handler and the listener of `examples/authorizer`, which is the program the document prints | a block a reader copies has to compile and run, and the contract's own suite refuses an endpoint that does not check its bearer |
 | the example plane | a server that passes `TestContract` | `examples/plane`, which the suite runs 42 cases against; the thirteen that read a stub provider's record skip by name, as they do against any front without `LUX_TEST_STUBS_URL` | two drifts between [[015-test-stubs-and-tiers]]'s stub and [[018-conformance-suite]]'s reader keep a run with that document red for reasons no front can answer: the stub writes its record under `header` and the suite reads `headers`, and its `events-<n>` stream carries a finish chunk the suite's frame count does not expect |
 | the acceptance tests | `TestSandboxCompositionEndToEnd`, `TestPlatformCredentialAsKey`, and the rest | the same tests under the tier's prefix, `TestE2E…` | [[015-test-stubs-and-tiers]]'s rule is that every test in a file tagged `integration` begins with `TestE2E`, and `TestEveryTestIsInATier` holds it |
-| the run's ledger | the delete refuses on every replica | the integration tier proves one replica within `LUX_KEY_CACHE`; the multi-replica half is the postgres tier's, which waits on [[010-state]] | the tier that runs two replicas against one database is not built |
+| the run's ledger | the delete refuses on every replica | the integration tier proves one replica within `LUX_KEY_CACHE`; the multi-replica half is [[010-state]]'s postgres tier | `TestPostgresTwoReplicas` proves it: replica b caches the Key, a deletes it, and b refuses within seconds through the journal tail |
 
 ## Not in this spec
 
@@ -328,6 +328,29 @@ plane's own design, which is that project's.
 | A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestE2ESandboxComposition` in the e2e tier | passing; the workload is the `lux` command in a directory of its own, holding a placeholder |
 | A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestE2EOwnerFollowsTheToken` | passing |
 | A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestE2EPlatformCredentialAsKey` in the e2e tier | passing; the supplied value is a token whose own `exp` has passed, so what the door honours can only be the Key |
-| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestE2ERunKeyDeletionLeavesTheLedger` | passing for one replica; the multi-replica half is the postgres tier's ([[010-state]]) |
+| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestE2ERunKeyDeletionLeavesTheLedger` | passing for one replica in the integration tier and across two replicas in [[010-state]]'s `TestPostgresTwoReplicas` |
 | Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestE2EOneCredentialKindPerHop`, over the e2e capture | passing; the authorizer hop is read through a recorder in front of the stub, which records the envelope and not the bearer |
 | `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent`, `TestE2EPlaneDocCommand` | passing: the sections, the tables, and the Go block in `internal/arch`; the command itself run by the tier against `make run` |
+
+
+## Outcome
+
+Built on 2026-09-14 on a branch and merged: `docs/plane.md` for a
+platform team, `examples/authorizer` as the endpoint the page prints,
+`examples/plane` over the three root packages, two `internal/arch`
+guards, and six integration-tier tests. It is proven by the whole gate
+and by coverage of 91.5% for `examples/plane` and 93.0% for
+`examples/authorizer`.
+
+What was built: the two-doors and concerns sections and their tables,
+held to the tree by `TestConcernsTableIsGrounded`; the minimal
+authorizer, printed whole in the document and run both in process
+against `latere.ai/x/pkg/authz/conformance` and beside `luxd` as its
+`LUX_AUTHORIZER_URL`; `examples/plane`, a platform front over
+`manifest`, `gateway`, and `metering` with its own identity and store
+that carries `TestContract`'s forty-two non-stub cases; and the sandbox
+composition, owner-follows-the-token, platform-credential-as-Key,
+one-credential-kind-per-hop, and run-ledger cases in the e2e tier, the
+last proven across replicas by [[010-state]]'s postgres tier. The
+authorizer reaches the vocabulary through `latere.ai/x/lux/authorizer`
+([[022-authorizer-vocabulary-package]]).
