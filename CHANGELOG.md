@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `lux-stubs`: an eighth listener, the index, whose `GET /` answers one
+  document naming the URL of every other stub of the run and the
+  credential the stub providers require, so a suite or a script handed
+  that one address reaches the rest without parsing the startup lines
+  or guessing a port; `-index-addr` binds it and the line
+  `lux-stubs: index <url>` names it. `GET /_received` on a stub
+  provider now names the recorded headers `headers`, the wire name a
+  reader in another process decodes, and a streamed chat answer carries
+  its finish reason on the last content event rather than in a frame of
+  its own. With `LUX_TEST_STUBS_URL` pointed at the index, the
+  conformance suite runs its stub-backed cases instead of skipping
+  them.
 - `lux serve`: a session's carriers and heartbeat have ended when the
   session ends, so nothing of a session that closed writes to stderr
   after the command printed its close reason or connected again.

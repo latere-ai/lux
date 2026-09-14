@@ -45,13 +45,18 @@ happens to run.
 Built and at `testing`. `test/stubs/provider` and `test/stubs/sink` are
 the two stubs written here, `test/stubs/issuer` and
 `test/stubs/authorizer` mount `pkg`'s two with Lux's vocabulary,
-`cmd/lux-stubs` serves all seven listeners, `make run` and `make
-run-file` give a clean clone a working gateway over them, and
-`test/e2e` is the integration tier with the postgres tier's skeleton
-beside it. What keeps the spec from `complete`: `TestE2EConformance`
-waits on [[018-conformance-suite]]'s `Run`, `TestPostgresTwoReplicas`
-waits on [[010-state]]'s Postgres store, and the `e2e` and `postgres`
-jobs have not yet run on a push to `main`. The build's departures from
+`test/stubs/index` is the document naming them all, `cmd/lux-stubs`
+serves the eight listeners, `make run` and `make run-file` give a clean
+clone a working gateway over them, and `test/e2e` is the integration
+tier with the postgres tier's skeleton beside it.
+`TestE2EConformance` runs [[018-conformance-suite]]'s `Run` against the
+stubs, with no case skipped for want of them. What keeps the spec from
+`complete`: one suite case, `case004Streaming`, asserts that the string
+of the upstream model name is absent from a translated stream, which the
+deterministic assistant content of this spec carries by construction, so
+it waits on a change to [[018-conformance-suite]];
+`TestPostgresTwoReplicas` waits on [[010-state]]'s Postgres store; and
+the `e2e` and `postgres` jobs have not yet run on a push to `main`. The build's departures from
 the design below are listed under "What the build changed".
 
 ## Design
@@ -70,6 +75,18 @@ installation; [[001-architecture]]'s binary table says so.
 | issuer | `latere.ai/x/pkg/authkit/issuertest`, mounted | OIDC discovery, a key set, and the package's minting routes |
 | authorizer | `latere.ai/x/pkg/authz/stub`, mounted | the contract of `latere.ai/x/pkg/authz`, which is [[006-identity]]'s |
 | sink | `test/stubs/sink`, written here | the contract of [[012-request-log-and-events]] |
+| index | `test/stubs/index`, written here | `GET /`, the document naming every stub above |
+
+Every stub has a listener of its own, so a caller handed one address
+finds none of the others. The index is the address that names the rest:
+`GET /` answers `{"providers": {"<dialect>": "<url>"}, "issuer": "<url>",
+"authorizer": "<url>", "sink": "<url>", "credential": "<value>"}`, the
+document [[018-conformance-suite]] reads from `LUX_TEST_STUBS_URL` before
+its stub cases run, so a suite driving a `luxd` over these stubs reads a
+port rather than guessing one. It serves that one route and answers `404`
+to every other, and the credential it reports is the `-credential` flag's,
+which a caller writes into the Providers it applies so a request forwarded
+without one is the `401` the stub provider records.
 
 A core that writes its own stub issuer and its own stub authorizer
 writes a second reading of two contracts it does not own, and the two
@@ -164,9 +181,9 @@ form: a `Provider.spec.baseURL` carries no query
 ([[003-manifest-contract]]), so the upstream model name is the only
 channel a manifest has into the stub.
 
-`GET /_received` returns every request the instance received, in order:
-method, path, query, every header, and the body. `DELETE /_received`
-clears it. Those two are what `TestSameDialectSameBytes`,
+`GET /_received` returns every request the instance received, in order,
+as a list of `{"method", "path", "query", "headers", "body"}`.
+`DELETE /_received` clears it. Those two are what `TestSameDialectSameBytes`,
 `TestCallerCredentialsNeverForwarded`, and `TestModelNameRewrite`
 ([[004-request-path]]) read.
 
@@ -439,7 +456,10 @@ Outcome at `complete` records nothing the tree does not.
 | the postgres tier | the same tree of cases against a shared store | `TestMain` refuses an unset `LUX_DB_URL` as designed; with one set, `TestPostgresTwoReplicas` skips naming [[010-state]]'s phase 6, and `internal/store`'s conformance run is that spec's | `luxd` refuses `LUX_DB_URL` until the Postgres store lands, and a red `postgres` job on every push until then would teach nobody anything |
 | the tiers' rules | `TestEveryTestIsInATier`, `TestPostgresMainRefusesWithoutAURL` | both in `test/stubs`, the root package of the stubs tree, untagged | the tagged run cannot host a test of its own refusal; the name keeps the tier's prefix so `make test-postgres` runs it too |
 | the tier | `TestE2E*` as the table names them | two more: `TestE2EFailureInjectionReachesTheDoors` over the failure table through a Model's target, and `TestE2EEventsReachTheSink` with a first delivery refused | the table is the stub's own; these prove the two contracts through the gateway |
-| the tier | `TestE2EConformance` calls `conformance.Run` | `runConformance` in `test/e2e/conformance_seam_test.go` skips until [[018-conformance-suite]] lands; the merge replaces the skip with the call and changes nothing else | the suite is built on another branch |
+| the tier | `TestE2EConformance` calls `conformance.Run` | `runConformance` in `test/e2e/conformance_seam_test.go` calls it with the stack's public URL, a token minted per subject from the stack's issuer, and `StubsURL` at the index, so the stub table runs rather than skipping | the suite was built on another branch and reads the stubs through one address |
+| the binary | a listener per stub, one line each | the index beside the seven, with `-index-addr` and the line `lux-stubs: index <url>` in the same shape | a caller handed one address reads the other seven from the document rather than parsing the lines |
+| the record | `GET /_received` names the headers | the member is `headers` on the wire, and the record's five wire names are held to a test | the record is decoded in another process, [[018-conformance-suite]] among them, and a member named on one side alone arrives empty rather than as a failure |
+| the stub provider | five content events followed by the route's final usage event | the chat stream's finish reason rides the last content event, and a stream of no content events keeps a frame of its own for it | a frame between the content and the usage is one more than the design counts, and a reader counting frames reads the count the upstream model name asked for |
 | `.lateregate.yaml` | one `cover.exempt` row | that row, and a `depcheck` row for `cmd/lux-stubs` | the binary reaches `latere.ai/x/pkg` and, through the sink's `events.Verify`, the OpenTelemetry SDK behind `internal/events`' delivery client |
 
 Two things the tier learned about the gateway are findings for other
@@ -468,7 +488,10 @@ in `pkg` v0.66.0, the version `go.mod` pins, and nothing waits on them.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Each stub package written here drives every route and every behaviour flag it offers from its own test | `TestProviderStub`, `TestProviderStubRoutes`, `TestSinkStub`; the issuer's and the authorizer's are `pkg`'s own, and the wrappers' additions are `TestAuthorizerStubNamesResourcesLuxsWay`, `TestAuthorizerStubFlags`, `TestAuthorizerStubDeniesTheProbe` | passing, `test/stubs/provider`, `test/stubs/sink`, `test/stubs/authorizer` |
+| Each stub package written here drives every route and every behaviour flag it offers from its own test | `TestProviderStub`, `TestProviderStubRoutes`, `TestSinkStub`, `TestIndexServesTheDocument`, `TestIndexRefusesEveryOtherRoute`; the issuer's and the authorizer's are `pkg`'s own, and the wrappers' additions are `TestAuthorizerStubNamesResourcesLuxsWay`, `TestAuthorizerStubFlags`, `TestAuthorizerStubDeniesTheProbe` | passing, `test/stubs/provider`, `test/stubs/sink`, `test/stubs/index`, `test/stubs/authorizer` |
+| The index names every stub of the run at `GET /`, with the credential the providers require, so a caller handed that one address reaches each of them and guesses no port | `TestIndexServesTheDocument`, `TestLuxStubsIndexNamesEveryStub` | passing, `test/stubs/index` and `cmd/lux-stubs`, the second against the running binary |
+| A streamed chat answer is the content events the upstream model name asked for, then the final usage event, then `[DONE]`, and no frame between | `TestChatStreamFrameBudget`, over three and five events and none | passing, `test/stubs/provider` |
+| The conformance suite of [[018-conformance-suite]] runs against the stubs with no case skipped for want of them | `TestE2EConformance`, whose seam passes `StubsURL` | the stub table runs; `case004Streaming` fails on an assertion of that spec's own, that a translated stream carries no occurrence of the upstream model name, which the deterministic content of this spec carries by construction |
 | The stub provider answers deterministically: one request twice yields byte-identical bodies, and the content names the dialect, the model, and the digest of the last user text | `TestProviderStubIsDeterministic` | passing |
 | Every row of the failure injection table produces its behaviour on each of the four dialects, by upstream model name and by header | `TestFailureInjection`, table-driven over rows and dialects | passing, 13 rows × 4 dialects × 2 channels |
 | The stub provider refuses a request whose credential is not the configured one and records it | `TestProviderStubChecksTheCredential` | passing |
