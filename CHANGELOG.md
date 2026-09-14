@@ -184,3 +184,23 @@ refused before it is pushed.
   listener and needs no bearer. `/metrics` on the internal listener
   serves one registry with every family. `GET /v1/usage` and `GET
   /v1/requests` are not served yet; they land with metering.
+- Request log and events: every mutation through `/v1` and every state
+  change worth knowing about, a Provider becoming unreachable or healthy
+  again, a Key or a Budget reaching its spend, a Model discovered or
+  removed by discovery, is journalled and, with `LUX_EVENTS_URL` and
+  `LUX_EVENTS_SECRET` set, delivered to that URL as one JSON body per
+  event with `Lux-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of
+  "<t>.<body>">`, at least once and in order per object, retried from a
+  second to five minutes for 24 hours and then dropped with an error
+  line; a sink named later is not sent what happened before it was set,
+  and a sink deduplicates on `id`. With `LUX_REQUESTLOG_EXPORTER=s3`
+  every usage record is also archived as NDJSON objects in
+  `LUX_S3_BUCKET` at `LUX_S3_ENDPOINT` under `LUX_S3_PREFIX` (default
+  `lux/`), keyed by UTC hour, replica, and ULID, in batches of 5000
+  records or every 30 seconds, from a buffer of 50 000 records that
+  drops the oldest when the bucket does not keep up; `LUX_S3_REGION`
+  (default `us-east-1`), `LUX_S3_ACCESS_KEY`, and `LUX_S3_SECRET_KEY`
+  are the client's, with no credential chain. `lux_events_pending` and
+  `lux_requestlog_dropped_total` say how much waits and how much was
+  lost. `GET /v1/requests` reads the archive as `source: archive` once
+  the API takes the reader.
