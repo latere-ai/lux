@@ -350,7 +350,7 @@ type Journal interface {
 // /v1/requests serves with source memory when no archive is
 // configured, on Postgres as on memory.
 type Usage interface {
-	AddRows(ctx context.Context, rows []metering.Row) error
+	AddRows(ctx context.Context, rows []metering.Aggregate) error
 	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
 	AppendRecord(ctx context.Context, r metering.Record) error
 	Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error)
