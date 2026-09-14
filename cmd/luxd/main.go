@@ -106,7 +106,11 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		return fail(stderr, err)
 	}
 
-	st, files, notice, err := openStore(ctx, cfg, getenv)
+	// The one registry of spec 019: the store's operations, the metering
+	// of spec 009, and, with spec 011, the doors record into it, and the
+	// internal listener serves it.
+	reg := metrics.NewRegistry()
+	st, files, notice, err := openStore(ctx, cfg, getenv, reg)
 	if err != nil {
 		return fail(stderr, err)
 	}
@@ -143,9 +147,19 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 
-	// The two jobs of spec 005 and the Key cache's journal tail run for
-	// the life of the process and stop with it, after the listeners have
-	// drained.
+	// The Limiter of spec 007 and the Recorder of spec 009 are the doors'
+	// stage 7 and their record; both flush this replica's deltas to the
+	// store every LUX_METERING_FLUSH, and once more at stop. The door
+	// handler that takes them as gateway.Options.Limiter and .Recorder
+	// mounts with spec 011.
+	defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute}
+	limiter := serve.NewLimiter(serve.LimiterOptions{Store: st, Budgets: keys, Defaults: defaults, Flush: cfg.MeteringFlush, Logger: logger})
+	recorder := serve.NewRecorder(serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger})
+	_, _ = fmt.Fprintf(stdout, "luxd: metering: spend counters and usage aggregates flush every %s\n", cfg.MeteringFlush)
+
+	// The two jobs of spec 005, the Key cache's journal tail, and the two
+	// metering flushes run for the life of the process and stop with it,
+	// after the listeners have drained.
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
 	discovery := serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
 	healthJob := serve.NewHealth(serve.HealthOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.HealthInterval, Logger: logger})
@@ -154,6 +168,8 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	jobs.Go(func() { discovery.Run(jobsCtx) })
 	jobs.Go(func() { healthJob.Run(jobsCtx) })
 	jobs.Go(func() { keys.Run(jobsCtx) })
+	jobs.Go(func() { limiter.Run(jobsCtx) })
+	jobs.Go(func() { recorder.Run(jobsCtx) })
 	defer func() {
 		stopJobs()
 		jobs.Wait()
@@ -225,15 +241,14 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 }
 
 // openStore constructs the store the configuration selects, wrapped in
-// Instrument, and returns the file mode's store beside it when that is
-// the mode, so serve can wire the re-read, and the substance of the one
-// start-up line that names the mode. The Postgres store lands in a later
+// Instrument on reg, and returns the file mode's store beside it when
+// that is the mode, so serve can wire the re-read, and the substance of
+// the one start-up line that names the mode. The Postgres store lands in a later
 // phase; until then a configured LUX_DB_URL is refused rather than
 // silently answered with state in memory, because an operator who asked
 // for durability and got a process's memory would find out at the first
 // restart.
-func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (store.Store, *filemode.Store, string, error) {
-	reg := metrics.NewRegistry()
+func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg *metrics.Registry) (store.Store, *filemode.Store, string, error) {
 	switch {
 	case cfg.DBURL != "":
 		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")

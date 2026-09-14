@@ -132,6 +132,24 @@ func TestServeStartsTheJobs(t *testing.T) {
 	}
 }
 
+// TestServeStartsTheMeteringFlush is spec 009's wiring at the process:
+// the Limiter's and the Recorder's flush loops start with the jobs on
+// LUX_METERING_FLUSH, the start-up log names the interval, and a stop
+// flushes once more without an error.
+func TestServeStartsTheMeteringFlush(t *testing.T) {
+	srv := startServe(t, map[string]string{"LUX_METERING_FLUSH": "250ms"})
+	if !strings.Contains(srv.out.String(), "luxd: metering: spend counters and usage aggregates flush every 250ms") {
+		t.Fatalf("no metering line in:\n%s", srv.out.String())
+	}
+	time.Sleep(600 * time.Millisecond) // two intervals with nothing to flush
+	if code := srv.stop(); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if strings.Contains(srv.errOut.String(), "level=ERROR") {
+		t.Fatalf("the flush logged an error:\n%s", srv.errOut.String())
+	}
+}
+
 // TestRewrapNeedsTheStore is spec 005's row at the process: without
 // LUX_DB_URL the role exits 1 naming the variable; with one, the
 // Postgres store is a later phase and the role says so with exit 1.
