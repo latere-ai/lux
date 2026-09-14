@@ -1,4 +1,8 @@
 /out/
+# The release build of spec 017, tools/release/build.sh, writes the
+# binaries and the archives here; the pipeline uploads them and a local
+# run is never committed.
+/dist/
 *.cover.out
 *.prof
 *.test

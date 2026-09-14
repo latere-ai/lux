@@ -1,9 +1,11 @@
 # Every push to main and every pull request runs the gate, the shared
 # pipeline of latere-ai/ci, the checks that need the tree and no network,
-# a tidy module file and the licence notice on every source file, and the
+# a tidy module file and the licence notice on every source file, the
 # two tiers of spec 015 that need more than the toolchain: the integration
 # tier over the stubs it builds itself, and the postgres tier against a
-# service container. Every third-party action is pinned by commit.
+# service container, and the install document of spec 017 against a kind
+# cluster built from the checkout. Every third-party action is pinned by
+# commit.
 name: verify
 on:
   push:
@@ -97,3 +99,63 @@ jobs:
       - run: go test -tags=postgres -run '^TestPostgres' -v ./...
         env:
           LUX_DB_URL: postgres://postgres:lux@127.0.0.1:5432/postgres?sslmode=disable
+
+  # The alert rules of spec 019 pass promtool, the step spec 017 owns: the
+  # rule groups are lifted out of the PrometheusRule and checked with the
+  # Prometheus image's own promtool, pinned by digest, so no rule an
+  # installation starts with fails to load.
+  rules:
+    name: the alert rules pass promtool
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: promtool check rules over the PrometheusRule's groups
+        run: |
+          mkdir -p out/rules
+          awk '/^spec:/{f=1;next} f{sub(/^  /,""); print}' deploy/base/prometheusrule.yaml > out/rules/rules.yaml
+          # prom/prometheus:v3.5.0, pinned by digest as every image reference is
+          docker run --rm -v "$PWD/out/rules:/rules:ro" --entrypoint promtool \
+            docker.io/prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996 \
+            check rules /rules/rules.yaml
+
+  # The install document of spec 017 against a kind cluster built from
+  # this checkout: the developer image and the stub image loaded into the
+  # cluster, the stubs as a Pod standing in for the issuer and the
+  # provider, and the fenced blocks of docs/install.md run in order by
+  # the same runner the release pipeline uses against the published
+  # artifacts. A prose defect fails the build the day it lands.
+  install:
+    name: the install document against a kind cluster
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - name: The developer image, the stub image, and the lux command from the checkout
+        run: |
+          docker build -t luxd:candidate .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/lux-stubs_linux_amd64 ./cmd/lux-stubs
+          docker build -f Dockerfile.stubs -t lux-stubs:candidate .
+          mkdir -p "$RUNNER_TEMP/bin" && go build -o "$RUNNER_TEMP/bin/lux" ./cmd/lux
+      - name: The cluster and the stubs
+        run: |
+          mkdir -p work && cd work
+          ../tools/docs/stubs-in-cluster.sh lux-stubs:candidate luxd:candidate lux-stubs:candidate
+      - name: Walk the document
+        env:
+          LUX_INSTALL_IMAGE: luxd:candidate
+          LUX_INSTALL_MANIFESTS: ../deploy
+        run: |
+          cd work
+          PATH="$RUNNER_TEMP/bin:$PATH" ../tools/docs/run-blocks.sh ../docs/install.md
+      - name: The cluster's state, for a failed run
+        if: failure()
+        run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200

@@ -1,0 +1,535 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The release pipeline of spec 017, on a v* tag: the tag's commit must
+# have passed verify; the binaries, the archives, and the two images are
+# built, the images pushed by digest and under no tag, signed, given a
+# bill of materials and a provenance attestation; the conformance suite
+# runs against the two digests; only then are the digests tagged and the
+# GitHub release created with the CHANGELOG section as its body; and
+# after that the release is verified from a clean runner, the install
+# document is walked against the published artifacts, and the next
+# conformance fixture is opened as a pull request. Nothing here pushes
+# to the default branch, no job carries a permission another needs, and
+# the image namespace is the repository owner's, so a fork's tag
+# publishes under the fork's. Every third-party action is pinned by
+# commit with its version in a comment.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # 1. The verify run for the push of this very commit concluded
+  # success. lateregate release pushes the branch and the tag in one
+  # push, so the run exists by now and may still be running; a tag on a
+  # commit whose gate never ran, or ran red, fails here and publishes
+  # nothing.
+  gate-green:
+    name: the tag's commit passed verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Wait for the verify run on this commit and require success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 110); do
+            conclusions=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/verify.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=20" \
+              --jq '[.workflow_runs[] | .conclusion // "running"] | join(" ")')
+            case " $conclusions " in
+              *" success "*) echo "verify concluded success on ${GITHUB_SHA}"; exit 0 ;;
+              *" failure "*|*" cancelled "*|*" timed_out "*|*" startup_failure "*|*" action_required "*)
+                echo "verify concluded '$conclusions' on ${GITHUB_SHA}; a release is cut from a green tree" >&2; exit 1 ;;
+            esac
+            if [ -z "$conclusions" ] && [ "$i" -gt 10 ]; then
+              echo "no verify run exists for the push of ${GITHUB_SHA}; tag a commit whose gate ran" >&2; exit 1
+            fi
+            sleep 30
+          done
+          echo "verify did not conclude on ${GITHUB_SHA} within the hour" >&2; exit 1
+
+  # 2. Everything the release carries, built once from this checkout.
+  # The images are pushed by digest and under no tag, so a run that stops
+  # before publish leaves two unreferenced digests and nothing an
+  # operator could pull by accident.
+  build:
+    name: the binaries, the archives, and the images by digest
+    needs: gate-green
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      owner: ${{ steps.owner.outputs.owner }}
+      luxd_digest: ${{ steps.images.outputs.luxd_digest }}
+      stubs_digest: ${{ steps.images.outputs.stubs_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # The namespace is the account that pushed the tag, lowered, read
+      # here and written nowhere in the tree.
+      - name: The image namespace is the repository owner's
+        id: owner
+        run: echo "owner=$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: The version promise holds since the previous tag
+        run: |
+          previous=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo none)
+          go run ./tools/release promise -previous "$previous" -tag "${GITHUB_REF_NAME}"
+      - name: Build the binaries and the archives
+        run: tools/release/build.sh "${GITHUB_REF_NAME}" dist
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build and push both images by digest, under no tag
+        id: images
+        env:
+          OWNER: ${{ steps.owner.outputs.owner }}
+        run: |
+          mkdir -p out
+          for image in luxd lux-stubs; do
+            file=Dockerfile.release
+            [ "$image" = lux-stubs ] && file=Dockerfile.stubs
+            docker buildx build --platform linux/amd64,linux/arm64 -f "$file" \
+              --output "type=image,name=${REGISTRY}/${OWNER}/${image},push-by-digest=true,name-canonical=true,push=true" \
+              --metadata-file "out/${image}.json" .
+            digest=$(jq -r '."containerimage.digest"' "out/${image}.json")
+            echo "${image}: ${digest}"
+            echo "$(printf '%s' "$image" | tr '-' '_')_digest=${digest}" >> "$GITHUB_OUTPUT"
+          done
+      # Each image's two layers carry the bytes the archives do: the
+      # binary is pulled back out of every platform and compared.
+      - name: The images carry the released binaries
+        env:
+          OWNER: ${{ steps.owner.outputs.owner }}
+          LUXD: ${{ steps.images.outputs.luxd_digest }}
+          STUBS: ${{ steps.images.outputs.stubs_digest }}
+        run: |
+          mkdir -p out/images
+          for arch in amd64 arm64; do
+            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/luxd@${LUXD}")
+            docker cp "$id:/usr/local/bin/luxd" "out/images/luxd_linux_${arch}"
+            docker rm "$id" >/dev/null
+            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux-stubs@${STUBS}")
+            docker cp "$id:/usr/local/bin/lux-stubs" "out/images/lux-stubs_linux_${arch}"
+            docker rm "$id" >/dev/null
+          done
+          go run ./tools/release images -dist dist -extracted out/images
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign both images by digest with the workflow's identity
+        env:
+          OWNER: ${{ steps.owner.outputs.owner }}
+        run: |
+          cosign sign --yes "${REGISTRY}/${OWNER}/luxd@${{ steps.images.outputs.luxd_digest }}"
+          cosign sign --yes "${REGISTRY}/${OWNER}/lux-stubs@${{ steps.images.outputs.stubs_digest }}"
+      - name: The bill of materials of the module graph
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sbom-module.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: The bill of materials of the luxd image
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd@${{ steps.images.outputs.luxd_digest }}
+          format: spdx-json
+          output-file: dist/sbom-luxd.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: The bill of materials of the lux-stubs image
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux-stubs@${{ steps.images.outputs.stubs_digest }}
+          format: spdx-json
+          output-file: dist/sbom-lux-stubs.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Attest the luxd image's bill of materials
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd
+          subject-digest: ${{ steps.images.outputs.luxd_digest }}
+          sbom-path: dist/sbom-luxd.spdx.json
+          push-to-registry: true
+      - name: Attest the lux-stubs image's bill of materials
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux-stubs
+          subject-digest: ${{ steps.images.outputs.stubs_digest }}
+          sbom-path: dist/sbom-lux-stubs.spdx.json
+          push-to-registry: true
+      - name: Attest the luxd image's provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd
+          subject-digest: ${{ steps.images.outputs.luxd_digest }}
+          push-to-registry: true
+      - name: Attest the lux-stubs image's provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux-stubs
+          subject-digest: ${{ steps.images.outputs.stubs_digest }}
+          push-to-registry: true
+      # The deploy archive: the base with the luxd image pinned to this
+      # tag by digest, the component, the overlays, the bootstrap
+      # template, and the example manifests, under one deploy/ directory.
+      - name: The deploy archive with the image pinned by digest
+        env:
+          OWNER: ${{ steps.owner.outputs.owner }}
+        run: |
+          rm -f dist/luxd dist/lux
+          printf 'images:\n  - name: luxd\n    newName: %s/%s/luxd\n    digest: %s\n' \
+            "${REGISTRY}" "${OWNER}" "${{ steps.images.outputs.luxd_digest }}" >> deploy/base/kustomization.yaml
+          kubectl kustomize deploy/overlays/kind | grep -q "image: ${REGISTRY}/${OWNER}/luxd@${{ steps.images.outputs.luxd_digest }}"
+          tar -czf "dist/deploy-${GITHUB_REF_NAME}.tar.gz" deploy
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # 3. The e2e stack from the two digests rather than from a checkout,
+  # and the conformance suite against it. The job also applies the
+  # example manifests and reads them back, and drains the run's records,
+  # which is the fixture the next release's suite reads.
+  conformance:
+    name: the conformance suite against the candidate digests
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    env:
+      OWNER: ${{ needs.build.outputs.owner }}
+      LUXD: ${{ needs.build.outputs.luxd_digest }}
+      STUBS: ${{ needs.build.outputs.stubs_digest }}
+      LUX_URL: http://localhost:8080
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Start the stubs and the gateway from the digests
+        run: |
+          docker run -d --name stubs --network host "${REGISTRY}/${OWNER}/lux-stubs@${STUBS}" \
+            -openai-addr 127.0.0.1:9101 -anthropic-addr 127.0.0.1:9102 -gemini-addr 127.0.0.1:9103 -lux-addr 127.0.0.1:9104 \
+            -authorizer-addr 127.0.0.1:9105 -issuer-addr 127.0.0.1:9106 -sink-addr 127.0.0.1:9107 -issuer-url http://127.0.0.1:9106
+          docker run -d --name luxd --network host \
+            -e LUX_PUBLIC_ADDR=127.0.0.1:8080 -e LUX_INTERNAL_ADDR=127.0.0.1:8081 -e LUX_PUBLIC_URL="${LUX_URL}" \
+            -e LUX_SECRETS_KEK="$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+            -e LUX_OIDC_ISSUERS=http://127.0.0.1:9106 -e LUX_OIDC_INSECURE_ISSUERS=http://127.0.0.1:9106 \
+            -e LUX_AUTHORIZER_URL=http://127.0.0.1:9105 -e LUX_AUTHORIZER_TOKEN=stub-authorizer-token \
+            -e LUX_EVENTS_URL=http://127.0.0.1:9107 -e LUX_EVENTS_SECRET=stub-sink-secret \
+            -e LUX_UPSTREAM_ALLOW_PRIVATE=1 -e LUX_HEALTH_INTERVAL=5s \
+            "${REGISTRY}/${OWNER}/luxd@${LUXD}" serve
+          for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:8081/readyz && break; sleep 0.2; done
+          curl -fsS http://127.0.0.1:8081/readyz
+          docker run -d --name luxd-check --network host --env-file <(docker inspect luxd --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^LUX_') \
+            "${REGISTRY}/${OWNER}/luxd@${LUXD}" check
+          docker wait luxd-check | grep -qx 0 || { docker logs luxd-check; exit 1; }
+          docker logs luxd-check
+      # The stubs document the suite reads at LUX_TEST_STUBS_URL, served
+      # from a file, since the binary gives every stub a listener of its
+      # own and no document of them.
+      - name: Serve the stubs document
+        run: |
+          mkdir -p out/stubs
+          cat > out/stubs/index.html <<'EOF'
+          {"providers":{"openai":"http://127.0.0.1:9101","anthropic":"http://127.0.0.1:9102","gemini":"http://127.0.0.1:9103","lux":"http://127.0.0.1:9104"},
+           "authorizer":"http://127.0.0.1:9105","issuer":"http://127.0.0.1:9106","sink":"http://127.0.0.1:9107","credential":"stub-credential"}
+          EOF
+          (cd out/stubs && nohup python3 -m http.server 9110 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          for _ in $(seq 1 50); do curl -fsS -o /dev/null http://127.0.0.1:9110/ && break; sleep 0.2; done
+      - name: Apply the example manifests as the fixture's objects
+        id: token
+        run: |
+          token=$(curl -fsS -X POST http://127.0.0.1:9106/mint -H 'Content-Type: application/json' -d '{"sub":"dev"}' | jq -r .token)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          mkdir -p out/examples
+          for f in deploy/examples/*.yaml; do
+            sed -e '/^  valueFrom:$/,/^    env: STUB_DEV_KEY$/d' "$f" > "out/examples/$(basename "$f")"
+          done
+          go run ./cmd/lux -url "${LUX_URL}" -token "$token" apply \
+            -f out/examples/provider-openai.yaml -f out/examples/provider-anthropic.yaml -f out/examples/provider-gemini.yaml -f out/examples/provider-lux.yaml \
+            -f out/examples/budget-dev.yaml \
+            -f out/examples/model-stub-openai.yaml -f out/examples/model-stub-anthropic.yaml -f out/examples/model-stub-gemini.yaml -f out/examples/model-stub-lux.yaml \
+            > out/applied.json
+          go run ./cmd/lux -url "${LUX_URL}" -token "$token" apply -f out/examples/key-dev.yaml | jq -r .status.value > out/key
+          echo "::add-mask::$(cat out/key)"
+      - name: TestContract against the candidate
+        env:
+          LUX_TEST_URL: ${{ env.LUX_URL }}
+          LUX_TEST_TOKEN: ${{ steps.token.outputs.token }}
+          LUX_TEST_ISSUER_URL: http://127.0.0.1:9106
+          LUX_TEST_STUBS_URL: http://127.0.0.1:9110
+        run: go test ./test/conformance -run '^TestContract$' -count=1 -v -timeout 20m
+      # One request through a door, so the run's records hold at least
+      # one; then the resolved manifests read back, and the records
+      # drained, as the next release's fixture directory.
+      - name: The fixture for the next release
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          key=$(cat out/key)
+          for _ in $(seq 1 30); do
+            curl -sS "${LUX_URL}/openai/v1/chat/completions" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
+              -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}' | grep -q '"choices"' && break
+            sleep 2
+          done
+          dir="out/fixture/${GITHUB_REF_NAME}"
+          mkdir -p "$dir"
+          for pair in provider:openai budget:dev model:stub-openai key:dev; do
+            kind=${pair%%:*}; name=${pair#*:}
+            curl -fsS "${LUX_URL}/v1/${kind}s/${name}" -H "Authorization: Bearer $TOKEN" | jq . > "$dir/${kind}.json"
+          done
+          curl -fsS "${LUX_URL}/v1/requests?limit=1000" -H "Authorization: Bearer $TOKEN" | jq -c '.items[]' > "$dir/records.ndjson"
+          [ -s "$dir/records.ndjson" ] || { echo "the run produced no record" >&2; exit 1; }
+          ls -l "$dir"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fixture
+          path: out/fixture/
+          if-no-files-found: error
+          retention-days: 7
+      - name: The gateway's log, for a failed run
+        if: failure()
+        run: docker logs luxd; docker logs stubs
+
+  # 4. Only now the digests get the :<tag> reference, and the release is
+  # created with every artifact and the CHANGELOG section as its body,
+  # read with the rule the pre-push hook enforces. checksums.txt is
+  # written and signed here rather than in build, so it can list the
+  # fixture archive the conformance run produced.
+  publish:
+    name: tag the digests and create the release
+    needs: [build, conformance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      OWNER: ${{ needs.build.outputs.owner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fixture
+          path: out/fixture
+      - name: The release notes are the CHANGELOG section for the tag
+        run: |
+          mkdir -p out
+          go tool lateregate release-notes "${GITHUB_REF_NAME}" > out/notes.md
+          test -s out/notes.md
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: The assets, their checksums, and the signature over them
+        run: |
+          mkdir -p release
+          cp dist/*.tar.gz dist/*.spdx.json release/
+          tar -czf "release/fixture-${GITHUB_REF_NAME}.tar.gz" -C out/fixture .
+          (cd release && sha256sum ./*.tar.gz > checksums.txt && cat checksums.txt)
+          cosign sign-blob --yes --output-signature release/checksums.txt.sig --output-certificate release/checksums.txt.pem release/checksums.txt
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Tag both digests
+        run: |
+          docker buildx imagetools create -t "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/luxd@${{ needs.build.outputs.luxd_digest }}"
+          docker buildx imagetools create -t "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs@${{ needs.build.outputs.stubs_digest }}"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --verify-tag --title "${GITHUB_REF_NAME}" --notes-file out/notes.md release/*
+
+  # 5. From a clean runner with no checkout: every asset downloaded in
+  # one call, the signatures, the checksums, the attestations, the
+  # images' binaries against the archives', and the body against the
+  # CHANGELOG section at the tag.
+  release-verify:
+    name: verify the release from a clean runner
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OWNER: ${{ needs.build.outputs.owner }}
+      GH_TOKEN: ${{ github.token }}
+      IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+      ISSUER: https://token.actions.githubusercontent.com
+    steps:
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Download every asset in one call
+        run: |
+          mkdir assets && cd assets
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}"
+          ls -l
+          for name in luxd_${GITHUB_REF_NAME}_linux_amd64 luxd_${GITHUB_REF_NAME}_linux_arm64 luxd_${GITHUB_REF_NAME}_darwin_amd64 luxd_${GITHUB_REF_NAME}_darwin_arm64 \
+                      lux_${GITHUB_REF_NAME}_linux_amd64 lux_${GITHUB_REF_NAME}_linux_arm64 lux_${GITHUB_REF_NAME}_darwin_amd64 lux_${GITHUB_REF_NAME}_darwin_arm64 \
+                      deploy-${GITHUB_REF_NAME} fixture-${GITHUB_REF_NAME}; do
+            test -f "${name}.tar.gz" || { echo "the release lacks ${name}.tar.gz" >&2; exit 1; }
+          done
+          for name in checksums.txt checksums.txt.sig checksums.txt.pem sbom-module.spdx.json sbom-luxd.spdx.json sbom-lux-stubs.spdx.json; do
+            test -f "$name" || { echo "the release lacks ${name}" >&2; exit 1; }
+          done
+      - name: The checksums verify and their signature names this workflow
+        run: |
+          cd assets
+          cosign verify-blob --signature checksums.txt.sig --certificate checksums.txt.pem \
+            --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" checksums.txt
+          sha256sum -c checksums.txt
+          [ "$(grep -c . checksums.txt)" -eq 10 ] || { echo "checksums.txt lists $(grep -c . checksums.txt) archives, want 10" >&2; exit 1; }
+      - name: Both images verify and their attestations answer
+        run: |
+          for image in luxd lux-stubs; do
+            cosign verify --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" "${REGISTRY}/${OWNER}/${image}:${GITHUB_REF_NAME}" > /dev/null
+            gh attestation verify "oci://${REGISTRY}/${OWNER}/${image}:${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}"
+          done
+      - name: The images carry the archives' binaries
+        run: |
+          for arch in amd64 arm64; do
+            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}")
+            docker cp "$id:/usr/local/bin/luxd" "luxd_image_${arch}"
+            docker rm "$id" >/dev/null
+            tar -xzOf "assets/luxd_${GITHUB_REF_NAME}_linux_${arch}.tar.gz" luxd > "luxd_archive_${arch}"
+            cmp "luxd_image_${arch}" "luxd_archive_${arch}" && echo "luxd linux/${arch}: the image and the archive carry the same bytes"
+          done
+      - name: The body is the CHANGELOG section for the tag
+        run: |
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body > body.md
+          gh api "repos/${GITHUB_REPOSITORY}/contents/CHANGELOG.md?ref=${GITHUB_REF_NAME}" -H 'Accept: application/vnd.github.raw+json' > CHANGELOG.md
+          awk -v tag="${GITHUB_REF_NAME}" '/^## /{p = ($2 == tag)} p' CHANGELOG.md | tail -n +2 | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > section.md
+          test -s section.md
+          if ! diff <(tr -d '\r' < body.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}') section.md; then
+            echo "the release body differs from the CHANGELOG section" >&2; exit 1
+          fi
+
+  # 6. The install document against the published artifacts: the image
+  # by tag, the deploy archive unpacked, the lux command from its
+  # archive, walked by the same runner the verify workflow uses against
+  # a checkout. The stubs stand in for the issuer and the provider, as a
+  # Pod applied from the job and never from the deploy tree.
+  install-release:
+    name: the install document against the published artifacts
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OWNER: ${{ needs.build.outputs.owner }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          install_only: true
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: The published artifacts, and nothing from the checkout but the document and its runner
+        run: |
+          mkdir -p work "$RUNNER_TEMP/bin" && cd work
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" -p "deploy-${GITHUB_REF_NAME}.tar.gz" -p "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz"
+          tar -xzf "deploy-${GITHUB_REF_NAME}.tar.gz"
+          tar -xzf "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/bin"
+          docker pull "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}"
+          docker pull "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
+      - name: The cluster and the stubs
+        run: |
+          cd work
+          ../tools/docs/stubs-in-cluster.sh "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}" \
+            "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
+      - name: Walk the document
+        env:
+          LUX_INSTALL_IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.owner }}/luxd:${{ github.ref_name }}
+          LUX_INSTALL_MANIFESTS: deploy
+        run: |
+          cd work
+          PATH="$RUNNER_TEMP/bin:$PATH" ../tools/docs/run-blocks.sh ../docs/install.md
+      - name: The cluster's state, for a failed run
+        if: failure()
+        run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200
+
+  # 7. The next fixture directory, as a pull request against main and
+  # never a push to it: what the conformance run produced, attached to
+  # the release already as fixture-<tag>.tar.gz by publish.
+  fixture:
+    name: open the fixture pull request
+    needs: [publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fixture
+          path: test/conformance/testdata/previous
+      - name: Commit the directory on a branch and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="conformance/fixture-${GITHUB_REF_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add "test/conformance/testdata/previous/${GITHUB_REF_NAME}"
+          git commit -m "conformance: fixture ${GITHUB_REF_NAME}" -m "The resolved manifests and the archived records the release's conformance run produced, for the fixture group of the next release."
+          git push origin "HEAD:refs/heads/conformance/fixture-${GITHUB_REF_NAME}"
+          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" \
+            --title "conformance: fixture ${GITHUB_REF_NAME}" \
+            --body "The previous-release fixture of spec 017: one resolved manifest per kind and the records the conformance run of ${GITHUB_REF_NAME} produced, read by the fixture group on every push from here on. The same bytes are attached to the release as fixture-${GITHUB_REF_NAME}.tar.gz."

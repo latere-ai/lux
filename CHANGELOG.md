@@ -6,6 +6,41 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Release and installation: a `v*` tag runs the release pipeline,
+  `.github/workflows/release.yml`, which requires the tag's commit to
+  have passed `verify`, builds `luxd` and `lux` for `linux` and
+  `darwin` on `amd64` and `arm64`, pushes the `luxd` and `lux-stubs`
+  images by digest, signs them with cosign, attaches an SPDX bill of
+  materials and a build provenance attestation to each, runs the
+  conformance suite against the two digests, and only then tags them
+  and creates the GitHub release with the CHANGELOG section as its
+  body, `checksums.txt` signed as a blob, a deploy archive with the
+  image pinned by digest, and the fixture the next release's suite
+  reads. Images publish under the account that pushed the tag, so a
+  fork's tag publishes under the fork's.
+- `deploy/`: a kustomize base hardened as the threat model says, a
+  `kind` overlay for a laptop cluster and a `generic` one for two
+  replicas over Postgres, an HPA component, and the bootstrap Secret
+  template for the four values no repository should carry. The
+  Deployment rolls one replica at a time and never surges, so a rollout
+  never asks the store for more connections than the running replicas
+  hold.
+- `luxd check`: the second role of the server binary prints one line
+  per requirement of the installation, `ok`, `warn`, or `fail` with one
+  sentence, in a fixed order from `version` to `tunnels`, and exits 1
+  when any line failed. It dials the issuers, the authorizer with the
+  probe every authorizer denies, the event sink with one signed
+  `check.ping`, the request log archive with one empty object it
+  deletes again, and every Provider, and changes nothing, so it is safe
+  against a serving installation.
+- `docs/install.md` walks an installation from nothing to a request
+  through a door on a kind cluster, and CI runs its fenced blocks on
+  every push against the checkout and after every release against the
+  published artifacts, so the document cannot go stale.
+- `Dockerfile.release` and `Dockerfile.stubs` copy the binaries the
+  pipeline built onto the same runtime stage the developer image uses,
+  now pinned by digest.
+
 - `lux serve`: a session's carriers and heartbeat have ended when the
   session ends, so nothing of a session that closed writes to stderr
   after the command printed its close reason or connected again.
