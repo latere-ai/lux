@@ -1,6 +1,6 @@
 ---
 title: "Security and threat model: what Lux protects, against whom, and how"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/001-architecture.md
