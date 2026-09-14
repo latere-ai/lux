@@ -91,6 +91,10 @@ func TestCheckIsReadOnly(t *testing.T) {
 		`{"apiVersion":"lux.latere.ai/v1beta1","kind":"Provider","metadata":{"name":"openai"},"spec":{"dialect":"openai","baseURL":"https://api.example.com/v1","credential":{"value":"sk-canary"}}}`, bearer...); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("PUT: %d %s", resp.StatusCode, body)
 	}
+	// The snapshot is every object as the API lists it, less status.health,
+	// which the serve's own health job writes on its schedule whether or
+	// not a check runs; the members a write would move, version and
+	// updatedAt among them, stay in the comparison.
 	snapshot := func() string {
 		var parts []string
 		for _, kind := range []string{"providers", "models", "keys", "budgets"} {
@@ -98,7 +102,22 @@ func TestCheckIsReadOnly(t *testing.T) {
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("GET /v1/%s: %d %s", kind, resp.StatusCode, body)
 			}
-			parts = append(parts, body)
+			var list struct {
+				Items []map[string]any `json:"items"`
+			}
+			if err := json.Unmarshal([]byte(body), &list); err != nil {
+				t.Fatalf("GET /v1/%s: %v in %s", kind, err, body)
+			}
+			for _, item := range list.Items {
+				if status, ok := item["status"].(map[string]any); ok {
+					delete(status, "health")
+				}
+			}
+			normalised, err := json.Marshal(list.Items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts = append(parts, string(normalised))
 		}
 		return strings.Join(parts, "\n")
 	}
