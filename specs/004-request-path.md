@@ -1,6 +1,6 @@
 ---
 title: "Request path: the dialect doors, route classes, the pipeline, translation, streaming, the data plane errors"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/001-architecture.md

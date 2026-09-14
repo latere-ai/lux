@@ -120,6 +120,11 @@ var rootAllow = map[string]allow{
 			"latere.ai/x/pkg/metrics",
 			"go.opentelemetry.io/",
 			"golang.org/x/",
+			// The lux door writes latere.ai/x/pkg/httpjson's envelope,
+			// and that package reaches github.com/google/uuid for its
+			// path helpers; the same row admits it for luxd in
+			// .lateregate.yaml (spec 004).
+			"github.com/google/uuid",
 		},
 		noStd: []string{"database/sql", "os/exec"},
 	},
