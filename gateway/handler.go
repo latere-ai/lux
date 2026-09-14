@@ -122,7 +122,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hdr.Set("X-Request-Id", xid)
 	}
 	c.rec = Record{ID: c.id, At: c.start}
-	c.finish(c.run())
+	ctx := r.Context()
+	c.finish(ctx, c.run(ctx))
 }
 
 // echoable is spec 011's rule for X-Request-Id: at most 128 bytes of
@@ -142,7 +143,7 @@ func echoable(s string) bool {
 // finish answers a failure the pipeline returned, settles the lease, and
 // writes the record. A failure after the first byte has already ended
 // the stream with the door's frame; one before it is the envelope.
-func (c *call) finish(f *failure) {
+func (c *call) finish(ctx context.Context, f *failure) {
 	switch {
 	case f == nil:
 		c.rec.Status = StatusOK
@@ -160,7 +161,7 @@ func (c *call) finish(f *failure) {
 		}
 	}
 	if c.lease != nil {
-		c.lease.Settle(context.WithoutCancel(c.r.Context()), c.tokens)
+		c.lease.Settle(context.WithoutCancel(ctx), c.tokens)
 	}
 	c.rec.EndedAt = c.h.now()
 	c.rec.Latency = c.rec.EndedAt.Sub(c.start)
@@ -175,7 +176,7 @@ func (c *call) finish(f *failure) {
 }
 
 // run is the pipeline, each stage total before the next begins.
-func (c *call) run() *failure {
+func (c *call) run(ctx context.Context) *failure {
 	c.door, _ = door(c.r.URL.Path)
 	c.rec.Door = c.door
 	rt, f := match(c.r.Method, c.r.URL.Path)
@@ -188,7 +189,7 @@ func (c *call) run() *failure {
 	if f := c.readBody(); f != nil {
 		return f
 	}
-	if f := c.authenticate(); f != nil {
+	if f := c.authenticate(ctx); f != nil {
 		return f
 	}
 	if rt.class == ClassOpaque && !c.key.Spec.Passthrough {
@@ -196,23 +197,23 @@ func (c *call) run() *failure {
 	}
 	switch rt.op {
 	case opModelsList:
-		return c.listModels()
+		return c.listModels(ctx)
 	case opModelsRead:
-		return c.readModel()
+		return c.readModel(ctx)
 	case opOpaque:
-		return c.opaque()
+		return c.opaque(ctx)
 	case opChatCompletions, opResponses, opEmbeddings, opMessages, opAnthropicCount, opGeminiGenerate, opGeminiStream, opGeminiCount, opGeminiEmbed, opGenerate, opLuxCount, opNone:
 	}
-	if f := c.resolveModel(); f != nil {
+	if f := c.resolveModel(ctx); f != nil {
 		return f
 	}
-	if f := c.selectTargets(); f != nil {
+	if f := c.selectTargets(ctx); f != nil {
 		return f
 	}
-	if f := c.reserve(Reservation{Key: c.key, Model: c.model}); f != nil {
+	if f := c.reserve(ctx, Reservation{Key: c.key, Model: c.model}); f != nil {
 		return f
 	}
-	return c.forward()
+	return c.forward(ctx)
 }
 
 // readBody is stage 2. A translated or model route reads the whole body
@@ -248,12 +249,12 @@ func (c *call) readBody() *failure {
 }
 
 // authenticate is stage 3: the credential, its hash, the Key, its state.
-func (c *call) authenticate() *failure {
+func (c *call) authenticate(ctx context.Context) *failure {
 	value, ok := credential(c.r)
 	if !ok {
 		return fail(CodeUnauthenticated, "no credential: Authorization: Bearer, x-api-key, x-goog-api-key, or the query parameter key")
 	}
-	k, err := c.h.o.Keys.ByHash(c.r.Context(), hashValue(value))
+	k, err := c.h.o.Keys.ByHash(ctx, hashValue(value))
 	if err != nil {
 		return fail(CodeStoreUnavailable, "Key lookup: "+err.Error())
 	}
@@ -270,7 +271,7 @@ func (c *call) authenticate() *failure {
 
 // resolveModel is stage 5: the name from the path or the probe, the
 // Model by exact name, the Key's selectors.
-func (c *call) resolveModel() *failure {
+func (c *call) resolveModel(ctx context.Context) *failure {
 	p, err := probeBody(c.body)
 	if err != nil {
 		return fail(CodeInvalidRequest, err.Error())
@@ -284,7 +285,7 @@ func (c *call) resolveModel() *failure {
 		}
 		name = p.model
 	}
-	m, f := c.lookupModel(name)
+	m, f := c.lookupModel(ctx, name)
 	if f != nil {
 		return f
 	}
@@ -295,8 +296,8 @@ func (c *call) resolveModel() *failure {
 // lookupModel resolves a name against the catalog and holds it to the
 // Key's selectors: model_not_found before model_not_allowed, so a caller
 // learns whether the name exists before whether this Key may use it.
-func (c *call) lookupModel(name string) (*v1.Model, *failure) {
-	m, err := c.h.o.Catalog.Model(c.r.Context(), name)
+func (c *call) lookupModel(ctx context.Context, name string) (*v1.Model, *failure) {
+	m, err := c.h.o.Catalog.Model(ctx, name)
 	if err != nil {
 		return nil, fail(CodeStoreUnavailable, "Model lookup: "+err.Error())
 	}
@@ -314,8 +315,8 @@ func (c *call) lookupModel(name string) (*v1.Model, *failure) {
 // door can reach on this route. None admitted is provider_unavailable;
 // none reachable is dialect_unsupported, so the caller learns which of
 // the two problems it has.
-func (c *call) selectTargets() *failure {
-	targets, err := c.h.o.Router.Targets(c.r.Context(), c.model)
+func (c *call) selectTargets(ctx context.Context) *failure {
+	targets, err := c.h.o.Router.Targets(ctx, c.model)
 	if err != nil {
 		return fail(CodeStoreUnavailable, "target selection: "+err.Error())
 	}
@@ -381,7 +382,7 @@ func (c *call) decode() {
 // reserve is stage 7. The reservation is spec 007's: the input estimate
 // and the requested output, or 1024; a count and an opaque route reserve
 // zero tokens.
-func (c *call) reserve(res Reservation) *failure {
+func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 	if c.h.o.Limiter == nil {
 		return nil
 	}
@@ -396,7 +397,7 @@ func (c *call) reserve(res Reservation) *failure {
 			res.InputTokens = int64(len(c.body)) / 4
 		}
 	}
-	lease, err := c.h.o.Limiter.Reserve(c.r.Context(), res)
+	lease, err := c.h.o.Limiter.Reserve(ctx, res)
 	if err != nil {
 		var refusal *Refusal
 		if errors.As(err, &refusal) {
@@ -411,8 +412,8 @@ func (c *call) reserve(res Reservation) *failure {
 // listModels answers GET /v1/models: the Models whose names match one of
 // the Key's selectors and whose status.available is true, sorted, in the
 // door's list shape; never forwarded.
-func (c *call) listModels() *failure {
-	models, err := c.h.o.Catalog.Models(c.r.Context())
+func (c *call) listModels(ctx context.Context) *failure {
+	models, err := c.h.o.Catalog.Models(ctx)
 	if err != nil {
 		return fail(CodeStoreUnavailable, "Model list: "+err.Error())
 	}
@@ -429,8 +430,8 @@ func (c *call) listModels() *failure {
 
 // readModel answers GET /v1/models/{model}: the one entry, or
 // model_not_found, or model_not_allowed, so the list and the read agree.
-func (c *call) readModel() *failure {
-	m, f := c.lookupModel(c.route.model)
+func (c *call) readModel(ctx context.Context) *failure {
+	m, f := c.lookupModel(ctx, c.route.model)
 	if f != nil {
 		return f
 	}

@@ -67,16 +67,27 @@ func geminiEntry(name string) geminiModel {
 	return geminiModel{Name: "models/" + name, DisplayName: name, SupportedGenerationMethods: []string{"generateContent", "countTokens"}}
 }
 
+// marshal encodes one of the door's own shapes, a struct of strings and
+// integers that always marshals, with the newline every body the gateway
+// composes ends in. A failure is a bug in this file and is a panic, which
+// the server's recovery answers as 011's internal.
+func marshal(v any) []byte {
+	out, err := json.Marshal(v)
+	if err != nil {
+		panic("gateway: a door's own shape does not marshal: " + err.Error())
+	}
+	return append(out, '\n')
+}
+
 // modelList renders the sorted names in the door's list shape.
 func modelList(door v1.Dialect, names []string) []byte {
-	var body any
 	switch door {
 	case v1.DialectOpenAI, v1.DialectLux:
 		list := openaiModelList{Object: "list", Data: make([]openaiModel, 0, len(names))}
 		for _, n := range names {
 			list.Data = append(list.Data, openaiEntry(n))
 		}
-		body = list
+		return marshal(list)
 	case v1.DialectAnthropic:
 		list := anthropicModelList{Data: make([]anthropicModel, 0, len(names))}
 		for _, n := range names {
@@ -85,29 +96,26 @@ func modelList(door v1.Dialect, names []string) []byte {
 		if len(names) > 0 {
 			list.FirstID, list.LastID = &names[0], &names[len(names)-1]
 		}
-		body = list
+		return marshal(list)
 	case v1.DialectGemini:
 		list := geminiModelList{Models: make([]geminiModel, 0, len(names))}
 		for _, n := range names {
 			list.Models = append(list.Models, geminiEntry(n))
 		}
-		body = list
+		return marshal(list)
 	}
-	out, _ := json.Marshal(body) // structs of strings and integers always marshal
-	return append(out, '\n')
+	return nil
 }
 
 // modelEntry renders one Model in the door's entry shape.
 func modelEntry(door v1.Dialect, name string) []byte {
-	var body any
 	switch door {
 	case v1.DialectOpenAI, v1.DialectLux:
-		body = openaiEntry(name)
+		return marshal(openaiEntry(name))
 	case v1.DialectAnthropic:
-		body = anthropicEntry(name)
+		return marshal(anthropicEntry(name))
 	case v1.DialectGemini:
-		body = geminiEntry(name)
+		return marshal(geminiEntry(name))
 	}
-	out, _ := json.Marshal(body) // as above
-	return append(out, '\n')
+	return nil
 }

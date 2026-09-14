@@ -243,10 +243,10 @@ func upstreamDetail(resp *http.Response) string {
 // forward is stages 8 and 9: the attempt order, one attempt per target,
 // a retryable failure before any response byte handing the request to
 // the next target, the last attempt's failure as the answer.
-func (c *call) forward() *failure {
+func (c *call) forward(ctx context.Context) *failure {
 	var last *failure
 	for _, t := range c.targets {
-		if c.r.Context().Err() != nil {
+		if ctx.Err() != nil {
 			return fail(ClientClosed, "")
 		}
 		m := c.modeFor(t)
@@ -256,7 +256,7 @@ func (c *call) forward() *failure {
 		if !c.h.o.Router.Allow(t) {
 			continue
 		}
-		f, final := c.attempt(t, m)
+		f, final := c.attempt(ctx, t, m)
 		if f == nil || final || c.model.Spec.Fallback == v1.FallbackNever {
 			return f
 		}
@@ -272,7 +272,7 @@ func (c *call) forward() *failure {
 // writes the response. final reports that no other target should be
 // tried: the request was served, the failure is not retryable, or the
 // caller has already seen part of an answer.
-func (c *call) attempt(t Target, m mode) (f *failure, final bool) {
+func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, final bool) {
 	p := t.Provider
 	started := c.h.now()
 	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, UpstreamModel: t.Model, Status: StatusOK}
@@ -287,7 +287,7 @@ func (c *call) attempt(t Target, m mode) (f *failure, final bool) {
 	c.rec.Provider, c.rec.ProviderID, c.rec.UpstreamModel = p.Metadata.Name, p.Status.ID, t.Model
 	c.rec.TargetDialect, c.rec.Translated = p.Spec.Dialect, m == modeTranslate
 
-	ctx, cancel := context.WithTimeout(c.r.Context(), providerTimeout(p))
+	ctx, cancel := context.WithTimeout(parent, providerTimeout(p))
 	defer cancel()
 	req, loss, f := c.outbound(ctx, t, m)
 	if f != nil {
@@ -302,7 +302,7 @@ func (c *call) attempt(t Target, m mode) (f *failure, final bool) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return c.transportFailure(t, ctx, err), false
+		return c.transportFailure(ctx, t, err), false
 	}
 	at.HTTPStatus = resp.StatusCode
 	switch {
@@ -331,7 +331,7 @@ func (c *call) attempt(t Target, m mode) (f *failure, final bool) {
 
 // transportFailure classifies an error from the client: the caller gone,
 // the Provider's timeout, or a failure before a response line.
-func (c *call) transportFailure(t Target, ctx context.Context, err error) *failure {
+func (c *call) transportFailure(ctx context.Context, t Target, err error) *failure {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case c.r.Context().Err() != nil:
@@ -479,23 +479,23 @@ func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Re
 // opaque is the opaque route: the Provider from Lux-Provider or the one
 // candidate, the reservation of one request and no tokens, and the bytes
 // streamed through in both directions.
-func (c *call) opaque() *failure {
-	p, f := c.chooseProvider()
+func (c *call) opaque(ctx context.Context) *failure {
+	p, f := c.chooseProvider(ctx)
 	if f != nil {
 		return f
 	}
-	if f := c.reserve(Reservation{Key: c.key, Opaque: true}); f != nil {
+	if f := c.reserve(ctx, Reservation{Key: c.key, Opaque: true}); f != nil {
 		return f
 	}
-	return c.forwardOpaque(p)
+	return c.forwardOpaque(ctx, p)
 }
 
 // chooseProvider picks an opaque route's Provider: by name from
 // Lux-Provider, a Provider of the door's dialect that one of the Key's
 // selectors reaches through some Model; without the header, the one
 // such Provider when there is exactly one; otherwise provider_required.
-func (c *call) chooseProvider() (*v1.Provider, *failure) {
-	models, err := c.h.o.Catalog.Models(c.r.Context())
+func (c *call) chooseProvider(ctx context.Context) (*v1.Provider, *failure) {
+	models, err := c.h.o.Catalog.Models(ctx)
 	if err != nil {
 		return nil, fail(CodeStoreUnavailable, "Model list: "+err.Error())
 	}
@@ -510,7 +510,7 @@ func (c *call) chooseProvider() (*v1.Provider, *failure) {
 	}
 	var candidates []*v1.Provider
 	for ref := range reachable {
-		p, err := c.h.o.Catalog.Provider(c.r.Context(), ref)
+		p, err := c.h.o.Catalog.Provider(ctx, ref)
 		if err != nil {
 			return nil, fail(CodeStoreUnavailable, "Provider lookup: "+err.Error())
 		}
@@ -537,14 +537,14 @@ func (c *call) chooseProvider() (*v1.Provider, *failure) {
 // Provider and speaks its API directly, so its answer, an error status
 // included, is the caller's to read. The record carries the upstream
 // status and zero estimated tokens.
-func (c *call) forwardOpaque(p *v1.Provider) *failure {
+func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	c.rec.Provider, c.rec.ProviderID, c.rec.TargetDialect = p.Metadata.Name, p.Status.ID, p.Spec.Dialect
 	c.tokens = Tokens{Estimated: true}
 	base, err := url.Parse(p.Spec.BaseURL)
 	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": baseURL: "+err.Error())
 	}
-	ctx, cancel := context.WithTimeout(c.r.Context(), providerTimeout(p))
+	ctx, cancel := context.WithTimeout(parent, providerTimeout(p))
 	defer cancel()
 	u := *base
 	u.Path = strings.TrimSuffix(base.Path, "/") + passthroughPath(c.door, c.route.rest)
@@ -568,7 +568,7 @@ func (c *call) forwardOpaque(p *v1.Provider) *failure {
 	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, Status: StatusOK}
 	resp, err := client.Do(req)
 	if err != nil {
-		f := c.transportFailure(Target{Provider: p}, ctx, err)
+		f := c.transportFailure(ctx, Target{Provider: p}, err)
 		at.Status, at.Error, at.Duration = StatusFailed, f.code, c.h.now().Sub(started)
 		c.rec.Attempts = append(c.rec.Attempts, at)
 		return f
