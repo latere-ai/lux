@@ -327,8 +327,15 @@ func (s *streamer) content(i int) {
 		if i == 0 {
 			delta["role"] = "assistant"
 		}
+		// The last content event carries the finish reason, so a stream
+		// of n content events is n frames and then the route's final
+		// usage event, as spec 015 has it, rather than one more.
+		var finish any
+		if i == s.b.Events-1 {
+			finish = "stop"
+		}
 		s.emit("", map[string]any{"id": chatID, "object": "chat.completion.chunk", "created": 0, "model": s.req.model,
-			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": nil}}})
+			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}})
 	case routeResponses:
 		s.emit("response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": messageID, "output_index": 0, "content_index": 0, "delta": p})
 	case routeMessages:
@@ -346,8 +353,12 @@ func (s *streamer) finish() {
 	in, out := s.b.InputTokens, s.b.OutputTokens
 	switch s.rt {
 	case routeChat:
-		s.emit("", map[string]any{"id": chatID, "object": "chat.completion.chunk", "created": 0, "model": s.req.model,
-			"choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
+		if s.b.Events == 0 {
+			// No content event carried the finish reason, so one frame
+			// of its own closes the choice.
+			s.emit("", map[string]any{"id": chatID, "object": "chat.completion.chunk", "created": 0, "model": s.req.model,
+				"choices": []any{map[string]any{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}}})
+		}
 		s.emit("", map[string]any{"id": chatID, "object": "chat.completion.chunk", "created": 0, "model": s.req.model, "choices": []any{},
 			"usage": map[string]any{"prompt_tokens": in, "completion_tokens": out, "total_tokens": in + out, "prompt_tokens_details": map[string]any{"cached_tokens": 0}}})
 		_, _ = io.WriteString(s.w, "data: [DONE]\n\n")

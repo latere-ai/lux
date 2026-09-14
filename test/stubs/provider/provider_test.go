@@ -132,6 +132,53 @@ func TestProviderStubRoutes(t *testing.T) {
 	}
 }
 
+// TestChatStreamFrameBudget: a streamed chat answer of n content events
+// is n frames, the final usage frame, and [DONE], with the finish reason
+// on the last content frame rather than a frame of its own, so a reader
+// counting frames reads the count the upstream model name asked for. A
+// stream of no content events keeps a frame for the finish reason, since
+// no content frame could carry it.
+func TestChatStreamFrameBudget(t *testing.T) {
+	srv := start(t, v1.DialectOpenAI)
+	for _, tc := range []struct {
+		model          string
+		events, frames int
+	}{
+		{"events-3", 3, 5},
+		{"m", DefaultEvents, DefaultEvents + 2},
+		{"events-0", 0, 3},
+	} {
+		resp := send(t, srv, http.MethodPost, "/v1/chat/completions", `{"model":"`+tc.model+`","stream":true,"messages":[{"role":"user","content":"hi"}]}`, nil)
+		fs := frames(resp.body)
+		if len(fs) != tc.frames {
+			t.Errorf("%s: %d frames, want %d\n%s", tc.model, len(fs), tc.frames, resp.body)
+			continue
+		}
+		if n, _ := contentEvents(v1.DialectOpenAI, fs); n != tc.events {
+			t.Errorf("%s: %d content frames, want %d\n%s", tc.model, n, tc.events, resp.body)
+		}
+		if usageEvents(v1.DialectOpenAI, fs) != 1 {
+			t.Errorf("%s: the usage frame is not the one before [DONE]\n%s", tc.model, resp.body)
+		}
+		if fs[len(fs)-1].data != "[DONE]" {
+			t.Errorf("%s: the last frame is %q", tc.model, fs[len(fs)-1].data)
+		}
+		var stops int
+		for _, f := range fs[:len(fs)-1] {
+			var doc map[string]any
+			if decodeJSON([]byte(f.data), &doc) != nil {
+				continue
+			}
+			if v, ok := lookup(doc, "choices.0.finish_reason"); ok && v == "stop" {
+				stops++
+			}
+		}
+		if stops != 1 {
+			t.Errorf("%s: %d frames carry a finish reason, want one\n%s", tc.model, stops, resp.body)
+		}
+	}
+}
+
 // TestProviderStubIsDeterministic: one request twice yields byte-identical
 // bodies, and the content names the dialect, the model, and the digest of
 // the last user text, which changes when the text does and when the
