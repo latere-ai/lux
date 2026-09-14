@@ -77,9 +77,11 @@ this table exists to make checkable.
 ### The minimal authorizer
 
 Twenty lines is enough to run an installation where every subject owns
-what it applied and administrators declare the catalog, which is what
+what it applied and administrators declare the catalogue, which is what
 the built-in owner policy does ([[006-identity]]) and what a platform
-replaces first. The payload is 006's exactly; a Go authorizer may
+replaces first. An administrator is under no ceiling, because a ceiling
+refuses a Key that names no limit at all and the catalogue's own Keys
+are declared without one. The payload is 006's exactly; a Go authorizer may
 decode it into `authz.Request` from `latere.ai/x/pkg/authz`, and one in
 any language reads the fields below. The endpoint answers from its
 bearer and its own state alone: it needs no session and calls neither
@@ -104,7 +106,7 @@ type resp struct {
 // can tell an endpoint that reads the request from one that does not.
 const probeID = "00000000-0000-0000-0000-000000000001"
 
-var spendCap = map[string]string{"free": "5", "team": "50", "admin": "500"}
+var spendCap = map[string]string{"free": "5", "team": "50"}
 
 func decide(r req) resp {
 	plan, _ := r.Claims["plan"].(string)
@@ -112,12 +114,17 @@ func decide(r req) resp {
 	case r.Resource["id"] == probeID:
 		return resp{Allow: false, Reason: "the probe id is reserved"}
 	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
-		if r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list") {
+		switch {
+		case r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
+		case plan == "admin":
+			return resp{Allow: true}
 		}
-		return resp{Allow: plan == "admin", Reason: "the catalogue is declared by the platform"}
+		return resp{Reason: "the catalogue is declared by the platform"}
 	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
 		return resp{Allow: false, Reason: "not yours"}
+	case plan == "admin":
+		return resp{Allow: true, Filter: map[string]any{"owners": []string{r.Subject}}}
 	default:
 		return resp{Allow: true,
 			Limits: map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100},

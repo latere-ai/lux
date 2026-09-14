@@ -165,10 +165,13 @@ func decide(r req) resp {
 	case r.Resource["id"] == probeID:
 		return resp{Allow: false, Reason: "the probe id is reserved"}
 	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
-		if r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list") {
+		switch {
+		case r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
+		case plan == "admin":
+			return resp{Allow: true}
 		}
-		return resp{Allow: plan == "admin", Reason: "the catalogue is declared by the platform"}
+		return resp{Reason: "the catalogue is declared by the platform"}
 	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
 		return resp{Allow: false, Reason: "not yours"}
 	case plan == "admin":
