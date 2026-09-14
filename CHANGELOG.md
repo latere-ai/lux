@@ -6,6 +6,25 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Usage and metering: every request through a door ends in one usage
+  record, the gateway's record with the cost the Model's `pricing` gives
+  its tokens, an integer count of micro-units and never a float: one
+  rounding, half up, over the whole sum, per 1, 1000, or 1000000 tokens,
+  in any currency. Cached input is billed once at its own price,
+  reasoning tokens are recorded and not billed, a count route, an
+  opaque route, and a Model without a price are `priced: false`, and a
+  request refused before it reached a provider has a record too. The
+  records fold into hourly rows per key, model, provider, owner, door,
+  status, and currency, which the store keeps and the usage API reads
+  grouped by up to three dimensions, including a Key label, over
+  hours, days, months, or a total, never summing two currencies; each
+  replica also keeps the last 1000 records per key for the request
+  list. `LUX_METERING_FLUSH` (default `1s`, between `100ms` and `1m`) is
+  how often a replica writes its spend counters and its aggregates,
+  `lux_tokens_total{direction}` and `lux_spend_microunits_total{currency}`
+  follow the records, and `lux_metering_flush_lag_seconds` grows while
+  the store refuses a flush. The `/v1/usage` and `/v1/requests` routes
+  that read all of this mount with the API.
 - Keys and limits: a Key's value is `lux_` and forty characters from a
   secure source, shown once and stored as a hash, and a platform may
   supply its own value of 32 to 4096 bytes instead, which opens the

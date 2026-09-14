@@ -1,6 +1,6 @@
 ---
 title: "Usage and metering: the record, cost, windows, the usage API, the multi-replica rule"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -38,9 +38,16 @@ year after it was written.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+The `metering` package holds the record, `Cost`, the aggregate shapes,
+`Fold`, the query, and the windows and counters [[007-keys-and-limits]]
+built there. `internal/store` declares `Usage()` on the contract with
+the memory store's hourly rows and per-Key ring and the suite's cases;
+the Postgres half is not built. `internal/serve` holds the `Recorder`
+over `gateway.Record`, the `Usage` aggregation for the route, the three
+metrics, and `LUX_METERING_FLUSH` through the Limiter's and the
+Recorder's flush, which `luxd serve` starts with its jobs. The routes
+that read the aggregates and the records are [[011-api]]'s and mount
+there; the archive is [[012-request-log-and-events]]'s.
 
 ## Design
 
@@ -75,7 +82,7 @@ finished or refused.
 | `latencyMs` | int | `endedAt` minus `at` |
 | `ttfbMs` | int | to the first response byte written to the caller; `0` when none was |
 | `tokens` | object | `{input, output, cachedInput, cacheWrite, reasoning, estimated}`, every count an `int64` |
-| `cost` | object | `{amount, currency, priced}`: `amount` an `int64` count of micro-units of `currency`, so `1250000` is `1.25`; the money strings of [[003-manifest-contract]] are what people write in a manifest and what `status` renders, and a record and a usage row carry the integer, never the string |
+| `cost` | object | `{amount, currency, priced}`, the `metering.Charge` struct, so named because `Cost` is the function: `amount` an `int64` count of micro-units of `currency`, so `1250000` is `1.25`; the money strings of [[003-manifest-contract]] are what people write in a manifest and what `status` renders, and a record and a usage row carry the integer, never the string; `currency` is empty and `amount` `0` when `priced` is false |
 | `stream` | bool | the caller asked for a stream |
 | `labels` | map | a copy of the Key's `metadata.labels` at request time |
 | `requestLabels` | map | the accepted pairs of the request's `Lux-Labels` header ([[007-keys-and-limits]]), at most eight; empty when none; never an aggregate dimension |
@@ -92,7 +99,21 @@ either.
 A refused request has a record: `status` `refused`, `error` set,
 `attempts` empty, zero tokens, zero cost. This is the record an
 operator reads to find out why a workload is getting nothing, so
-refusing without one would hide the most useful case.
+refusing without one would hide the most useful case. A request refused
+before its Key was known carries an empty `key` and `owner`.
+
+The Recorder of `internal/serve` builds the record after the response
+is finished, so the one read it makes adds nothing to the caller's
+latency: the resolved Model's `pricing` is read through the catalog by
+the name the record carries, bounded by five seconds, and a catalog
+that does not answer leaves the record unpriced and logs the read. A
+count route is told by its template in the door table of
+[[004-request-path]], `/anthropic/v1/messages/count_tokens`,
+`/gemini/v1beta/models/{model}:countTokens`, and `/lux/v1/count_tokens`,
+and an opaque route by its class; both are unpriced whatever the Model
+says, because no completion was made from the count. `gateway.Record`
+could carry a count flag and make the template list unnecessary, which
+is that spec's edit to make.
 
 ### Tokens
 
@@ -173,7 +194,11 @@ a Budget in one currency and names a Model priced in another is refused
 then `0`. Under a spend limit or a Budget an unpriced Model is refused
 `model_unpriced` before any bytes reach a provider unless the Key sets
 `allowUnpriced`, because a spend limit that silently admits requests it
-cannot price is not a limit.
+cannot price is not a limit. `Charged(t, p)` is the record's cost block
+for `Cost(t, p)`: the amount and the Pricing's currency when priced, an
+empty block otherwise. A price the Pricing does not name is `0`, and a
+`per` of `0`, which the resolver never leaves but a caller might, reads
+as `1`.
 
 ### Windows and counters
 
@@ -197,18 +222,26 @@ a window began.
 | key spend | `key:<key id>:spend:<start>` | `limits.spend.window` | cost in micro-units | the store |
 | key requests | `key:<key id>:requests:<start>` | `limits.spend.window` | one per admitted request | the store |
 | key tokens | `key:<key id>:tokens:<start>` | `limits.spend.window` | input plus output | the store |
-| key totals | the three above with window `none` | `none` | the same three over the Key's lifetime | the store |
+| key totals | the three above with the word `none` in place of `<start>`, `key:<key id>:spend:none` | `none` | the same three over the Key's lifetime | the store |
 | budget spend | `budget:<budget id>:spend:<start>` | `Budget.spec.window` | cost in micro-units | the store |
 | exhausted marker | `key:<key id>:exhausted:<start>`, `budget:<budget id>:exhausted:<start>` | the object's spend window | `1`, added by a replica that observes the window at or over its amount; the add that returns `1` is the one that emits the event ([[007-keys-and-limits]], [[012-request-log-and-events]]) | the store |
 
 `<start>` is the window start as Unix seconds, so a key names exactly
 one window and a finished window's row is prunable by its own name.
-The spend counter is what the limit of [[007-keys-and-limits]] reads;
-the requests and tokens counters, and the three totals, are what
-`status.usage` renders, and the window rows exist only for a Key with
-a spend limit. The per-minute rate limits are not counters here at all:
-they are that spec's per-replica buckets and never reach the store,
-which is the multi-replica rule below.
+The totals' key carries the word `none`, not the Key's `createdAt`,
+as [[007-keys-and-limits]] settled: a duration window that begins at
+the creation instant, which the first window of every Key created on
+an aligned boundary does, would otherwise render the totals' key and
+count every request twice. The spend counter is what the limit of
+[[007-keys-and-limits]] reads; the requests and tokens counters, and
+the three totals, are what `status.usage` renders, and the window rows
+exist only for a Key with a spend limit. The Limiter feeds all of them,
+one request at admission, the measured tokens at the settle, and the
+estimate then the measured cost less it; the Recorder folds the
+aggregates from the records and adds to none of these, or every
+admitted request would count twice. The per-minute rate limits are not
+counters here at all: they are that spec's per-replica buckets and
+never reach the store, which is the multi-replica rule below.
 
 ### The multi-replica rule
 
@@ -228,7 +261,11 @@ Spend windows are the store's. Each replica keeps a local delta per
 counter key and flushes it every `LUX_METERING_FLUSH`, and at shutdown,
 through one add that returns the counter's new total; the returned
 total replaces the replica's cached store value and the delta resets.
-There is no per-request store read: the check a hard limit makes is
+A replica that has never added to a key holds no view of it and admits
+its first request under that key on an empty view, which is the one
+request of the bound's last term; it learns the store's total at its
+own first flush of that key. There is no per-request store read: the
+check a hard limit makes is
 
 ```
 spent = lastStoreTotal + localDelta
@@ -265,24 +302,39 @@ above ([[007-keys-and-limits]], [[012-request-log-and-events]]), and
 continues.
 
 Three metrics of [[019-observability]] are this spec's, recorded at
-settle and at flush: `lux_tokens_total{direction}` adds each record's
-`input`, `output`, `cachedInput`, and `cacheWrite`;
+the record and at the flush, under `serve.MetricTokens`,
+`MetricSpend`, and `MetricFlushLag`: `lux_tokens_total{direction}` adds
+each record's `input`, `output`, `cached_input`, and `cache_write`;
 `lux_spend_microunits_total{currency}` adds each priced record's
 `cost.amount`; `lux_metering_flush_lag_seconds` is the seconds since
-this replica's last successful `Flush`, so a stalled store shows as a
-growing gauge before any limit is wrong by more than the bound.
+this replica's last successful flush, the older of the Limiter's
+counter flush and the Recorder's aggregate flush, so a stalled store
+shows as a growing gauge before any limit is wrong by more than the
+bound. [[019-observability]]'s table also lists
+`lux_output_tokens_per_second` under this spec; it is not recorded
+here and is that spec's to place.
 
 ### Configuration
 
 | Variable | Default | Rule |
 |---|---|---|
-| `LUX_METERING_FLUSH` | `1s` | at least `100ms`, at most `1m`; the flush interval of every spend counter and of the aggregates; listed with its owner in [[002-repository-scaffold]]'s table |
+| `LUX_METERING_FLUSH` | `1s` | at least `100ms`, at most `1m`; the flush interval of every spend counter, through the Limiter, and of the aggregates, through the Recorder, each a loop `luxd serve` starts with its jobs and flushes once more at stop; listed with its owner in [[002-repository-scaffold]]'s table |
 
 ### The usage API
 
 Every aggregate this API answers is read through `Store.Usage()`, the
 collection [[010-state]] declares with this spec's types, so the memory
-store and the Postgres store answer one query the same way.
+store and the Postgres store answer one query the same way. As built,
+`AddRows` takes `[]metering.Aggregate`, the hourly row with every
+dimension a member, because a row keyed by a `dimensions` map cannot be
+upserted on its primary key; `QueryRows` answers `[]metering.Row`, the
+response rows, grouped as `metering.Group` groups; `AppendRecord` and
+`Records` are the ring, with `store.EncodeRecordCursor` binding a
+cursor to the record query and the record's `at` and `id`. That spec's
+code block names the element type of `AddRows` as `Row` and is its
+edit to make. `serve.Usage(ctx, store, query, now)` is what the route
+calls: it fills an open range with the last day, validates, and reads
+the rows, never nil.
 
 The routes are [[011-api]]'s; the parameters and the response fields
 are this spec's.
@@ -299,21 +351,32 @@ are this spec's.
 
 The API asks the authorizer `usage.read` with the resolved `keys` and
 the `owners` of the query in the `resource` ([[006-identity]]), and the
-answer's `filter` is intersected with the query: an `owners` list
-narrows the rows to those Keys' owners and a `labels` map to Keys
-carrying every pair, so a caller outside the filter reads an empty
-result and never a 403 ([[011-api]]). Under the owner policy the filter
-is the caller's own subject.
+answer's `filter` is intersected with the query through
+`metering.Intersect(q, owners, labels)`: an `owners` list narrows
+`Owners` to the subjects both name, or to the filter's when the query
+named none, and a `labels` map adds every pair, so a caller outside the
+filter reads an empty result and never a 403 ([[011-api]]); an
+intersection that selects nothing, owners with nothing in common or a
+label the query names with another value, is answered `false` and the
+route writes an empty `items` without a query. Under the owner policy
+the filter is the caller's own subject. A parameter outside the table
+is a `*metering.QueryError` naming the parameter in `Field`, which the
+route answers `invalid_field` at that name.
 
-A response row is `{bucket, dimensions, requests, ok, refused, failed,
-inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens,
-cost, currency, unpricedRequests}`. `bucket` is the interval's start,
-RFC 3339 UTC, or absent for `interval` `none`; `dimensions` is a map of
-each `by` name to its value; `ok`, `refused`, and `failed` sum the
-`status` dimension of the aggregate rows. `currency` is a dimension of
-every row whether or not it is named in `by`, because two currencies
-are never summed. `cost` is an `int64` of micro-units, as in the
-record.
+A response row, `metering.Row`, is `{bucket, dimensions, requests, ok,
+refused, failed, inputTokens, outputTokens, cachedInputTokens,
+cacheWriteTokens, cost, currency, unpricedRequests}`. `bucket` is the
+interval's start, RFC 3339 UTC, or absent for `interval` `none`;
+`dimensions` is a map of each `by` name to its value, the `key_`,
+`mdl_`, or `prv_` id for `key`, `model`, and `provider`, never the
+name, because a Key's id keeps working after the Key is deleted and a
+Model may be renamed under a running query; `ok`, `refused`, and
+`failed` sum the `status` dimension of the aggregate rows. `currency`
+is a dimension of every row whether or not it is named in `by`, because
+two currencies are never summed; the unpriced and the refused requests
+of a bucket are a row with an empty `currency`. `cost` is an `int64` of
+micro-units, as in the record. The rows are ordered by bucket, then
+each `by` value, then currency.
 
 `GET /v1/requests` answers records, newest first, with `from`, `to`,
 the same filters, plus `status`, `error`, and `stream`, a `cursor`, and
@@ -338,8 +401,9 @@ long as it keeps anything. The store holds aggregates only, so no
 variable configures how long the store keeps records and the store's
 size is a function of the dimensions rather than of the traffic.
 
-The aggregate is one row per hour per dimension tuple, upserted by the
-same flush that writes the counters:
+The aggregate, `metering.Aggregate`, is one row per hour per dimension
+tuple, upserted by the Recorder's flush on the same interval as the
+counters:
 
 | Column | Type | Note |
 |---|---|---|
@@ -350,57 +414,55 @@ same flush that writes the counters:
 
 `by=label:<name>` groups on `labels->><name>`, which costs nothing in
 cardinality because `key_id` is already a dimension and a Key's labels
-are one value per Key. Coarser intervals are summed from the hours;
-`month` is summed from the hours of the calendar month in UTC. The
-memory store keeps the same rows in maps and loses them at restart,
-which the start-up log says ([[010-state]]).
+are one value per Key; a Key relabelled between two flushes reads with
+its newest labels, because the upsert replaces them. Coarser intervals
+are summed from the hours; `month` is summed from the hours of the
+calendar month in UTC; an hour that overlaps the query's range is read
+whole. The memory store keeps the same rows in a map by
+`metering.AggregateKey` and the rings in a map by Key id, and loses
+both at restart, which the start-up log says ([[010-state]]).
 
 ### The `metering` package
 
+The windows, the counter keys, `Counters`, and `Claim` are as
+[[007-keys-and-limits]] built them there; this spec adds the rest.
+
 ```go
-// Cost, Tokens, Record, Attempt as above.
+// Status, Tokens, Charge, Ref, KeyRef, Attempt, Record as the table
+// above; Record's JSON names are the table's.
 
-// Window returns the bounds of w containing at. resetsAt is the zero
-// time for window none.
-func Window(w v1.Window, at, createdAt time.Time) (start, resetsAt time.Time)
+// Cost prices t under p per Per tokens, one rounding half up over the
+// whole sum; nil p is unpriced. Charged is the record's cost block.
+func Cost(t Tokens, p *v1.Pricing) (v1.Money, bool)
+func Charged(t Tokens, p *v1.Pricing) Charge
 
-type Scope string
-
-const (
-	ScopeKeyRequests     Scope = "key:requests"
-	ScopeKeyTokens       Scope = "key:tokens"
-	ScopeKeySpend        Scope = "key:spend"
-	ScopeKeyExhausted    Scope = "key:exhausted"
-	ScopeBudgetSpend     Scope = "budget:spend"
-	ScopeBudgetExhausted Scope = "budget:exhausted"
-)
-
-// CounterKey renders the key of the counter table: one key names one
-// window of one object. For ScopeKeySpend under a Key with no spend
-// limit, and for the totals, w is WindowNone and start is createdAt.
-func CounterKey(s Scope, id string, w v1.Window, at, createdAt time.Time) string
-
-// CounterStore is what the store satisfies (010).
-type CounterStore interface {
-	AddCounter(ctx context.Context, key string, delta int64, expiresAt time.Time) (total int64, err error)
-	ReadCounters(ctx context.Context, keys []string) (map[string]int64, error)
-}
-
-// Counters holds one replica's deltas over a CounterStore.
-type Counters struct{ ... }
-
-func NewCounters(store CounterStore, flush time.Duration) *Counters
-func (c *Counters) Add(key string, n int64)                 // local, lock-free on the hot path
-func (c *Counters) Total(key string) int64                  // last store total plus local delta
-func (c *Counters) Flush(ctx context.Context) error         // one add per dirty key
-func (c *Counters) Run(ctx context.Context) error           // flush on the interval until ctx ends
-
-// Row is one aggregate row; Fold turns records into rows. Query and
-// RecordQuery are the parameters of the two usage routes above, which
-// the store answers (010).
-type Row struct{ ... }
+// Dimension is key, model, provider, owner, door, status, or
+// label:<name>; Interval is none, hour, day, or month, and Bucket is
+// the start of the bucket holding an instant, in UTC.
 type Dimension string
 type Interval string
+func (d Dimension) Valid() bool
+func (d Dimension) Label() (name string, ok bool)
+func (i Interval) Valid() bool
+func (i Interval) Bucket(at time.Time) time.Time
+
+// Aggregate is the store's hourly row; Sums are its summed columns;
+// AggregateKey is its primary key. Row is the response row.
+type Aggregate struct { Bucket; KeyID, ModelID, ProviderID, Owner; Door; Status; Currency; Labels; Sums }
+type Sums struct { Requests, InputTokens, OutputTokens, CachedInputTokens, CacheWriteTokens, Cost, Unpriced int64 }
+type AggregateKey struct { ... }
+type Row struct { Bucket; Dimensions; Requests, OK, Refused, Failed; ...Tokens; Cost int64; Currency; UnpricedRequests }
+
+// AggregateOf is one record's hourly row; Aggregates folds records
+// into hourly rows; Group sums hourly rows into response rows; Fold is
+// Group over Aggregates. All four are pure.
+func AggregateOf(r Record) Aggregate
+func Aggregates(rs []Record) []Aggregate
+func Group(as []Aggregate, by []Dimension, in Interval) []Row
+func Fold(rs []Record, by []Dimension, in Interval) []Row
+
+// Query and RecordQuery are the two routes' parameters, ids resolved.
+const MaxRange, MaxBy, DefaultRange = 90 days, 3, 24 hours
 type Query struct {
 	From, To time.Time
 	By       []Dimension
@@ -410,20 +472,27 @@ type Query struct {
 }
 type RecordQuery struct {
 	Query
-	Status, Error string
-	Stream        *bool
+	Status Status
+	Error  string
+	Stream *bool
 }
+type QueryError struct{ Field, Detail string }
+func (q Query) WithDefaults(now time.Time) Query
+func (q Query) Validate() error               // a *QueryError at its parameter
+func (q Query) Matches(a Aggregate) bool
+func (q RecordQuery) Matches(r Record) bool
+func Intersect(q Query, owners []string, labels map[string]string) (Query, bool)
 
-func Fold(rs []Record, by []Dimension, in Interval) []Row
-
-// RecordsPerKey is the memory store's ring size per key.
+// RecordsPerKey is the ring size per Key.
 const RecordsPerKey = 1000
 ```
 
-`Counters.Add` is called once per request per counter on the hot path
-and never blocks on the store; `Flush` is the only method that touches
-it. `Fold` is pure, which is what lets the aggregates be recomputed
-from an archive and compared against the store's.
+`Fold` is pure, which is what lets the aggregates be recomputed from
+an archive and compared against the store's, and `Group` is the one
+grouping the memory store runs, so the store and the fold cannot
+disagree. The package imports `manifest/v1` and the standard library
+and nothing else; `Status` is its own type with the gateway's three
+values, because the gateway imports this package and not the reverse.
 
 ## Not in this spec
 
@@ -438,21 +507,21 @@ DDL ([[010-state]]); which target a request reached
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every data plane request in the e2e tier, refused, failed, or successful, has exactly one record | `TestEveryRequestHasOneUsageRecord` | not built |
-| A Key under a hard Budget naming an unpriced Model is refused `model_unpriced` before any bytes reach a provider, and the refusal has a record | `TestUnpricedModelRefusedUnderABudget` | not built |
-| A canary prompt, completion, header value, credential, and Key value appear in no record of an e2e run; `Record` has no `any` member | `TestRecordCarriesNoContent` | not built |
-| A corpus of pricings and token counts produces the golden costs, including the half-up boundary and `per` of 1, 1000, and 1000000 | `TestCostGolden`, table-driven | not built |
-| Cached input tokens are billed once, at the cached price, on each of the four dialects and on both a translated route and a passthrough | `TestCachedInputIsNotBilledTwice` | not built |
-| Reasoning tokens are recorded and are not a term in the cost | `TestReasoningIsNotBilled` | not built |
-| An upstream that reports no usage yields `estimated: true`, an input count from the estimator, and an output count of zero; an opaque route yields zero tokens, `estimated: true`, and `priced: false` | `TestEstimatedTokensAreMarked`, `TestOpaqueRouteIsUnpriced` | not built |
-| A duration window's key is the same for every instant inside it and differs across the boundary; `month` resets on the first UTC; `none` never resets; the totals' key is the Key's `createdAt` | `TestWindowBoundaries` | not built |
-| Three replicas spending against one hard limit at ten requests a second each with a one-cent request and a one-second flush overshoot by no more than `(R − 1) × F × T × C + C`, twenty-one cents, over a hundred runs; one replica by no more than one request | `TestTwoReplicaOvershootIsBounded` | not built |
-| A rate limit admits `replicas` times its value across replicas and its value on one | `TestRateWindowIsPerReplica` | not built |
-| A replica's local delta refuses before any flush, and a flush makes it visible to the other replica within one interval | `TestLocalDeltaRefusesImmediately` | not built |
-| A soft Budget past its amount continues and emits `budget.exhausted` once per window; the marker counter's first add returns `1` on exactly one of six replicas | `TestSoftBudgetContinues`, `TestExhaustedMarkerIsClaimedOnce` | not built |
-| The three counters under a Key's spend window and under `none` carry the requests, tokens, and spend the Key's records sum to, and no window row exists for a Key without a spend limit | `TestKeyCountersFollowTheRecords` | not built |
-| Aggregates folded from the records equal the store's rows for every grouping; no row sums two currencies; `requestLabels` is no dimension and appears in no aggregate row | `TestAggregatesMatchTheRecords`, `TestNoCurrencyIsSummed`, `TestRequestLabelsAreNotAggregated` | not built |
-| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension; a `cost` in a row is an integer; the authorizer's `filter` of one owner leaves a query naming another owner's Key an empty result | `TestUsageQueryValidation`, `TestUsageFilterNarrows` | not built |
-| `lux_tokens_total`, `lux_spend_microunits_total`, and `lux_metering_flush_lag_seconds` follow a run's records and a stalled store | `TestMeteringMetrics` with [[019-observability]]'s `TestMetricsTable` | not built |
-| `GET /v1/requests` reports `source` `archive` with the exporter configured and `memory` without it | `TestRequestsSource` | not built |
-| `metering` imports `manifest/v1` and the standard library and nothing else | [[001-architecture]]'s `TestRootPackagesDialNothing` | not built |
+| Every data plane request in the e2e tier, refused, failed, or successful, has exactly one record | `TestEveryRequestHasOneUsageRecord` | the package half passing in `internal/serve`, through `gateway.New` with this spec's Recorder and the real Key cache, catalog, Limiter, and router, over served, failed, and four kinds of refused request; the e2e tier's half is [[015-test-stubs-and-tiers]]'s |
+| A Key under a hard Budget naming an unpriced Model is refused `model_unpriced` before any bytes reach a provider, and the refusal has a record | `TestUnpricedModelRefusedUnderABudget` | passing, `internal/serve` |
+| A canary prompt, completion, header value, credential, and Key value appear in no record of an e2e run; `Record` has no `any` member | `TestRecordCarriesNoContent` | passing: the type half in `metering` by reflection over every member, the run half in `internal/serve` over every door with the five canaries and the aggregate rows beside the records; the e2e run is [[015-test-stubs-and-tiers]]'s |
+| A corpus of pricings and token counts produces the golden costs, including the half-up boundary and `per` of 1, 1000, and 1000000 | `TestCostGolden`, table-driven | passing, `metering` |
+| Cached input tokens are billed once, at the cached price, on each of the four dialects and on both a translated route and a passthrough | `TestCachedInputIsNotBilledTwice` | passing: the arithmetic in `metering`, the four dialects as passthroughs and four translations through `gateway.New` in `internal/serve` |
+| Reasoning tokens are recorded and are not a term in the cost | `TestReasoningIsNotBilled` | passing, `metering`, and on the `lux` upstream's record in `internal/serve` |
+| An upstream that reports no usage yields `estimated: true`, an input count from the estimator, and an output count of zero; an opaque route yields zero tokens, `estimated: true`, and `priced: false` | `TestEstimatedTokensAreMarked`, `TestOpaqueRouteIsUnpriced` | passing, `internal/serve`; the count route's unpriced record is in the first |
+| A duration window's key is the same for every instant inside it and differs across the boundary; `month` resets on the first UTC; `none` never resets; the totals' key carries the word `none` | `TestWindowBoundaries` | passing, `metering`, beside [[007-keys-and-limits]]'s `TestWindowEpochs` and `TestCounterKeyScheme` |
+| Three replicas spending against one hard limit at ten requests a second each with a one-cent request and a one-second flush overshoot by no more than `(R − 1) × F × T × C + C`, twenty-one cents, over a hundred runs; one replica by no more than one request | `TestTwoReplicaOvershootIsBounded` | passing, `internal/serve`: the twenty-one cents and the one request as figures, two replicas over twenty runs held to the bound; the hundred runs of three replicas are [[007-keys-and-limits]]'s `TestOvershootBound` |
+| A rate limit admits `replicas` times its value across replicas and its value on one | `TestRateWindowIsPerReplica` | passing, `internal/serve` |
+| A replica's local delta refuses before any flush, and a flush makes it visible to the other replica within one interval | `TestLocalDeltaRefusesImmediately` | passing, `internal/serve` |
+| A soft Budget past its amount continues and emits `budget.exhausted` once per window; the marker counter's first add returns `1` on exactly one of six replicas | `TestSoftBudgetContinues`, `TestExhaustedMarkerIsClaimedOnce` | passing, `internal/serve` |
+| The three counters under a Key's spend window and under `none` carry the requests, tokens, and spend the Key's admitted records sum to, the Recorder adding to none of them, and no window row exists for a Key without a spend limit | `TestKeyCountersFollowTheRecords` | passing, `internal/serve`, through `gateway.New` with the Limiter and the Recorder together |
+| Aggregates folded from the records equal the store's rows for every grouping; no row sums two currencies; `requestLabels` is no dimension and appears in no aggregate row | `TestAggregatesMatchTheRecords`, `TestNoCurrencyIsSummed`, `TestRequestLabelsAreNotAggregated` | passing: the fold against an independent sum in `metering`, the store's rows against the fold in `storetest` over the memory store and in `internal/serve` after the Recorder's flush; the labels row in `metering` |
+| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension; a `cost` in a row is an integer; the authorizer's `filter` of one owner leaves a query naming another owner's Key an empty result | `TestUsageQueryValidation`, `TestUsageFilterNarrows` | the function half passing in `metering`, `Query.Validate` and `Intersect`, and `serve.Usage` in `internal/serve`; the route's half waits for [[011-api]]'s `GET /v1/usage` |
+| `lux_tokens_total`, `lux_spend_microunits_total`, and `lux_metering_flush_lag_seconds` follow a run's records and a stalled store | `TestMeteringMetrics` with [[019-observability]]'s `TestMetricsTable` | `TestMeteringMetrics` passing, `internal/serve`; `TestMetricsTable` is [[019-observability]]'s |
+| `GET /v1/requests` reports `source` `archive` with the exporter configured and `memory` without it | `TestRequestsSource` | waits for [[011-api]]'s route and [[012-request-log-and-events]]'s exporter; the ring it reads with `memory` is `storetest`'s `TestRecordsRingIsBounded` |
+| `metering` imports `manifest/v1` and the standard library and nothing else | [[001-architecture]]'s `TestRootPackagesDialNothing` | passing, `internal/arch` |
