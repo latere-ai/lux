@@ -52,7 +52,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		PublicAddr: ":8080", InternalAddr: ":8081", DBMaxConns: 8,
 		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
-		KeyCache: 10 * time.Second,
+		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -83,6 +83,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		"LUX_KEY_CACHE":                   "30s",
 		"LUX_DEFAULT_REQUESTS_PER_MINUTE": "600",
 		"LUX_DEFAULT_TOKENS_PER_MINUTE":   "200000",
+		"LUX_METERING_FLUSH":              "500ms",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +104,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		KeyCache:                 30 * time.Second,
 		DefaultRequestsPerMinute: 600,
 		DefaultTokensPerMinute:   200000,
+		MeteringFlush:            500 * time.Millisecond,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -120,7 +122,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		DBURL: "postgres://lux:secret@db.example.com:5432/lux?sslmode=require", DBMaxConns: 20,
 		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
-		KeyCache: 10 * time.Second,
+		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)

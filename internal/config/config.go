@@ -101,6 +101,12 @@ type Config struct {
 	// Key without limits gets at resolve; 0 is no limit.
 	DefaultRequestsPerMinute int
 	DefaultTokensPerMinute   int
+
+	// The metering variable of spec 009.
+
+	// MeteringFlush is how often a replica writes its spend deltas and
+	// its usage aggregates to the store.
+	MeteringFlush time.Duration
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -154,6 +160,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadIdentity(getenv)...)
 	problems = append(problems, c.loadProviders(getenv)...)
 	problems = append(problems, c.loadKeys(getenv)...)
+	problems = append(problems, c.loadMetering(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))
