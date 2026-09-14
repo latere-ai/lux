@@ -1,6 +1,6 @@
 ---
 title: "Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
@@ -48,16 +48,17 @@ the two stubs written here, `test/stubs/issuer` and
 `test/stubs/index` is the document naming them all, `cmd/lux-stubs`
 serves the eight listeners, `make run` and `make run-file` give a clean
 clone a working gateway over them, and `test/e2e` is the integration
-tier with the postgres tier's skeleton beside it.
+tier with the postgres tier beside it.
 `TestE2EConformance` runs [[018-conformance-suite]]'s `Run` against the
-stubs, with no case skipped for want of them. What keeps the spec from
-`complete`: one suite case, `case004Streaming`, asserts that the string
-of the upstream model name is absent from a translated stream, which the
-deterministic assistant content of this spec carries by construction, so
-it waits on a change to [[018-conformance-suite]];
-`TestPostgresTwoReplicas` waits on [[010-state]]'s Postgres store; and
-the `e2e` and `postgres` jobs have not yet run on a push to `main`. The build's departures from
-the design below are listed under "What the build changed".
+stubs, with no case skipped for want of them. The three things that
+kept the spec from `complete` are settled: `case004Streaming` reads the
+model member rather than the absence of the upstream model name from a
+translated stream, which the deterministic assistant content of this
+spec carries by construction ([[018-conformance-suite]]);
+`TestPostgresTwoReplicas` runs against a database, [[010-state]]'s
+Postgres store having landed; and the `e2e` and `postgres` jobs have
+run on `main`. The build's departures from the design below are listed
+under "What the build changed".
 
 ## Design
 
@@ -330,7 +331,7 @@ These are the targets this spec adds to the `Makefile`, beside the
 | unit | every package outside `test/` | none | any | nothing | the gate, on every push |
 | stub | `test/stubs/...` | none | any | nothing | the same run |
 | integration | `test/e2e` | `integration` | `TestE2E*` | nothing | `make test-e2e`, the `e2e` job |
-| postgres | `test/e2e`, `internal/store` | `postgres` | `TestPostgres*` | `LUX_DB_URL` | `make test-postgres`, the `postgres` job |
+| postgres | `test/e2e`, `internal/store/postgres` | `postgres` | `TestPostgres*` | `LUX_DB_URL` | `make test-postgres`, the `postgres` job |
 | conformance | `test/conformance` | none | `TestContract` | `LUX_TEST_URL` | the release pipeline and a platform ([[018-conformance-suite]]) |
 
 The integration tier lives in `test/e2e` and starts `luxd` and
@@ -353,10 +354,11 @@ plus the cases that only exist with a shared store: two `luxd`
 processes against one database, a lease held by one of them, a spend
 counter that both see within one flush, a Key cache invalidated through
 the journal, and a restart that resumes an unacknowledged event
-([[010-state]], [[012-request-log-and-events]]). `internal/store`'s own
-`TestPostgresStoreConformance` is in the tier too: it is `storetest.Run`
-([[010-state]]) against the same URL, so the store suite that runs
-against memory in the untagged run runs against Postgres here.
+([[010-state]], [[012-request-log-and-events]]).
+`internal/store/postgres`'s own `TestPostgresStoreConformance` is in the
+tier too: it is `storetest.Run` ([[010-state]]) against the same URL, so
+the store suite that runs against memory in the untagged run runs
+against Postgres here.
 
 It is a tag rather than an environment check because a tier that
 silently skips is a tier nobody notices is not running. Under
@@ -404,7 +406,8 @@ commit with its version in a comment, as the file already does.
 | `postgres` | every push and pull request | the same with `-tags=postgres -run '^TestPostgres'`, with `LUX_DB_URL` pointed at a service container |
 
 The package pattern is `./...` and not `./test/...` because the
-postgres tier reaches `internal/store` as well as `test/e2e`.
+postgres tier reaches `internal/store/postgres`, `internal/check`, and
+`cmd/luxd` as well as `test/e2e`.
 
 ```yaml
   postgres:
@@ -453,7 +456,7 @@ Outcome at `complete` records nothing the tree does not.
 | `deploy/examples/` | one Provider per dialect at its stub | the same, with `credential.value: stub-credential` and `discovery.mode: none` | the stub's credential is no secret and a literal is what both modes accept; discovery would list `stub-<dialect>` beside the declared Models of the same name |
 | `make run`, `make run-file` | nothing on `PATH` but the toolchain | `curl` beside it, and `make` itself | the token is minted and the examples applied over HTTP from a recipe; the tier's two `make` rows fail, never skip, without them |
 | `TestE2ECheckAgainstTheStubs` | `luxd check`'s authorizer row | the row's call, `auth.Authorizer.Check` over `authz.Client`, against the stub as a process with an allow-everything table in force | `luxd check` is [[017-release-and-installation]]'s and not in this build |
-| the postgres tier | the same tree of cases against a shared store | `TestMain` refuses an unset `LUX_DB_URL` as designed; with one set, `TestPostgresTwoReplicas` skips naming [[010-state]]'s phase 6, and `internal/store`'s conformance run is that spec's | `luxd` refuses `LUX_DB_URL` until the Postgres store lands, and a red `postgres` job on every push until then would teach nobody anything |
+| the postgres tier | the same tree of cases against a shared store | `TestMain` refuses an unset `LUX_DB_URL` as designed; `TestPostgresTwoReplicas` runs the two replicas, and the tagged cases in `internal/store/postgres`, `internal/check`, and `cmd/luxd` are [[010-state]]'s, written with that store | the tier is one tag and one prefix across the tree, so the spec that builds a component behind a database writes its cases where the component lives |
 | the tiers' rules | `TestEveryTestIsInATier`, `TestPostgresMainRefusesWithoutAURL` | both in `test/stubs`, the root package of the stubs tree, untagged | the tagged run cannot host a test of its own refusal; the name keeps the tier's prefix so `make test-postgres` runs it too |
 | the tier | `TestE2E*` as the table names them | two more: `TestE2EFailureInjectionReachesTheDoors` over the failure table through a Model's target, and `TestE2EEventsReachTheSink` with a first delivery refused | the table is the stub's own; these prove the two contracts through the gateway |
 | the tier | `TestE2EConformance` calls `conformance.Run` | `runConformance` in `test/e2e/conformance_seam_test.go` calls it with the stack's public URL, a token minted per subject from the stack's issuer, and `StubsURL` at the index, so the stub table runs rather than skipping | the suite was built on another branch and reads the stubs through one address |
@@ -506,8 +509,46 @@ in `pkg` v0.66.0, the version `go.mod` pins, and nothing waits on them.
 | `make run` on a clean clone prints the three exports, and a request through the `/openai` door with the printed Key returns a stub answer, produces one usage record, and delivers one event to the sink | `TestE2EMakeRun` | passing; the applies' ten events reach the sink, and the record costs the 450 micro-units the example names |
 | `make run-file` serves the same door from the manifest directory and refuses a `PUT` with `read_only` | `TestE2EMakeRunFileMode` | passing |
 | The integration tier starts `luxd` as a process on port 0 and covers every door, the four kinds' grammar, and a clean shutdown | `TestE2ELifecycle` | passing |
-| The postgres tier runs two `luxd` processes against one database and proves the shared lease, the shared spend counter, the journal-driven cache invalidation, and the resumed event | `TestPostgresTwoReplicas` | skips naming [[010-state]]'s phase 6 until the Postgres store lands |
-| Every test function in a file tagged `integration` begins with `TestE2E` and every one in a file tagged `postgres` begins with `TestPostgres`, wherever in the tree the file sits, and `test/conformance`'s one server-driven entry point is `TestContract` | `TestEveryTestIsInATier`, parsing every `_test.go` file's build tags and function names | passing, `test/stubs`; the `test/conformance` half applies once the package exists |
+| The postgres tier runs two `luxd` processes against one database and proves the shared lease, the shared spend counter, the journal-driven cache invalidation, and the resumed event | `TestPostgresTwoReplicas` | passing, `test/e2e`, over the Postgres store of [[010-state]] |
+| Every test function in a file tagged `integration` begins with `TestE2E` and every one in a file tagged `postgres` begins with `TestPostgres`, wherever in the tree the file sits, and `test/conformance`'s one server-driven entry point is `TestContract` | `TestEveryTestIsInATier`, parsing every `_test.go` file's build tags and function names | passing, `test/stubs`, the `test/conformance` half included since that package landed |
 | The untagged `go test ./...` the gate runs compiles no test that needs a database, a network, or a binary on `PATH`, and the whole bar passes on a machine with only the Go toolchain installed | `go tool lateregate`, the `hermetic` gate | passing, `hermetic.allow: []` |
 | `make test-postgres` with `LUX_DB_URL` unset fails naming the variable and one way to get a database, and never reports a skip | `TestPostgresMainRefusesWithoutAURL` | passing, `test/stubs`, over `go test -tags=postgres ./test/e2e/` |
 | The `e2e` and `postgres` jobs pass on the first push to `main`, with every action pinned by commit | the `verify` workflow run | passing on `main`'s runs since the merge of 2026-09-14 |
+
+## Outcome
+
+2026-09-14. Built as `cmd/lux-stubs` over `test/stubs/provider`,
+`test/stubs/sink`, `test/stubs/issuer`, `test/stubs/authorizer`, and
+`test/stubs/index`, with `make run` and `make run-file`, the
+integration and postgres tiers in `test/e2e`, the tier rules in
+`test/stubs`, the two `cover.exempt` and `depcheck` rows in
+`.lateregate.yaml`, and the `e2e` and `postgres` jobs in
+`verify.yml`. The issuer and the authorizer are
+`latere.ai/x/pkg/authkit/issuertest` and `latere.ai/x/pkg/authz/stub`
+mounted with Lux's vocabulary, which `TestStubsMountTheSharedPackages`
+holds: no package written here serves a discovery document, a key set,
+or an authorization decision.
+
+Every acceptance row above passes. The last two that were owed closed
+today: `TestPostgresTwoReplicas` runs the two replicas against a
+database now that [[010-state]]'s Postgres store has landed, and the
+`test/conformance` half of `TestEveryTestIsInATier` applies now that
+[[018-conformance-suite]]'s package exists. The tier table names
+`internal/store/postgres` where it said `internal/store`, which is
+where that spec put its tagged cases, beside the ones in
+`internal/check` and `cmd/luxd`; the tier is one tag and one test
+prefix across the whole tree, so a spec that builds a component behind
+a database writes its cases where the component lives and
+`make test-postgres` still runs them all.
+
+What was built differs from the design as dispatched in the points the
+Design's table of changes carries, the usage member names of the `lux`
+dialect stub, the failure table's exact behaviours, the sink's run-time
+outage switch, the stubs index beside the seven listeners, the rendered
+`out/run/examples/` directory behind `make run`, and the two extra
+`TestE2E` cases among them. Two things the tier learned about the
+gateway are findings for other specs and not departures here: a
+declared Model is absent from a door's `GET /v1/models` until the
+health job's next tick ([[005-providers]]), and a first probe that
+fails leaves a Provider `Unreachable` until that tick, so the tier's
+first request after a start is retried.
