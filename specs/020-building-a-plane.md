@@ -1,6 +1,6 @@
 ---
 title: "Building a plane: how a platform composes the packages and the webhooks, and gives a sandbox model access"
-status: dispatched
+status: testing
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -33,13 +33,16 @@ either that is not already there.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built on 2026-09-14: `docs/plane.md` is the document, `examples/plane`
+is a platform front over the three root packages that carries the
+conformance suite, and `examples/authorizer` is the endpoint the
+document prints, held to `latere.ai/x/pkg/authz/conformance` and run
+beside `luxd` in the integration tier. The departures from the design
+below are listed under "What the build changed".
 
 ## Design
 
-### Two doors
+### The two doors
 
 | Door | The platform runs | The platform writes | It gets |
 |---|---|---|---|
@@ -59,15 +62,15 @@ rewriting: the packages are what `luxd` is made of.
 | accounts, organizations, teams | claims in the issuer's token, read by the authorizer; the gateway reads none of them | the platform's middleware before `Resolve` sets `Options.Actor` |
 | roles and permissions | the authorizer's `allow` per action ([[006-identity]]) | the platform's own check before it calls `Resolve` |
 | plans and quotas | the authorizer's `limits`, which cap what a Key may ask for, plus `Budget` objects the platform applies; a Key that names no limit under a cap is refused, so the platform's console or client fills the limits in | `Options.Limits` and the same Budgets |
-| a shared catalog | `Provider` and `Model` objects the platform declares as an admin subject; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
-| per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup.Models` answers for the tenant |
-| funded credits | a `Budget` per grant with `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
-| a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, `aud` the gateway's audience, so the object's `owner` is the person ([[006-identity]]); the gateway never sees a cookie | reads the platform's API |
-| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's prefix | the platform's own service identity in `Options.Actor` |
-| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
-| billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` implementation |
-| audit | the signed event sink ([[012-request-log-and-events]]) | the platform's own sink implementation |
-| multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one handler per region |
+| a shared catalogue | `Provider` and `Model` objects the platform declares as an administrator; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
+| per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup` answers `Models` for the tenant |
+| funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
+| a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person ([[006-identity]]); the gateway never sees a cookie | reads the platform's own API |
+| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's own prefix | the platform's own service identity in `Options.Actor` |
+| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
+| billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` |
+| audit | the signed event sink at `LUX_EVENTS_URL` ([[012-request-log-and-events]]) | the platform's own sink |
+| multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
 | a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` ([[013-tunnelled-runtimes]]) | the same |
 
 Every row on the left is an endpoint the platform writes or an object
@@ -77,9 +80,11 @@ this table exists to make checkable.
 ### The minimal authorizer
 
 Twenty lines is enough to run an installation where every subject owns
-what it applied and administrators declare the catalog, which is what
+what it applied and administrators declare the catalogue, which is what
 the built-in owner policy does ([[006-identity]]) and what a platform
-replaces first. The payload is 006's exactly; a Go authorizer may
+replaces first. An administrator is under no ceiling, because a ceiling
+refuses a Key that names no limit at all and the catalogue's own Keys
+are declared without one. The payload is 006's exactly; a Go authorizer may
 decode it into `authz.Request` from `latere.ai/x/pkg/authz`, and one in
 any language reads the fields below. The endpoint answers from its
 bearer and its own state alone: it needs no session and calls neither
@@ -104,7 +109,7 @@ type resp struct {
 // can tell an endpoint that reads the request from one that does not.
 const probeID = "00000000-0000-0000-0000-000000000001"
 
-var spendCap = map[string]string{"free": "5", "team": "50", "admin": "500"}
+var spendCap = map[string]string{"free": "5", "team": "50"}
 
 func decide(r req) resp {
 	plan, _ := r.Claims["plan"].(string)
@@ -112,12 +117,17 @@ func decide(r req) resp {
 	case r.Resource["id"] == probeID:
 		return resp{Allow: false, Reason: "the probe id is reserved"}
 	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
-		if r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list") {
+		switch {
+		case r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
+		case plan == "admin":
+			return resp{Allow: true}
 		}
-		return resp{Allow: plan == "admin", Reason: "the catalogue is declared by the platform"}
+		return resp{Reason: "the catalogue is declared by the platform"}
 	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
 		return resp{Allow: false, Reason: "not yours"}
+	case plan == "admin":
+		return resp{Allow: true, Filter: map[string]any{"owners": []string{r.Subject}}}
 	default:
 		return resp{Allow: true,
 			Limits: map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100},
@@ -272,8 +282,22 @@ archive a release publishes.
 `docs/plane.md` is this spec in the user register: the two doors, the
 concerns table, the minimal authorizer, the sandbox composition, and
 the conformance command, written for a platform engineer rather than
-for a contributor to this repository. It is owed by this spec and is
-not written yet.
+for a contributor to this repository. Its sections are this design's
+headings, its concerns and its credential hops are these tables' rows,
+and its Go block is `examples/authorizer/main.go` word for word, all
+of which `TestPlaneDocIsCurrent` holds.
+
+### What the build changed
+
+Each row is a departure from the design above, with the reason.
+
+| Where | The design said | The build does | Why |
+|---|---|---|---|
+| the minimal authorizer | one ceiling table with an `admin` row | `spendCap` has `free` and `team`, and an administrator is granted no `limits` at all | a ceiling refuses a Key that names no limit ([[003-manifest-contract]]), so an installation's own Keys, the conformance suite's among them, cannot be applied under one |
+| the minimal authorizer | the twenty lines of `decide` | that, plus the `POST` handler and the listener of `examples/authorizer`, which is the program the document prints | a block a reader copies has to compile and run, and the contract's own suite refuses an endpoint that does not check its bearer |
+| the example plane | a server that passes `TestContract` | `examples/plane`, which the suite runs 42 cases against; the thirteen that read a stub provider's record skip by name, as they do against any front without `LUX_TEST_STUBS_URL` | two drifts between [[015-test-stubs-and-tiers]]'s stub and [[018-conformance-suite]]'s reader keep a run with that document red for reasons no front can answer: the stub writes its record under `header` and the suite reads `headers`, and its `events-<n>` stream carries a finish chunk the suite's frame count does not expect |
+| the acceptance tests | `TestSandboxCompositionEndToEnd`, `TestPlatformCredentialAsKey`, and the rest | the same tests under the tier's prefix, `TestE2E…` | [[015-test-stubs-and-tiers]]'s rule is that every test in a file tagged `integration` begins with `TestE2E`, and `TestEveryTestIsInATier` holds it |
+| the run's ledger | the delete refuses on every replica | the integration tier proves one replica within `LUX_KEY_CACHE`; the multi-replica half is the postgres tier's, which waits on [[010-state]] | the tier that runs two replicas against one database is not built |
 
 ## Not in this spec
 
@@ -289,12 +313,12 @@ plane's own design, which is that project's.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, denies the probe id and passes the conformance suite's `identity` and `manifest` groups | `TestPlaneDocAuthorizerConforms`, running the document's code block | not built |
-| A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | not built |
-| Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | not built |
-| A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestSandboxCompositionEndToEnd` in the e2e tier | not built |
-| A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestOwnerFollowsTheToken` | not built |
-| A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestPlatformCredentialAsKey` in the e2e tier | not built |
-| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestRunKeyDeletionLeavesTheLedger` | not built |
-| Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestOneCredentialKindPerHop`, over the e2e capture | not built |
-| `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent` | not built |
+| The authorizer in `docs/plane.md`, compiled and run beside `luxd`, denies the probe id and passes the conformance suite's `identity` and `manifest` groups | `TestPlaneDocAuthorizerConforms` over the program the document prints, and `TestE2EPlaneDocAuthorizerConforms`, which runs it as `luxd`'s `LUX_AUTHORIZER_URL` and carries the whole suite | passing; the endpoint also passes `latere.ai/x/pkg/authz/conformance` under the twenty-four actions |
+| A server built from `manifest`, `gateway`, and `metering` in `examples/plane/`, with its own identity and store, passes `TestContract` | `TestExamplePlaneConforms` | passing over `conformance.Run`: 42 cases green, the thirteen that read a stub's record skipped by name |
+| Every row of the concerns table names a mechanism that exists in the tree: an action, a manifest field, a variable, a package symbol, or a route | `TestConcernsTableIsGrounded`, reading this file against the specs and the tree | passing, `internal/arch` |
+| A Key applied by a service token, carried as a sandbox secret, and substituted by an egress gateway reaches a door and is metered, and the Key value appears in no byte of the sandbox's environment, file system, or output | `TestE2ESandboxComposition` in the e2e tier | passing; the workload is the `lux` command in a directory of its own, holding a placeholder |
+| A Key applied with a service token is owned by the service account and one applied with an actor token by the person, and `GET /v1/usage?by=owner` attributes each Key's requests to its owner | `TestE2EOwnerFollowsTheToken` | passing |
+| A Key created with a stub issuer's token as `spec.value` opens a door by that string with the stub issuer receiving no call, expires at the Key's `expiresAt` while the token has none, and is `unauthenticated` within `LUX_KEY_CACHE` of `DELETE /v1/keys/{id}` | `TestE2EPlatformCredentialAsKey` in the e2e tier | passing; the supplied value is a token whose own `exp` has passed, so what the door honours can only be the Key |
+| Deleting the Key at the end of a run refuses the next request within `LUX_KEY_CACHE` on every replica while its usage stays readable by id | `TestE2ERunKeyDeletionLeavesTheLedger` | passing for one replica; the multi-replica half is the postgres tier's ([[010-state]]) |
+| Every hop in the two credential tables carries the credential kind named and no other; the gateway verifies a supplied value by hash and never as a token, and no plane verifies a token another plane minted | `TestE2EOneCredentialKindPerHop`, over the e2e capture | passing; the authorizer hop is read through a recorder in front of the stub, which records the envelope and not the bearer |
+| `docs/plane.md` carries every section this spec names and its command block runs green against `make run` | `TestPlaneDocIsCurrent`, `TestE2EPlaneDocCommand` | passing: the sections, the tables, and the Go block in `internal/arch`; the command itself run by the tier against `make run` |

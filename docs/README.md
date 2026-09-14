@@ -23,6 +23,7 @@ Trying it out before there is anything to install takes one command,
 | Manifest reference | the schema in the [manifest contract spec](../specs/003-manifest-contract.md) |
 | API | the endpoints and error codes in the [API spec](../specs/011-api.md), and the webhooks an operator writes in the [identity spec](../specs/006-identity.md) |
 | The packages | the [architecture spec](../specs/001-architecture.md) names the exported packages and what each promises |
+| Building a platform on it | the two doors, where each platform concern goes, a minimal authorizer, how a sandbox gets model access without holding a credential, and the conformance command, in [`plane.md`](plane.md); the runnable endpoint is [`examples/authorizer`](../examples/authorizer) and the server built from the packages is [`examples/plane`](../examples/plane) |
 
 ## Changing it
 

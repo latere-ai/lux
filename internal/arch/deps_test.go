@@ -55,9 +55,11 @@ func goList(t *testing.T, dir string, args ...string) []string {
 }
 
 // The directories a package may live under. Everything at the module
-// root that is not one of the three exported trees is a role or a tool
-// under one of these.
-var rootDirs = []string{"cmd", "internal", "test", "tools", "manifest", "gateway", "metering"}
+// root that is not one of the three exported trees is a role, a tool,
+// or an example under one of these. examples holds the two programs
+// docs/plane.md prints, which are built and tested like any package
+// and are imported by nothing (spec 020).
+var rootDirs = []string{"cmd", "internal", "test", "tools", "examples", "manifest", "gateway", "metering"}
 
 // TestRootPackagesAreTheThree is the first half of spec 001's package
 // rule: every package of the module is manifest, gateway, or metering, or

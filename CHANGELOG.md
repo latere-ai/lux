@@ -27,6 +27,21 @@ refused before it is pushed.
   no gateway running. Nothing a caller of a door sees changes: the same
   bytes, headers, envelopes, codes, and records, held by the door tests
   and by the bridge's goldens, which are the doors' own bytes.
+- Building a platform on the gateway: `docs/plane.md` is the page for a
+  team that sells or governs model access. It says how a platform
+  composes the gateway, either by running `luxd` and writing the
+  webhooks or by importing `manifest`, `gateway`, and `metering` into
+  its own binary; where each of its own concerns goes, row by row; what
+  a minimal authorization endpoint looks like, as a program that
+  compiles and runs (`examples/authorizer`); how a sandbox running
+  untrusted code calls a model without holding a credential, and which
+  credential each hop of that composition carries; the one command that
+  proves a front still serves the contract; and what the gateway
+  promises a platform and what it does not. `examples/plane` is a
+  server of the second kind, built from the three packages with a
+  store, an identity, and a control plane of its own, and the
+  conformance suite runs against it.
+
 - `lux serve`: a session's carriers and heartbeat have ended when the
   session ends, so nothing of a session that closed writes to stderr
   after the command printed its close reason or connected again.
