@@ -1,0 +1,8 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: b
+  annotations:
+    lux.latere.ai/note: x
+spec:
+  amount: "1"

@@ -1,0 +1,31 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "azure",
+    "labels": {
+      "region": "eu",
+      "tier": "paid"
+    }
+  },
+  "spec": {
+    "dialect": "openai",
+    "tunnel": false,
+    "baseURL": "https://azure.example.com/openai/v1",
+    "credential": {
+      "header": "api-key",
+      "scheme": "raw"
+    },
+    "discovery": {
+      "mode": "none"
+    },
+    "health": {
+      "mode": "passive"
+    },
+    "timeout": "2m",
+    "concurrency": 8
+  },
+  "status": {
+    "warnings": []
+  }
+}

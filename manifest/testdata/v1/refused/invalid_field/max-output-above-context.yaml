@@ -1,0 +1,9 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: m
+spec:
+  targets:
+    - provider: openai
+  contextWindow: 1000
+  maxOutputTokens: 1001

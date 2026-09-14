@@ -1,0 +1,6 @@
+{
+  "code": "invalid_field",
+  "paths": [
+    "spec.models[0]"
+  ]
+}

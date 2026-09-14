@@ -1,0 +1,36 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "gemini",
+    "annotations": {
+      "example.com/owner-team": "research"
+    }
+  },
+  "spec": {
+    "dialect": "gemini",
+    "tunnel": false,
+    "baseURL": "https://gemini.example.com/v1beta",
+    "credential": {
+      "header": "x-goog-api-key",
+      "scheme": "raw"
+    },
+    "discovery": {
+      "mode": "auto",
+      "include": [
+        "gemini-*"
+      ],
+      "exclude": [
+        "*-exp"
+      ]
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

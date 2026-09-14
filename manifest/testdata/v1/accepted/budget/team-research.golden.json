@@ -1,0 +1,16 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "team-research"
+  },
+  "spec": {
+    "amount": "500",
+    "currency": "USD",
+    "window": "month",
+    "hard": true
+  },
+  "status": {
+    "warnings": []
+  }
+}

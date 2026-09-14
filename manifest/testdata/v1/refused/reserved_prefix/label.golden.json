@@ -1,0 +1,6 @@
+{
+  "code": "reserved_prefix",
+  "paths": [
+    "metadata.labels[\"lux.latere.ai/managed\"]"
+  ]
+}

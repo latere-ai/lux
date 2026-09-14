@@ -1,0 +1,49 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Model",
+  "metadata": {
+    "name": "gpt-5",
+    "labels": {
+      "family": "gpt"
+    }
+  },
+  "spec": {
+    "targets": [
+      {
+        "provider": "openai",
+        "model": "gpt-5",
+        "weight": 100,
+        "priority": 0
+      },
+      {
+        "provider": "azure",
+        "model": "gpt-5",
+        "weight": 0,
+        "priority": 1
+      }
+    ],
+    "fallback": "onError",
+    "pricing": {
+      "currency": "USD",
+      "per": 1000000,
+      "input": "1.25",
+      "output": "10",
+      "cachedInput": "0.125",
+      "cacheWrite": "1.25"
+    },
+    "modalities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "contextWindow": 400000,
+    "maxOutputTokens": 128000
+  },
+  "status": {
+    "warnings": []
+  }
+}

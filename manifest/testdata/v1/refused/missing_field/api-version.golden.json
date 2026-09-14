@@ -1,0 +1,6 @@
+{
+  "code": "missing_field",
+  "paths": [
+    "apiVersion"
+  ]
+}

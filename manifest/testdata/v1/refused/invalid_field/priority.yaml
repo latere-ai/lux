@@ -1,0 +1,8 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: m
+spec:
+  targets:
+    - provider: openai
+      priority: 10

@@ -1,0 +1,49 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Key",
+  "metadata": {
+    "name": "run-42",
+    "labels": {
+      "run": "r_42"
+    }
+  },
+  "spec": {
+    "models": [
+      "gpt-5",
+      "anthropic/*"
+    ],
+    "limits": {
+      "requestsPerMinute": 60,
+      "tokensPerMinute": 100000,
+      "spend": {
+        "amount": "5",
+        "currency": "USD",
+        "window": "24h"
+      }
+    },
+    "budget": "team-research",
+    "ttl": "168h",
+    "allowUnpriced": false,
+    "passthrough": false,
+    "disabled": false
+  },
+  "status": {
+    "selectors": [
+      {
+        "selector": "gpt-5",
+        "matched": [
+          "gpt-5"
+        ]
+      },
+      {
+        "selector": "anthropic/*",
+        "matched": [
+          "anthropic/claude-opus-4",
+          "anthropic/claude-sonnet-4"
+        ]
+      }
+    ],
+    "expiresAt": "2026-09-20T10:00:00Z",
+    "warnings": []
+  }
+}

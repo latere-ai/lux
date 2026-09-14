@@ -40,8 +40,7 @@ type field struct {
 // fieldsOf reads the schema of one struct type from its tags.
 func fieldsOf(t reflect.Type) map[string]field {
 	out := map[string]field{}
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if wo, ok := f.Tag.Lookup("writeonly"); ok {
 			out[wo] = field{typ: f.Type, writeOnly: true}
 			continue

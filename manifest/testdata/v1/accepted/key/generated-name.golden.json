@@ -1,0 +1,33 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Key",
+  "metadata": {
+    "name": "fixed-name-0000"
+  },
+  "spec": {
+    "models": [
+      "anthropic/*"
+    ],
+    "limits": {
+      "requestsPerMinute": 0,
+      "tokensPerMinute": 0
+    },
+    "ttl": "1h",
+    "allowUnpriced": false,
+    "passthrough": true,
+    "disabled": false
+  },
+  "status": {
+    "selectors": [
+      {
+        "selector": "anthropic/*",
+        "matched": [
+          "anthropic/claude-opus-4",
+          "anthropic/claude-sonnet-4"
+        ]
+      }
+    ],
+    "expiresAt": "2026-09-13T11:00:00Z",
+    "warnings": []
+  }
+}

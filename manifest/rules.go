@@ -71,7 +71,7 @@ func validModelName(s string) bool {
 	if s == "" || len(s) > maxModelName {
 		return false
 	}
-	for _, seg := range strings.Split(s, "/") {
+	for seg := range strings.SplitSeq(s, "/") {
 		if !modelSegment.MatchString(seg) {
 			return false
 		}

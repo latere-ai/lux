@@ -1,0 +1,27 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "anthropic"
+  },
+  "spec": {
+    "dialect": "anthropic",
+    "tunnel": false,
+    "baseURL": "https://anthropic.example.com/v1",
+    "credential": {
+      "header": "x-api-key",
+      "scheme": "raw"
+    },
+    "discovery": {
+      "mode": "auto"
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

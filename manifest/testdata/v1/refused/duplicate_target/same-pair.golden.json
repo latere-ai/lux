@@ -1,0 +1,6 @@
+{
+  "code": "duplicate_target",
+  "paths": [
+    "spec.targets[2]"
+  ]
+}

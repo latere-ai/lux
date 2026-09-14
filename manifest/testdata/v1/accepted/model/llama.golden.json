@@ -1,0 +1,31 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Model",
+  "metadata": {
+    "name": "laptop/llama3.1:8b"
+  },
+  "spec": {
+    "targets": [
+      {
+        "provider": "laptop",
+        "model": "llama3.1:8b",
+        "weight": 100,
+        "priority": 0
+      }
+    ],
+    "fallback": "never",
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    }
+  },
+  "status": {
+    "warnings": [
+      "This model has no pricing, so a key with a spend limit or a budget cannot use it unless it allows unpriced models."
+    ]
+  }
+}

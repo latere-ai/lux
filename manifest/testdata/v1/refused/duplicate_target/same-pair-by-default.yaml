@@ -1,0 +1,9 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: gpt-5
+spec:
+  targets:
+    - provider: openai
+    - provider: openai
+      model: gpt-5

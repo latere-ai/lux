@@ -1,0 +1,6 @@
+apiVersion: lux.latere.ai/v1
+kind: Budget
+metadata:
+  name: b
+spec:
+  amount: "1"

@@ -1,0 +1,37 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Model",
+  "metadata": {
+    "name": "anthropic/claude-sonnet-4"
+  },
+  "spec": {
+    "targets": [
+      {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-20250514",
+        "weight": 100,
+        "priority": 0
+      }
+    ],
+    "fallback": "onError",
+    "pricing": {
+      "currency": "USD",
+      "per": 1000000,
+      "input": "3",
+      "output": "15",
+      "cachedInput": "3",
+      "cacheWrite": "3"
+    },
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    }
+  },
+  "status": {
+    "warnings": []
+  }
+}

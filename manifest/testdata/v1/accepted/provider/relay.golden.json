@@ -1,0 +1,30 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "relay"
+  },
+  "spec": {
+    "dialect": "lux",
+    "tunnel": false,
+    "baseURL": "https://relay.example.com/lux/v1",
+    "credential": {
+      "header": "Authorization",
+      "scheme": "bearer"
+    },
+    "headers": {
+      "X-Relay-Tenant": "acme"
+    },
+    "discovery": {
+      "mode": "auto"
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

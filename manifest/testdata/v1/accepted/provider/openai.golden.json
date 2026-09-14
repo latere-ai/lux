@@ -1,0 +1,40 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "openai",
+    "labels": {
+      "tier": "paid"
+    }
+  },
+  "spec": {
+    "dialect": "openai",
+    "tunnel": false,
+    "baseURL": "https://api.openai.com/v1",
+    "credential": {
+      "header": "Authorization",
+      "scheme": "bearer"
+    },
+    "headers": {
+      "OpenAI-Organization": "org_example"
+    },
+    "discovery": {
+      "mode": "auto",
+      "include": [
+        "gpt-*",
+        "o*"
+      ],
+      "exclude": [
+        "*-preview"
+      ]
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

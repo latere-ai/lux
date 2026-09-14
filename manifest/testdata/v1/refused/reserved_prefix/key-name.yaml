@@ -1,0 +1,6 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: key_run-42
+spec:
+  models: [gpt-5]

@@ -1,0 +1,32 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Key",
+  "metadata": {
+    "name": "platform-dev"
+  },
+  "spec": {
+    "models": [
+      "gpt-5"
+    ],
+    "limits": {
+      "requestsPerMinute": 0,
+      "tokensPerMinute": 0
+    },
+    "expiresAt": "2027-01-01T00:00:00Z",
+    "allowUnpriced": true,
+    "passthrough": false,
+    "disabled": false
+  },
+  "status": {
+    "selectors": [
+      {
+        "selector": "gpt-5",
+        "matched": [
+          "gpt-5"
+        ]
+      }
+    ],
+    "expiresAt": "2027-01-01T00:00:00Z",
+    "warnings": []
+  }
+}

@@ -1,0 +1,5 @@
+apiVersion: lux.latere.ai/v1beta1
+metadata:
+  name: b
+spec:
+  amount: "1"

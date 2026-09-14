@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: k
+spec:
+  models: [gpt-5]
+  ttl: 30s

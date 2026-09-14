@@ -1,0 +1,22 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "laptop"
+  },
+  "spec": {
+    "dialect": "openai",
+    "tunnel": true,
+    "discovery": {
+      "mode": "auto"
+    },
+    "health": {
+      "mode": "none"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

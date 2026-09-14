@@ -1,6 +1,6 @@
 ---
 title: "Manifest contract: the four kinds, decoding, validation, defaulting, resolve"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/001-architecture.md

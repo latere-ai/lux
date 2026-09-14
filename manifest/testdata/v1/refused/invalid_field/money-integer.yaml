@@ -1,0 +1,6 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: b
+spec:
+  amount: "1234567890123"

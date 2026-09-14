@@ -1,0 +1,5 @@
+kind: Budget
+metadata:
+  name: b
+spec:
+  amount: "1"

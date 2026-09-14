@@ -1,0 +1,16 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "research-soft"
+  },
+  "spec": {
+    "amount": "100.5",
+    "currency": "EUR",
+    "window": "168h",
+    "hard": false
+  },
+  "status": {
+    "warnings": []
+  }
+}
