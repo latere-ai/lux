@@ -78,7 +78,7 @@ func (rec *recorder) last() *http.Request {
 
 // quiet keeps a test server's handshake failures, which the tests
 // provoke on purpose, out of the test output.
-var quiet = slog.NewLogLogger(slog.NewTextHandler(io.Discard, nil), slog.LevelError)
+var quiet = slog.NewLogLogger(slog.DiscardHandler, slog.LevelError)
 
 // loopback is a client source that may reach the test servers on
 // 127.0.0.1, as an operator with a runtime on the same host would set.
