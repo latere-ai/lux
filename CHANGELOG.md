@@ -6,6 +6,21 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Identity for the control plane: `luxd` accepts a bearer from any
+  OpenID Connect issuer listed in `LUX_OIDC_ISSUERS`, signed `RS256` or
+  `ES256`, with `aud` containing `LUX_OIDC_AUDIENCE` (default `lux`),
+  and refuses to start on an issuer it cannot read or whose key set has
+  no usable key. Permission is asked of the authorizer at
+  `LUX_AUTHORIZER_URL` with `LUX_AUTHORIZER_TOKEN`, in the twenty-four
+  actions of the identity spec with one flat `resource` per action and
+  every claim of the token forwarded verbatim; a deny is `forbidden`,
+  any answer that is no decision is `authorizer_unavailable`, and a
+  refused reference in a manifest reads as `not_found`. Without an
+  authorizer the built-in owner policy applies, with `LUX_ADMIN_SUBJECTS`
+  as its administrators. `LUX_AUTHORIZER_TIMEOUT` bounds one decision;
+  `LUX_OIDC_INSECURE_ISSUERS` admits an `http://` issuer off loopback
+  for a test. The `/v1` routes that use all of this are not mounted
+  yet; the specs say when.
 - The manifest contract: `manifest` and `manifest/v1` decode a
   `Provider`, `Model`, `Key`, or `Budget` from YAML or JSON with one
   schema, refuse an unknown field with its path, validate every field
