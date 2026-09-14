@@ -9,6 +9,7 @@ import (
 
 	"latere.ai/x/pkg/llmdialect"
 	"latere.ai/x/pkg/llmdialect/anthropic"
+	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
 	"latere.ai/x/pkg/llmdialect/lux"
 	"latere.ai/x/pkg/llmdialect/openaichat"
@@ -47,6 +48,23 @@ func OpenAIReasoningFamily(name string) bool {
 	}
 	n, err := strconv.Atoi(rest[:i])
 	return err == nil && n >= 5
+}
+
+// wireOf is the bridge wire of a door or a target dialect: the API
+// family whose shapes the bridge writes and reads for it. A path under
+// no door renders the lux shapes, as spec 004 says of the envelope.
+func wireOf(d v1.Dialect) bridge.Wire {
+	switch d {
+	case v1.DialectOpenAI:
+		return bridge.WireOpenAI
+	case v1.DialectAnthropic:
+		return bridge.WireAnthropic
+	case v1.DialectGemini:
+		return bridge.WireGoogle
+	case v1.DialectLux, "":
+		return bridge.WireLux
+	}
+	return bridge.WireLux
 }
 
 // frontendFor is the door's codec for a translated route: the caller

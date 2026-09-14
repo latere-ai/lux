@@ -18,6 +18,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
+	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
 	"latere.ai/x/pkg/llmdialect/tokencount"
 
@@ -425,6 +426,10 @@ func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 	return nil
 }
 
+// modelOwner is the owned_by every entry of a door's model list carries:
+// the gateway answers the list itself, so the owner is the gateway.
+const modelOwner = "lux"
+
 // listModels answers GET /v1/models: the Models whose names match one of
 // the Key's selectors and whose status.available is true, sorted, in the
 // door's list shape; never forwarded.
@@ -440,7 +445,11 @@ func (c *call) listModels(ctx context.Context) *failure {
 		}
 	}
 	slices.Sort(names)
-	c.writeJSON(http.StatusOK, modelList(c.door, names))
+	entries := make([]bridge.Model, 0, len(names))
+	for _, n := range names {
+		entries = append(entries, bridge.Model{Name: n, OwnedBy: modelOwner})
+	}
+	c.writeJSON(http.StatusOK, bridge.ModelList(wireOf(c.door), entries))
 	return nil
 }
 
@@ -451,7 +460,7 @@ func (c *call) readModel(ctx context.Context) *failure {
 	if f != nil {
 		return f
 	}
-	c.writeJSON(http.StatusOK, modelEntry(c.door, m.Metadata.Name))
+	c.writeJSON(http.StatusOK, bridge.ModelEntry(wireOf(c.door), bridge.Model{Name: m.Metadata.Name, OwnedBy: modelOwner}))
 	return nil
 }
 
