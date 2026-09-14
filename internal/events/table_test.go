@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -22,15 +23,18 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/authkit/issuertest"
+	"latere.ai/x/pkg/s3/s3test"
 
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/events"
+	"latere.ai/x/lux/internal/reqlog"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store/memory"
 	"latere.ai/x/lux/manifest"
+	"latere.ai/x/lux/metering"
 )
 
 // The canaries: each is a value that must reach the sink nowhere.
@@ -111,7 +115,7 @@ func (c *collector) bodies() [][]byte {
 
 // plane is the whole surface over one memory store: the API of spec
 // 011, the doors of spec 004 with the seams of specs 005 to 009, the two
-// jobs of spec 005, and the sink of this spec.
+// jobs of spec 005, and the sink and the archive of this spec.
 type plane struct {
 	t       *testing.T
 	st      *memory.Store
@@ -121,6 +125,8 @@ type plane struct {
 	upURL   string
 	sink    *collector
 	sinkURL string
+	bucket  *s3test.Server
+	archive *reqlog.Exporter
 	clients *gateway.Clients
 	creds   *serve.StoreCredentials
 	logger  *slog.Logger
@@ -138,7 +144,7 @@ func (p *plane) clock() time.Time {
 
 func newPlane(t *testing.T) *plane {
 	t.Helper()
-	p := &plane{t: t, now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := &plane{t: t, now: time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), logger: slog.New(slog.DiscardHandler)}
 	p.st = memory.New(memory.WithClock(p.clock))
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
 	p.bearer = iss.Mint(issuertest.Claims{Sub: "alice"})
@@ -171,7 +177,9 @@ func newPlane(t *testing.T) *plane {
 	catalog := &serve.Catalog{Objects: p.st.Objects()}
 	cache := serve.NewKeyCache(serve.KeyCacheOptions{Store: p.st, TTL: time.Hour, Logger: p.logger, Now: p.clock})
 	limiter := serve.NewLimiter(serve.LimiterOptions{Store: p.st, Budgets: cache, Flush: time.Second, Logger: p.logger, Now: p.clock})
-	recorder := serve.NewRecorder(serve.RecorderOptions{Store: p.st, Catalog: catalog, Limiter: limiter, Flush: time.Second, Logger: p.logger, Now: p.clock})
+	p.bucket = s3test.New(t, "archive")
+	p.archive = reqlog.NewExporter(reqlog.ExporterOptions{Bucket: p.bucket.Client(true), Replica: "replica-a", Logger: p.logger, Now: p.clock})
+	recorder := serve.NewRecorder(serve.RecorderOptions{Store: p.st, Catalog: catalog, Limiter: limiter, Archive: p.archive, Flush: time.Second, Logger: p.logger, Now: p.clock})
 	p.doors = gateway.New(gateway.Options{
 		Keys: cache, Catalog: catalog, Credentials: p.creds,
 		Router:   gateway.NewTargetRouter(gateway.RouterOptions{Catalog: catalog, Now: p.clock}),
@@ -454,6 +462,88 @@ func TestEventsCarryNoSecrets(t *testing.T) {
 				t.Errorf("%s reached the sink in %s", name, body)
 			}
 		}
+	}
+}
+
+// TestArchiveCarriesNoContent is the archive's half of the canary row,
+// over the same run: the records of the door requests reach the bucket
+// as NDJSON lines that each parse as one metering.Record, and no
+// archived byte carries the canary Key value, credential, prompt,
+// completion, the caller's address, or the bearer. The type half is the
+// same walk metering runs over Record: no member that could hold a body.
+func TestArchiveCarriesNoContent(t *testing.T) {
+	var leaks []string
+	walk(reflect.TypeFor[metering.Record](), "Record", &leaks)
+	if len(leaks) != 0 {
+		t.Fatalf("Record can carry content: %v", leaks)
+	}
+	p := newPlane(t)
+	p.exercise()
+	if err := p.archive.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	keys := p.bucket.Keys()
+	if len(keys) != 1 || !strings.HasPrefix(keys[0], "lux/2026/09/14/12/replica-a-") {
+		t.Fatalf("keys %v", keys)
+	}
+	data, _ := p.bucket.Get(keys[0])
+	if ct, _ := p.bucket.ContentType(keys[0]); ct != reqlog.ContentType {
+		t.Fatalf("Content-Type %q", ct)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("%d archived records for three door requests:\n%s", len(lines), data)
+	}
+	statuses := map[metering.Status]int{}
+	for _, line := range lines {
+		var rec metering.Record
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("line %q: %v", line, err)
+		}
+		if !strings.HasPrefix(rec.ID, "req_") || rec.Key.ID == "" || rec.Door != "openai" {
+			t.Errorf("record %+v", rec)
+		}
+		statuses[rec.Status]++
+	}
+	if statuses[metering.StatusOK] != 1 || statuses[metering.StatusRefused] != 2 {
+		t.Fatalf("statuses %v", statuses)
+	}
+	for name, v := range map[string]string{
+		"the Key value": canaryKey, "the Key hash": serve.HashKeyValue(canaryKey), "the credential": canaryCredential,
+		"the prompt": canaryPrompt, "the completion": canaryCompletion, "the caller's address": clientAddress, "the bearer": p.bearer,
+	} {
+		if bytes.Contains(data, []byte(v)) {
+			t.Errorf("%s reached the archive", name)
+		}
+	}
+}
+
+// walk reports every field of ty whose kind could hold content: an
+// interface, a byte slice, a pointer to one, or a function; the walk
+// metering's TestRecordCarriesNoContent runs.
+func walk(ty reflect.Type, path string, out *[]string) {
+	switch ty.Kind() {
+	case reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer:
+		*out = append(*out, path+" is a "+ty.Kind().String())
+	case reflect.Slice, reflect.Array:
+		if ty.Elem().Kind() == reflect.Uint8 {
+			*out = append(*out, path+" is bytes")
+			return
+		}
+		walk(ty.Elem(), path+"[]", out)
+	case reflect.Map:
+		walk(ty.Key(), path+"{key}", out)
+		walk(ty.Elem(), path+"{value}", out)
+	case reflect.Pointer:
+		walk(ty.Elem(), "*"+path, out)
+	case reflect.Struct:
+		if ty == reflect.TypeFor[time.Time]() {
+			return
+		}
+		for f := range ty.Fields() {
+			walk(f.Type, path+"."+f.Name, out)
+		}
+	default:
 	}
 }
 
