@@ -1,6 +1,6 @@
 ---
 title: "Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
@@ -42,9 +42,17 @@ happens to run.
 
 ## Current state
 
-Nothing is built. The scaffold's `verify.yml` runs the gate, the tidy
-check, and the image build ([[002-repository-scaffold]]), and `make
-run` starts a process that serves the probes and nothing else.
+Built and at `testing`. `test/stubs/provider` and `test/stubs/sink` are
+the two stubs written here, `test/stubs/issuer` and
+`test/stubs/authorizer` mount `pkg`'s two with Lux's vocabulary,
+`cmd/lux-stubs` serves all seven listeners, `make run` and `make
+run-file` give a clean clone a working gateway over them, and
+`test/e2e` is the integration tier with the postgres tier's skeleton
+beside it. What keeps the spec from `complete`: `TestE2EConformance`
+waits on [[018-conformance-suite]]'s `Run`, `TestPostgresTwoReplicas`
+waits on [[010-state]]'s Postgres store, and the `e2e` and `postgres`
+jobs have not yet run on a push to `main`. The build's departures from
+the design below are listed under "What the build changed".
 
 ## Design
 
@@ -105,11 +113,15 @@ dialect has two of them:
 
 | Route | Input member | Output member |
 |---|---|---|
-| `openai` `/v1/chat/completions`, `/v1/embeddings` | `usage.prompt_tokens` | `usage.completion_tokens` |
+| `openai` `/v1/chat/completions` | `usage.prompt_tokens` | `usage.completion_tokens` |
+| `openai` `/v1/embeddings` | `usage.prompt_tokens` | none: the API reports `usage.total_tokens` and no output member |
 | `openai` `/v1/responses` | `usage.input_tokens` | `usage.output_tokens` |
-| `anthropic` `/v1/messages`, `:count_tokens` | `usage.input_tokens` | `usage.output_tokens` |
-| `gemini` | `usageMetadata.promptTokenCount` | `usageMetadata.candidatesTokenCount` |
-| `lux` | `usage.input` | `usage.output`, the `ir.Usage` member names |
+| `anthropic` `/v1/messages` | `usage.input_tokens` | `usage.output_tokens` |
+| `anthropic` `/v1/messages/count_tokens` | `input_tokens`, at the top level as the API answers | none |
+| `gemini` `:generateContent`, `:streamGenerateContent` | `usageMetadata.promptTokenCount` | `usageMetadata.candidatesTokenCount` |
+| `gemini` `:countTokens` | `totalTokens` | none |
+| `lux` `/v1/generate` | `usage.input_tokens` | `usage.output_tokens`, the `ir.Usage` wire names |
+| `lux` `/v1/count_tokens` | `input_tokens` | none |
 
 Those are the members [[009-usage-and-metering]]'s extraction table and
 `latere.ai/x/pkg/llmdialect` read, so a stub that reports them is what
@@ -180,15 +192,11 @@ is what a stub issuer is for and is why it never runs in an
 installation. `luxd` accepts it over `http://` only because the test
 sets `LUX_OIDC_INSECURE_ISSUERS` ([[006-identity]]).
 
-One thing the package lacks is an HTTP read of its request recorder:
-`Requests()` is a method, and `TestHotPathDialsNoWebhook`
-([[001-architecture]]) reads it across a process boundary. This spec
-needs `GET /requests` and `DELETE /requests` on
-`latere.ai/x/pkg/authkit/issuertest`, the two
-`latere.ai/x/pkg/authz/stub` already serves, returning and clearing the
-`[]string` of `"METHOD /path"` that `Requests()` returns. Until they
-land the criterion is proved in the integration tier's own process,
-where the method is reachable.
+The package serves `GET /requests` and `DELETE /requests`, returning
+and clearing the `[]string` of `"METHOD /path"` that `Requests()`
+returns, since `latere.ai/x/pkg` v0.66.0, so
+`TestE2EHotPathDialsNoWebhook` ([[001-architecture]]) reads the record
+across the process boundary. Neither route records itself.
 
 ### The stub authorizer
 
@@ -227,18 +235,18 @@ the test cannot know in advance.
 ([[001-architecture]]) reads: a `DELETE`, a thousand data plane
 requests, and a read expecting an empty list.
 
-[[006-identity]] names six forms of unavailability and the package
-covers three. The other three are the change this spec needs in
-`latere.ai/x/pkg/authz/stub`:
+[[006-identity]] names six forms of unavailability. The package covers
+four; the tier drives the other two with a `luxd` of its own, because
+they are properties of the connection and not of an answer:
 
-| [[006-identity]]'s form | Today | Needed |
-|---|---|---|
-| a timeout | `POST /hang` | — |
-| a non-200 status | `PUT /fail` with a status | — |
-| a refused connection | `Close`, which stops the listener | — |
-| a body that does not parse | none | `PUT /fail` accepting `{"body": "malformed"}` |
-| a body without `allow` | none | `PUT /fail` accepting `{"body": "no-allow"}` |
-| a TLS failure | none | outside the stub: it serves plain HTTP, so the tier proves this form against a listener of its own that answers a handshake with garbage |
+| [[006-identity]]'s form | Driven by |
+|---|---|
+| a timeout | `POST /hang`, with `LUX_AUTHORIZER_TIMEOUT` short |
+| a non-200 status | `PUT /fail` with `{"status": 500}` |
+| a body that does not parse | `PUT /fail` with `{"body": "malformed"}`, in `pkg` since v0.66.0 |
+| a body without `allow` | `PUT /fail` with `{"body": "no-allow"}`, the same |
+| a refused connection | a `luxd` of the tier's own whose `LUX_AUTHORIZER_URL` names a port nothing listens at; the stub's `Close` is an in-process affair |
+| a TLS failure | outside the stub: it serves plain HTTP, so the tier starts a listener of its own that answers the handshake with bytes that are no TLS record, and a `luxd` whose authorizer URL is `https://` at it |
 
 The suite asserts every one of the six is `authorizer_unavailable` at
 the gateway and none of them is an allow.
@@ -411,6 +419,36 @@ Both jobs pass `-v`, so a log names the tests that ran and a tier that
 silently matched nothing is visible as an empty list rather than a
 green check.
 
+### What the build changed
+
+Each row is a departure from the design above, with the reason, so the
+Outcome at `complete` records nothing the tree does not.
+
+| Where | The design said | The build does | Why |
+|---|---|---|---|
+| the usage table | `lux` reports `usage.input` and `usage.output`; embeddings and the counts share the generation routes' members | `usage.input_tokens` and `usage.output_tokens`; embeddings report `prompt_tokens` and `total_tokens`; each count answers its API's own top-level count | those are the wire names `ir.Usage`, `llmdialect/lux`, and the three APIs use, and a stub that reports members its API does not have is not honest about the contract |
+| the stub provider | the failure table | the table as written, with `Lux-Stub-Fail` winning over the model name, `events-<n>` read on a streamed request alone, `fail-stream-mid` closing the connection through `http.ErrAbortHandler`, the catch-all checking the credential too, and a `:streamGenerateContent` without `alt=sse` answered as a JSON array | what the gateway and the dialect's own SDKs send; `TestFailureInjection` walks every row on every dialect by name and by header |
+| the stub provider | the model list | one entry, `stub-<dialect>` | a discovered Model then names the dialect it came from |
+| the stub sink | `-fail-first <n>` | `-fail-first` on the binary and `PUT /_fail {"first": n}` at run time; `attempts` counts every verified delivery of an id, refused ones included; a duplicate id is acknowledged and stored once; a verified body with no `id` is a `400` recorded apart | a tier that starts one binary drives the outage without restarting it; a sink deduplicates on `id` |
+| `lux-stubs` | one line per stub with its URL | `lux-stubs: <stub> <url>` for `openai`, `anthropic`, `gemini`, `lux`, `issuer`, `authorizer`, `sink`, then `lux-stubs: issuer url <url>` and `lux-stubs: ready`; the flags are `-<stub>-addr`, `-credential`, `-issuer-url`, `-es256`, `-authorizer-token`, `-authorizer-deny`, `-authorizer-fail`, `-sink-secret`, `-fail-first` | a reader across a process boundary waits for `ready`; every address is bound before anything serves |
+| `make run` | `LUX_URL=http://127.0.0.1:8080` and stub ports derived from the checkout's name | every port derived from the name, `RUN_PORT` the override, and `LUX_PUBLIC_URL` on `localhost` while the stubs sit at `127.0.0.1` | [[003-manifest-contract]]'s loop check compares hostnames alone, so a Provider on the gateway's own hostname is refused whatever its port |
+| `make run` | applies every manifest under `deploy/examples/` | renders them into `out/run/examples/` first: the stub ports rewritten and, in server mode, the Key's `valueFrom` block dropped | a Provider's `valueFrom` is refused through `/v1` and a Key's `valueFrom` is required in the file mode, so one directory serves both modes only through a render |
+| `deploy/examples/` | one Provider per dialect at its stub | the same, with `credential.value: stub-credential` and `discovery.mode: none` | the stub's credential is no secret and a literal is what both modes accept; discovery would list `stub-<dialect>` beside the declared Models of the same name |
+| `make run`, `make run-file` | nothing on `PATH` but the toolchain | `curl` beside it, and `make` itself | the token is minted and the examples applied over HTTP from a recipe; the tier's two `make` rows fail, never skip, without them |
+| `TestE2ECheckAgainstTheStubs` | `luxd check`'s authorizer row | the row's call, `auth.Authorizer.Check` over `authz.Client`, against the stub as a process with an allow-everything table in force | `luxd check` is [[017-release-and-installation]]'s and not in this build |
+| the postgres tier | the same tree of cases against a shared store | `TestMain` refuses an unset `LUX_DB_URL` as designed; with one set, `TestPostgresTwoReplicas` skips naming [[010-state]]'s phase 6, and `internal/store`'s conformance run is that spec's | `luxd` refuses `LUX_DB_URL` until the Postgres store lands, and a red `postgres` job on every push until then would teach nobody anything |
+| the tiers' rules | `TestEveryTestIsInATier`, `TestPostgresMainRefusesWithoutAURL` | both in `test/stubs`, the root package of the stubs tree, untagged | the tagged run cannot host a test of its own refusal; the name keeps the tier's prefix so `make test-postgres` runs it too |
+| the tier | `TestE2E*` as the table names them | two more: `TestE2EFailureInjectionReachesTheDoors` over the failure table through a Model's target, and `TestE2EEventsReachTheSink` with a first delivery refused | the table is the stub's own; these prove the two contracts through the gateway |
+| the tier | `TestE2EConformance` calls `conformance.Run` | `runConformance` in `test/e2e/conformance_seam_test.go` skips until [[018-conformance-suite]] lands; the merge replaces the skip with the call and changes nothing else | the suite is built on another branch |
+| `.lateregate.yaml` | one `cover.exempt` row | that row, and a `depcheck` row for `cmd/lux-stubs` | the binary reaches `latere.ai/x/pkg` and, through the sink's `events.Verify`, the OpenTelemetry SDK behind `internal/events`' delivery client |
+
+Two things the tier learned about the gateway are findings for other
+specs rather than departures here: a declared Model is absent from a
+door's `GET /v1/models` until the health job's next tick publishes its
+availability ([[005-providers]], at most `LUX_HEALTH_INTERVAL`), and a
+first probe that fails leaves a Provider `Unreachable` until that tick,
+so the tier's first request after a start is retried.
+
 ## Not in this spec
 
 The conformance suite the stubs are wired into
@@ -421,33 +459,32 @@ stub's contract is, which is its owning spec's; the issuer's and the
 authorizer's own behaviour, which is `latere.ai/x/pkg`'s and is tested
 there, not here.
 
-Two changes outside this tree are named above and are this spec's
-dependencies rather than its design: `GET /requests` and `DELETE
-/requests` on `latere.ai/x/pkg/authkit/issuertest`, and the two
-malformed-body outages on `latere.ai/x/pkg/authz/stub`. Each criterion
-that needs one says what it proves until it lands.
+The two changes outside this tree an earlier draft named, `GET
+/requests` and `DELETE /requests` on `latere.ai/x/pkg/authkit/issuertest`
+and the two malformed-body outages on `latere.ai/x/pkg/authz/stub`, are
+in `pkg` v0.66.0, the version `go.mod` pins, and nothing waits on them.
 
 ## Acceptance criteria
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Each stub package written here drives every route and every behaviour flag it offers from its own test | `TestProviderStub`, `TestSinkStub`; the issuer's and the authorizer's are `pkg`'s own | not built |
-| The stub provider answers deterministically: one request twice yields byte-identical bodies, and the content names the dialect, the model, and the digest of the last user text | `TestProviderStubIsDeterministic` | not built |
-| Every row of the failure injection table produces its behaviour on each of the four dialects, by upstream model name and by header | `TestFailureInjection`, table-driven over rows and dialects | not built |
-| The stub provider refuses a request whose credential is not the configured one and records it | `TestProviderStubChecksTheCredential` | not built |
-| `GET /_received` returns every request in order with its headers and body, and `DELETE /_received` clears it | `TestReceivedRecording` | not built |
-| The stub issuer's discovery document and key set verify a minted token through the same verifier `luxd` uses, under RS256 and under ES256 | `TestIssuerStubMintsVerifiableTokens`, table-driven over the two algorithms | not built |
-| The stub provider reports the usage members of the route, not of the dialect, so a `/v1/responses` answer and a `/v1/chat/completions` answer carry different member names and both are metered | `TestProviderStubUsageShapes`, table-driven over the route table | not built |
-| A Model whose target is `tokens-1000-500` produces a usage record of exactly 1000 and 500 tokens and the cost [[009-usage-and-metering]]'s arithmetic gives for its pricing | `TestE2ECostIsExact` | not built |
-| Each of [[006-identity]]'s six unavailability forms, driven through `latere.ai/x/pkg/authz/stub`, is `authorizer_unavailable` at the gateway and none is an allow | `TestE2EAuthorizerUnavailability`, table-driven over the six rows | not built |
-| `lux-stubs` mounts `latere.ai/x/pkg/authkit/issuertest` and `latere.ai/x/pkg/authz/stub` rather than a reimplementation: no package under `test/stubs/` serves a discovery document, a key set, or an authorization decision | `TestStubsMountTheSharedPackages`, over `go list -deps ./cmd/lux-stubs` and the routes each package registers | not built |
-| The stub authorizer denies `authz.ProbeID` whatever rules are set, so `luxd check`'s authorizer row passes against it | `TestE2ECheckAgainstTheStubs` | not built |
-| The stub sink refuses a body whose signature does not verify and records it apart | `TestSinkVerifiesSignature` | not built |
-| `make run` on a clean clone prints the three exports, and a request through the `/openai` door with the printed Key returns a stub answer, produces one usage record, and delivers one event to the sink | `TestE2EMakeRun` | not built |
-| `make run-file` serves the same door from the manifest directory and refuses a `PUT` with `read_only` | `TestE2EMakeRunFileMode` | not built |
-| The integration tier starts `luxd` as a process on port 0 and covers every door, the four kinds' grammar, and a clean shutdown | `TestE2ELifecycle` | not built |
-| The postgres tier runs two `luxd` processes against one database and proves the shared lease, the shared spend counter, the journal-driven cache invalidation, and the resumed event | `TestPostgresTwoReplicas` | not built |
-| Every test function in a file tagged `integration` begins with `TestE2E` and every one in a file tagged `postgres` begins with `TestPostgres`, wherever in the tree the file sits, and `test/conformance`'s one server-driven entry point is `TestContract` | `TestEveryTestIsInATier`, parsing every `_test.go` file's build tags and function names | not built |
-| The untagged `go test ./...` the gate runs compiles no test that needs a database, a network, or a binary on `PATH`, and the whole bar passes on a machine with only the Go toolchain installed | `go tool lateregate`, the `hermetic` gate | not built |
-| `make test-postgres` with `LUX_DB_URL` unset fails naming the variable and one way to get a database, and never reports a skip | `TestPostgresMainRefusesWithoutAURL` | not built |
-| The `e2e` and `postgres` jobs pass on the first push to `main`, with every action pinned by commit | the `verify` workflow run | not built |
+| Each stub package written here drives every route and every behaviour flag it offers from its own test | `TestProviderStub`, `TestProviderStubRoutes`, `TestSinkStub`; the issuer's and the authorizer's are `pkg`'s own, and the wrappers' additions are `TestAuthorizerStubNamesResourcesLuxsWay`, `TestAuthorizerStubFlags`, `TestAuthorizerStubDeniesTheProbe` | passing, `test/stubs/provider`, `test/stubs/sink`, `test/stubs/authorizer` |
+| The stub provider answers deterministically: one request twice yields byte-identical bodies, and the content names the dialect, the model, and the digest of the last user text | `TestProviderStubIsDeterministic` | passing |
+| Every row of the failure injection table produces its behaviour on each of the four dialects, by upstream model name and by header | `TestFailureInjection`, table-driven over rows and dialects | passing, 13 rows × 4 dialects × 2 channels |
+| The stub provider refuses a request whose credential is not the configured one and records it | `TestProviderStubChecksTheCredential` | passing |
+| `GET /_received` returns every request in order with its headers and body, and `DELETE /_received` clears it | `TestReceivedRecording` | passing |
+| The stub issuer's discovery document and key set verify a minted token through the same verifier `luxd` uses, under RS256 and under ES256 | `TestIssuerStubMintsVerifiableTokens`, table-driven over the two algorithms | passing, `test/stubs/issuer`, through `internal/auth.NewVerifier` |
+| The stub provider reports the usage members of the route, not of the dialect, so a `/v1/responses` answer and a `/v1/chat/completions` answer carry different member names and both are metered | `TestProviderStubUsageShapes`, table-driven over the route table | passing, with the table as "What the build changed" has it |
+| A Model whose target is `tokens-1000-500` produces a usage record of exactly 1000 and 500 tokens and the cost [[009-usage-and-metering]]'s arithmetic gives for its pricing | `TestE2ECostIsExact` | passing, `test/e2e`: 7500 micro-units of USD at 2.50 and 10 per million |
+| Each of [[006-identity]]'s six unavailability forms, driven through `latere.ai/x/pkg/authz/stub`, is `authorizer_unavailable` at the gateway and none is an allow | `TestE2EAuthorizerUnavailability`, table-driven over the six rows | passing; the refused connection and the TLS failure through a `luxd` of the row's own |
+| `lux-stubs` mounts `latere.ai/x/pkg/authkit/issuertest` and `latere.ai/x/pkg/authz/stub` rather than a reimplementation: no package under `test/stubs/` serves a discovery document, a key set, or an authorization decision | `TestStubsMountTheSharedPackages`, over `go list -deps ./cmd/lux-stubs` and the routes each package registers | passing, `cmd/lux-stubs` |
+| The stub authorizer denies `authz.ProbeID` whatever rules are set, so `luxd check`'s authorizer row passes against it | `TestE2ECheckAgainstTheStubs` | passing, through the row's call; `luxd check` itself is [[017-release-and-installation]]'s |
+| The stub sink refuses a body whose signature does not verify and records it apart | `TestSinkVerifiesSignature` | passing |
+| `make run` on a clean clone prints the three exports, and a request through the `/openai` door with the printed Key returns a stub answer, produces one usage record, and delivers one event to the sink | `TestE2EMakeRun` | passing; the applies' ten events reach the sink, and the record costs the 450 micro-units the example names |
+| `make run-file` serves the same door from the manifest directory and refuses a `PUT` with `read_only` | `TestE2EMakeRunFileMode` | passing |
+| The integration tier starts `luxd` as a process on port 0 and covers every door, the four kinds' grammar, and a clean shutdown | `TestE2ELifecycle` | passing |
+| The postgres tier runs two `luxd` processes against one database and proves the shared lease, the shared spend counter, the journal-driven cache invalidation, and the resumed event | `TestPostgresTwoReplicas` | skips naming [[010-state]]'s phase 6 until the Postgres store lands |
+| Every test function in a file tagged `integration` begins with `TestE2E` and every one in a file tagged `postgres` begins with `TestPostgres`, wherever in the tree the file sits, and `test/conformance`'s one server-driven entry point is `TestContract` | `TestEveryTestIsInATier`, parsing every `_test.go` file's build tags and function names | passing, `test/stubs`; the `test/conformance` half applies once the package exists |
+| The untagged `go test ./...` the gate runs compiles no test that needs a database, a network, or a binary on `PATH`, and the whole bar passes on a machine with only the Go toolchain installed | `go tool lateregate`, the `hermetic` gate | passing, `hermetic.allow: []` |
+| `make test-postgres` with `LUX_DB_URL` unset fails naming the variable and one way to get a database, and never reports a skip | `TestPostgresMainRefusesWithoutAURL` | passing, `test/stubs`, over `go test -tags=postgres ./test/e2e/` |
+| The `e2e` and `postgres` jobs pass on the first push to `main`, with every action pinned by commit | the `verify` workflow run | waits for the push; both jobs pass as commands on this branch |
