@@ -10,6 +10,12 @@ cover:
     # server the gate does not start and measures no statements here
     # (spec 015).
     test/conformance: a package whose whole body runs against a server the gate does not start
+    # Spec 010's Postgres store: every statement runs against a database
+    # the gate does not start, so the untagged run measures its pure
+    # parts alone and the postgres tier of spec 015 runs the rest, its
+    # conformance suite included, against a service container.
+    internal/store/postgres: a store whose body runs against a database the gate does not start; the postgres tier measures it
+    internal/store/postgres/pgtest: the postgres tier's database helper, compiled into tagged test binaries alone
 
 spec:
   status:
@@ -79,6 +85,16 @@ depcheck:
           the YAML decoder spec 003 names, reached through manifest by the
           file mode of spec 010, which decodes a directory of manifests at
           start
+        # The Postgres store of spec 010: the driver, its pool, and the
+        # three small packages it reads a connection string with, and the
+        # migrator pgxmigrate runs, whose pgx5 database driver reads the
+        # error codes. Only internal/store/postgres imports any of them.
+        github.com/jackc/pgx: the Postgres driver of spec 010's store, reached through internal/store/postgres alone
+        github.com/jackc/puddle: the driver's connection pool
+        github.com/jackc/pgpassfile: the driver's reading of a password file a connection string may name
+        github.com/jackc/pgservicefile: the driver's reading of a service file a connection string may name
+        github.com/jackc/pgerrcode: the error codes the migrator's pgx5 driver reads
+        github.com/golang-migrate/migrate: the migrator of spec 010's store, run through latere.ai/x/pkg/pgxmigrate over the embedded migrations
     # Spec 014's build list for the agent client: the standard library,
     # latere.ai/x/pkg/httpjson for the error envelope, this module's
     # manifest and manifest/v1, which pull in the one YAML library, and

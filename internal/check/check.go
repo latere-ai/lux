@@ -42,6 +42,7 @@ import (
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
+	"latere.ai/x/lux/internal/store/postgres"
 	"latere.ai/x/lux/internal/tunnel"
 	"latere.ai/x/lux/internal/version"
 	"latere.ai/x/lux/manifest"
@@ -104,7 +105,26 @@ type Options struct {
 
 	// open replaces how the store is opened; the package's own tests seed
 	// one. Nil is the store the configuration selects.
-	open func(ctx context.Context, cfg config.Config, getenv config.Getenv) (store.Store, *filemode.Store, error)
+	open func(ctx context.Context, cfg config.Config, getenv config.Getenv) (opened, error)
+}
+
+// database is what the three rows over the Postgres store read: the
+// readiness, the schema, and the cluster's connection limits, with the
+// endpoint a line may print. *postgres.Store satisfies it, and the
+// package's tests stand a fake in for it.
+type database interface {
+	Ready(ctx context.Context) error
+	Schema(ctx context.Context) (postgres.Schema, error)
+	ConnectionLimits(ctx context.Context) (maxConnections, reserved int, err error)
+	Endpoint() string
+}
+
+// opened is what open answers: the store, the file mode's store when
+// that is the mode, and the database when the Postgres store is.
+type opened struct {
+	st    store.Store
+	files *filemode.Store
+	db    database
 }
 
 // Run prints one line per requirement to out and returns 1 when any line
@@ -123,11 +143,19 @@ func Run(ctx context.Context, o Options, out io.Writer) int {
 // run is one check's state: the configuration, the store it opened, and
 // the Providers it read, shared by the rows.
 type run struct {
-	o         Options
-	cfg       config.Config
-	st        store.Store
-	files     *filemode.Store
+	o     Options
+	cfg   config.Config
+	st    store.Store
+	files *filemode.Store
+	db    database
+	// openErr is why the store did not open; storeErr is why the
+	// Providers could not be read, the open failure included, and why is
+	// the sentence the rows that needed them print.
+	openErr   error
 	storeErr  error
+	why       string
+	schema    postgres.Schema
+	schemaErr error
 	providers []*v1.Provider
 }
 
@@ -156,10 +184,24 @@ func Lines(ctx context.Context, o Options) []Line {
 	}
 	lines = append(lines, Line{OK, "configuration", "every variable read; " + mode(cfg)})
 	r := &run{o: o, cfg: cfg}
-	r.st, r.files, r.storeErr = o.open(ctx, cfg, o.Getenv)
+	got, err := o.open(ctx, cfg, o.Getenv)
+	r.st, r.files, r.db, r.openErr, r.storeErr = got.st, got.files, got.db, err, err
 	if r.st != nil {
 		defer func() { _ = r.st.Close() }()
-		r.providers, r.storeErr = listProviders(ctx, r.st)
+		if r.db != nil {
+			// The schema decides whether the tables are there to read:
+			// a database that does not answer, a schema not yet applied,
+			// or one luxd serve would refuse leaves the rows over the
+			// objects unchecked, and the store and migrations rows say
+			// which it was.
+			r.schema, r.schemaErr = r.db.Schema(ctx)
+			r.why = schemaWhy(r.schema, r.schemaErr)
+		}
+		if r.why != "" {
+			r.storeErr = errors.New(r.why)
+		} else {
+			r.providers, r.storeErr = listProviders(ctx, r.st)
+		}
 	}
 	for _, row := range []func(context.Context) Line{
 		r.publicURL, r.issuers, r.authorizer, r.events, r.requestLog,
@@ -190,23 +232,46 @@ func notChecked(name, why string) Line {
 	return Line{Warn, name, "not checked; " + why}
 }
 
-// openStore opens the store the configuration selects, as serve does:
-// the file mode over LUX_MANIFEST_DIR, the memory store otherwise, and a
-// refusal of LUX_DB_URL until the Postgres store lands (spec 010).
-func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (store.Store, *filemode.Store, error) {
+// openStore opens the store the configuration selects, as serve does
+// but for the migrations, which check applies never: the Postgres store's
+// pool over LUX_DB_URL, the file mode over LUX_MANIFEST_DIR, the memory
+// store otherwise (spec 010).
+func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (opened, error) {
 	switch {
 	case cfg.DBURL != "":
-		return nil, nil, errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
+		pg, err := postgres.Open(ctx, postgres.Options{URL: cfg.DBURL, MaxConns: cfg.DBMaxConns})
+		if err != nil {
+			return opened{}, err
+		}
+		return opened{st: pg, db: pg}, nil
 	case cfg.ManifestDir != "":
 		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
 		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL})
 		if err != nil {
-			return nil, nil, err
+			return opened{}, err
 		}
-		return files, files, nil
+		return opened{st: files, files: files}, nil
 	default:
-		return memory.New(), nil, nil
+		return opened{st: memory.New()}, nil
 	}
+}
+
+// schemaWhy is the sentence the rows over the objects print when the
+// Postgres schema keeps them from reading, and "" when the tables are
+// there to read: the database did not answer, the schema is not applied
+// yet, or luxd serve would refuse it.
+func schemaWhy(s postgres.Schema, err error) string {
+	if err != nil {
+		return "the store did not answer"
+	}
+	action, why := postgres.Guard(s)
+	switch {
+	case action == postgres.Refuse:
+		return "luxd serve would refuse the schema: " + why
+	case s.Version == 0:
+		return "the schema is not applied yet; luxd serve applies it at its first start"
+	}
+	return ""
 }
 
 // listProviders reads every Provider of the store, in name order.
@@ -233,8 +298,10 @@ func listProviders(ctx context.Context, st store.Store) ([]*v1.Provider, error) 
 // storeWhy is the reason the rows over the store are not checked.
 func (r *run) storeWhy() string {
 	switch {
-	case r.cfg.DBURL != "":
+	case r.cfg.DBURL != "" && r.openErr != nil:
 		return "the store did not open"
+	case r.cfg.DBURL != "" && r.why != "":
+		return r.why
 	case r.cfg.ManifestDir != "":
 		return "the manifest directory did not load"
 	default:
@@ -380,12 +447,18 @@ func (r *run) requestLog(ctx context.Context) Line {
 }
 
 // store (spec 010): the mode is named; with Postgres the pool opens and
-// SELECT 1 answers, which waits on that store's phase.
-func (r *run) store(context.Context) Line {
+// SELECT 1 answers inside the readiness budget.
+func (r *run) store(ctx context.Context) Line {
 	const name = "store"
 	switch {
+	case r.cfg.DBURL != "" && r.db == nil:
+		return Line{Fail, name, r.openErr.Error()}
 	case r.cfg.DBURL != "":
-		return Line{Fail, name, r.storeErr.Error()}
+		started := r.o.Now()
+		if err := r.db.Ready(ctx); err != nil {
+			return Line{Fail, name, err.Error()}
+		}
+		return Line{OK, name, fmt.Sprintf("the Postgres store at %s answered SELECT 1 in %s; desired state, spend windows, leases, and the journal are shared by every replica and survive a restart", r.db.Endpoint(), r.o.Now().Sub(started).Round(time.Millisecond))}
 	case r.cfg.ManifestDir != "":
 		return Line{OK, name, "the file mode: desired state is the directory " + r.cfg.ManifestDir + ", read-only through the API; spend windows, budgets, and leases are per replica"}
 	default:
@@ -394,13 +467,29 @@ func (r *run) store(context.Context) Line {
 }
 
 // migrations (spec 010): the schema is not dirty and is of the binary's
-// major, which only the Postgres store has.
+// major; the line names the stored and the embedded highest version, ok
+// when they agree or the stored one is behind, warn when it is ahead
+// within the major, fail when dirty or of another major. Nothing is
+// applied here.
 func (r *run) migrations(context.Context) Line {
 	const name = "migrations"
-	if r.cfg.DBURL != "" {
+	switch {
+	case r.cfg.DBURL == "":
+		return Line{OK, name, "none; only the Postgres store has a schema to migrate"}
+	case r.db == nil:
 		return notChecked(name, r.storeWhy())
+	case r.schemaErr != nil:
+		return notChecked(name, "the store did not answer")
 	}
-	return Line{OK, name, "none; only the Postgres store has a schema to migrate"}
+	action, why := postgres.Guard(r.schema)
+	switch action {
+	case postgres.Refuse:
+		return Line{Fail, name, why}
+	case postgres.Serve:
+		return Line{Warn, name, why}
+	default:
+		return Line{OK, name, why}
+	}
 }
 
 // manifestDir (spec 010): in the file mode the directory is readable,
@@ -419,20 +508,37 @@ func (r *run) manifestDir(context.Context) Line {
 }
 
 // dbConns (spec 010): the arithmetic spec 017's rollout rule rests on,
-// LUX_DB_MAX_CONNS plus one per replica, times the Deployment's replicas;
-// the cluster's max_connections joins the comparison with the Postgres
-// store.
-func (r *run) dbConns(context.Context) Line {
+// LUX_DB_MAX_CONNS plus one per replica, times the Deployment's replicas,
+// beside the cluster's max_connections less its superuser_reserved_connections:
+// a warn when the replicas together exceed what is left, a fail when
+// one replica alone does.
+func (r *run) dbConns(ctx context.Context) Line {
 	const name = "db conns"
 	per := r.cfg.DBMaxConns + 1
 	detail := fmt.Sprintf("LUX_DB_MAX_CONNS is %d, so each replica opens up to %d connections and the Deployment's %d replicas %d; a rollout surges no replica, so the store never sees more",
 		r.cfg.DBMaxConns, per, r.o.Replicas, per*r.o.Replicas)
-	if r.cfg.DBURL == "" {
-		detail += "; without LUX_DB_URL none is opened"
-	} else {
-		detail += "; max_connections is compared once the Postgres store is in the build"
+	switch {
+	case r.cfg.DBURL == "":
+		return Line{OK, name, detail + "; without LUX_DB_URL none is opened"}
+	case r.db == nil:
+		return notChecked(name, r.storeWhy())
+	case r.schemaErr != nil:
+		return notChecked(name, "the store did not answer")
 	}
-	return Line{OK, name, detail}
+	maxConnections, reserved, err := r.db.ConnectionLimits(ctx)
+	if err != nil {
+		return Line{Fail, name, err.Error()}
+	}
+	usable := maxConnections - reserved
+	detail += fmt.Sprintf("; the cluster's max_connections is %d with %d reserved for superusers, leaving %d", maxConnections, reserved, usable)
+	switch {
+	case per > usable:
+		return Line{Fail, name, detail + "; one replica alone exceeds it, so no replica can open its pool"}
+	case per*r.o.Replicas > usable:
+		return Line{Warn, name, detail + "; the replicas together exceed it, so the last to start finds no slot: lower LUX_DB_MAX_CONNS or raise max_connections"}
+	default:
+		return Line{OK, name, detail}
+	}
 }
 
 // secretsKEK (spec 005): LUX_SECRETS_KEK is set and every key decodes to

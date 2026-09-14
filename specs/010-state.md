@@ -4,7 +4,7 @@ status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
-affects: [internal/store/, internal/store/postgres/, internal/store/postgres/migrations/, internal/store/filemode/, internal/store/storetest/, internal/serve/, internal/check/, internal/config/]
+affects: [internal/store/, internal/store/postgres/, internal/store/postgres/migrations/, internal/store/postgres/pgtest/, internal/store/filemode/, internal/store/storetest/, internal/serve/, internal/check/, internal/config/, cmd/luxd/, test/e2e/]
 effort: large
 created: 2026-09-13
 updated: 2026-09-14
@@ -48,19 +48,28 @@ implementation, by mode.
 
 ## Current state
 
-Phase 2 is built: `internal/store` holds the contract, its errors, the
-cursor, and `Instrument`; `internal/store/memory` the memory store;
-`internal/store/filemode` the directory loader over it with `Reload`;
-`internal/store/storetest` the suite, run against memory from both
-packages; `internal/config` the three rows; and `luxd serve` constructs
-the store the configuration selects, joins its `Ready` to readiness, and
-re-reads the directory on `SIGHUP`. `Usage()` waits for
-[[009-usage-and-metering]]'s types. Phase 6 is not: the Postgres store,
-its migrations, the schema guards, the `depcheck` rows for the driver,
-and the postgres tier's `TestPostgresStoreConformance`; until it lands
-`luxd serve` refuses a configured `LUX_DB_URL` with one line. The
-readings this pass fixed where the text was open are written into the
-Design below, each beside the rule it settles.
+Both phases are built. Phase 2: `internal/store` holds the contract,
+its errors, the cursor, and `Instrument`; `internal/store/memory` the
+memory store; `internal/store/filemode` the directory loader over it
+with `Reload`; `internal/store/storetest` the suite, run against memory
+from both packages; `internal/config` the three rows; and `luxd serve`
+constructs the store the configuration selects, joins its `Ready` to
+readiness, and re-reads the directory on `SIGHUP`. Phase 6:
+`internal/store/postgres` is the Postgres store over
+`github.com/jackc/pgx/v5`, its two `v1` migrations embedded under
+`migrations/` and applied through `latere.ai/x/pkg/pgxmigrate` after the
+schema guards below have read `schema_migrations`;
+`internal/store/postgres/pgtest` hands the tier's tagged tests a
+database of their own on the cluster `LUX_DB_URL` names; `luxd serve`
+selects the store on `LUX_DB_URL`, `luxd check` reads the `store`,
+`migrations`, and `db conns` rows from a real database, and `luxd
+rewrap` runs over the store's rows. The postgres tier runs the whole
+suite as `TestPostgresStoreConformance`, the spec's Postgres rows in the
+store package, `TestPostgresTwoReplicas` in `test/e2e`, and `luxd check`
+against the cluster. The readings both passes fixed where the text was
+open are written into the Design below, each beside the rule it
+settles, and the departures of the Postgres build are the table at the
+end of the Design.
 
 ## Design
 
@@ -341,7 +350,7 @@ type Journal interface {
 // /v1/requests serves with source memory when no archive is
 // configured, on Postgres as on memory.
 type Usage interface {
-	AddRows(ctx context.Context, rows []metering.Row) error
+	AddRows(ctx context.Context, rows []metering.Aggregate) error
 	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
 	AppendRecord(ctx context.Context, r metering.Record) error
 	Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error)
@@ -427,13 +436,20 @@ assumption. The migrator is `github.com/golang-migrate/migrate/v4`
 through `latere.ai/x/pkg/pgxmigrate.Up(dsn, fs, dir)`, with that
 module's `database/pgx/v5` driver blank-imported and its `source/iofs`
 reading the embedded files; `pgxmigrate` itself imports no driver and
-asks the caller to. The two module paths are the two `depcheck` rows
-this spec adds to `./cmd/luxd`, `internal/serve`, `internal/rewrap`,
-and `internal/check` in `.lateregate.yaml`, each with this reason, and
-[[001-architecture]]'s build list names them as "the Postgres driver
-for the store". The migrator opens a `database/sql` pool of its own for
-the length of `Up` and closes it, so a start briefly holds
-`LUX_DB_MAX_CONNS` plus one connection.
+asks the caller to. The module paths the build list gains, the driver
+with its pool and the three small packages it reads a connection string
+with, and the migrator, are the `depcheck` rows this spec adds to
+`./cmd/luxd` in `.lateregate.yaml`, each with its reason; the role
+packages hold no list of their own ([[017-release-and-installation]]),
+and [[001-architecture]]'s build list names them as "the Postgres
+driver for the store". The migrator opens a `database/sql` pool of its
+own for the length of `Up` and closes it, so a start briefly holds
+`LUX_DB_MAX_CONNS` plus one connection. The process's clock is the
+store's clock, as it is the memory store's: every timestamp a row
+carries is the caller's or the process's, and every expiry, of a lease,
+a tunnel row, or a due delivery, is compared with a now the process
+passes in rather than the database's `now()`, because the two clocks
+are not one thing and the contract's callers hand in Go times.
 
 | Table | Columns | Holds |
 |---|---|---|
@@ -442,7 +458,7 @@ the length of `Up` and closes it, so a start briefly holds
 | `credentials` | `provider_id` text pk, `version` int, `wrapped_key` bytea, `wrapped_nonce` bytea, `ciphertext` bytea, `nonce` bytea, `updated_at` | the sealed credential; the wrapped key and the ciphertext are separate columns so a re-wrap touches one |
 | `counters` | `key` text pk, `value` bigint, `expires_at` timestamptz null | the spend windows; null is a `none` window |
 | `leases` | `name` text pk, `holder` text, `expires_at` timestamptz | the jobs |
-| `journal` | `id` text pk, `gseq` bigserial, `object_id` text, `seq` bigint, `type` text, `at` timestamptz, `payload` jsonb, `attempts` int, `next_attempt_at` timestamptz, `acked_at` timestamptz null | the events of 012 |
+| `journal` | `id` text pk, `gseq` bigint assigned as the table's maximum plus one under a transaction-scoped advisory lock, `object_id` text, `seq` bigint, `type` text, `at` timestamptz, `payload` bytea, `attempts` int, `next_attempt_at` timestamptz, `acked_at` timestamptz null | the events of 012; `payload` is bytea because a delivery is signed over the exact bytes and jsonb would re-spell them, and `gseq` is not a sequence because a sequence's values commit out of order and a replica tailing `Since` past the later one would never see the earlier |
 | `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunnelled-runtimes]], one live row per tunnelled Provider |
 | `usage_hourly` | the dimensions and sums of [[009-usage-and-metering]] | the aggregates |
 
@@ -480,7 +496,11 @@ Migrations are embedded under `internal/store/postgres/migrations/` as
 previous binary, below. `<version>` is `M000nnn`, the schema major `M`
 followed by a six-digit ordinal, so the first migration of `v1` is
 `1000001_init.up.sql`, and the major is read back from the version by
-integer division. They are applied at the start of `luxd serve` by
+integer division. `v1` has two: `1000001_init` creates the seven tables
+of state and `1000002_usage` the aggregates of
+[[009-usage-and-metering]], so the migration from the previous schema
+is a path the tier walks rather than a rule with nothing to apply to.
+They are applied at the start of `luxd serve` by
 `pgxmigrate.Up` over the URL with its scheme rewritten to `pgx5://`,
 which retries the open for ten seconds so a rolling deploy whose
 outgoing replica still holds its pool does not fail the incoming one.
@@ -509,7 +529,17 @@ holds every `.up.sql` of the current major to that grammar.
 `Ready` is `SELECT 1` with a one second budget and is the readiness
 check named `store`, a `latere.ai/x/pkg/health.Check`, joined to the
 scaffold's readiness ([[002-repository-scaffold]]). No package outside
-`internal/store/postgres` imports the driver or the migrator.
+`internal/store/postgres` imports the driver or the migrator; its test
+helper `internal/store/postgres/pgtest`, which creates a database per
+test on the cluster `LUX_DB_URL` names and drops it after, sits
+beneath it and is compiled into the tier's tagged test binaries alone.
+A database that does not answer at start is the start-up failure,
+naming `LUX_DB_URL` and the endpoint, the host, port, and database,
+and never the URL, which may carry a password; one that goes away
+while the store serves fails `Ready` inside its budget and answers
+every call with the store's error, never a contract error, and serves
+again when the database is back, because the pool discards a broken
+connection and dials a new one.
 
 ### The file mode
 
@@ -653,7 +683,7 @@ The mode's other rules:
 | Variable | Default | Rule |
 |---|---|---|
 | `LUX_MANIFEST_DIR` | none | a readable directory; sets the file mode; a configuration error with `LUX_DB_URL` |
-| `LUX_DB_URL` | none | a `postgres://` or `postgresql://` URL, the two spellings the driver takes, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store; never echoed, not even inside the parser's error, because it may carry a password. Until the Postgres store lands, `luxd serve` refuses a configured URL with one line saying so rather than answering with state in memory, because an operator who asked for durability would find out at the first restart |
+| `LUX_DB_URL` | none | a `postgres://` or `postgresql://` URL, the two spellings the driver takes, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store; never echoed, not even inside the parser's error, because it may carry a password. A database that does not answer at start is exit 1 with one line naming the variable and the endpoint, rather than a process answering with state in memory, because an operator who asked for durability would find out at the first restart |
 | `LUX_DB_MAX_CONNS` | `8` | an integer, at least 1, at most 100; read only with `LUX_DB_URL` |
 
 The three are in [[002-repository-scaffold]]'s table with this spec as
@@ -683,6 +713,37 @@ design can give, and `luxd check` repeats it.
 | `manifest dir` | in file mode, the directory is readable, the line names how many files were read per kind, and every one of them resolves |
 | `db conns` | with Postgres, the line reads `max_connections` and `superuser_reserved_connections` from the cluster and prints them beside `LUX_DB_MAX_CONNS` plus one; it warns when two replicas' worth, the base Deployment's count of [[017-release-and-installation]], exceeds `max_connections` minus the reserved slots, and fails when one replica's does |
 
+`luxd check` applies nothing, so over a database whose schema is not
+applied yet, the state before a first `luxd serve`, `store` is `ok`,
+`migrations` is `ok` saying the schema is not applied and this build
+applies it at start, and every row that reads the objects,
+`public url`'s Provider comparison, `credentials`, `providers`,
+`dialects`, and `tunnels`, is `warn: not checked; the schema is not
+applied yet`; over a schema `luxd serve` would refuse they say so the
+same way, and over a database that does not answer `store` fails once
+and `migrations` and `db conns` are `not checked; the store did not
+answer`, so a failure is attributed once.
+
+### What the build changed
+
+Each row is a departure from the design above as it was dispatched,
+with the reason, so the Outcome at `complete` records nothing the tree
+does not.
+
+| Where | The design said | The build does | Why |
+|---|---|---|---|
+| `journal.payload` | `jsonb` | `bytea` | a delivery is signed over the exact bytes of the payload, and jsonb re-spells a document, its spaces and key order, so a retry would carry another signature input; the suite's `TestJournalTail` reads the bytes back byte for byte |
+| `journal.gseq` | `bigserial` | `bigint`, the table's maximum plus one under `pg_advisory_xact_lock` for the length of the appending transaction | a sequence hands out values that commit out of order, and a replica tailing `Since` past the later one would never see the earlier; the lock costs one append at a time, which mutations, rare beside the data plane, do not notice |
+| the clock | "Postgres reads its own" in the suite's doc | the process's clock, passed into every expiry comparison and stamped on every row the caller left unset | the contract's callers hand in Go times, and the database's clock is not the process's: the container this was built against sat fifty minutes from the host, which a mixed reading turned into leases that never lapsed and deliveries never due |
+| `depcheck` | rows on `./cmd/luxd`, `internal/serve`, `internal/rewrap`, and `internal/check` | rows on `./cmd/luxd` alone, six of them: `pgx`, `puddle`, `pgpassfile`, `pgservicefile`, `pgerrcode`, and `golang-migrate/migrate` | the role packages have no allow list of their own ([[017-release-and-installation]]), and the build reaches the driver's small dependencies, each a row with its reason |
+| the migrations | one, `1000001_init` | two, `1000001_init` and `1000002_usage` | the aggregates joined the store with [[009-usage-and-metering]] after this spec was drafted, and a second file makes the migration from the previous schema a path the tier walks |
+| `objects.status`, `objects.observed` | two jsonb columns, merged on read | the same, the observed column keyed by the status members' own JSON names, so a read is `status \|\| observed` and `PutStatus` is `observed \|\| $incoming` with the zero members left out of the incoming document | one statement each, no read-modify-write, and one merge rule for every kind |
+| `Usage().AppendRecord`, `Records` | the process's own ring, "on Postgres as on memory" | the memory store's ring, held by the Postgres store | the ring is the memory store's already, and one implementation of a bounded ring is enough |
+| the tests | `TestPostgresStoreConformance`, `TestRestartKeepsState`, `TestSchemaGuards`, `TestQueriesUseIndexes`, `TestPoolIsBounded` | the pure halves keep their names untagged (`TestSchemaGuards` over the decision table, `TestMigrationsAreAdditive`, `TestDriverIsConfined`, `TestPoolDefaults`, `TestDatabaseDownAtStartup`); everything that needs a database is `TestPostgres...` behind the tag, as the tier's rule requires ([[015-test-stubs-and-tiers]]), each against a database `pgtest` creates for it | a tagged file holds `TestPostgres` names alone, and a case that shares a database with another package's cannot assert an empty store |
+| `TestQueriesUseIndexes` | `EXPLAIN` over the queries | `pg_stat_user_indexes` after every operation has run once with sequential scans off and a few thousand rows to filter: every index of the schema has been scanned | the statistics measure the queries the store runs rather than copies of them in a test, and prove no index is dead weight as well |
+| the cover gate | 90% per package | `internal/store/postgres` and its `pgtest` exempt in `.lateregate.yaml` with the reason, at 93% under the tag against the container | the gate starts no database, so the untagged run measures the pure parts alone; the tier measures the rest |
+| `luxd check` over an unapplied schema | not said | `store` and `migrations` `ok`, the rows over the objects `warn: not checked` naming the reason | check applies nothing, and a fresh database before the first `serve` is the state the install document runs it against |
+
 ## Not in this spec
 
 The schema and `Resolve` ([[003-manifest-contract]]); sealing, opening,
@@ -698,7 +759,7 @@ cost, and the aggregate columns' meaning
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunnelled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | passing against memory; the postgres tier waits for phase 6 |
+| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunnelled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | passing against memory in `memory` and `storetest`, and against Postgres in `internal/store/postgres` under the tag, every case on a database of its own |
 | `Put` with a stale version is `ErrVersionConflict` and with the current version advances it by one from 1; two concurrent writers at one version yield one success | `TestOptimisticConcurrency` | passing |
 | A name is unique per kind among objects that are not deleted and is reusable after a delete; a declared Model `Put` at version 0 over a discovered one of that name keeps the id, sets `source` `declared` and the actor's owner, and advances the version rather than `ErrNameTaken` | `TestNamesAreUniqueAmongLiveObjects`, `TestDeclaredReplacesDiscoveredInPlace` | passing |
 | `PutStatus` changes no member of the control plane's column and `Put` changes no member of the observed column, for every member in the table by kind; a read merges both | `TestStatusHalvesAreSeparate`, table-driven over the members | passing |
@@ -708,12 +769,17 @@ cost, and the aggregate columns' meaning
 | A lease is held by one holder; a second acquires only after the TTL lapses; the holder's own `Acquire` renews without losing it | `TestLeases` | passing |
 | `Since` returns every event after a global sequence in order, across objects, and a tailing replica misses none; `Pending` returns at most one event per object, the oldest `Seq` first | `TestJournalTail`, `TestPendingIsOnePerObject` | passing |
 | `Keys.Put` on an existing key id replaces the hash and the old hash is `ErrNotFound` at once; `Credentials.Rewrap` at a stale version is `ErrVersionConflict` and at the current one changes the two wrap columns and no other | `TestKeyHashReplacesOnRotate`, `TestRewrapTouchesTheWrapColumnsOnly` | passing |
-| After a restart with Postgres, every object, key hash, credential, open spend window, and pending event is what it was; with memory, the start-up log names the three consequences | `TestRestartKeepsState`, `TestMemoryStoreLogsItsAssumptions` | the memory half passing (`TestMemoryStoreLogsItsAssumptions`); the Postgres half waits for phase 6 |
+| After a restart with Postgres, every object, key hash, credential, open spend window, and pending event is what it was; with memory, the start-up log names the three consequences | `TestPostgresRestartKeepsState`, `TestMemoryStoreLogsItsAssumptions` | passing: the Postgres half in `internal/store/postgres` under the tag, the lease, the tunnel row, the aggregates, and the sequence's continuation included, and at the process in the tier's `TestPostgresTwoReplicas`, where a Key's spend window carries what was spent before the restart; the memory half in `cmd/luxd` |
+| Two replicas share one store: an object one writes the other reads at once, a thousand counter adds split between them sum on both, one lease has one holder, and the journal and the tunnel registry are one; at the process, two `luxd` over one database serve a Key applied through either, read five requests spent across both within a flush, deliver one event per mutation, and refuse a Key deleted through one on the other inside the cache window through the journal tail | `TestPostgresReplicasShareOneStore`, the tier's `TestPostgresTwoReplicas` | passing |
+| A database that does not answer at start is exit 1 with one line naming `LUX_DB_URL` and the endpoint and never the password, for `serve` and `rewrap` alike; one that goes away while the store serves fails `Ready` inside its budget, answers every call with the store's error and no contract error, and serves again when it is back | `TestDatabaseDownAtStartup`, `TestDatabaseDownAtStartupExitsOne`, `TestRewrapNeedsTheStore`, `TestPostgresDatabaseGoesAwayWhileServing` | passing, the last through a TCP proxy the test stops and resumes |
+| A `Transact`'s writes are its own until it commits, a panic inside `fn` rolls everything back, and a write the contract refuses inside `fn` leaves the transaction usable, as on the memory store | `TestPostgresTransactIsolation` | passing |
+| `luxd serve` with `LUX_DB_URL` migrates the database, prints the Postgres line naming the endpoint and the schema version and never the password, joins the store to readiness, serves again over the applied schema without a warning, warns and serves over a schema ahead, and refuses a dirty one; `luxd rewrap` re-wraps the store's rows under the first key, reports a row no key opens with exit 1, and refuses a schema not at this build's version before reading a row | `TestPostgresServeSelectsTheStore`, `TestPostgresRewrapRole` in `cmd/luxd` | passing |
+| `luxd check`'s `store`, `migrations`, and `db conns` rows read the database as the table above says, in every state of the schema and the cluster, and the rows over the objects are `not checked` naming the reason while the schema is not there to read; against a real cluster the three rows are `ok` over an applied schema, `migrations` says `not applied` over an empty database and check applies nothing, and a pool the cluster cannot hold fails `db conns` with exit 1 | `TestCheckReadsTheDatabase` over a fake database, `TestPostgresCheckRows` over a real one, the tier's `TestPostgresCheckReadsTheCluster` at the process | passing |
 | `credentials` rows hold no plaintext under any key, the store has no method that returns one, and no package under `internal/store` imports `internal/secrets` | `TestStoreCannotDecrypt` | passing |
-| A dirty schema and a schema of another major each refuse to start naming the version; a schema ahead within the binary's major starts with one `WARN` naming both and serves; a schema behind is migrated | `TestSchemaGuards`, table-driven over the four rows | not built |
-| Every `.up.sql` of the current major only creates a table, adds a nullable or defaulted column, or adds an index, and no `.down.sql` exists | `TestMigrationsAreAdditive` | not built |
-| Every list, lookup, count, and upsert in the index table uses its index | `TestQueriesUseIndexes` with `EXPLAIN` | not built |
-| No package outside `internal/store/postgres` imports `github.com/jackc/pgx/v5` or `github.com/golang-migrate/migrate/v4`, and both are `depcheck` rows of `./cmd/luxd` and the three role packages | `TestDriverIsConfined`, the `depcheck` gate | not built |
+| A dirty schema and a schema of another major each refuse to start naming the version; a schema ahead within the binary's major starts with one `WARN` naming both and serves; a schema behind is migrated | `TestSchemaGuards`, table-driven over the four rows without a database; `TestPostgresSchemaGuards` over a real `schema_migrations` table, from an empty database and from the previous schema | passing |
+| Every `.up.sql` of the current major only creates a table, adds a nullable or defaulted column, or adds an index, and no `.down.sql` exists | `TestMigrationsAreAdditive` | passing, with `TestMigrationVersions` holding the names to one increasing sequence of this major ending at `Highest` |
+| Every list, lookup, count, and upsert in the index table uses its index | `TestPostgresQueriesUseIndexes`, by `pg_stat_user_indexes` with sequential scans off | passing: every index of the schema is scanned once every operation has run |
+| No package outside `internal/store/postgres` imports `github.com/jackc/pgx/v5` or `github.com/golang-migrate/migrate/v4`, and both are `depcheck` rows of `./cmd/luxd` | `TestDriverIsConfined` over the untagged and the two tagged builds, the `depcheck` gate | passing |
 | Every store method increments `lux_store_operations_total` once with its name and `ok`, `conflict`, or `error` | `TestStoreOperationsAreCounted` | passing |
 | A directory of the four kinds in a deliberately wrong file order resolves in kind order and serves; a file with two documents is a start-up failure naming the file and `multi_document`; a `.yml` file is not read | `TestFileModeResolvesInKindOrder`, `TestFileModeIsOneObjectPerFile` | passing |
 | A Provider credential and a Key value both come from the environment in file mode; a Key value of the wrong shape, and an unset or empty variable for either, is a start-up failure naming the object and the variable and not the value; `Key.spec.value` and `tunnel: true` are each `invalid_field` | `TestFileModeValuesFromEnvironment`, `TestFileModeRefusesServerOnlyFields` | passing |
@@ -721,6 +787,6 @@ cost, and the aggregate columns' meaning
 | `SIGHUP` picks up an added, a changed, and a removed file, keeps every unchanged object's id, and carries an unchanged Provider's discovered Models over; a directory that stops resolving leaves the previous snapshot serving and logs the file and path | `TestFileModeReReads`, `TestFileModeIdsSurviveReRead` | passing |
 | A file that fails to resolve at start is a start-up failure naming the file and the path, and nothing is served | `TestFileModeStartupNamesTheFailingFile` | passing |
 | `LUX_MANIFEST_DIR` with `LUX_DB_URL` is a configuration error naming both | `TestFileModeAndDatabaseAreExclusive` | passing |
-| Discovered Models appear in file mode, are read-only, and are owned by `file|manifest-dir` | `TestFileModeDiscovery` | the store half passing (`TestFileModeDiscovery`); the discovery job waits for 005 |
-| Two file-mode replicas observing one outage each emit one `provider.unreachable`, and the start-up log says so when a sink is set | `TestFileModeEventsArePerReplica` | the store half passing (`TestFileModeEventsArePerReplica`); the events wait for 012 |
-| `LUX_DB_MAX_CONNS` bounds the pool, its default is 8, and a start holds at most that many plus the migrator's one | `TestPoolIsBounded` | not built |
+| Discovered Models appear in file mode, are read-only, and are owned by `file|manifest-dir` | `TestFileModeDiscovery` | the store half passing (`TestFileModeDiscovery`); the discovery job is [[005-providers]]'s |
+| Two file-mode replicas observing one outage each emit one `provider.unreachable`, and the start-up log says so when a sink is set | `TestFileModeEventsArePerReplica` | the store half passing (`TestFileModeEventsArePerReplica`); the events are [[012-request-log-and-events]]'s |
+| `LUX_DB_MAX_CONNS` bounds the pool, its default is 8, and a start holds at most that many plus the migrator's one | `TestPoolDefaults` for the default and the bounds without a database; `TestPostgresPoolIsBounded`, a pool of three under forty callers sampled from outside the pool, the migrator's connection gone after `Connect` | passing |

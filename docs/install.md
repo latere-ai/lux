@@ -212,8 +212,10 @@ never the content.
 ## Where to go from here
 
 - Set `LUX_DB_URL` in the Secret and apply `deploy/overlays/generic`
-  for two replicas over Postgres, once that store is in the release you
-  run; the [state spec](../specs/010-state.md) says what it holds. That
+  for two replicas over Postgres; the gateway applies its schema at
+  start, and the [state spec](../specs/010-state.md) says what it holds
+  and what `luxd check`'s `store`, `migrations`, and `db conns` rows
+  read from the cluster. That
   overlay keeps the alert rules, a `PrometheusRule` the Prometheus
   Operator reads; a cluster without the operator drops it the way the
   kind overlay does.
