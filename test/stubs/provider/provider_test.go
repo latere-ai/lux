@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -358,6 +359,36 @@ func TestReceivedRecording(t *testing.T) {
 	}
 	if resp := send(t, srv, http.MethodGet, "/_received", "", nil); string(resp.body) != "[]" {
 		t.Fatalf("after DELETE: %s", resp.body)
+	}
+}
+
+// TestReceivedWireNames: the record's members are method, path, query,
+// headers, and body on the wire, the names a reader in another process
+// decodes, so a rename here is a failure rather than an empty field
+// there.
+func TestReceivedWireNames(t *testing.T) {
+	srv := start(t, v1.DialectOpenAI)
+	send(t, srv, http.MethodPost, "/v1/chat/completions?tag=a", `{"model":"m"}`, http.Header{"X-Trace": {"one"}})
+	var raw []map[string]any
+	if err := decodeJSON(send(t, srv, http.MethodGet, "/_received", "", nil).body, &raw); err != nil || len(raw) != 1 {
+		t.Fatalf("GET /_received: %v, %d records", err, len(raw))
+	}
+	got := raw[0]
+	for name, want := range map[string]any{"method": http.MethodPost, "path": "/v1/chat/completions", "query": "tag=a", "body": `{"model":"m"}`} {
+		if got[name] != want {
+			t.Errorf("%s = %v, want %v", name, got[name], want)
+		}
+	}
+	headers, ok := got["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("headers is %T; the record's members are %v", got["headers"], slices.Sorted(maps.Keys(got)))
+	}
+	trace, _ := headers["X-Trace"].([]any)
+	if len(trace) != 1 || trace[0] != "one" {
+		t.Errorf("headers.X-Trace = %v", headers["X-Trace"])
+	}
+	if len(got) != 5 {
+		t.Errorf("the record carries %v", slices.Sorted(maps.Keys(got)))
 	}
 }
 
