@@ -110,13 +110,10 @@ func LoadRewrap(getenv Getenv) (Rewrap, error) {
 	var problems []string
 	r := Rewrap{DBURL: strings.TrimSpace(getenv("LUX_DB_URL"))}
 	r.SecretsKEK, problems = parseKEK(getenv("LUX_SECRETS_KEK"), "LUX_SECRETS_KEK is unset, and rewrap re-wraps every stored data key under its first key", problems)
-	switch {
-	case r.DBURL == "":
+	if r.DBURL == "" {
 		problems = append(problems, "LUX_DB_URL is unset, and rewrap re-wraps the credential rows of a database, since the memory store survives no process and the file mode seals nothing")
-	default:
-		if err := checkDBURL(r.DBURL); err != nil {
-			problems = append(problems, "LUX_DB_URL "+err.Error())
-		}
+	} else if err := checkDBURL(r.DBURL); err != nil {
+		problems = append(problems, "LUX_DB_URL "+err.Error())
 	}
 	if len(problems) > 0 {
 		sort.Strings(problems)

@@ -4,6 +4,7 @@
 package config
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -60,9 +61,7 @@ func TestProviderRules(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer})
-			for k, v := range tc.env {
-				m[k] = v
-			}
+			maps.Copy(m, tc.env)
 			c, err := Load(env(m))
 			switch {
 			case tc.want == "" && err != nil:

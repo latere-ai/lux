@@ -328,7 +328,9 @@ func (t *pinned) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	release, ok := t.sem.Acquire(ctx, wait)
 	if !ok {
-		if err := ctx.Err(); err != nil {
+		// A caller that went away is its own error; a deadline that
+		// passed while waiting is the wait outliving the request.
+		if err := ctx.Err(); errors.Is(err, context.Canceled) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w: %d slot(s) toward %s all in flight", ErrProviderBusy, t.sem.Size(), net.JoinHostPort(t.host, t.port))

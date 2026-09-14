@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,7 @@ type recorder struct {
 
 func (rec *recorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rec.mu.Lock()
-	rec.requests = append(rec.requests, r.Clone(context.Background()))
+	rec.requests = append(rec.requests, r.Clone(r.Context()))
 	rec.mu.Unlock()
 	if rec.handle != nil {
 		rec.handle(w, r)
@@ -74,6 +75,10 @@ func (rec *recorder) last() *http.Request {
 	}
 	return rec.requests[len(rec.requests)-1]
 }
+
+// quiet keeps a test server's handshake failures, which the tests
+// provoke on purpose, out of the test output.
+var quiet = slog.NewLogLogger(slog.NewTextHandler(io.Discard, nil), slog.LevelError)
 
 // loopback is a client source that may reach the test servers on
 // 127.0.0.1, as an operator with a runtime on the same host would set.
@@ -430,6 +435,7 @@ func TestTLSIsVerifiedAt12OrLater(t *testing.T) {
 	rec := &recorder{}
 	srv := httptest.NewUnstartedServer(rec)
 	srv.EnableHTTP2 = true
+	srv.Config.ErrorLog = quiet
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	p := provider(srv.URL)
@@ -456,6 +462,7 @@ func TestTLSIsVerifiedAt12OrLater(t *testing.T) {
 	// A server that speaks 1.1 at most is refused at the handshake.
 	old := httptest.NewUnstartedServer(rec)
 	old.TLS = &tls.Config{MaxVersion: tls.VersionTLS11, MinVersion: tls.VersionTLS10} //nolint:gosec // the test's server is the old one
+	old.Config.ErrorLog = quiet
 	old.StartTLS()
 	t.Cleanup(old.Close)
 	oldRoots := x509.NewCertPool()

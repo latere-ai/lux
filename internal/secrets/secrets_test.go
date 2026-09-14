@@ -291,7 +291,7 @@ func TestStartupRequiresAWorkingKEK(t *testing.T) {
 // Provider carrying a canary value, once stored, encodes without it on
 // a read and a list.
 func TestCredentialStatusCarriesNoValue(t *testing.T) {
-	fields := reflect.TypeOf(v1.CredentialStatus{})
+	fields := reflect.TypeFor[v1.CredentialStatus]()
 	if fields.NumField() != 3 {
 		t.Fatalf("CredentialStatus has %d fields, want set, version, updatedAt", fields.NumField())
 	}
