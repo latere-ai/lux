@@ -360,10 +360,20 @@ objects that are not deleted ([[003-manifest-contract]]), which is what
 backs `ErrNameTaken` and what lets a name be reused after a delete.
 Lease names are `discovery`, `health`, `journal`, and `usage`; every TTL
 is 15 seconds and a holder renews at a third of it. Every method of
-every collection counts one `lux_store_operations_total` with `op` its
-name and `result` `ok`, `conflict`, or `error` ([[019-observability]]),
-through `store.Instrument(Store) Store`, which `internal/serve` wraps
-around whichever implementation it built.
+every collection, and `Transact` and `Ready`, counts one
+`lux_store_operations_total` with `op` its name as
+`Collection.Method`, `Objects.Put`, and `result` `ok`, `conflict`, or
+`error` ([[019-observability]]), through `store.Instrument(Store,
+*metrics.Registry) Store`, which `internal/serve` wraps around whichever
+implementation it built, passing the one registry of
+[[019-observability]] because `latere.ai/x/pkg/metrics` has no default
+registry to reach for. `ok` is an answer, `ErrNotFound` included,
+because a lookup that finds nothing is the store working; `conflict` is
+a refusal the contract names, `ErrVersionConflict`, `ErrNameTaken`,
+`ErrHashTaken`, `ErrReadOnly`, and `ErrInvalidCursor`; `error` is the
+store failing, an ended context or `ErrNested` included, which is the
+one value the `LuxStoreFailing` alert reads. The `Store` handed to a
+`Transact`'s `fn` counts the same way.
 
 What satisfies the interfaces `gateway` and `metering` take is
 `internal/serve`, never the store itself, so neither root package
