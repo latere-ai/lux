@@ -172,6 +172,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_REQUESTLOG_EXPORTER` | 012 | `none` | where the request log is archived: `none` or `s3` |
 | `LUX_S3_ENDPOINT`, `LUX_S3_REGION`, `LUX_S3_BUCKET`, `LUX_S3_ACCESS_KEY`, `LUX_S3_SECRET_KEY`, `LUX_S3_PREFIX` | 012 | unset; region `us-east-1`, prefix `lux/` | the request-log archive; the endpoint, the bucket, the access key, and the secret key are required when the exporter is `s3`, and there is no default endpoint and no credential chain |
 | `LUX_REQUESTS_PER_MINUTE`, `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` | 011 | `600`, `60` | control-plane requests one subject, and one client address before authentication, may send in a minute |
+| `LUX_TRUSTED_PROXIES` | 011 | unset | CIDR ranges of the proxies in front of the gateway whose `X-Forwarded-For` names the client; unset trusts no header |
 | `LUX_MAX_MANIFEST_BYTES` | 011 | `65536` | the largest manifest or JSON body accepted on the control plane |
 | `LUX_TUNNEL_ENABLED`, `LUX_TUNNEL_REGISTRY_TTL` | 013 | unset, `30s` | the reverse tunnel for local runtimes, and the liveness window of a serving node in the registry |
 | `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearers on the forward route, a comma separated list of which the first is sent and every one is accepted, so a rotation is prepending; unset serves a tunnelled Provider on the holding replica only; the address without the secret is a start-up failure |

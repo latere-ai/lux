@@ -144,6 +144,9 @@ and, when the object exists, `id` beside the fields, so an authorizer
 reads `resource.owner` and never `resource.fields.owner`; the
 envelope's optional `workload` field is for a core whose workloads ask,
 and `luxd` never sends it, because a data plane request asks nothing.
+`request.ip` is the client address as [[011-api]] determines it: the
+peer's, or the forwarded one behind a proxy listed in
+`LUX_TRUSTED_PROXIES`.
 `resource` per action:
 
 | Action | `resource` |
