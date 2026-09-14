@@ -49,6 +49,12 @@ spec:
             - name: internal
               containerPort: 8081
               protocol: TCP
+          # The audience every caller token must carry is named on the
+          # container itself, so a reader of this file sees what the
+          # gateway verifies without opening the ConfigMap.
+          env:
+            - name: LUX_OIDC_AUDIENCE
+              value: lux
           envFrom:
             - configMapRef:
                 name: luxd

@@ -26,6 +26,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -152,7 +153,7 @@ func (d dirTree) List(dir string) ([]string, error) {
 type gitTree struct{ root, ref string }
 
 func (g gitTree) git(args ...string) ([]byte, error) {
-	cmd := exec.Command("git", append([]string{"-C", g.root}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", g.root}, args...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -172,7 +173,7 @@ func (g gitTree) List(dir string) ([]string, error) {
 		return nil, err
 	}
 	var names []string
-	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if l != "" {
 			names = append(names, l)
 		}
@@ -195,7 +196,7 @@ func Read(t Tree) (Surface, error) {
 	if err != nil {
 		return s, err
 	}
-	for _, line := range strings.Split(string(spec), "\n") {
+	for line := range strings.SplitSeq(string(spec), "\n") {
 		if !strings.HasPrefix(line, "| `LUX_") {
 			continue
 		}
