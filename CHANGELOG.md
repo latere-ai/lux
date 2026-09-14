@@ -6,6 +6,28 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `LUX_DB_URL` selects the Postgres store: desired state, the Key
+  hashes, the sealed credentials, the spend windows, the leases, the
+  journal, the tunnel registry, and the usage aggregates become rows
+  every replica shares and a restart keeps. `luxd serve` applies the
+  embedded migrations at start after holding the stored schema to three
+  rules: a dirty schema or one of another major refuses to start naming
+  the version, one ahead within the major starts with one `WARN` line
+  and serves, and one behind is migrated. The pool is sized by
+  `LUX_DB_MAX_CONNS` (default 8), and the start-up line names the
+  endpoint and the schema version, never the URL. `luxd check`'s
+  `store`, `migrations`, and `db conns` rows read the database: `SELECT
+  1` inside the readiness budget, the stored and embedded schema
+  versions, and the cluster's `max_connections` less its reserved slots
+  beside what the replicas open, a `warn` when the replicas together
+  exceed it and a `fail` when one alone does; over a database whose
+  schema is not applied yet the rows over the objects say so rather
+  than fail. `luxd rewrap` runs over the store's rows and refuses a
+  schema not at its own version. A database that does not answer at
+  start is exit 1 naming the endpoint; one that goes away while serving
+  fails readiness and serves again when it is back. The postgres tier
+  runs the whole store suite, two `luxd` processes over one database,
+  and `luxd check` against the cluster.
 - A whole answer's spend is settled before its body reaches the caller,
   so the request a caller sends the moment it has the answer meets the
   Budget and spend the answer moved; before, a fast caller could slip
