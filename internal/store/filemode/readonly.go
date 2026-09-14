@@ -32,6 +32,7 @@ func (v view) Counters() store.Counters       { return v.inner.Counters() }
 func (v view) Leases() store.Leases           { return v.inner.Leases() }
 func (v view) Journal() store.Journal         { return v.inner.Journal() }
 func (v view) Tunnels() store.Tunnels         { return v.inner.Tunnels() }
+func (v view) Usage() store.Usage             { return v.inner.Usage() }
 
 func (v view) Transact(ctx context.Context, fn func(tx store.Store) error) error {
 	return v.inner.Transact(ctx, func(tx store.Store) error { return fn(view{inner: tx, dir: v.dir}) })

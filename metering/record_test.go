@@ -148,8 +148,8 @@ func walk(t *testing.T, ty reflect.Type, path string, out *[]string) {
 		if ty == reflect.TypeFor[time.Time]() {
 			return
 		}
-		for i := range ty.NumField() {
-			f := ty.Field(i)
+		for f := range ty.Fields() {
+			f := f
 			walk(t, f.Type, path+"."+f.Name, out)
 		}
 	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,

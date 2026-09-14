@@ -12,6 +12,7 @@ import (
 
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 // Factory constructs one empty store per case and cleans it up through
@@ -46,6 +47,9 @@ func Run(t *testing.T, newStore Factory) {
 		{"TestRewrapTouchesTheWrapColumnsOnly", rewrapTouchesTheWrapColumnsOnly},
 		{"TestStoreCannotDecrypt", storeCannotDecrypt},
 		{"TestTunnelRegistry", tunnelRegistry},
+		{"TestAggregatesMatchTheRecords", aggregatesMatchTheRecords},
+		{"TestNoCurrencyIsSummed", noCurrencyIsSummed},
+		{"TestRecordsRingIsBounded", recordsRingIsBounded},
 		{"TestReadyAndClose", readyAndClose},
 		{"TestEndedContextIsAnswered", endedContextIsAnswered},
 	}
@@ -179,7 +183,7 @@ func declaredReplacesDiscovered(t *testing.T, s store.Store) {
 	discovered.Status.Owner = "https://login.example.com|discovery"
 	_, err := s.Objects().Put(ctx, discovered, 0)
 	noErr(t, err, "discovery creates")
-	noErr(t, s.Objects().PutStatus(ctx, v1.KindModel, discovered.Status.ID, store.ModelObserved{Available: ptr(true)}), "observed member on the discovered row")
+	noErr(t, s.Objects().PutStatus(ctx, v1.KindModel, discovered.Status.ID, store.ModelObserved{Available: new(true)}), "observed member on the discovered row")
 
 	declared := model("openai/gpt-5", "openai")
 	newID := declared.Status.ID
@@ -221,7 +225,8 @@ func declaredReplacesDiscovered(t *testing.T, s store.Store) {
 	equal(t, blank.Status.Source, v1.SourceDeclared, "the default source is written back")
 }
 
-func ptr[T any](v T) *T { return &v }
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
 
 // statusHalvesAreSeparate is table-driven over every member of spec
 // 010's table: the observed member is not written by Put and is by
@@ -254,10 +259,10 @@ func statusHalvesAreSeparate(t *testing.T, s store.Store) {
 		}},
 		{"Model", func() v1.Object {
 			m := model("gpt-5", "openai")
-			m.Status.Available = ptr(true)
+			m.Status.Available = new(true)
 			m.Status.Targets = []v1.TargetStatus{{Provider: "openai", Model: "gpt-5", Health: v1.HealthHealthy}}
 			return m
-		}(), store.ModelObserved{Available: ptr(false), Targets: []v1.TargetStatus{{Provider: "openai", Model: "gpt-5", Health: v1.HealthDegraded}}}, func(t *testing.T, before, after v1.Object) {
+		}(), store.ModelObserved{Available: new(false), Targets: []v1.TargetStatus{{Provider: "openai", Model: "gpt-5", Health: v1.HealthDegraded}}}, func(t *testing.T, before, after v1.Object) {
 			b, a := as[*v1.Model](t, before), as[*v1.Model](t, after)
 			truth(t, b.Status.Available == nil && b.Status.Targets == nil, "Put wrote no observed Model member")
 			equal(t, b.Status.Source, v1.SourceDeclared, "Put wrote source")
@@ -288,9 +293,9 @@ func statusHalvesAreSeparate(t *testing.T, s store.Store) {
 			b.Status.Spent = ptr(v1.Money(1))
 			b.Status.Remaining = ptr(v1.Money(2))
 			b.Status.ResetsAt = at
-			b.Status.Keys = ptr(4)
+			b.Status.Keys = new(4)
 			return b
-		}(), store.BudgetObserved{State: v1.BudgetExhausted, Spent: ptr(v1.Money(10)), Remaining: ptr(v1.Money(0)), ResetsAt: at, Keys: ptr(2)}, func(t *testing.T, before, after v1.Object) {
+		}(), store.BudgetObserved{State: v1.BudgetExhausted, Spent: ptr(v1.Money(10)), Remaining: ptr(v1.Money(0)), ResetsAt: at, Keys: new(2)}, func(t *testing.T, before, after v1.Object) {
 			b, a := as[*v1.Budget](t, before), as[*v1.Budget](t, after)
 			truth(t, b.Status.State == "" && b.Status.Spent == nil && b.Status.Remaining == nil && b.Status.ResetsAt.IsZero() && b.Status.Keys == nil, "Put wrote no observed Budget member")
 			equal(t, a.Status.State, v1.BudgetExhausted, "PutStatus wrote state")
@@ -1069,7 +1074,16 @@ func endedContextIsAnswered(t *testing.T, s store.Store) {
 		"Tunnels.Heartbeat":  func() error { _, err := s.Tunnels().Heartbeat(ctx, "prv_1", "tun_1", time.Second); return err },
 		"Tunnels.Get":        func() error { _, err := s.Tunnels().Get(ctx, "prv_1"); return err },
 		"Tunnels.Unregister": func() error { return s.Tunnels().Unregister(ctx, "prv_1", "tun_1") },
-		"Ready":              func() error { return s.Ready(ctx) },
+		"Usage.AddRows": func() error {
+			return s.Usage().AddRows(ctx, []metering.Aggregate{{Bucket: time.Now(), KeyID: "key_1"}})
+		},
+		"Usage.QueryRows":    func() error { _, err := s.Usage().QueryRows(ctx, metering.Query{}); return err },
+		"Usage.AppendRecord": func() error { return s.Usage().AppendRecord(ctx, metering.Record{ID: "req_1"}) },
+		"Usage.Records": func() error {
+			_, _, err := s.Usage().Records(ctx, metering.RecordQuery{}, store.Page{})
+			return err
+		},
+		"Ready": func() error { return s.Ready(ctx) },
 	}
 	for name, call := range calls {
 		wantErr(t, call(), context.Canceled, name)

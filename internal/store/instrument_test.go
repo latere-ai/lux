@@ -15,6 +15,7 @@ import (
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/memory"
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 func labels(op, result string) map[string]string {
@@ -84,6 +85,18 @@ func TestStoreOperationsAreCounted(t *testing.T) {
 		{"Tunnels.Heartbeat", store.ResultOK, func() error { _, err := s.Tunnels().Heartbeat(ctx, "prv_1", "tun_1", time.Minute); return err }},
 		{"Tunnels.Get", store.ResultOK, func() error { _, err := s.Tunnels().Get(ctx, "prv_1"); return err }},
 		{"Tunnels.Unregister", store.ResultOK, func() error { return s.Tunnels().Unregister(ctx, "prv_1", "tun_1") }},
+		{"Usage.AddRows", store.ResultOK, func() error {
+			return s.Usage().AddRows(ctx, []metering.Aggregate{{Bucket: time.Now(), KeyID: "key_1", Currency: "USD"}})
+		}},
+		{"Usage.QueryRows", store.ResultOK, func() error {
+			_, err := s.Usage().QueryRows(ctx, metering.Query{From: time.Now().Add(-time.Hour), To: time.Now().Add(time.Hour)})
+			return err
+		}},
+		{"Usage.AppendRecord", store.ResultOK, func() error { return s.Usage().AppendRecord(ctx, metering.Record{ID: "req_1"}) }},
+		{"Usage.Records", store.ResultConflict, func() error {
+			_, _, err := s.Usage().Records(ctx, metering.RecordQuery{}, store.Page{Cursor: "x"})
+			return err
+		}},
 		{"Ready", store.ResultOK, func() error { return s.Ready(ctx) }},
 		{"Transact", store.ResultError, func() error {
 			return s.Transact(ctx, func(tx store.Store) error { return errors.New("fn failed") })
@@ -102,6 +115,7 @@ func TestStoreOperationsAreCounted(t *testing.T) {
 	for _, iface := range []reflect.Type{
 		reflect.TypeFor[store.Objects](), reflect.TypeFor[store.Keys](), reflect.TypeFor[store.Credentials](),
 		reflect.TypeFor[store.Counters](), reflect.TypeFor[store.Leases](), reflect.TypeFor[store.Journal](), reflect.TypeFor[store.Tunnels](),
+		reflect.TypeFor[store.Usage](),
 	} {
 		name := strings.TrimPrefix(iface.String(), "store.")
 		for m := range iface.Methods() {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 // Store is what the serve role constructs and every consumer takes as an
@@ -16,9 +17,8 @@ import (
 // every id is the caller's, the prefixed ULID of spec 001, and is the
 // primary key of its row.
 //
-// Usage, the aggregate side of spec 009, joins the interface with that
-// spec: its parameters are the metering package's types, which do not
-// exist before it lands, and a name is defined by one spec alone.
+// Usage is the aggregate side of spec 009, whose parameters are the
+// metering package's types, so a name is defined by one spec alone.
 type Store interface {
 	Objects() Objects
 	Keys() Keys
@@ -26,6 +26,7 @@ type Store interface {
 	Counters() Counters
 	Leases() Leases
 	Journal() Journal
+	Usage() Usage
 	// Tunnels is the tunnel registry of spec 013.
 	Tunnels() Tunnels
 	// Transact runs fn against a Store whose writes commit together or
@@ -282,6 +283,35 @@ type Journal interface {
 
 // JournalKind is the kind a ByObject cursor is encoded under.
 const JournalKind = "journal"
+
+// Usage is the aggregate side of spec 009. Records are not rows in any
+// mode: the durable record set is the archive of spec 012, and
+// AppendRecord feeds the process's own bounded ring, metering.RecordsPerKey
+// per Key, which Records answers and GET /v1/requests serves with source
+// memory when no archive is configured, on Postgres as on memory. The
+// aggregates are rows: one per hour per dimension tuple, summed on
+// conflict, which is what the usage API reads.
+type Usage interface {
+	// AddRows upserts hourly aggregate rows: a row whose key exists has
+	// its sums added and its labels replaced, one that does not is
+	// inserted. The Recorder's flush calls it with the hour's deltas.
+	AddRows(ctx context.Context, rows []metering.Aggregate) error
+	// QueryRows answers the response rows of q: the hourly rows inside
+	// the range that pass the filters, grouped by q.By and summed into
+	// q.Interval, as metering.Group does, so no row sums two currencies.
+	// q is validated by the caller.
+	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
+	// AppendRecord adds r to its Key's ring, dropping the oldest past
+	// metering.RecordsPerKey.
+	AppendRecord(ctx context.Context, r metering.Record) error
+	// Records pages the rings' records that match q, newest first by At
+	// then id; the cursor is EncodeRecordCursor's, and one from another
+	// query is ErrInvalidCursor. A Limit of 0 or less is every row.
+	Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error)
+}
+
+// RecordsKind is the kind a Records cursor is encoded under.
+const RecordsKind = "records"
 
 // Tunnels is the registry of live tunnel sessions of spec 013, one row
 // per tunnelled Provider, so every replica reads the same answer.

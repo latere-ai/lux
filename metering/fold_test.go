@@ -455,16 +455,16 @@ func TestUsageFilterNarrows(t *testing.T) {
 			t.Fatal("a stream filter admitted a non-stream record")
 		}
 	}
-	if (RecordQuery{Query: Query{From: rs[0].At.Add(time.Second), To: rs[0].At.Add(time.Hour)}}).Matches(rs[0]) {
+	if (RecordQuery{From: rs[0].At.Add(time.Second), To: rs[0].At.Add(time.Hour)}).Matches(rs[0]) {
 		t.Fatal("a record before from matched")
 	}
-	if (RecordQuery{Query: Query{From: rs[0].At.Add(-time.Hour), To: rs[0].At}}).Matches(rs[0]) {
+	if (RecordQuery{From: rs[0].At.Add(-time.Hour), To: rs[0].At}).Matches(rs[0]) {
 		t.Fatal("a record at to matched; to is exclusive")
 	}
-	if !(RecordQuery{Query: Query{From: rs[0].At, To: rs[0].At.Add(time.Second)}}).Matches(rs[0]) {
+	if !(RecordQuery{From: rs[0].At, To: rs[0].At.Add(time.Second)}).Matches(rs[0]) {
 		t.Fatal("a record at from did not match; from is inclusive")
 	}
-	if (RecordQuery{Query: Query{From: all.From, To: all.To, Keys: []string{"key_Z"}}}).Matches(rs[0]) {
+	if (RecordQuery{From: all.From, To: all.To, Keys: []string{"key_Z"}}).Matches(rs[0]) {
 		t.Fatal("an unknown Key matched")
 	}
 }

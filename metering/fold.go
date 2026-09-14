@@ -153,11 +153,9 @@ func AggregateOf(r Record) Aggregate {
 	a := Aggregate{
 		Bucket: IntervalHour.Bucket(r.At), KeyID: r.Key.ID, ModelID: r.Model.ID, ProviderID: r.Provider.ID,
 		Owner: r.Owner, Door: r.Door, Status: r.Status, Currency: r.Cost.Currency,
-		Labels: maps.Clone(r.Labels),
-		Sums: Sums{
-			Requests: 1, InputTokens: r.Tokens.Input, OutputTokens: r.Tokens.Output,
-			CachedInputTokens: r.Tokens.CachedInput, CacheWriteTokens: r.Tokens.CacheWrite,
-		},
+		Labels:   maps.Clone(r.Labels),
+		Requests: 1, InputTokens: r.Tokens.Input, OutputTokens: r.Tokens.Output,
+		CachedInputTokens: r.Tokens.CachedInput, CacheWriteTokens: r.Tokens.CacheWrite,
 	}
 	if a.Labels == nil {
 		a.Labels = map[string]string{}
@@ -179,7 +177,7 @@ func Aggregates(rs []Record) []Aggregate {
 		a := AggregateOf(r)
 		k := a.Key()
 		if have, ok := rows[k]; ok {
-			have.Sums.Add(a.Sums)
+			have.Add(a.Sums)
 			continue
 		}
 		rows[k] = &a

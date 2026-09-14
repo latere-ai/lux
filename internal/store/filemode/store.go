@@ -165,6 +165,10 @@ func (s *Store) Journal() store.Journal { return s.view.Journal() }
 // Tunnels implements store.Store.
 func (s *Store) Tunnels() store.Tunnels { return s.view.Tunnels() }
 
+// Usage implements store.Store: the aggregates and the rings are the
+// gateway's and are written in this mode as in any other.
+func (s *Store) Usage() store.Usage { return s.view.Usage() }
+
 // Transact implements store.Store: the memory store's Transact with the
 // read-only rules on the Store fn is handed.
 func (s *Store) Transact(ctx context.Context, fn func(tx store.Store) error) error {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"latere.ai/x/lux/internal/store"
+	"latere.ai/x/lux/metering"
 )
 
 // Notice is the start-up line's substance: the three consequences of
@@ -67,6 +68,13 @@ type state struct {
 	seqs     map[string]int64       // object id to its last Seq
 	gseq     int64
 	tunnels  map[string]store.Tunnel // by provider id
+	// The usage side of spec 009: the hourly aggregate rows by their
+	// primary key, and the ring of records per Key id, oldest first.
+	// The rings are the gateway's own and never part of an apply, so an
+	// append may grow a ring's array in place; a snapshot keeps the
+	// shorter header and a rollback shows the ring as it was.
+	aggregates map[metering.AggregateKey]metering.Aggregate
+	records    map[string][]metering.Record
 }
 
 func newState() *state {
@@ -81,6 +89,9 @@ func newState() *state {
 		journal:  map[string]store.Event{},
 		seqs:     map[string]int64{},
 		tunnels:  map[string]store.Tunnel{},
+
+		aggregates: map[metering.AggregateKey]metering.Aggregate{},
+		records:    map[string][]metering.Record{},
 	}
 }
 
@@ -99,6 +110,9 @@ func (st *state) clone() *state {
 		seqs:     maps.Clone(st.seqs),
 		gseq:     st.gseq,
 		tunnels:  maps.Clone(st.tunnels),
+
+		aggregates: maps.Clone(st.aggregates),
+		records:    maps.Clone(st.records),
 	}
 }
 
@@ -148,6 +162,9 @@ func (s *Store) Journal() store.Journal { return journal{s} }
 
 // Tunnels implements store.Store.
 func (s *Store) Tunnels() store.Tunnels { return tunnels{s} }
+
+// Usage implements store.Store.
+func (s *Store) Usage() store.Usage { return usage{s} }
 
 // Transact holds the write lock for the call and runs fn against a
 // Store that shares the state. A failure of fn, an error or a panic,

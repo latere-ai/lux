@@ -11,6 +11,7 @@ import (
 	"latere.ai/x/pkg/metrics"
 
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 // MetricOperations is the counter every store method increments once,
@@ -67,6 +68,7 @@ func (s *instrumented) Counters() Counters       { return iCounters{s.inner.Coun
 func (s *instrumented) Leases() Leases           { return iLeases{s.inner.Leases(), s} }
 func (s *instrumented) Journal() Journal         { return iJournal{s.inner.Journal(), s} }
 func (s *instrumented) Tunnels() Tunnels         { return iTunnels{s.inner.Tunnels(), s} }
+func (s *instrumented) Usage() Usage             { return iUsage{s.inner.Usage(), s} }
 
 func (s *instrumented) Transact(ctx context.Context, fn func(tx Store) error) error {
 	err := s.inner.Transact(ctx, func(tx Store) error {
@@ -309,4 +311,33 @@ func (t iTunnels) Unregister(ctx context.Context, providerID, session string) er
 	err := t.Tunnels.Unregister(ctx, providerID, session)
 	t.s.count("Tunnels.Unregister", err)
 	return err
+}
+
+type iUsage struct {
+	Usage
+	s *instrumented
+}
+
+func (u iUsage) AddRows(ctx context.Context, rows []metering.Aggregate) error {
+	err := u.Usage.AddRows(ctx, rows)
+	u.s.count("Usage.AddRows", err)
+	return err
+}
+
+func (u iUsage) QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error) {
+	rows, err := u.Usage.QueryRows(ctx, q)
+	u.s.count("Usage.QueryRows", err)
+	return rows, err
+}
+
+func (u iUsage) AppendRecord(ctx context.Context, r metering.Record) error {
+	err := u.Usage.AppendRecord(ctx, r)
+	u.s.count("Usage.AppendRecord", err)
+	return err
+}
+
+func (u iUsage) Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error) {
+	recs, next, err := u.Usage.Records(ctx, q, p)
+	u.s.count("Usage.Records", err)
+	return recs, next, err
 }
