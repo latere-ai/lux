@@ -1,9 +1,9 @@
 # Every push to main and every pull request runs the gate, the shared
-# pipeline of latere-ai/ci, and the checks that need the tree and no
-# network: a tidy module file and the licence notice on every source
-# file. The tiers that need a stub provider, issuer, authorizer, and sink
-# beside them are spec 015's and join here when that spec lands. Every
-# third-party action is pinned by commit.
+# pipeline of latere-ai/ci, the checks that need the tree and no network,
+# a tidy module file and the licence notice on every source file, and the
+# two tiers of spec 015 that need more than the toolchain: the integration
+# tier over the stubs it builds itself, and the postgres tier against a
+# service container. Every third-party action is pinned by commit.
 name: verify
 on:
   push:
@@ -50,3 +50,50 @@ jobs:
       - name: The image reports its version
         run: |
           docker run --rm luxd:candidate -version | grep -q '^luxd '
+
+  # The integration tier: luxd and lux-stubs as processes the tier builds
+  # into a directory of its own, so it needs the toolchain, make, and
+  # curl, the last two for the make run rows. The package pattern is
+  # ./... so a tagged test anywhere in the tree is run, and -v so a tier
+  # that matched nothing is visible as an empty list. No -race: the gate's
+  # race gate runs the in-process suite, and here the assertions are HTTP
+  # requests against a separate process.
+  e2e:
+    name: the integration tier
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test -tags=integration -run '^TestE2E' -v ./...
+
+  # The postgres tier: the same tree of cases against a shared store, with
+  # LUX_DB_URL pointed at a service container. The database is the
+  # tier's dependency, declared by the variable, and nothing in the tree
+  # starts one.
+  postgres:
+    name: the postgres tier
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        # postgres:17-alpine, pinned by digest as every image reference is
+        image: postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        env:
+          POSTGRES_PASSWORD: lux
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test -tags=postgres -run '^TestPostgres' -v ./...
+        env:
+          LUX_DB_URL: postgres://postgres:lux@127.0.0.1:5432/postgres?sslmode=disable

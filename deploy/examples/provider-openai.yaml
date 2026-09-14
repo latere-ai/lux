@@ -1,0 +1,18 @@
+# A Provider speaking the openai dialect, pointed at the stub provider
+# `make run` starts beside luxd; `make run` rewrites the port to the one it
+# derived for this checkout. A real Provider names its upstream here, and
+# its credential is applied once through /v1 and sealed, or read from a
+# variable with `valueFrom: {env: ...}` in the file mode. The stub's
+# credential is not a secret, so it sits here as a literal, which both
+# modes accept.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: openai
+spec:
+  dialect: openai
+  baseURL: http://127.0.0.1:9101/v1
+  credential:
+    value: stub-credential
+  discovery:
+    mode: none          # the Models beside this file are declared; auto would list the stub's stub-openai too

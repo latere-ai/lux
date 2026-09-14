@@ -1,0 +1,13 @@
+# The anthropic dialect against its stub; see provider-openai.yaml for
+# what each field is here for.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic
+spec:
+  dialect: anthropic
+  baseURL: http://127.0.0.1:9102/v1
+  credential:
+    value: stub-credential
+  discovery:
+    mode: none          # the Models beside this file are declared; auto would list the stub's stub-anthropic too

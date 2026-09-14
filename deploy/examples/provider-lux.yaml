@@ -1,0 +1,13 @@
+# The lux dialect against its stub: another Lux, or anything that speaks
+# its door, as an upstream. See provider-openai.yaml for the rest.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: lux
+spec:
+  dialect: lux
+  baseURL: http://127.0.0.1:9104/v1
+  credential:
+    value: stub-credential
+  discovery:
+    mode: none          # the Models beside this file are declared; auto would list the stub's stub-lux too

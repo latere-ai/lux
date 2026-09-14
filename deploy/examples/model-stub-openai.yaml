@@ -1,0 +1,15 @@
+# One routable name over the openai stub. The target's model is the
+# upstream's own name; a stub answers stub:openai:<model>:<digest> and
+# reports 100 input and 20 output tokens, so with this pricing every
+# request through the door costs exactly 0.00045 USD.
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: stub-openai
+spec:
+  targets:
+    - provider: openai
+      model: stub-openai
+  pricing:                # USD per 1,000,000 tokens
+    input: "2.50"
+    output: "10"

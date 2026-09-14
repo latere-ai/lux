@@ -4,6 +4,12 @@
 
 cover:
   trim_prefix: latere.ai/x/lux/
+  exempt:
+    # Spec 018's suite: TestContract is in the untagged run and skips
+    # without LUX_TEST_URL, so the package's whole body runs against a
+    # server the gate does not start and measures no statements here
+    # (spec 015).
+    test/conformance: a package whose whole body runs against a server the gate does not start
 
 spec:
   status:
@@ -97,6 +103,32 @@ depcheck:
           the YAML decoder spec 003 names, reached through manifest by lux
           apply, which decodes every document with the server's own Decode;
           its encoder renders -o yaml
+    # Spec 015's stubs binary: it mounts the stub issuer and the stub
+    # authorizer of latere.ai/x/pkg rather than a second reading of either
+    # contract, and its sink verifies with internal/events, which carries
+    # the delivery client's instrumented transport and, through it, the
+    # OpenTelemetry SDK luxd already admits. It ships as a test image and
+    # never as an installation, so no provider SDK and no driver joins it
+    # either.
+    latere.ai/x/lux/cmd/lux-stubs:
+      decision: >-
+        the stubs reach latere.ai/x/pkg for the issuer and the authorizer
+        they mount and the standard library, and the sink's events.Verify
+        brings internal/events with the OpenTelemetry SDK behind its
+        delivery client; nothing else joins without a row here (spec 015)
+      allow:
+        latere.ai/x/pkg: the stub issuer, the stub authorizer, and the shared library they are built on (spec 015)
+        go.opentelemetry.io: the OpenTelemetry SDK behind internal/events' delivery client, reached through latere.ai/x/pkg/otel
+        google.golang.org/grpc: the OTLP exporters' transport, a dependency of the OpenTelemetry SDK
+        google.golang.org/protobuf: the OTLP wire format, a dependency of the OpenTelemetry SDK
+        google.golang.org/genproto: the OTLP status types, a dependency of the OpenTelemetry SDK
+        golang.org/x: the Go project's extended library, a dependency of the OpenTelemetry SDK and gRPC
+        github.com/grpc-ecosystem/grpc-gateway: the OTLP HTTP exporters' dependency
+        github.com/go-logr: the OpenTelemetry SDK's logging seam
+        github.com/google/uuid: request ids in latere.ai/x/pkg/httpjson
+        github.com/felixge/httpsnoop: the response recorder of the SDK's HTTP instrumentation
+        github.com/cespare/xxhash: a hash the OpenTelemetry SDK's metric pipeline uses
+        github.com/cenkalti/backoff: the OTLP exporters' retry
 
 license:
   spdx: Apache-2.0

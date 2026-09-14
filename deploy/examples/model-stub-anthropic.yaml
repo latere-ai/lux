@@ -1,0 +1,12 @@
+# One routable name over the anthropic stub; see model-stub-openai.yaml.
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: stub-anthropic
+spec:
+  targets:
+    - provider: anthropic
+      model: stub-anthropic
+  pricing:
+    input: "3"
+    output: "15"

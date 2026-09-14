@@ -290,3 +290,16 @@ refused before it is pushed.
   heartbeat rather than reconnecting, exits 0 on `SIGINT` and
   `SIGTERM` with the session closed cleanly, and exits 1 when the
   gateway ends the session for good.
+- Test stubs and tiers: `lux-stubs` serves a stub provider per dialect,
+  the stub issuer and authorizer of `latere.ai/x/pkg`, and a stub sink
+  that verifies `Lux-Signature`, each on its own loopback address. A stub
+  provider answers as a function of the request and fails on demand by
+  upstream model name (`fail-500`, `fail-429`, `hang`, `redirect`,
+  `tokens-<in>-<out>`, and the rest of the table) or by the
+  `Lux-Stub-Fail` header. `make run` starts the stubs and `luxd` on
+  ports derived from the checkout, applies `deploy/examples/`, and
+  prints `LUX_URL`, `LUX_TOKEN`, and `LUX_KEY`; `make run-file` is the
+  same in the file mode; `make run-down` stops both. `make test-e2e`
+  runs the integration tier, `luxd` and `lux-stubs` as processes, and
+  `make test-postgres` the postgres tier, which refuses to run without
+  `LUX_DB_URL`; `verify.yml` runs both on every push.
