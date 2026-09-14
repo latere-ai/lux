@@ -95,7 +95,7 @@ bridge.Envelope(wire, bridge.Failure{...}) []byte
 bridge.ErrorFrame(wire, bridge.Failure{...}) []byte
 bridge.ModelList(wire, []bridge.Model) []byte
 bridge.ModelEntry(wire, bridge.Model) []byte
-bridge.CountTokens(wire, body) (n int64, estimated bool, err error)
+bridge.CountTokensFor(dialect, body) (n int64, estimated bool, err error)
 bridge.CountBody(wire, n) []byte
 bridge.UsageOf(wire, body) (bridge.Usage, bool)
 bridge.NewUsageScanner(wire, framing) *bridge.UsageScanner
@@ -120,7 +120,7 @@ gateway maps onto its own table below.
 | `frontendFor`, `backendFor`, `codecs`, `codecsFor` | one `bridge.Open(door wire, target wire, options)` per attempt; the option values stay the gateway's, computed as the codec options table of [[004-request-path]] says |
 | `outbound`'s translate arm: `DecodeRequest`, the name, `EncodeRequest` | `b.Request(body, RequestOptions{Model: t.Model, Loss: droppedHeaders})`; the returned `loss` is the `Lux-Loss` header and the record's |
 | `respondWhole`'s translate arm: `DecodeResponse`, the name, `EncodeResponse` | `b.Response(body, ResponseOptions{Model: c.model.Metadata.Name})`; the returned `usage` is the record's tokens |
-| `streamTranslated`'s event loop | `b.Stream(c.w, resp.Body, ...)` with `FirstByte` writing the status once the first event has arrived, the `text/event-stream` header set before the call so a stream that fails on its first event still answers with it, `Flush` the response controller's flush, and no `Fail`: `endStream` writes the door's frame as before, so there is one writer of the frame and never two |
+| `streamTranslated`'s event loop | `b.Stream(c.w, resp.Body, ...)` after the gateway wrote the status and the `text/event-stream` header itself, when the upstream's headers arrived, as before the move, so the caller's time to first byte does not wait for the first event and a stream that fails on its first event still answers with them; no `FirstByte`, `Flush` the response controller's flush, and no `Fail`: `endStream` writes the door's frame as before, so there is one writer of the frame and never two |
 | `responseEvents` | `b.StreamResponse(c.w, body, ...)` for a target that answers a stream request with one JSON body |
 | `envelope`, `openaiError`, `anthropicError`, `geminiError`, `googleStatus` | `bridge.Envelope(wire, Failure{Code, Message, Detail, RequestID, Status, Domain: "lux"})` |
 | `streamErrorFrame` | `bridge.ErrorFrame(wire, Failure{...})`, still written by `endStream`, which decides whether there is anyone left to write to |
@@ -129,7 +129,7 @@ gateway maps onto its own table below.
 | `sniffer`, `sseSniffer`, `jsonSniffer`, `frameEnd`, `frameData` | `bridge.NewUsageScanner(wire, FramingSSE\|FramingJSON)`, the same `io.Writer` beside the passthrough relay |
 | `probe`, `probeBody` | `bridge.Probe`, returning `bridge.Call` |
 | `rewriteModel`, `rewriteFrame`, `setIncludeUsage`, `removeMember`, and the JSON scanner under them (`member`, `skipValue`, `splice`, `insertMember`) | `bridge.SetModel`, `bridge.SetModelInFrame`, `bridge.SetIncludeUsage`, `bridge.RemoveMember` |
-| `tokencount.Estimate` over the decoded request, in `estimate` and `estimatedTokens` | `bridge.CountTokens(wire, body)` and `bridge.CountBody(wire, n)` |
+| `tokencount.Estimate` over the decoded request, in `estimate` and `estimatedTokens` | `bridge.CountTokensFor(dialect, body)` in the route's dialect and `bridge.CountBody(wire, n)` |
 
 What stays, untouched: `forward.go`'s attempt order, retries, and
 header policy; `handler.go`'s pipeline and its stages; `key.go`,
@@ -159,7 +159,7 @@ conversion is five lines in `record.go`.
   family predicate: the values are computed here and passed in.
 - **`Lux-Loss`** is set from `Request`'s second return, joined with
   commas, and omitted when it is nil. **`Lux-Estimated: true`** is set
-  when `CountTokens` returns `estimated`. The names are this
+  when `CountTokensFor` returns `estimated`. The names are this
   repository's; the values are the bridge's.
 - **Every code, status, and sentence.** The bridge's seven failure
   codes are mapped here, in `bridgeFailure`, and nowhere else:
@@ -199,19 +199,18 @@ conversion is five lines in `record.go`.
 Unchanged in count. Before the swap a translated request was decoded
 twice, once in `decode` for the reservation's estimate and once per
 attempt in `outbound`, so the loss report is that target's alone.
-After it, `bridge.CountTokens` decodes for the estimate, once per
+After it, `bridge.CountTokensFor` decodes for the estimate, once per
 request and reused by a record whose upstream reported no usage, and
 `b.Request` decodes per attempt: the same two, and `call.irReq` and
-`call.decodeErr` are gone. The `ir` import stays: `bridge.Open` takes
-`ir.Dialect` names, and `doorDialect` and `targetDialect` are the
-gateway's choice of codec per route and per target. One estimate
-differs: `CountTokens` reads a body through the wire's one frontend,
-Chat Completions for `WireOpenAI`, so a `/openai/v1/responses` body
-toward another dialect, which `decode` read with the Responses codec,
-now falls to the byte heuristic in the reservation and in a record
-whose upstream reported nothing; no byte on the wire changes, and a
-`CountTokens` that takes the door's `ir.Dialect` is the bridge's fix,
-reported to `latere.ai/x/pkg`.
+`call.decodeErr` are gone. The `ir` import stays: `bridge.Open` and
+`bridge.CountTokensFor` take `ir.Dialect` names, and `doorDialect` and
+`targetDialect` are the gateway's choice of codec per route and per
+target. The estimate is read in the route's dialect for that reason:
+the bridge's `CountTokens` reads a body through a wire's one frontend,
+Chat Completions for `WireOpenAI`, which would have sent a
+`/openai/v1/responses` body to the byte heuristic; `CountTokensFor`
+was added to the bridge for this, and
+`TestResponsesEstimateUsesItsOwnCodec` holds the route to it.
 
 ### The swap, commit by commit
 

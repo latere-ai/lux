@@ -455,7 +455,7 @@ func (c *call) readModel(ctx context.Context) *failure {
 // The record says ok with zero tokens.
 func (c *call) estimate(ctx context.Context) *failure {
 	w := wireOf(c.door)
-	n, estimated, err := bridge.CountTokens(w, c.body)
+	n, estimated, err := bridge.CountTokensFor(doorDialect(c.route.op), c.body)
 	if err != nil {
 		return c.bridgeFailure(ctx, err)
 	}
@@ -483,14 +483,15 @@ func (c *call) estimatedTokens() Tokens {
 }
 
 // inputEstimate is the estimator's count of the request's input, read
-// through the door's wire by bridge.CountTokens, and the body's length in
-// bytes divided by four when the wire has no codec or its codec refuses
-// the body. It is computed once, for the reservation and for a record
-// whose upstream reported nothing.
+// in the route's dialect by bridge.CountTokensFor, so a Responses body
+// is read by the Responses codec and a Chat body by Chat's, and the
+// body's length in bytes divided by four when the route has no codec or
+// its codec refuses the body. It is computed once, for the reservation
+// and for a record whose upstream reported nothing.
 func (c *call) inputEstimate() int64 {
 	if c.counted == nil {
 		n := int64(len(c.body)) / 4
-		if m, _, err := bridge.CountTokens(wireOf(c.door), c.body); err == nil {
+		if m, _, err := bridge.CountTokensFor(doorDialect(c.route.op), c.body); err == nil {
 			n = m
 		}
 		c.counted = &n

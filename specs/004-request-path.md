@@ -115,8 +115,8 @@ the Model exists and the Key may name it. Names are sorted.
 A token count that no upstream answers, the `/anthropic` count route
 toward a non-`anthropic` target and the `/lux` count route toward one,
 is `{"input_tokens": <n>}` with `n` from
-`latere.ai/x/pkg/llmdialect/tokencount.Estimate` over the decoded
-request and the response header `Lux-Estimated: true`, so a caller can
+`latere.ai/x/pkg/llmdialect/bridge.CountTokensFor` over the request in
+the route's dialect and the response header `Lux-Estimated: true`, so a caller can
 tell a heuristic from a tokenizer's answer. A count, the `/gemini`
 door's `:countTokens` included, runs stages 1 to 7 of the pipeline with
 a token reservation of zero, so it costs the Key one request from its
@@ -326,9 +326,10 @@ The outbound request toward the target's `baseURL`:
   browser would render ([[016-security-and-threat-model]]).
 
 Translation is `latere.ai/x/pkg/llmdialect`'s: the door's dialect is
-the `Frontend`, the target's the `Backend`, one pair per attempt. The
-gateway drives the pair itself rather than through `Translator`, because
-it writes between the two legs what the codecs cannot know:
+the `Frontend`, the target's the `Backend`, one pair per attempt, opened
+and driven through `llmdialect/bridge` ([[021-translation-through-llmdialect]]).
+The bridge writes between the two legs what the codecs cannot know, on
+the values the gateway passes in:
 `Frontend.DecodeRequest`, then the target's upstream name into
 `ir.Request.Model`, then `Backend.EncodeRequest`; `Backend.DecodeResponse`,
 then the Model's name into `ir.Response.Model`, then
@@ -561,8 +562,8 @@ the upstream status, the latency and the time to first byte, the
 `Tokens` with `Estimated`, whether a stream was asked, and the request
 labels. [[009-usage-and-metering]]'s `metering.Record` is built from it
 with the cost added; the gateway computes no price and imports no
-`metering`. The package imports `latere.ai/x/pkg/llmdialect` and its
-dialects, `httpjson` for the lux envelope, `metrics`, `manifest/v1`,
+`metering`. The package imports `latere.ai/x/pkg/llmdialect/bridge` and
+`llmdialect/ir` for the dialect names, `metrics`, `manifest/v1`,
 `manifest` for `Match`, and the standard library; nothing under
 `internal/`, no database driver, no identity library. It dials only
 through `ClientSource`, which the importer constructs toward the
@@ -616,7 +617,7 @@ tunnel that makes a local runtime a Provider ([[013-tunnelled-runtimes]]).
 Built on 2026-09-14 as the `gateway` package: `New(Options)` and
 `Handler.ServeHTTP`, the four doors and their route table, the pipeline
 in the order the Design numbers, passthrough and translation through
-`latere.ai/x/pkg/llmdialect`, streaming in both modes, the error
+`latere.ai/x/pkg/llmdialect/bridge`, streaming in both modes, the error
 envelope per door with the fixed sentences of [[011-api]]'s table, the
 model list per dialect, the count emulation, one `Record` per request,
 and the three request metrics of [[019-observability]]. Every row of

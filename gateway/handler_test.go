@@ -14,9 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"latere.ai/x/pkg/metrics"
-
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/pkg/llmdialect/bridge"
+	"latere.ai/x/pkg/llmdialect/ir"
+	"latere.ai/x/pkg/metrics"
 )
 
 // TestNewRequiresOptions is the builder's precision: a handler without
@@ -908,5 +909,28 @@ func TestRecordFields(t *testing.T) {
 	w.post("/openai/v1/chat/completions", chatBody("gpt", false))
 	if reg.Histogram(MetricTimeToFirstByte, "", nil).Count(map[string]string{"door": "openai", "model": "gpt"}) != 2 {
 		t.Error("lux_time_to_first_byte_seconds did not observe the served requests")
+	}
+}
+
+// TestResponsesEstimateUsesItsOwnCodec: a /openai/v1/responses request
+// whose upstream reports no usage is estimated by the Responses codec,
+// not refused by the Chat codec and left to the bytes fallback.
+func TestResponsesEstimateUsesItsOwnCodec(t *testing.T) {
+	w := newWorld(t)
+	w.openai.respondJSON(200, `{"id":"r1","object":"response","model":"gpt-4.1","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`)
+	body := `{"model":"gpt","input":"hello there, a prompt long enough that the estimator and a guess of the bytes over four disagree on the count"}`
+	rec := w.post("/openai/v1/responses", body)
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	want, _, err := bridge.CountTokensFor(ir.DialectOpenAIResponses, []byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want == int64(len(body))/4 {
+		t.Fatal("the fixture cannot tell the estimator from the bytes fallback")
+	}
+	if got := w.recorder.last(t).Tokens; !got.Estimated || got.Input != want {
+		t.Fatalf("tokens %+v, want an estimated input of %d", got, want)
 	}
 }

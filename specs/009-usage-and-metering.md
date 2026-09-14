@@ -125,9 +125,11 @@ is that spec's edit to make.
 | a stream's own usage | the members are read as the last value of each across the stream; an `/openai` chat completion stream carries them because [[004-request-path]] sets `stream_options.include_usage` on the way out | `estimated: false` |
 | an estimate | the response carries none, or a stream ended before its usage frame | `estimated: true` |
 
-On a translated route the counts come from `ir.Usage`, which
-`llmdialect` fills from the upstream dialect's members. On a
-passthrough the gateway reads the same members itself:
+On a translated route the counts come from the `bridge.Usage` that
+`llmdialect/bridge`'s `Response` and `Stream` return, filled from
+`ir.Usage` and the upstream dialect's members. On a passthrough the
+gateway reads the same members through `bridge.UsageOf` and
+`bridge.NewUsageScanner`:
 
 | Dialect | Input | Output | Cached input | Cache write |
 |---|---|---|---|---|
@@ -148,8 +150,9 @@ reports inside its output count, and is carried for reporting only; it
 is not a term in the cost.
 
 When the upstream reports nothing, `tokens.input` is
-`llmdialect/tokencount.Estimate(*ir.Request)` over the intermediate
-request and `tokens.output` is `0`, because no exported estimator
+`llmdialect/bridge.CountTokensFor` over the request in the route's
+dialect, which is `tokencount.Estimate` over the decoded request, and
+`tokens.output` is `0`, because no exported estimator
 counts a response and inventing one would put a number nobody can
 audit into a bill. `tokencount`'s own documentation says metering uses
 the upstream's reported usage and never the estimate, which is why the
