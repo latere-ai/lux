@@ -275,6 +275,10 @@ growing gauge before any limit is wrong by more than the bound.
 
 ### The usage API
 
+Every aggregate this API answers is read through `Store.Usage()`, the
+collection [[010-state]] declares with this spec's types, so the memory
+store and the Postgres store answer one query the same way.
+
 The routes are [[011-api]]'s; the parameters and the response fields
 are this spec's.
 

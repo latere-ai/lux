@@ -138,8 +138,10 @@ and returns it as ciphertext, and imports nothing of `internal/secrets`
 `internal/serve` satisfies from `store.Credentials()` and
 `secrets.Open`, only for the Provider a chosen target names, and only
 for the life of one outbound request ([[001-architecture]]); the
-discovery and health jobs open the same way for the models route. The
-value is redacted by type, not by discipline: it is decoded into a
+discovery and health jobs open the same way for the models route. In
+file mode the seam is `filemode.Store.CredentialValue` ([[010-state]]),
+which hands back the value read from the environment, and nothing is
+opened. The value is redacted by type, not by discipline: it is decoded into a
 field the JSON and YAML encoders skip ([[003-manifest-contract]]), so
 no object that carries it can be serialized into a response, an event,
 a log line, or a request log record.

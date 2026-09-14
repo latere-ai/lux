@@ -357,8 +357,8 @@ other's members.
 | every kind | `id`, `owner`, `createdAt`, `updatedAt`, `warnings`; `version` is the row's | |
 | `Provider` | `credential` ([[005-providers]]) | `health`, `discovered`, `tunnel` ([[005-providers]], [[013-tunnelled-runtimes]]) |
 | `Model` | `source` | `available`, `targets[].health` ([[008-routing-and-models]]) |
-| `Key` | `prefix`, `expiresAt`, `budget`, `selectors` ([[003-manifest-contract]], [[007-keys-and-limits]]) | `state`, `usage`, `lastUsedAt` ([[007-keys-and-limits]]) |
-| `Budget` | | `state`, `spent`, `remaining`, `resetsAt`, `keys` ([[007-keys-and-limits]]) |
+| `Key` | `prefix`, `expiresAt`, `budget`, `selectors` ([[003-manifest-contract]], [[007-keys-and-limits]]) | `lastUsedAt` ([[007-keys-and-limits]]); `state` and `usage` are rendered at read time from the counters and never stored, though `KeyObserved` admits them for a store that is written by another program |
+| `Budget` | | none written by `luxd`: `state`, `spent`, `remaining`, `resetsAt`, and `keys` are rendered at read time from the counters and the Keys that name the Budget ([[007-keys-and-limits]]), though `BudgetObserved` admits them |
 
 Errors the interface names: `ErrNotFound`, `ErrVersionConflict`,
 `ErrNameTaken`, `ErrHashTaken`, `ErrReadOnly`, `ErrInvalidCursor`,
