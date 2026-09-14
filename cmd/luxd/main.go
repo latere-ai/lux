@@ -468,7 +468,9 @@ func openCredentials(ctx context.Context, cfg config.Config, st store.Store, fil
 // revoker the API tells of a deleted Provider, and the handler behind
 // the tunnel routes and the forward listener; otherwise the clients
 // serve both seams and there is no Gateway. In the file mode there is
-// no issuer to verify a session's bearer, so the tunnel stays off. The
+// no issuer to verify a session's bearer, so the tunnel stays off; off
+// either way the sessions gauge of spec 019 is registered at zero, so
+// the metric is in the registry whether or not the tunnel is on. The
 // returned notice is the start-up line: it names the forward address or
 // says tunnelled Providers serve on the holding replica alone, which an
 // installation past one replica reads as the cause of an intermittent
@@ -476,8 +478,10 @@ func openCredentials(ctx context.Context, cfg config.Config, st store.Store, fil
 func composeTunnel(cfg config.Config, st store.Store, identity *auth.Auth, clients *gateway.Clients, reg *metrics.Registry, logger *slog.Logger, onConnect func(context.Context, *v1.Provider)) (gateway.ClientSource, api.ClientRevoker, *tunnel.Gateway, string) {
 	switch {
 	case !cfg.TunnelEnabled:
+		tunnel.RegisterIdle(reg)
 		return clients, clients, nil, "tunnel: off; LUX_TUNNEL_ENABLED=1 serves the tunnel routes and admits spec.tunnel"
 	case identity.Verifier == nil:
+		tunnel.RegisterIdle(reg)
 		return clients, clients, nil, "tunnel: off in the file mode, which has no issuer to verify a session's bearer"
 	}
 	tun := tunnel.New(tunnel.Options{

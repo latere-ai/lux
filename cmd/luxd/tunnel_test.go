@@ -247,7 +247,8 @@ func TestServeTunnelsARuntime(t *testing.T) {
 }
 
 // TestTunnelOffNotices: without LUX_TUNNEL_ENABLED the start-up line
-// says the tunnel is off and the routes are not_found; with it in the
+// says the tunnel is off, the routes are not_found, and the sessions
+// gauge of spec 019 is scraped at zero all the same; with it in the
 // file mode the line says why the tunnel stays off.
 func TestTunnelOffNotices(t *testing.T) {
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
@@ -258,6 +259,9 @@ func TestTunnelOffNotices(t *testing.T) {
 	resp, body := do(t, http.MethodPost, srv.publicURL+"/v1/providers/laptop/tunnel", "", "Authorization", "Bearer "+iss.Mint(issuertest.Claims{Sub: "alice"}))
 	if resp.StatusCode != 404 || errorCode(t, body) != "not_found" {
 		t.Errorf("the session route with the tunnel off: %d %s", resp.StatusCode, body)
+	}
+	if _, metrics := do(t, http.MethodGet, srv.internalURL+"/metrics", ""); !strings.Contains(metrics, "lux_tunnel_sessions 0") {
+		t.Errorf("the gauge with the tunnel off:\n%s", metrics)
 	}
 	srv.stop()
 
