@@ -15,6 +15,7 @@ import (
 
 	"latere.ai/x/pkg/authkit/issuertest"
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/authz/stub"
 
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/manifest"
@@ -694,4 +695,131 @@ func TestTheLookupAnswersAsTheCallerSees(t *testing.T) {
 		t.Error("a selector was resolved while the authorizer was down")
 	}
 	h.authz.Fail(0)
+}
+
+// TestTheFrontRefusesWhatItCannotServe covers the corners a whole run
+// does not walk: a forbidden decision, a body larger than the bound,
+// an object of another kind's id, a delete of what is drawn from, and
+// the seams the gateway calls with nothing to report.
+func TestTheFrontRefusesWhatItCannotServe(t *testing.T) {
+	h := start(t, "", "")
+	token := h.issuer.Mint(issuertest.Claims{Sub: "alice", Aud: issuertest.StringList{"lux"}})
+
+	// A body above the bound is refused before it is read.
+	huge := `{"spec":{"amount":"1","currency":"USD","window":"month"}` + strings.Repeat(" ", int(maxManifestBytes)+1) + `}`
+	if resp := h.do(t, http.MethodPut, "/v1/budgets/huge", token, huge); resp.status != http.StatusRequestEntityTooLarge {
+		t.Errorf("a body above the bound = %d %s", resp.status, resp.body)
+	}
+	// An id of another kind names nothing, and an apply by id is a
+	// refusal at the name.
+	if resp := h.do(t, http.MethodGet, "/v1/keys/bud_01", token, ""); resp.status != http.StatusNotFound {
+		t.Errorf("an id of another kind = %d %s", resp.status, resp.body)
+	}
+	if resp := h.do(t, http.MethodPut, "/v1/keys/key_01", token, `{"spec":{"models":["*"]}}`); resp.status != http.StatusBadRequest {
+		t.Errorf("an apply by id = %d %s", resp.status, resp.body)
+	}
+	// A path the table does not carry, and a method it does not list.
+	if resp := h.do(t, http.MethodGet, "/v1/nonesuch", token, ""); resp.status != http.StatusNotFound {
+		t.Errorf("a path outside the table = %d", resp.status)
+	}
+	if resp := h.do(t, http.MethodPatch, "/v1/keys/dev", token, `{}`); resp.status != http.StatusNotFound {
+		t.Errorf("a method the table does not list = %d", resp.status)
+	}
+
+	// A Budget a Key draws from, and the Provider a Model targets, are
+	// refused until what names them is gone.
+	h.mustApply(t, token, "/v1/budgets/team", `{"spec":{"amount":"10","currency":"USD","window":"month"}}`)
+	h.mustApply(t, token, "/v1/keys/drawer", `{"spec":{"models":["*"],"budget":"team"}}`)
+	if resp := h.do(t, http.MethodDelete, "/v1/budgets/team", token, ""); resp.status != http.StatusConflict {
+		t.Errorf("a Budget a Key draws from = %d %s", resp.status, resp.body)
+	}
+	h.mustApply(t, token, "/v1/providers/openai", `{"spec":{"dialect":"openai","baseURL":"https://openai.provider.example.com/v1","credential":{"value":"sk-x"},"discovery":{"mode":"none"},"health":{"mode":"none"}}}`)
+	h.mustApply(t, token, "/v1/models/gpt", `{"spec":{"targets":[{"provider":"openai"}]}}`)
+	if resp := h.do(t, http.MethodDelete, "/v1/providers/openai", token, ""); resp.status != http.StatusConflict {
+		t.Errorf("a Provider a Model targets = %d %s", resp.status, resp.body)
+	}
+	// A rotate keeps everything but the value, and refuses a
+	// precondition that has no meaning on it.
+	rotated := h.do(t, http.MethodPost, "/v1/keys/drawer/rotate", token, "")
+	if rotated.status != http.StatusOK || !strings.Contains(rotated.body, `"value":"lux_`) {
+		t.Errorf("the rotate = %d %s", rotated.status, rotated.body)
+	}
+	if resp := h.do(t, http.MethodPost, "/v1/keys/nobody/rotate", token, ""); resp.status != http.StatusNotFound {
+		t.Errorf("a rotate of nothing = %d", resp.status)
+	}
+
+	// A decision the authorizer denies is forbidden, and one it cannot
+	// make is the permission service being unavailable.
+	h.authz.Deny(stub.Rule{Action: actionKeyRead}, "not yours")
+	if resp := h.do(t, http.MethodGet, "/v1/keys/drawer", token, ""); resp.status != http.StatusForbidden {
+		t.Errorf("a denied read = %d %s", resp.status, resp.body)
+	}
+	h.authz.SetRules()
+	h.authz.Fail(http.StatusServiceUnavailable)
+	if resp := h.do(t, http.MethodGet, "/v1/keys", token, ""); resp.status != http.StatusServiceUnavailable {
+		t.Errorf("a decision nobody made = %d %s", resp.status, resp.body)
+	}
+	h.authz.Fail(0)
+
+	// The seams the data plane calls: health is observed and kept
+	// nowhere, and the counter table answers a read of keys it has
+	// never seen.
+	noHealth{}.Observe("prv_1", true)
+	if healthy("prv_1") != v1.HealthHealthy {
+		t.Error("the front's health view is not healthy")
+	}
+	totals, err := h.plane.store.Read(t.Context(), []string{"a", "b"})
+	if err != nil || len(totals) != 2 || totals["a"] != 0 {
+		t.Errorf("the counter table reads %v %v", totals, err)
+	}
+}
+
+// mustApply PUTs one manifest and requires a create or an update.
+func (h *harness) mustApply(t *testing.T, token, path, body string) {
+	t.Helper()
+	resp := h.do(t, http.MethodPut, path, token, body)
+	if resp.status != http.StatusCreated && resp.status != http.StatusOK {
+		t.Fatalf("PUT %s = %d %s", path, resp.status, resp.body)
+	}
+}
+
+// TestTheLeaseGivesBackWhatARefusalTook: a reservation refused after
+// the buckets were charged leaves them as it found them.
+func TestTheLeaseGivesBackWhatARefusalTook(t *testing.T) {
+	s := newStore()
+	l := newLimiter(s, manifest.Defaults{}, time.Second, time.Now)
+	rate, tokens := 2, 10
+	k := newKey("key_refund")
+	k.Spec.Limits.RequestsPerMinute = &rate
+	k.Spec.Limits.TokensPerMinute = &tokens
+	big := gateway.Reservation{Key: k, Model: &v1.Model{}, InputTokens: 100, OutputTokens: 100}
+	if _, err := l.Reserve(t.Context(), big); err != nil {
+		t.Fatalf("the first reservation: %v", err)
+	}
+	// The token bucket cannot cover the second, so it is refused and
+	// the request bucket is given back what the refusal took: one
+	// request of the two a minute is still there.
+	assertRefusal(t, l, big, gateway.CodeRateLimited)
+	if a := l.buckets.Allow("requests:key_refund"); !a.OK {
+		t.Error("the request bucket was not given back what the refusal took")
+	}
+	if a := l.buckets.Allow("requests:key_refund"); a.OK {
+		t.Error("the request bucket admits more than its rate")
+	}
+
+	// A settle that measured nothing refunds the estimate whole.
+	priced := &v1.Model{Metadata: v1.ObjectMeta{Name: "priced"}}
+	unit := v1.Money(1_000_000)
+	priced.Spec.Pricing = &v1.Pricing{Currency: "USD", Per: 1_000_000, Input: &unit, Output: &unit}
+	plain := newKey("key_settle")
+	lease, err := l.Reserve(t.Context(), gateway.Reservation{Key: plain, Model: priced, InputTokens: 10, OutputTokens: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease.Settle(t.Context(), gateway.Tokens{})
+	if got := l.counters.Total(metering.TotalKey(metering.ScopeKeySpend, "key_settle")); got != 0 {
+		t.Errorf("a settle of nothing left %d micro-units", got)
+	}
+	// A settle twice is one settle: the lease is spent.
+	lease.Settle(t.Context(), gateway.Tokens{Input: 10, Output: 10})
 }
