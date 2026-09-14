@@ -178,6 +178,7 @@ For running Lux and building on it:
 |---|---|
 | [Install](docs/install.md) | from an empty cluster to a request through a door |
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
+| [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |
 | [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |
 | [All documentation](docs/README.md) | the full index for operators and platform builders |
 
