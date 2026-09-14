@@ -202,7 +202,7 @@ func TestLookupDenyIsNotFound(t *testing.T) {
 			t.Errorf("model.use resource %v", got)
 		}
 	})
-	t.Run("a catalog failure is no decision", func(t *testing.T) {
+	t.Run("a catalog failure passes through as the store's error", func(t *testing.T) {
 		_, z := newStubAuthorizer(t)
 		broken := &catalog{err: errors.New("store: connection reset")}
 		l := z.Lookup(alice, info, broken)
@@ -215,8 +215,17 @@ func TestLookupDenyIsNotFound(t *testing.T) {
 				t.Errorf("err = %v", err)
 			}
 		}
+		// Resolve keeps the failure's kind: a plain error naming the field
+		// and the cause, never a refusal, so the API answers for the store
+		// and not for the authorizer.
 		_, err := manifest.Resolve(t.Context(), keyManifest(), manifest.Options{Actor: manifest.Actor{Subject: fixtureSubject}, Lookup: l})
-		wantManifestCode(t, err, manifest.CodeAuthorizerUnavailable, "spec.budget")
+		var e *manifest.Error
+		if err == nil || errors.As(err, &e) {
+			t.Fatalf("Resolve returned %v, want the store's own error", err)
+		}
+		if !contains(err.Error(), "spec.budget") || !contains(err.Error(), "store: connection reset") {
+			t.Fatalf("err = %v, wants the field and the cause", err)
+		}
 	})
 }
 

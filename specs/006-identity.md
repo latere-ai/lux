@@ -277,9 +277,9 @@ Rules:
   the cache below, `auth.Authorizer.Lookup(caller, request, catalog)`
   over a `Catalog` of the store's Providers, Budgets, and the Models a
   selector matches; an importer constructs its own. A `Catalog` failure
-  surfaces through `Resolve` as `authorizer_unavailable`, the one code
-  [[003-manifest-contract]] gives a `Lookup` error that is neither
-  `not_found` nor that.
+  passes through `Resolve` as the store's own error, never as a
+  refusal ([[003-manifest-contract]]), and the API answers
+  `store_unavailable` for it ([[011-api]]).
 - An allow is cached per replica for the answer's `ttl`, `60s` when
   the answer names none, capped at `600s`; a deny for `5s`;
   unavailability never; under the key of subject, action, and resource
@@ -536,11 +536,9 @@ What other specs carry from this: [[011-api]] maps `auth.Error`'s three
 codes to 401, 403, and 503, reads `Decision.Limits.RequestsPerMinute`
 for the rate bucket and `Decision.Limits.MaxKeys` at `key.create`,
 passes `Decision.Limits.Key` as `Options.Limits`, and reports
-`Auth.Policy` in `/v1/self`; a `Catalog` failure inside `Resolve`
-surfaces as `authorizer_unavailable`, because
-[[003-manifest-contract]]'s `Lookup` rule gives an error that is
-neither code that one, so a `store_unavailable` there needs
-`manifest.Error` to carry its cause first. [[017-release-and-installation]]
+`Auth.Policy` in `/v1/self`; a `Catalog` failure inside `Resolve` passes
+through as the store's own error, which the API answers as
+`store_unavailable`.Error` to carry its cause first. [[017-release-and-installation]]
 says the probe's answer is not entered in the decision cache; the
 shared client holds its deny for five seconds like any deny, under the
 anonymous subject and the reserved id, which no request about an object
