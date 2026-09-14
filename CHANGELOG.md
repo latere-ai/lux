@@ -6,6 +6,12 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A hard spend or Budget limit refuses the request that follows a settled
+  answer even while that answer's spend is being flushed to the store: the
+  metering counters keep a flushed delta in a replica's own total for the
+  whole store round-trip, so a Key's `spend_exceeded` or a Budget's
+  `budget_exhausted` no longer races the flush and admits one request over
+  the limit.
 - `docs/configuration.md` is the operator reference for every `LUX_*`
   variable `luxd` reads: its meaning, default, and when it is required,
   grouped by area, with the meanings the repository scaffold spec owns. A

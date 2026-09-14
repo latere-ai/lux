@@ -120,8 +120,11 @@ func (c *Counters) Pending(key string) int64 {
 
 // Flush writes every unflushed delta to the store, one Add per dirty
 // key, and takes each returned total as the key's new known value. A
-// key whose Add fails keeps its delta for the next flush, and the error
-// names it; the other keys still flush. Rows of windows that reset
+// flushed delta stays in pending, and so in Total, until the store
+// returns it as part of known, so a concurrent Total never sees a key's
+// own spend regress across a flush. A key whose Add fails keeps its
+// delta for the next flush, and the error names it; the other keys still
+// flush. Rows of windows that reset
 // before the previous flush and hold no delta are dropped, so a replica
 // that lives through many windows does not keep every one.
 func (c *Counters) Flush(ctx context.Context) error {
@@ -135,8 +138,12 @@ func (c *Counters) Flush(ctx context.Context) error {
 	batch := make([]dirty, 0, len(c.rows))
 	for key, r := range c.rows {
 		if r.pending != 0 {
+			// The delta stays in pending, and so in Total, until the store
+			// round-trip returns and it is moved into known in one locked
+			// step below. Zeroing it here would blank the key's own spend
+			// for the length of the store call, so a hard limit could
+			// admit a request that its own settled spend already exhausts.
 			batch = append(batch, dirty{key, r.pending, r.expiresAt})
-			r.pending = 0
 			continue
 		}
 		if !r.expiresAt.IsZero() && r.expiresAt.Before(now) && r.touched.Add(c.flush).Before(now) {
@@ -154,10 +161,15 @@ func (c *Counters) Flush(ctx context.Context) error {
 			c.rows[d.key] = r
 		}
 		if err != nil {
-			r.pending += d.delta
+			// The delta was never removed from pending, so it simply waits
+			// for the next flush.
 			errs = append(errs, fmt.Errorf("counter %s: %w", d.key, err))
 		} else {
+			// Take the store's total as known and drop the flushed delta
+			// from pending together, so Total never regresses: it is
+			// known+pending throughout, delta counted on exactly one side.
 			r.known = total
+			r.pending -= d.delta
 			r.touched = now
 		}
 		c.mu.Unlock()

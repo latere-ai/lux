@@ -300,3 +300,55 @@ func TestClaimIsFirstOnce(t *testing.T) {
 		t.Fatalf("Claim on a refusing store = %v", err)
 	}
 }
+
+// gatedStore is a CounterStore whose first Add blocks, once it has been
+// entered, until it is released, so a test can hold a flush inside the
+// store's round-trip and read the counter while the flush is mid-write.
+type gatedStore struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *gatedStore) Add(_ context.Context, _ string, delta int64, _ time.Time) (int64, error) {
+	g.once.Do(func() {
+		close(g.entered)
+		<-g.release
+	})
+	return delta, nil
+}
+
+func (g *gatedStore) Read(context.Context, []string) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+// TestFlushKeepsOwnSpendVisibleMidRoundTrip: while a flush holds a key's
+// captured delta inside the store's Add, a concurrent reader still sees
+// that spend, so a hard limit refuses the request its own settled spend
+// already exhausts rather than admitting it in the window of the store
+// round-trip. Without the fix Total reads zero here, because the flush
+// blanked pending before it learned the new known.
+func TestFlushKeepsOwnSpendVisibleMidRoundTrip(t *testing.T) {
+	g := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
+	c := NewCounters(g, time.Hour)
+	c.Add("k", 100, time.Time{})
+
+	flushed := make(chan error, 1)
+	go func() { flushed <- c.Flush(context.Background()) }()
+
+	<-g.entered // the flush now holds the delta inside store.Add
+	if got := c.Total("k"); got != 100 {
+		t.Errorf("Total mid-flush = %d, want 100: the replica lost its own spend", got)
+	}
+	if got := c.Known("k") + c.Pending("k"); got != 100 {
+		t.Errorf("Known+Pending mid-flush = %d, want 100", got)
+	}
+	close(g.release)
+
+	if err := <-flushed; err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got, pending := c.Total("k"), c.Pending("k"); got != 100 || pending != 0 {
+		t.Fatalf("after the flush: total %d, pending %d, want 100 and 0", got, pending)
+	}
+}
