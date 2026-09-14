@@ -158,6 +158,30 @@ func TestWriteFailureHeaders(t *testing.T) {
 	}
 }
 
+// TestWriteRefusalPicksTheDoorShape: a refusal written before the handler
+// takes the shape of the door its path names, the lux shape under no
+// door, and carries the code, the detail, and Retry-After like any
+// failure the handler writes.
+func TestWriteRefusalPicksTheDoorShape(t *testing.T) {
+	for path, want := range map[string]string{
+		"/openai/v1/chat/completions": `"type":"rate_limited"`,
+		"/anthropic/v1/messages":      `"type":"error"`,
+		"/gemini/v1beta/models":       `"status":"RESOURCE_EXHAUSTED"`,
+		"/lux/v1/generate":            `"request_id":"req_1"`,
+		"/v1/keys":                    `"request_id":"req_1"`,
+	} {
+		rec := httptest.NewRecorder()
+		WriteRefusal(rec, path, "req_1", CodeRateLimited, "address 203.0.113.9 is spent", 1500*time.Millisecond)
+		h := rec.Header()
+		if rec.Code != 429 || h.Get(HeaderError) != "rate_limited" || h.Get("Retry-After") != "2" || h.Get(HeaderErrorDetail) != "address 203.0.113.9 is spent" {
+			t.Errorf("%s: status %d headers %v", path, rec.Code, h)
+		}
+		if body := rec.Body.String(); !strings.Contains(body, want) || !strings.Contains(body, CodeRateLimited.Message()) {
+			t.Errorf("%s: body %s lacks %s", path, body, want)
+		}
+	}
+}
+
 func TestStreamErrorFrames(t *testing.T) {
 	f := fail(CodeUpstreamError, "cut")
 	oa := string(streamErrorFrame(v1.DialectOpenAI, "req_1", f))
