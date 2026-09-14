@@ -101,39 +101,6 @@ func (i *identity) authenticate(r *http.Request) (caller, error) {
 	return c, nil
 }
 
-// The action vocabulary the gateway's contract defines, which this
-// front sends its authorizer unchanged, so one endpoint serves a
-// platform's own binary and luxd alike.
-const (
-	actionProviderCreate = "provider.create"
-	actionProviderRead   = "provider.read"
-	actionProviderUpdate = "provider.update"
-	actionProviderDelete = "provider.delete"
-	actionProviderList   = "provider.list"
-	actionModelCreate    = "model.create"
-	actionModelRead      = "model.read"
-	actionModelUpdate    = "model.update"
-	actionModelDelete    = "model.delete"
-	actionModelList      = "model.list"
-	actionModelUse       = "model.use"
-	actionKeyCreate      = "key.create"
-	actionKeyRead        = "key.read"
-	actionKeyUpdate      = "key.update"
-	actionKeyDelete      = "key.delete"
-	actionKeyList        = "key.list"
-	actionBudgetCreate   = "budget.create"
-	actionBudgetRead     = "budget.read"
-	actionBudgetUpdate   = "budget.update"
-	actionBudgetDelete   = "budget.delete"
-	actionBudgetList     = "budget.list"
-	actionBudgetDraw     = "budget.draw"
-	actionUsageRead      = "usage.read"
-)
-
-// kindUsage is the resource kind of usage.read, which is no manifest
-// kind.
-const kindUsage = "Usage"
-
 // resourceFor is the resource one action acts on: the kind, the id of
 // an object that exists, and the fields an authorizer decides by. A
 // create carries no id, as the object does not exist yet.

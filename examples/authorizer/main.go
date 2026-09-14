@@ -3,7 +3,10 @@
 
 // Command authorizer is the minimal authorization endpoint of
 // docs/plane.md: one POST, one decision, answered from the bearer and
-// this process's own state alone. Run it beside the gateway,
+// this process's own state alone. The actions it decides on are named
+// through latere.ai/x/lux/authorizer, the package that carries the
+// vocabulary luxd asks in, so a copy of this program runs
+// go get latere.ai/x/lux first. Run it beside the gateway,
 //
 //	go run ./examples/authorizer -addr 127.0.0.1:8081 -token "$LUX_AUTHORIZER_TOKEN"
 //
@@ -30,6 +33,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"latere.ai/x/lux/authorizer"
 )
 
 // req is the envelope the gateway POSTs, of which this endpoint reads
@@ -63,17 +68,22 @@ const probeID = "00000000-0000-0000-0000-000000000001"
 // catalogue and the installation's own Keys are declared without one.
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
-// decide is the whole policy: the probe first, the catalogue declared by
-// an administrator and readable by everyone, an object to its owner
-// alone, and a ceiling and a filter on everything else.
+// decide is the whole policy: the probe first, an action outside the
+// vocabulary, the catalogue declared by an administrator and readable by
+// everyone, an object to its owner alone, and a ceiling and a filter on
+// everything else. The kind an action acts on is authorizer.Kind's
+// answer, so the catalogue's two kinds are named once and a new action
+// arrives here as a kind this policy already decides.
 func decide(r req) resp {
 	plan, _ := r.Claims["plan"].(string)
-	switch {
+	switch kind := authorizer.Kind(r.Action); {
 	case r.Resource["id"] == probeID:
 		return resp{Allow: false, Reason: "the probe id is reserved"}
-	case strings.HasPrefix(r.Action, "provider."), strings.HasPrefix(r.Action, "model."):
+	case kind == "":
+		return resp{Reason: "no action of the gateway's vocabulary"}
+	case kind == "Provider", kind == "Model":
 		switch {
-		case r.Action == "model.use" || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
+		case r.Action == authorizer.ActionModelUse || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
 			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
 		case plan == "admin":
 			return resp{Allow: true}

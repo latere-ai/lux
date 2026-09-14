@@ -19,6 +19,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/httpjson"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -255,10 +256,10 @@ var prefixes = map[string]string{
 // actions are the five a kind's routes ask: create, read, update,
 // delete, list.
 var actions = map[string][5]string{
-	v1.KindProvider: {actionProviderCreate, actionProviderRead, actionProviderUpdate, actionProviderDelete, actionProviderList},
-	v1.KindModel:    {actionModelCreate, actionModelRead, actionModelUpdate, actionModelDelete, actionModelList},
-	v1.KindKey:      {actionKeyCreate, actionKeyRead, actionKeyUpdate, actionKeyDelete, actionKeyList},
-	v1.KindBudget:   {actionBudgetCreate, actionBudgetRead, actionBudgetUpdate, actionBudgetDelete, actionBudgetList},
+	v1.KindProvider: {authorizer.ActionProviderCreate, authorizer.ActionProviderRead, authorizer.ActionProviderUpdate, authorizer.ActionProviderDelete, authorizer.ActionProviderList},
+	v1.KindModel:    {authorizer.ActionModelCreate, authorizer.ActionModelRead, authorizer.ActionModelUpdate, authorizer.ActionModelDelete, authorizer.ActionModelList},
+	v1.KindKey:      {authorizer.ActionKeyCreate, authorizer.ActionKeyRead, authorizer.ActionKeyUpdate, authorizer.ActionKeyDelete, authorizer.ActionKeyList},
+	v1.KindBudget:   {authorizer.ActionBudgetCreate, authorizer.ActionBudgetRead, authorizer.ActionBudgetUpdate, authorizer.ActionBudgetDelete, authorizer.ActionBudgetList},
 }
 
 type callKey struct{}
@@ -725,34 +726,13 @@ func (c *call) readBody() ([]byte, *apiError) {
 	return body, nil
 }
 
-// decodeLimits reads the ceilings the authorizer granted, in the wire
-// names of the contract's limits object.
+// decodeLimits reads the ceilings the authorizer granted. The names on
+// the wire and the figures they mean are the vocabulary's, so this
+// front reads an answer exactly as luxd does, and Resolve is handed the
+// four a Key is held to.
 func decodeLimits(d authz.Decision) (manifest.Limits, error) {
-	var wire struct {
-		MaxKeyRequestsPerMinute int    `json:"max_key_requests_per_minute"`
-		MaxKeyTokensPerMinute   int    `json:"max_key_tokens_per_minute"`
-		MaxKeySpend             string `json:"max_key_spend"`
-		MaxKeyTTL               string `json:"max_key_ttl"`
-	}
-	if err := d.DecodeLimits(&wire); err != nil {
-		return manifest.Limits{}, err
-	}
-	out := manifest.Limits{MaxRequestsPerMinute: wire.MaxKeyRequestsPerMinute, MaxTokensPerMinute: wire.MaxKeyTokensPerMinute}
-	if wire.MaxKeySpend != "" {
-		money, err := v1.ParseMoney(wire.MaxKeySpend)
-		if err != nil {
-			return out, err
-		}
-		out.MaxSpend = money
-	}
-	if wire.MaxKeyTTL != "" {
-		ttl, err := time.ParseDuration(wire.MaxKeyTTL)
-		if err != nil {
-			return out, err
-		}
-		out.MaxTTL = ttl
-	}
-	return out, nil
+	granted, err := authorizer.DecodeLimits(d)
+	return granted.Key, err
 }
 
 // fillStatus writes the members this front owns before the object is
@@ -971,7 +951,7 @@ func (c *call) rotate(ctx context.Context) *apiError {
 	if !ok {
 		return refuse(codeInternal, "")
 	}
-	if _, err := c.authorize(ctx, actionKeyUpdate, resourceFor(v1.KindKey, key)); err != nil {
+	if _, err := c.authorize(ctx, authorizer.ActionKeyUpdate, resourceFor(v1.KindKey, key)); err != nil {
 		return err
 	}
 	if err := pre.check(true, version); err != nil {
@@ -1074,7 +1054,7 @@ func (c *call) usage(ctx context.Context) *apiError {
 	if err != nil {
 		return err
 	}
-	d, err := c.authorize(ctx, actionUsageRead, authz.NewResource(kindUsage, "", map[string]any{
+	d, err := c.authorize(ctx, authorizer.ActionUsageRead, authz.NewResource(authorizer.KindUsage, "", map[string]any{
 		"keys": q.Keys, "owners": q.Owners, "labels": map[string]string{},
 	}))
 	if err != nil {
@@ -1258,7 +1238,7 @@ func (c *call) requests(ctx context.Context) *apiError {
 			return err
 		}
 	}
-	d, aerr := c.authorize(ctx, actionUsageRead, authz.NewResource(kindUsage, "", map[string]any{
+	d, aerr := c.authorize(ctx, authorizer.ActionUsageRead, authz.NewResource(authorizer.KindUsage, "", map[string]any{
 		"keys": q.Keys, "owners": q.Owners, "labels": map[string]string{},
 	}))
 	if aerr != nil {

@@ -14,6 +14,9 @@ import (
 
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/conformance"
+
+	"latere.ai/x/lux/authorizer"
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // The document's authorizer is held to the contract it implements,
@@ -24,21 +27,15 @@ import (
 // token is the bearer this endpoint requires in the tests.
 const token = "the-platform-authorizer-token"
 
-// vocabulary is the action table of spec 006, which is what the
-// gateway sends and what an authorizer answers.
-var vocabulary = []conformance.Action{
-	{Name: "provider.create", Kind: "Provider"}, {Name: "provider.read", Kind: "Provider"},
-	{Name: "provider.update", Kind: "Provider"}, {Name: "provider.delete", Kind: "Provider"},
-	{Name: "provider.tunnel", Kind: "Provider"}, {Name: "provider.list", Kind: "Provider"},
-	{Name: "model.create", Kind: "Model"}, {Name: "model.read", Kind: "Model"},
-	{Name: "model.update", Kind: "Model"}, {Name: "model.delete", Kind: "Model"},
-	{Name: "model.list", Kind: "Model"}, {Name: "model.use", Kind: "Model"},
-	{Name: "key.create", Kind: "Key"}, {Name: "key.read", Kind: "Key"},
-	{Name: "key.update", Kind: "Key"}, {Name: "key.delete", Kind: "Key"}, {Name: "key.list", Kind: "Key"},
-	{Name: "budget.create", Kind: "Budget"}, {Name: "budget.read", Kind: "Budget"},
-	{Name: "budget.update", Kind: "Budget"}, {Name: "budget.delete", Kind: "Budget"},
-	{Name: "budget.list", Kind: "Budget"}, {Name: "budget.draw", Kind: "Budget"},
-	{Name: "usage.read", Kind: "Usage"},
+// vocabulary is the action table this endpoint is held to, read from
+// the package the program decides by rather than copied: every action
+// luxd asks, each with the kind it acts on.
+func vocabulary() []conformance.Action {
+	var out []conformance.Action
+	for _, a := range authorizer.Actions() {
+		out = append(out, conformance.Action{Name: a, Kind: authorizer.Kind(a)})
+	}
+	return out
 }
 
 // TestPlaneDocAuthorizerConforms runs the conformance suite every
@@ -51,7 +48,7 @@ func TestPlaneDocAuthorizerConforms(t *testing.T) {
 	server := httptest.NewServer(handler(token))
 	t.Cleanup(server.Close)
 	conformance.Run(t, server.URL, token,
-		conformance.WithActions(vocabulary...),
+		conformance.WithActions(vocabulary()...),
 		conformance.WithSubjects("https://login.example.com|alice", "https://login.example.com|bob"),
 	)
 }
@@ -170,11 +167,8 @@ func TestTheEnvelopeIsTheContracts(t *testing.T) {
 	if err != nil || !d.Allow {
 		t.Fatalf("the gateway's own client reads %v %v", d, err)
 	}
-	var limits struct {
-		MaxKeySpend string `json:"max_key_spend"`
-		MaxKeys     int    `json:"max_keys"`
-	}
-	if err := d.DecodeLimits(&limits); err != nil || limits.MaxKeySpend != "5" || limits.MaxKeys != 100 {
+	limits, err := authorizer.DecodeLimits(d)
+	if err != nil || limits.Key.MaxSpend != v1.Money(5_000_000) || limits.MaxKeys != 100 {
 		t.Errorf("the ceilings read as %+v: %v", limits, err)
 	}
 	if d.Filter == nil || len(d.Filter.Owners) != 1 || d.Filter.Owners[0] != "https://login.example.com|alice" {

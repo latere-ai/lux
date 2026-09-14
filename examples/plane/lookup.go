@@ -8,6 +8,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -36,7 +37,7 @@ func (l *lookup) Provider(ctx context.Context, nameOrID string) (*v1.Provider, e
 	if p == nil {
 		return nil, manifest.ErrNotFound
 	}
-	allow, err := l.allowed(ctx, actionProviderRead, resourceFor(v1.KindProvider, p))
+	allow, err := l.allowed(ctx, authorizer.ActionProviderRead, resourceFor(v1.KindProvider, p))
 	if err != nil || !allow {
 		return nil, err
 	}
@@ -52,7 +53,7 @@ func (l *lookup) Budget(ctx context.Context, nameOrID string) (*v1.Budget, error
 	if b == nil {
 		return nil, manifest.ErrNotFound
 	}
-	allow, err := l.allowed(ctx, actionBudgetDraw, resourceFor(v1.KindBudget, b))
+	allow, err := l.allowed(ctx, authorizer.ActionBudgetDraw, resourceFor(v1.KindBudget, b))
 	if err != nil || !allow {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (l *lookup) Models(ctx context.Context, selector string) ([]v1.ModelRef, er
 		}
 	}
 	res := authz.NewResource(v1.KindModel, "", map[string]any{"selector": selector, "matched": matched, "labels": map[string]string{}})
-	allow, err := l.allowed(ctx, actionModelUse, res)
+	allow, err := l.allowed(ctx, authorizer.ActionModelUse, res)
 	if err != nil || !allow {
 		return nil, err
 	}

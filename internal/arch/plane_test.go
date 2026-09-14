@@ -423,3 +423,73 @@ func parseDir(t *testing.T, dir string, fn func(*ast.File)) {
 		parseFile(t, filepath.Join(dir, e.Name()), fn)
 	}
 }
+
+// vocabularyPackage is the import path of the actions, the resource
+// shapes, and the limits an authorizer is written against (spec 022).
+const vocabularyPackage = "latere.ai/x/lux/authorizer"
+
+// TestExampleAuthorizerUsesTheVocabulary is spec 022 over the program
+// docs/plane.md prints: it reaches every action it decides on through
+// the package rather than through a string literal, it names the kind
+// of an action and the one action it tests for by name, and the
+// document says which package that is and how a reader who copies the
+// block gets it.
+func TestExampleAuthorizerUsesTheVocabulary(t *testing.T) {
+	actions := map[string]bool{}
+	for _, a := range authorizer.Actions() {
+		actions[a] = true
+	}
+	imported, named := false, map[string]bool{}
+	parseFile(t, filepath.Join(root(t), planeAuthorizer), func(file *ast.File) {
+		for _, im := range file.Imports {
+			if path, err := strconv.Unquote(im.Path.Value); err == nil && path == vocabularyPackage {
+				imported = true
+			}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.BasicLit:
+				if s, ok := stringLit(node); ok && actions[s] {
+					t.Errorf("%s spells the action %q; the program a platform copies names it through %s", planeAuthorizer, s, vocabularyPackage)
+				}
+			case *ast.SelectorExpr:
+				if pkg, ok := node.X.(*ast.Ident); ok && pkg.Name == "authorizer" {
+					named[node.Sel.Name] = true
+				}
+			}
+			return true
+		})
+	})
+	if !imported {
+		t.Errorf("%s does not import %s", planeAuthorizer, vocabularyPackage)
+	}
+	for _, want := range []string{"Kind", "ActionModelUse"} {
+		if !named[want] {
+			t.Errorf("%s names no authorizer.%s; it decides by the vocabulary or by a string", planeAuthorizer, want)
+		}
+	}
+	intro := introduction(t, readSpec(t, planeDoc), "## The minimal authorizer")
+	for _, want := range []string{"`" + vocabularyPackage + "`", "`go get latere.ai/x/lux`"} {
+		if !strings.Contains(intro, want) {
+			t.Errorf("%s introduces the minimal authorizer without naming %s:\n%s", planeDoc, want, intro)
+		}
+	}
+}
+
+// introduction is the prose of one section: from its heading to the
+// first fenced block or the next heading, whichever comes first.
+func introduction(t *testing.T, text, heading string) string {
+	t.Helper()
+	i := strings.Index(text, heading+"\n")
+	if i < 0 {
+		t.Fatalf("%s has no section %q", planeDoc, heading)
+	}
+	rest := text[i+len(heading)+1:]
+	if j := strings.Index(rest, "```"); j >= 0 {
+		rest = rest[:j]
+	}
+	if j := strings.Index(rest, "\n## "); j >= 0 {
+		rest = rest[:j]
+	}
+	return rest
+}
