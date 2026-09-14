@@ -1,6 +1,6 @@
 ---
 title: "Usage and metering: the record, cost, windows, the usage API, the multi-replica rule"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -46,8 +46,10 @@ the Postgres half is not built. `internal/serve` holds the `Recorder`
 over `gateway.Record`, the `Usage` aggregation for the route, the three
 metrics, and `LUX_METERING_FLUSH` through the Limiter's and the
 Recorder's flush, which `luxd serve` starts with its jobs. The routes
-that read the aggregates and the records are [[011-api]]'s and mount
-there; the archive is [[012-request-log-and-events]]'s.
+that read the aggregates and the records are [[011-api]]'s and are
+mounted there, `GET /v1/usage` over `serve.Usage` and `GET /v1/requests`
+over the ring with `source: memory`; the archive is
+[[012-request-log-and-events]]'s.
 
 ## Design
 
@@ -521,7 +523,68 @@ DDL ([[010-state]]); which target a request reached
 | A soft Budget past its amount continues and emits `budget.exhausted` once per window; the marker counter's first add returns `1` on exactly one of six replicas | `TestSoftBudgetContinues`, `TestExhaustedMarkerIsClaimedOnce` | passing, `internal/serve` |
 | The three counters under a Key's spend window and under `none` carry the requests, tokens, and spend the Key's admitted records sum to, the Recorder adding to none of them, and no window row exists for a Key without a spend limit | `TestKeyCountersFollowTheRecords` | passing, `internal/serve`, through `gateway.New` with the Limiter and the Recorder together |
 | Aggregates folded from the records equal the store's rows for every grouping; no row sums two currencies; `requestLabels` is no dimension and appears in no aggregate row | `TestAggregatesMatchTheRecords`, `TestNoCurrencyIsSummed`, `TestRequestLabelsAreNotAggregated` | passing: the fold against an independent sum in `metering`, the store's rows against the fold in `storetest` over the memory store and in `internal/serve` after the Recorder's flush; the labels row in `metering` |
-| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension; a `cost` in a row is an integer; the authorizer's `filter` of one owner leaves a query naming another owner's Key an empty result | `TestUsageQueryValidation`, `TestUsageFilterNarrows` | the function half passing in `metering`, `Query.Validate` and `Intersect`, and `serve.Usage` in `internal/serve`; the route's half waits for [[011-api]]'s `GET /v1/usage` |
+| `GET /v1/usage` rejects a range past 90 days, more than three `by` dimensions, and an unknown dimension; a `cost` in a row is an integer; the authorizer's `filter` of one owner leaves a query naming another owner's Key an empty result | `TestUsageQueryValidation`, `TestUsageFilterNarrows` | passing: the function half in `metering`, `Query.Validate` and `Intersect`, and `serve.Usage` in `internal/serve`; the route's half in `internal/api`, where `TestUsageQueryValidation` refuses each parameter and `TestUsageFilterNarrows` reads an empty result under another owner's filter |
 | `lux_tokens_total`, `lux_spend_microunits_total`, and `lux_metering_flush_lag_seconds` follow a run's records and a stalled store | `TestMeteringMetrics` with [[019-observability]]'s `TestMetricsTable` | `TestMeteringMetrics` passing, `internal/serve`; `TestMetricsTable` is [[019-observability]]'s |
-| `GET /v1/requests` reports `source` `archive` with the exporter configured and `memory` without it | `TestRequestsSource` | waits for [[011-api]]'s route and [[012-request-log-and-events]]'s exporter; the ring it reads with `memory` is `storetest`'s `TestRecordsRingIsBounded` |
+| `GET /v1/requests` reports `source` `archive` with the exporter configured and `memory` without it | `TestRequestsSource` | the `memory` half passing, `internal/api`'s `TestRequestsSource` over the route and `storetest`'s `TestRecordsRingIsBounded` over the ring it reads; the `archive` half waits for [[012-request-log-and-events]]'s exporter and is that spec's to close |
 | `metering` imports `manifest/v1` and the standard library and nothing else | [[001-architecture]]'s `TestRootPackagesDialNothing` | passing, `internal/arch` |
+
+## Outcome
+
+Built on 2026-09-13 and 2026-09-14 in eight commits on `main`,
+`e2c9c1d` through `856e08e`, with the two routes landing in `63049e6`
+beside [[011-api]]. It is proven by the whole gate and by per-package
+coverage under the race detector of 98.9% for `metering`, 97.2% for
+`internal/serve`, 98.9% for `internal/store` with 98.7% for the memory
+store, and 93.7% for `internal/api`.
+
+What was built: `metering/record.go`, the record and its blocks, and
+`metering/cost.go`, `Cost` and `Charged`, the integer micro-unit
+arithmetic with one half-up rounding over the whole sum;
+`metering/fold.go`, the dimensions, the intervals, the hourly
+`Aggregate`, and `AggregateOf`, `Aggregates`, `Group`, and `Fold` over
+them; `metering/query.go`, the two queries, `WithDefaults`, `Validate`,
+`Matches`, and `Intersect`; `internal/store`'s `Usage()` on the
+contract with the memory store's hourly rows and per-Key ring, the
+record cursor, and `storetest`'s cases; `internal/serve/recorder.go`,
+the `Recorder` over `gateway.Record` with the three metrics and the
+flush, and `internal/serve/usage.go`, `serve.Usage`;
+`internal/config`'s `LUX_METERING_FLUSH`; `cmd/luxd`'s two flush loops
+started and stopped with the jobs; and `internal/api/usage.go`, the
+two routes over all of it. The Design above was rewritten to what was
+built as this spec reached `testing`; what diverged from the text as
+dispatched, each already fixed in the Design beside the rule it
+settles:
+
+- `Store.Usage().AddRows` takes `[]metering.Aggregate`, the hourly row
+  with every dimension a member, because a row keyed by a `dimensions`
+  map cannot be upserted on its primary key. [[010-state]]'s code block
+  still names the element type `Row` and is that spec's edit to make.
+- The Postgres half of `Usage()` is not built. [[010-state]] owns the
+  store implementations and its Postgres phase is later in the build
+  order; the memory store and the contract suite hold the behaviour in
+  the meantime.
+- `GET /v1/requests` answers `source: memory` alone. The `archive`
+  answer, its reader, and the hour-prefixed objects it lists are
+  [[012-request-log-and-events]]'s, which closes the other half of the
+  `TestRequestsSource` row above.
+- The overshoot bound is asserted here with two replicas over twenty
+  runs rather than the three over a hundred the criterion names,
+  because [[007-keys-and-limits]]'s `TestOvershootBound` already runs
+  that shape with the same figures and a bound is worth proving once.
+- The e2e halves of the first and the third criteria, one record per
+  request and the five canaries over a run, are
+  [[015-test-stubs-and-tiers]]'s tier; the package halves pass through
+  `gateway.New` with the real Key cache, catalog, Limiter, and router.
+- `TestMetricsTable`, the other half of the metrics criterion, is
+  [[019-observability]]'s.
+
+What the neighbouring specs own from here:
+[[012-request-log-and-events]] adds the archive, the exporter, and the
+reader that makes `source` read `archive`, and with it the durable
+record set this spec's retention rule assumes;
+[[015-test-stubs-and-tiers]] runs the two e2e halves;
+[[019-observability]] holds the metric names in its table;
+[[010-state]] adds the Postgres aggregates and counters and edits its
+`AddRows` signature; [[011-api]] owns the two routes' parsing,
+refusals, and OpenAPI operations, which this spec's parameter tables
+define.
