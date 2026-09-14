@@ -41,8 +41,10 @@ year after it was written.
 The `metering` package holds the record, `Cost`, the aggregate shapes,
 `Fold`, the query, and the windows and counters [[007-keys-and-limits]]
 built there. `internal/store` declares `Usage()` on the contract with
-the memory store's hourly rows and per-Key ring and the suite's cases;
-the Postgres half is not built. `internal/serve` holds the `Recorder`
+the memory store's hourly rows and per-Key ring and the suite's cases,
+and `internal/store/postgres` answers it from the `usage_hourly` table
+of its second migration, held to the same suite under the postgres tag
+([[010-state]]). `internal/serve` holds the `Recorder`
 over `gateway.Record`, the `Usage` aggregation for the route, the three
 metrics, and `LUX_METERING_FLUSH` through the Limiter's and the
 Recorder's flush, which `luxd serve` starts with its jobs. The routes
