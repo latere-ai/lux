@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -44,8 +45,8 @@ func ClientAddress(r *http.Request, trusted []netip.Prefix) string {
 			}
 		}
 	}
-	for i := len(entries) - 1; i >= 0; i-- {
-		a, err := netip.ParseAddr(hostOf(entries[i]))
+	for _, entrie := range slices.Backward(entries) {
+		a, err := netip.ParseAddr(hostOf(entrie))
 		if err != nil {
 			return peer
 		}

@@ -109,8 +109,8 @@ func byteSize(name, raw string, def, minimum, maximum int64, problems []string) 
 		suffix string
 		unit   int64
 	}{{"Ki", 1 << 10}, {"Mi", 1 << 20}, {"Gi", 1 << 30}} {
-		if strings.HasSuffix(raw, s.suffix) {
-			digits, unit = strings.TrimSuffix(raw, s.suffix), s.unit
+		if before, ok := strings.CutSuffix(raw, s.suffix); ok {
+			digits, unit = before, s.unit
 			break
 		}
 	}

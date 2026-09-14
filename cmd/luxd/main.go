@@ -29,6 +29,7 @@ import (
 	"latere.ai/x/pkg/metrics"
 
 	"latere.ai/x/lux/gateway"
+	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/secrets"
@@ -86,9 +87,9 @@ func subcommand(args []string) (string, []string) {
 }
 
 // serveCmd is the node: the two listeners and the probes of spec 002,
-// the store and the identity, the two jobs of spec 005, and the Key
-// cache of spec 007 with its journal tail. The dialect doors, the API,
-// and the routing of later specs mount here.
+// the store and the identity, the two jobs of spec 005, the Key cache
+// and the Limiter of spec 007, the doors of spec 004 with the routing of
+// spec 008, and the control plane of spec 011, mounted per mode.
 func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("luxd serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -106,7 +107,12 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		return fail(stderr, err)
 	}
 
-	st, files, notice, err := openStore(ctx, cfg, getenv)
+	// One metrics registry for the process, spec 019's: the store's, the
+	// Key cache's, the router's, the doors', the authorizer's, and the
+	// control plane's families land in it, and the internal listener
+	// serves it at /metrics.
+	reg := metrics.NewRegistry()
+	st, files, notice, err := openStore(ctx, cfg, getenv, reg)
 	if err != nil {
 		return fail(stderr, err)
 	}
@@ -114,11 +120,10 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 
-	// The Key cache of spec 007: the door's lookup, invalidated by the
+	// The Key cache of spec 007: the doors' lookup, invalidated by the
 	// journal tail below, and emptied after a file-mode re-read, which
-	// swaps the snapshot without a journal row. The door handler that
-	// reads through it mounts with spec 011.
-	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: cfg.KeyCache, Logger: logger})
+	// swaps the snapshot without a journal row.
+	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: cfg.KeyCache, Metrics: reg, Logger: logger})
 	if files != nil {
 		stopHUP := reloadOnHUP(ctx, files, stdout, stderr, keys.Reset)
 		defer stopHUP()
@@ -126,9 +131,8 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 
 	// Identity of spec 006: the issuers are fetched and checked once here,
 	// so a deployment that cannot reach its issuer fails at start and not
-	// at the first request. The /v1 handlers that authenticate and ask the
-	// authorizer mount with spec 011.
-	identity, err := auth.Startup(ctx, cfg, nil)
+	// at the first request.
+	identity, err := auth.Startup(ctx, cfg, nil, serve.AuthorizerObserver(reg))
 	if err != nil {
 		return fail(stderr, err)
 	}
@@ -143,21 +147,65 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 
-	// The two jobs of spec 005 and the Key cache's journal tail run for
-	// the life of the process and stop with it, after the listeners have
-	// drained.
+	// The two jobs of spec 005, the Key cache's journal tail, and the
+	// Limiter's flush of spec 007 run for the life of the process and
+	// stop with it, after the listeners have drained. The resolver's
+	// defaults are spec 007's two rates and spec 004's upstream timeout,
+	// shared by the Limiter and the API's Resolve.
+	defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
 	discovery := serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
 	healthJob := serve.NewHealth(serve.HealthOptions{Store: st, Clients: clients, Credentials: credentials, Interval: cfg.HealthInterval, Logger: logger})
+	limiter := serve.NewLimiter(serve.LimiterOptions{Store: st, Budgets: keys, Defaults: defaults, Logger: logger})
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	var jobs sync.WaitGroup
 	jobs.Go(func() { discovery.Run(jobsCtx) })
 	jobs.Go(func() { healthJob.Run(jobsCtx) })
 	jobs.Go(func() { keys.Run(jobsCtx) })
+	jobs.Go(func() { limiter.Run(jobsCtx) })
 	defer func() {
 		stopJobs()
 		jobs.Wait()
 	}()
+
+	// The doors of spec 004 over the seams of specs 005, 007, and 008.
+	// The Recorder is serve.DiscardRecorder until spec 009's recorder,
+	// which prices every record and writes it, replaces it here.
+	catalog := &serve.Catalog{Objects: st.Objects()}
+	doors := gateway.New(gateway.Options{
+		Keys:         keys,
+		Catalog:      catalog,
+		Credentials:  credentials,
+		Router:       gateway.NewTargetRouter(gateway.RouterOptions{Catalog: catalog, Health: healthJob.View, Metrics: reg}),
+		Limiter:      limiter,
+		Recorder:     serve.DiscardRecorder{},
+		Clients:      clients,
+		Health:       healthJob,
+		Metrics:      reg,
+		Version:      version.Version,
+		MaxBodyBytes: cfg.MaxBodyBytes,
+	})
+
+	// The control plane of spec 011: on the public listener in server
+	// mode, and on the internal listener alone in the file mode, where
+	// the public listener answers not_found under /v1.
+	control := api.New(api.Options{
+		Store:                 st,
+		Auth:                  identity,
+		Authorizer:            identity.Authorizer(&serve.ObjectOwners{Objects: st.Objects()}),
+		PublicURL:             cfg.PublicURL,
+		Version:               version.Version,
+		RequestsPerMinute:     cfg.RequestsPerMinute,
+		TrustedProxies:        cfg.TrustedProxies,
+		MaxManifestBytes:      cfg.MaxManifestBytes,
+		Defaults:              defaults,
+		AllowPrivateUpstreams: cfg.UpstreamAllowPrivate,
+		Keys:                  cfg.SecretsKEK,
+		Clients:               clients,
+		ReadOnlyDir:           cfg.ManifestDir,
+		Metrics:               reg,
+		Logger:                logger,
+	})
 
 	draining := make(chan struct{})
 	probes := health.Handler(health.Options{
@@ -169,8 +217,33 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Version:   version.Version,
 		Commit:    version.Commit,
 		BuildTime: version.Date,
+		Metrics:   serve.Metrics(reg),
 	})
 
+	// The public listener: the three probes and the build identity at /,
+	// answered whatever a caller's bucket says, and the two planes, the
+	// four doors, /.well-known/lux, and /v1 in server mode, behind one
+	// per-address bucket of spec 011, one instance so a refused
+	// credential on either plane draws from the same bucket.
+	planes := http.NewServeMux()
+	for _, d := range []string{"openai", "anthropic", "gemini", "lux"} {
+		planes.Handle("/"+d, doors)
+		planes.Handle("/"+d+"/", doors)
+	}
+	planes.Handle("/.well-known/lux", control)
+	// The internal listener: the four probes, /metrics, and /v1 in the
+	// file mode.
+	internal := http.NewServeMux()
+	internal.Handle("/", probes)
+	if files == nil {
+		planes.Handle("/v1/", control)
+		_, _ = fmt.Fprintf(stdout, "luxd: control plane at %s/v1 on the public listener\n", cfg.PublicURL)
+	} else {
+		planes.Handle("/v1/", control.Unmounted())
+		internal.Handle("/v1/", control)
+		_, _ = fmt.Fprintln(stdout, "luxd: control plane read-only on the internal listener; the public listener answers not_found under /v1")
+	}
+	limited := serve.LimitUnauthenticated(planes, serve.AddressLimiterOptions{PerMinute: cfg.UnauthenticatedRequestsPerMinute, Trusted: cfg.TrustedProxies})
 	public := http.NewServeMux()
 	for _, p := range []string{"/livez", "/readyz", "/version"} {
 		public.Handle("GET "+p, probes)
@@ -179,6 +252,10 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = fmt.Fprintln(w, version.String())
 	})
+	for _, prefix := range []string{"/openai", "/anthropic", "/gemini", "/lux", "/v1", "/.well-known/lux"} {
+		public.Handle(prefix, limited)
+		public.Handle(prefix+"/", limited)
+	}
 
 	var lc net.ListenConfig
 	publicLn, err := lc.Listen(ctx, "tcp", cfg.PublicAddr)
@@ -195,7 +272,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 
 	servers := []*http.Server{
 		{Handler: public, ReadHeaderTimeout: 10 * time.Second},
-		{Handler: probes, ReadHeaderTimeout: 10 * time.Second},
+		{Handler: internal, ReadHeaderTimeout: 10 * time.Second},
 	}
 	errc := make(chan error, len(servers))
 	for i, ln := range []net.Listener{publicLn, internalLn} {
@@ -225,15 +302,14 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 }
 
 // openStore constructs the store the configuration selects, wrapped in
-// Instrument, and returns the file mode's store beside it when that is
-// the mode, so serve can wire the re-read, and the substance of the one
-// start-up line that names the mode. The Postgres store lands in a later
-// phase; until then a configured LUX_DB_URL is refused rather than
-// silently answered with state in memory, because an operator who asked
-// for durability and got a process's memory would find out at the first
-// restart.
-func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (store.Store, *filemode.Store, string, error) {
-	reg := metrics.NewRegistry()
+// Instrument on the process's registry, and returns the file mode's
+// store beside it when that is the mode, so serve can wire the re-read,
+// and the substance of the one start-up line that names the mode. The
+// Postgres store lands in a later phase; until then a configured
+// LUX_DB_URL is refused rather than silently answered with state in
+// memory, because an operator who asked for durability and got a
+// process's memory would find out at the first restart.
+func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg *metrics.Registry) (store.Store, *filemode.Store, string, error) {
 	switch {
 	case cfg.DBURL != "":
 		return nil, nil, "", errors.New("LUX_DB_URL: the Postgres store is not in this build; unset it to hold state in memory, or set LUX_MANIFEST_DIR to read manifests from a directory")
