@@ -1,6 +1,6 @@
 ---
 title: "Architecture: two planes, the kinds, the packages, extension points, invariants"
-status: validated
+status: complete
 track: core
 depends_on: []
 affects: [manifest/, gateway/, metering/, internal/, cmd/luxd/, cmd/lux/, docs/]
@@ -409,9 +409,9 @@ every spec depends on this one, the dispatch gate waits for it to reach
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every package at the module root is `manifest`, `gateway`, or `metering` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package | not built |
+| Every package at the module root is `manifest`, `gateway`, or `metering` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package, with `TestRootPackagesAreTheThree` for the layout | passing; each tree is skipped until it lands |
 | Each role package's and each binary's build list matches its `depcheck` allow list | the `depcheck` gate | passing for the scaffold's list |
-| No file under `deploy/`, `docs/`, or `.github/workflows/`, and no default in `internal/config`, names a Latere hostname or namespace outside an example or the API group; a directory that does not exist yet is skipped by name | `TestNoLatereCoordinatesInReleasedArtifacts` | not built |
+| No file in the tree, a document, a manifest, a workflow, the gate's configuration, a default, a Go comment or a string, names a hostname of the maintainer's outside the API group, a particular deployment of Lux, a component internal to one, or a private document; the test walks the whole tree and skips only binaries | `TestNoLatereCoordinatesInReleasedArtifacts` | passing |
 
 ### Held by other specs
 
@@ -429,3 +429,16 @@ that builds the component; the row is complete when that spec's is.
 | 7, money that cannot be counted is not spent: a Key under a hard Budget naming an unpriced Model is refused with `model_unpriced` before any bytes reach a provider | [[007-keys-and-limits]] | `TestUnpricedModelRefusedUnderABudget` |
 | 8, a fork publishes under its own namespace | [[017-release-and-installation]] | `TestReleasePublishesUnderTheOwnersNamespace` |
 | 10, desired state survives: after `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | [[010-state]], [[015-test-stubs-and-tiers]] | the postgres tier's `TestPostgresTwoReplicas` |
+
+## Outcome
+
+Built on 2026-09-14 in `internal/arch`, a package of tests and no code:
+`TestRootPackagesAreTheThree` and `TestRootPackagesDialNothing` over
+`go list`, one allow list per root package that the spec building each
+tree refines, and `TestNoLatereCoordinatesInReleasedArtifacts` over the
+whole tree, which also holds the rule that the public repository names
+no particular deployment of Lux and nothing internal to one. The
+`depcheck` gate held the scaffold's list throughout. The invariants a
+built component proves stay indexed in the table above as other specs'
+acceptance, which is what let this spec close first and every other
+spec dispatch.
