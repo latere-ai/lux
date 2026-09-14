@@ -1,18 +1,20 @@
 # Lux
 
-**An open source LLM gateway.** One address serves every model
-provider's API. A manifest in the shape of a Kubernetes object declares
-the upstreams, the routable model names, the credentials a workload
-holds, and the spend windows they draw from. `luxd` accepts a request in
-the OpenAI, Anthropic, Gemini, or lux-native dialect, resolves the model
-name to a target, translates the request into that provider's dialect,
-injects the provider credential the caller never sees, streams the
-answer back in the dialect it was asked in, and records what it cost.
-Identity comes from any OpenID Connect issuer. Permission comes from an
-endpoint you write.
+**An open source LLM gateway.** Put one HTTP endpoint in front of every
+model provider, and let each workload reach models through a credential
+you issue and revoke rather than a provider key you copy into services.
 
-Run it standalone, or build a platform on its Go packages and webhooks
-instead of forking it.
+Lux is a single Go server, `luxd`. You declare your providers, model
+names, credentials, and spend limits as Kubernetes-style manifests, and
+`luxd` serves them. A request arrives in the OpenAI, Anthropic, Gemini,
+or lux-native dialect; Lux resolves the model name to a provider,
+translates the request into that provider's dialect, adds the provider
+credential the caller never sees, streams the reply back in the dialect
+it was asked in, and records what it cost. Identity comes from any
+OpenID Connect issuer; permission comes from an endpoint you write.
+
+Run `luxd` on its own, or import its Go packages and drive them from
+your own control plane instead of forking it.
 
 [![CI](https://github.com/latere-ai/lux/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/lux/actions/workflows/verify.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)
@@ -24,11 +26,11 @@ instead of forking it.
 A team that uses more than one model ends up with more than one client
 library, more than one request shape, and a provider key in every
 service that calls a model. Rotating a key means finding every service
-that holds it. Giving a new agent access means handing it a provider
-key with no limit on it, or writing a proxy. Knowing what a workload
-spent means reconciling four billing pages against four sets of logs,
-after the month has closed. Moving a model name from one provider to
-another, or splitting it across two, means changing the callers.
+that holds it. Giving a new agent access means handing it a provider key
+with no limit on it, or writing a proxy. Knowing what a workload spent
+means reconciling four billing pages against four sets of logs, after
+the month has closed. Moving a model name from one provider to another,
+or splitting it across two, means changing the callers.
 
 Lux makes the provider a document, the model name a routing decision,
 and the credential a workload holds a separate object with its own
@@ -36,35 +38,37 @@ limits, expiry, and budget.
 
 ## How it works
 
-- **One manifest, one meaning.** `apiVersion: lux.latere.ai/v1beta1`,
-  and four kinds: `Provider` for an upstream with its dialect, base
-  URL, and write-only credential; `Model` for a routable name with
-  targets, weights, fallback, and pricing; `Key` for the credential a
-  workload holds; `Budget` for a spend window several keys draw from.
-  Every surface, the API, the `lux` command, and a platform importing
-  the packages, resolves a manifest through one function, and what you
-  read back is what runs, defaults included.
+- **One manifest, one meaning.** Everything is a Kubernetes-style object
+  under `apiVersion: lux.latere.ai/v1beta1`, in four kinds: `Provider`
+  is an upstream with its dialect, base URL, and write-only credential;
+  `Model` is a routable name with targets, weights, fallback, and
+  pricing; `Key` is the credential a workload holds; `Budget` is a spend
+  window several keys draw from. The `/v1` API, the `lux` command, and a
+  platform importing the packages all resolve a manifest through the same
+  function, so what you read back is what runs, defaults included.
 - **Every dialect at one address.** The OpenAI, Anthropic, and Gemini
   request shapes are doors into the same gateway, and so is the
-  lux-native one. A caller keeps the client library it already has; the
-  translation between shapes is
-  [`latere.ai/x/pkg/llmdialect`](https://github.com/latere-ai/pkg), a
-  package with its own test corpus rather than a branch per provider in
-  the request path.
-- **The provider credential never leaves the gateway.** A caller holds
-  a Key, which is not a provider key: it names the models it may reach
-  and the limits it runs under, its value is shown once at creation,
-  and revoking it takes effect without touching an upstream. The
-  gateway injects the provider credential toward that provider's base
-  URL and nowhere else.
-- **A model name is a routing decision.** One name, several targets
-  with weights, a fallback list when a target fails or is rate
-  limited, and the prices the usage record is costed with. Moving a
-  name to a second provider is an edit to one `Model`.
-- **Every request is accounted.** One usage record per request, with
-  the key, the model, the target, the tokens, and the cost, and never
-  the content. Budgets are enforced against those records, so a spend
-  window is a limit rather than a report.
+  lux-native one. A caller keeps the SDK it already has; the translation
+  between shapes lives in one package with its own golden test corpus,
+  [`latere.ai/x/pkg/llmdialect`](https://github.com/latere-ai/pkg),
+  rather than a branch per provider in the request path.
+- **The provider credential never leaves the gateway.** A `Key` is not a
+  provider key: it names the models it may reach and the limits it runs
+  under, its value is shown once at creation, and revoking it takes
+  effect without touching an upstream. `luxd` injects the provider's own
+  credential toward that provider's base URL and nowhere else.
+- **A model name is a routing decision.** One name, several targets with
+  weights, a fallback order for when a target fails or is rate limited,
+  and the prices each request is costed against. Moving a name to a
+  second provider is an edit to one `Model`, not a change to the
+  callers.
+- **Every request is accounted.** One usage record per request, with the
+  key, the model, the target, the tokens, and the cost, and never the
+  prompt or the completion. Budgets are enforced against those records,
+  so a spend window is a limit rather than a monthly surprise.
+
+A small deployment as a manifest: a model that fails over between two
+regions, a monthly budget, and a key an agent holds.
 
 ```yaml
 apiVersion: lux.latere.ai/v1beta1
@@ -105,12 +109,15 @@ spec:
   ttl: 720h
 ```
 
+Apply it with the `lux` command, then call the gateway with the SDK you
+already use.
+
 ```sh
 lux apply -f anthropic.yaml --credential-from-env ANTHROPIC_API_KEY
 lux apply -f models.yaml -f budget.yaml
 lux apply -f research-agent.yaml          # prints the key value once
 
-# the Anthropic SDK's base URL is the /anthropic door; any dialect's SDK works the same way
+# the Anthropic SDK's base URL is the /anthropic door; any dialect's SDK is the same
 curl https://lux.example.com/anthropic/v1/messages \
   -H "authorization: Bearer $LUX_KEY" \
   -H "content-type: application/json" \
@@ -120,10 +127,10 @@ curl https://lux.example.com/anthropic/v1/messages \
 
 ## Try it
 
-From a checkout, `make run` builds the gateway and its stubs, starts them
-on loopback with every store in memory, applies the manifest above, and
-prints `LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The
-Key opens any door in the dialect its SDK already speaks:
+From a checkout, `make run` builds `luxd` and a set of stubs, starts them
+on loopback with all state in memory, applies the manifest above, and
+prints `LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The key
+opens any door in the dialect that door's SDK speaks:
 
 ```sh
 curl -sS "$LUX_URL/openai/v1/chat/completions" \
@@ -132,64 +139,65 @@ curl -sS "$LUX_URL/openai/v1/chat/completions" \
 ```
 
 `make` runs the quality gate and `make run-down` stops the stack. To
-install a release on a cluster, see [`docs/install.md`](docs/install.md).
+install a release on a cluster, see [Install](docs/install.md).
 
 ## What you get
 
 - Four kinds with strict decoding, server-side defaults, and a `status`
-  the server writes, evolving under written rules.
-- Four dialects on the data plane, translated through one package with
-  a golden corpus, and the conformance suite any server must pass.
-- Routing by weight and priority, fallback on a failure or a rate
-  limit before the first byte, and a health probe per provider that
-  takes a target out of rotation.
+  the server writes, evolving under written compatibility rules.
+- Four dialects on the data plane, translated through one package with a
+  golden corpus, and a conformance suite any server must pass.
+- Routing by weight and priority, fallback on a failure or rate limit
+  before the first byte, and a per-provider health probe that takes a
+  target out of rotation.
 - Keys with model selectors, per-minute request and token limits, an
   expiry, and a value shown once; budgets several keys draw from.
 - Streaming in every dialect, translated as it arrives rather than
   buffered.
-- Usage records and per-key, per-model, per-target metering, costed
-  from the prices in the `Model`.
+- Usage records and per-key, per-model, per-target metering, costed from
+  the prices on the `Model`.
 - A request log with the bodies kept out of the gateway's own store and
   archived where you point it.
 - Provider credentials wrapped by a key-encryption key, write-only
-  through the API, never returned through it and never handed to a
-  caller.
-- State in memory, in Postgres, or read from a directory of manifests
-  on disk.
+  through the API, never read back and never handed to a caller.
+- State in memory, in Postgres, or read from a directory of manifests on
+  disk.
 - OIDC from any issuer, an authorizer webhook with a built-in owner
-  policy, and a signed event sink.
-- A reverse tunnel so a model running on your own machine is a
-  `Provider` like any other.
-- Go packages a platform imports: `manifest`, `gateway`, `metering`.
-- The `lux` command and a skill file that teaches an agent to use it.
-- Signed images, SBOMs, and provenance on every release.
+  policy, and a signed event stream.
+- A reverse tunnel, so a model on your own machine is a `Provider` like
+  any other.
+- The Go packages a platform imports: `manifest`, `gateway`, `metering`.
+- The `lux` command, and a skill file that teaches an agent to drive it.
+- Signed images, SBOMs, and build provenance on every release.
 
 ## Documentation
 
-| Page | |
+For running Lux and building on it:
+
+| | |
 |---|---|
-| [Specs](specs/README.md) | the design, one spec per component, with the build order |
-| [Architecture](specs/001-architecture.md) | the planes, the packages, what the gateway owns and what a platform supplies |
-| [Manifest contract](specs/003-manifest-contract.md) | every field, every rule, every error code |
-| [Request path](specs/004-request-path.md) | the dialect doors, routing, translation, streaming, credential injection |
-| [Keys and limits](specs/007-keys-and-limits.md) | what a `Key` may reach and what a `Budget` stops |
-| [Building a plane](specs/020-building-a-plane.md) | how a platform composes the packages and the webhooks |
-| [docs/](docs/README.md) | for people who run `luxd` or build against it |
+| [Install](docs/install.md) | from an empty cluster to a request through a door |
+| [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
+| [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |
+| [All documentation](docs/README.md) | the full index for operators and platform builders |
+
+## Contributing
+
+Lux's design, and the reasoning behind each decision, lives in
+[`specs/`](specs/README.md) — one document per component, with the build
+order. The specs are written for people who change Lux, not for people
+who run it. [`CONTRIBUTING.md`](CONTRIBUTING.md) is how to build, the bar
+a change meets, and where a package belongs; [`SECURITY.md`](SECURITY.md)
+is how to report a vulnerability.
 
 ## Project status
 
 Pre-release, built in the open. Every capability above is implemented and
 covered by tests, and `main` passes the full quality gate on every
 commit. What remains before `v1` is the first tagged release, so there is
-no published image or binary to pull yet and the manifest schema may
+no published image or binary to pull yet, and the manifest schema may
 still change; the [CHANGELOG](CHANGELOG.md) records every change to it.
 Until then, run it from a checkout as [Try it](#try-it) shows.
-
-## Contributing
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md) is how to build, the bar, and
-where a package belongs. [`SECURITY.md`](SECURITY.md) is where to
-report a vulnerability.
 
 ## License
 
