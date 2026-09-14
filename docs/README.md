@@ -7,6 +7,7 @@ packages.
 
 | Page | |
 |---|---|
+| Quick start | the published images on your machine with no build, `docker compose up` and a few `curl`s, in [`quickstart.md`](quickstart.md); the wiring is [`compose.yaml`](../compose.yaml) |
 | Install | from nothing to a request through a door on a kind cluster, in [`install.md`](install.md); the manifests it applies are [`deploy/`](../deploy/README.md), and what a release promises and how upgrades work are in the [release and installation spec](../specs/017-release-and-installation.md) and [`upgrades/`](upgrades/README.md) |
 | Configuration | the table in the [repository scaffold spec](../specs/002-repository-scaffold.md) until `docs/configuration.md` is generated from the code |
 | Security | what the design protects and what it does not, in the [threat model](../specs/016-security-and-threat-model.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
