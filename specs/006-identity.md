@@ -457,7 +457,7 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 |---|---|---|
 | `luxd` refuses to start with no issuer and no manifest directory, with an unreachable issuer, and with an issuer whose key set has no `RS256` or `ES256` key, each naming the issuer | `TestServeRefusesToStartWithoutAnIssuer` in `internal/config` and `cmd/luxd`, `TestUnreachableIssuerIsAStartupFailure`, `TestIssuerWithoutUsableKeysIsAStartupFailure` in `internal/auth` | passing; the call from `serve` lands with the merge |
 | A token from a listed issuer with the audience is accepted; one with another issuer, another audience, an expired `exp`, a future `nbf`, or a bad signature is `unauthenticated` | `TestBearerAcceptance`, table-driven, `ES256` accepted beside `RS256` | passing |
-| A Key value on `/v1` is `unauthenticated`; an issuer token on a door is `unauthenticated` when no Key's hash matches it and opens the door when a Key was created with it as `spec.value`, with the door decoding nothing | `TestPlanesRefuseEachOthersCredential`, `TestSuppliedTokenIsAKeyAtTheDoor` | the `/v1` half passes; the door half and `TestSuppliedTokenIsAKeyAtTheDoor` are not built and land with [[007-keys-and-limits]]'s doors |
+| A Key value on `/v1` is `unauthenticated`; an issuer token on a door is `unauthenticated` when no Key's hash matches it and opens the door when a Key was created with it as `spec.value`, with the door decoding nothing | `TestPlanesRefuseEachOthersCredential`, [[004-request-path]]'s `TestSuppliedValueOpensTheDoor` | passing: the `/v1` half here, the door half in `gateway` |
 | An issuer whose keys become unreachable after start keeps verifying tokens signed by the cached keys and refuses one with an unknown `kid` | `TestStaleKeySetServesUntilRefresh` | passing |
 | With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action, with `TestResourceShapes` | passing |
 | Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a connection failure before a response line is retried once and nothing else is; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestAuthorizerRetriesOnlyBeforeAResponseLine`, `TestDataPlaneServesWhileAuthorizerIsDown` | the first two pass; the third is not built and lands with [[004-request-path]]'s doors |
@@ -543,8 +543,8 @@ says the probe's answer is not entered in the decision cache; the
 shared client holds its deny for five seconds like any deny, under the
 anonymous subject and the reserved id, which no request about an object
 shares, so a check run changes what no later request is told and the
-sentence holds in effect. [[007-keys-and-limits]] owns the door half of
-the plane boundary and `TestSuppliedTokenIsAKeyAtTheDoor`;
+sentence holds in effect. [[004-request-path]] owns the door half of
+the plane boundary as `TestSuppliedValueOpensTheDoor`;
 [[004-request-path]] `TestDataPlaneServesWhileAuthorizerIsDown`;
 [[015-test-stubs-and-tiers]] the e2e capture of
 `TestAuthorizerTokenStaysOnItsEndpoint`; [[001-architecture]] and

@@ -5,7 +5,9 @@ package serve
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -648,4 +650,42 @@ func (c brokenCounters) Read(ctx context.Context, keys []string) (map[string]int
 		return nil, errBroken
 	}
 	return c.Counters.Read(ctx, keys)
+}
+
+// TestKeyLookupComparesNothing: the path from a door to the store hashes
+// the presented value and asks an index for the hash; no file on that
+// path compares a presented value with a stored one, in constant time or
+// otherwise, so there is no comparison whose timing could leak a value.
+func TestKeyLookupComparesNothing(t *testing.T) {
+	forbidden := map[string]string{
+		`"crypto/subtle"`:            "import",
+		`"crypto/hmac"`:              "import",
+		`subtle.ConstantTimeCompare`: "call",
+		`hmac.Equal`:                 "call",
+		`bytes.Equal`:                "call",
+	}
+	files := []string{"../../gateway/key.go", "keys.go", "keyvalue.go"}
+	entries, err := os.ReadDir("../store/memory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".go") && !strings.HasSuffix(e.Name(), "_test.go") {
+			files = append(files, "../store/memory/"+e.Name())
+		}
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for needle, kind := range forbidden {
+			if strings.Contains(string(data), needle) {
+				t.Errorf("%s: %s %s on the key lookup path", f, kind, needle)
+			}
+		}
+	}
+	if HashKeyValue("lux_x") != fmt.Sprintf("%x", sha256.Sum256([]byte("lux_x"))) {
+		t.Error("the door's hash is not SHA-256 of the exact bytes")
+	}
 }

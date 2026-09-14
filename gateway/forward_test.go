@@ -702,3 +702,38 @@ func TestProviderHeadersAndCredentialSchemes(t *testing.T) {
 		t.Errorf("bad base URL on an opaque route: %s", rec.Header().Get(HeaderError))
 	}
 }
+
+// TestHopByHopHeadersAreRemovedBothWays: the fixed hop-by-hop set and
+// every header a Connection header names leave the request toward the
+// provider and the response toward the caller, and a header named by
+// neither is kept in both directions.
+func TestHopByHopHeadersAreRemovedBothWays(t *testing.T) {
+	src := func() http.Header {
+		h := http.Header{}
+		h.Set("Connection", "X-Hop, x-other")
+		h.Set("X-Hop", "1")
+		h.Set("X-Other", "2")
+		h.Set("Keep-Alive", "timeout=5")
+		h.Set("Transfer-Encoding", "chunked")
+		h.Set("Proxy-Connection", "keep-alive")
+		h.Set("X-Kept", "yes")
+		return h
+	}
+	request := src()
+	removeHopByHop(request)
+	response := http.Header{}
+	relayHeaders(response, src(), false)
+	for _, tc := range []struct {
+		direction string
+		h         http.Header
+	}{{"request", request}, {"response", response}} {
+		for _, gone := range []string{"Connection", "X-Hop", "X-Other", "Keep-Alive", "Transfer-Encoding", "Proxy-Connection"} {
+			if tc.h.Get(gone) != "" {
+				t.Errorf("%s: %s survived", tc.direction, gone)
+			}
+		}
+		if tc.h.Get("X-Kept") != "yes" {
+			t.Errorf("%s: X-Kept was removed", tc.direction)
+		}
+	}
+}

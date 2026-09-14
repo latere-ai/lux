@@ -691,3 +691,9 @@ whose `Targets` carries each Provider without its credential value;
 into its own; [[011-api]] the mount at the four doors, the per-address
 unauthenticated rate before the handler, the client address, and the
 `store_unavailable` row's raisers.
+
+Amended 2026-09-14, from the threat model's review: `relayHeaders`
+removed the fixed hop-by-hop set from a response and not the headers the
+upstream's own `Connection` named, so a provider could hand a caller a
+header meant for one hop; both directions now read `Connection` the same
+way, held by `TestHopByHopHeadersAreRemovedBothWays`.

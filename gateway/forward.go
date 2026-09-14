@@ -33,13 +33,24 @@ var callerCredentials = []string{"Authorization", "X-Api-Key", "X-Goog-Api-Key",
 
 // removeHopByHop deletes the hop-by-hop set and the headers Connection
 // names.
-func removeHopByHop(h http.Header) {
+// connectionNamed is the set of header names a Connection header lists,
+// canonicalised, which are hop-by-hop for that one hop whatever their
+// name. The same reading serves both directions.
+func connectionNamed(h http.Header) map[string]bool {
+	named := map[string]bool{}
 	for _, c := range h.Values("Connection") {
 		for name := range strings.SplitSeq(c, ",") {
 			if name = strings.TrimSpace(name); name != "" {
-				h.Del(name)
+				named[textproto.CanonicalMIMEHeaderKey(name)] = true
 			}
 		}
+	}
+	return named
+}
+
+func removeHopByHop(h http.Header) {
+	for name := range connectionNamed(h) {
+		h.Del(name)
 	}
 	for name := range hopByHop {
 		h.Del(name)
@@ -362,11 +373,12 @@ func (c *call) observe(p *v1.Provider, failed bool) {
 // did not receive. A text/html Content-Type is relayed as
 // application/octet-stream, so no door serves markup a browser renders.
 func relayHeaders(dst, src http.Header, translated bool) {
+	named := connectionNamed(src)
 	for name, values := range src {
 		name = textproto.CanonicalMIMEHeaderKey(name)
 		lower := strings.ToLower(name)
 		switch {
-		case hopByHop[name], name == "Set-Cookie", name == "Content-Length", name == "Content-Encoding":
+		case hopByHop[name], named[name], name == "Set-Cookie", name == "Content-Length", name == "Content-Encoding":
 			continue
 		case strings.HasPrefix(name, "Lux-"):
 			continue
