@@ -86,7 +86,10 @@ replaces first. An administrator is under no ceiling, because a ceiling
 refuses a Key that names no limit at all and the catalogue's own Keys
 are declared without one. The payload is 006's exactly; a Go authorizer may
 decode it into `authz.Request` from `latere.ai/x/pkg/authz`, and one in
-any language reads the fields below. The endpoint answers from its
+any language reads the fields below. The program names the vocabulary
+it decides by through `latere.ai/x/lux/authorizer` rather than through a
+string literal, so a reader who copies it runs `go get latere.ai/x/lux`
+first ([[022-authorizer-vocabulary-package]]). The endpoint answers from its
 bearer and its own state alone: it needs no session and calls neither
 the gateway nor the issuer while deciding ([[006-identity]]).
 

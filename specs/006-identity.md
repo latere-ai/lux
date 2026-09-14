@@ -190,8 +190,9 @@ an authorizer in any language reads `resource.labels` as an object and
 `resource.models` as a list whether or not the manifest set them; a
 create's `amount` is `""` when the manifest names none, because the
 authorizer is asked before `Resolve` refuses the manifest. The builders
-are `internal/auth`'s, one per row, and `ResourceFor(action, object)`
-picks the row for an action on a manifest object.
+are the `authorizer` package's ([[022-authorizer-vocabulary-package]]),
+one per row, and `ResourceFor(action, object)` picks the row for an
+action on a manifest object.
 
 Response, 200:
 
@@ -459,10 +460,10 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 | A token from a listed issuer with the audience is accepted; one with another issuer, another audience, an expired `exp`, a future `nbf`, or a bad signature is `unauthenticated` | `TestBearerAcceptance`, table-driven, `ES256` accepted beside `RS256` | passing |
 | A Key value on `/v1` is `unauthenticated`; an issuer token on a door is `unauthenticated` when no Key's hash matches it and opens the door when a Key was created with it as `spec.value`, with the door decoding nothing | `TestPlanesRefuseEachOthersCredential`, [[004-request-path]]'s `TestSuppliedValueOpensTheDoor` | passing: the `/v1` half here, the door half in `gateway` |
 | An issuer whose keys become unreachable after start keeps verifying tokens signed by the cached keys and refuses one with an unknown `kid` | `TestStaleKeySetServesUntilRefresh` | passing |
-| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action, with `TestResourceShapes` | passing |
+| With the stub authorizer, every action in the table is sent with the `resource` shape in the table, and the request carries `subject`, `issuer`, `sub`, and every claim of the token in `claims` verbatim | `TestAuthorizerRequestShapes`, table-driven over every action, with `TestResourceShapes`, the `authorizer` package's ([[022-authorizer-vocabulary-package]]) | passing |
 | Each unavailability form, refused connection, TLS failure, non-200, unparseable body, body without `allow`, and timeout, is `authorizer_unavailable` and none is an allow; a connection failure before a response line is retried once and nothing else is; a data plane request during each is served | `TestAuthorizerUnavailability`, `TestAuthorizerRetriesOnlyBeforeAResponseLine`, `TestDataPlaneServesWhileAuthorizerIsDown` | the first two pass; the third is not built and lands with [[004-request-path]]'s doors |
 | A `deny` on `model.use`, `budget.draw`, or a target's `provider.read` at resolve is `not_found` naming the field; a `deny` on the request's own action is `forbidden` with the reason in the developer detail only | `TestLookupDenyIsNotFound`, `TestDenyReasonStaysOutOfTheUserSentence` | passing |
-| Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers`, `TestDecodeLimits` | passing to the figures, the rate, `manifest.Limits` refusing through `Resolve`, and `max_keys`; the rate bucket and the `key.create` check are [[011-api]]'s |
+| Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers`, `TestDecodeLimits`, the `authorizer` package's ([[022-authorizer-vocabulary-package]]) | passing to the figures, the rate, `manifest.Limits` refusing through `Resolve`, and `max_keys`; the rate bucket and the `key.create` check are [[011-api]]'s |
 | `filter` narrows `list` and `usage.read` to the owners and labels named | `TestAuthorizerFilter` | passing to the decision; the narrowing of a list is [[011-api]]'s |
 | An allow is cached for the answer's `ttl`, `60s` when it names none, and at the `600s` cap, a deny for `5s`, unavailability never, and an answer about a resource with no id never, so ten applies of a Key naming one selector send ten `model.use` calls; a revoked subject is refused on the control plane within the allow's `ttl` | `TestDecisionCache`, `TestNoIdIsNeverCached` | passing |
 | `authz.ProbeID` is denied by the stub authorizer and by the owner policy for every subject and action, `luxd check` reports an authorizer that allows it, and an item route given the probe id answers `not_found` | `TestProbeIdIsAlwaysDenied` | passing for the stub, the owner policy, and `Check`; `luxd check` is [[017-release-and-installation]]'s and the item route [[011-api]]'s |

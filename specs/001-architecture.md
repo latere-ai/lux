@@ -134,12 +134,13 @@ its own later is a new `main` over an existing package.
 
 ### Packages
 
-The module is `latere.ai/x/lux`. Three package trees at the root,
-`manifest`, `gateway`, and `metering`, with their subpackages, are
-imported by others; everything else is `internal/`. Dialect translation
-is not a package of this module: `latere.ai/x/pkg/llmdialect` is the
-open source core for it, with every dialect a frontend and a backend
-around one intermediate representation, and `gateway` imports it. The
+The module is `latere.ai/x/lux`. Four package trees at the root,
+`manifest`, `gateway`, `metering`, and `authorizer`, with their
+subpackages, are imported by others; everything else is `internal/`.
+Dialect translation is not a package of this module:
+`latere.ai/x/pkg/llmdialect` is the open source core for it, with every
+dialect a frontend and a backend around one intermediate
+representation, and `gateway` imports it. The
 word for an upstream is `provider`, in every spec and every identifier;
 `backend` and `vendor` are not used.
 
@@ -148,6 +149,7 @@ word for an upstream is `provider`, in every spec and every identifier;
 | `manifest`, `manifest/v1` | the `lux.latere.ai/v1beta1` kinds, strict decoding, validation, defaulting, resolve | a manifest the schema accepts today is accepted by every later `v1` build; new fields are optional; Go API additive within a module major | [[003-manifest-contract]] |
 | `gateway` | the data plane as a handler: key check, limits, model resolution, target selection, translation through `llmdialect`, credential injection, streaming, retries and fallback, usage extraction | drives any store that satisfies its interfaces; owns no HTTP server, no identity, no store implementation | [[004-request-path]], [[008-routing-and-models]] |
 | `metering` | the usage record, cost from a Model's pricing, the window arithmetic of limits and budgets | the record's fields are additive; a cost computed today is computed the same by every later build for the same pricing | [[009-usage-and-metering]], [[007-keys-and-limits]] |
+| `authorizer` | the vocabulary an authorizer is written against: the actions `luxd` asks, the resource shape of each one, and the `limits` an allow may carry | an action never changes its string and never disappears, a resource shape only gains fields, a `limits` member keeps its wire name and its meaning; Go API additive within a module major; owns no policy and decides nothing | [[022-authorizer-vocabulary-package]], [[006-identity]] |
 | `internal/api` | the `/v1` handlers, the OpenAPI document | none | [[011-api]] |
 | `internal/auth` | the OIDC verifier over the issuers, the authorizer client, the owner policy | none | [[006-identity]] |
 | `internal/store` | desired state, credential values, key hashes, counters, the journal; memory, Postgres, and the file mode | none | [[010-state]] |
@@ -159,8 +161,12 @@ The rule for the root packages: they compute, validate, and drive.
 client, no database driver, and no identity library. `gateway` imports
 neither of the last two and dials one thing, the providers' base URLs,
 which are its substrate; it reaches the store, the credentials, and the
-usage sink through interfaces the importer satisfies. None of them
-dials an identity provider, a database, a billing system, or a webhook.
+usage sink through interfaces the importer satisfies. `authorizer` is
+the one exception to the HTTP client half, and only in its build list:
+it names the envelope of the shared authorizer contract, which carries
+that contract's client, and the client is a type it never constructs
+([[022-authorizer-vocabulary-package]]). None of the four dials an
+identity provider, a database, a billing system, or a webhook.
 A platform imports them to get the contract and the data plane with
 its own identity and policy around them, or runs `luxd` and gets the
 same through the webhooks. Both paths reach one `Resolve` and one
@@ -378,8 +384,11 @@ and bounded rather than bought with a dependency.
    publishes under the fork's namespace. The module path, its
    `latere.ai/x/*` dependencies, and the shared CI pipeline are the
    project's own coordinates and are not what this forbids.
-9. `manifest`, `gateway`, and `metering` own no policy; `manifest` and
-   `metering` dial nothing, and `gateway` dials only the providers.
+9. `manifest`, `gateway`, `metering`, and `authorizer` own no policy;
+   `manifest`, `metering`, and `authorizer` dial nothing, and `gateway`
+   dials only the providers. `authorizer` names the envelope of the
+   shared authorizer contract, so an HTTP client is in its build list as
+   a type it never constructs, and it dials nothing all the same.
 10. Desired state is the control plane's; observed state, health,
     discovery, and the windows, is the data plane's report, and no
     observed state overwrites desired state.
@@ -409,7 +418,7 @@ every spec depends on this one, the dispatch gate waits for it to reach
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every package at the module root is `manifest`, `gateway`, or `metering` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package, with `TestRootPackagesAreTheThree` for the layout | passing; each tree is skipped until it lands |
+| Every package at the module root is `manifest`, `gateway`, `metering`, or `authorizer` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; `authorizer` reaches the shared authorizer contract, whose client it never constructs, and nothing under `internal/` or `cmd/`, no identity library, and no store driver; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package, with `TestRootPackagesAreTheThree` for the layout | passing; each tree is skipped until it lands |
 | Each role package's and each binary's build list matches its `depcheck` allow list | the `depcheck` gate | passing for the scaffold's list |
 | No file in the tree, a document, a manifest, a workflow, the gate's configuration, a default, a Go comment or a string, names a hostname of the maintainer's outside the API group, a particular deployment of Lux, a component internal to one, or a private document; the test walks the whole tree and skips only binaries | `TestNoLatereCoordinatesInReleasedArtifacts` | passing |
 
