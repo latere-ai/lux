@@ -1,6 +1,6 @@
 ---
 title: "Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/006-identity.md
@@ -361,3 +361,76 @@ events ([[011-api]]); the stub sink and its behaviour flags
 | A bucket outage shorter than the buffer's headroom loses nothing once it recovers | `TestArchiveRecoversWithoutLoss` | passing, `internal/reqlog` |
 | Shutdown writes what the buffer holds before the process exits | `TestDrainWritesTheBuffer` | passing, `internal/reqlog`; the wiring's drain through `run` is `cmd/luxd`'s `TestServeArchivesTheRequestLog` |
 | `LUX_EVENTS_URL` without `LUX_EVENTS_SECRET`, an `http://` sink off loopback, and `LUX_REQUESTLOG_EXPORTER=s3` without the endpoint, the bucket, the access key, or the secret key are each start-up failures naming the variable | `TestEventsConfigurationRefusals`, `TestArchiveConfigurationRefusals` | passing, `internal/config` |
+
+## Outcome
+
+Complete on 2026-09-14 on this spec's own rows. The `source: archive`
+half of `GET /v1/requests` is [[011-api]]'s wiring and the end-to-end
+run against the stub sink is [[015-test-stubs-and-tiers]]'s; both are
+named below. Every row of the table has its test in the tree and the
+gate passes whole: `internal/events` at 97.1%, `internal/reqlog` at
+97.3%, `internal/config` at 99.6%, `internal/serve` at 97.4%, and
+`cmd/luxd` at 95.6% of statements.
+
+What diverged from the Design as dispatched, each carried into the
+Design above:
+
+- `budget.created` carries `{amount, currency, window, hard}` and not
+  the Model row's members; the API of [[011-api]] had built it so.
+- The moment the sink was first set is a counter row,
+  `events:sink:since`, written by the first holder with one atomic add.
+  The Design named the moment and not where it lives, and a restart
+  needs it durable or `TestDeliveryResumesFromTheJournal` cannot hold.
+- `lux_events_pending` is counted by paging `Journal.Since` at the end
+  of each tick, because the journal contract of [[010-state]] has no
+  count; a count on the contract is a follow-up for that spec.
+- The delivery deadline is wall time on the sink client; the fake clock
+  of the give-up row drives the 24 hours and not the 10 seconds.
+- A batch stays in the ring while it is written and is removed by
+  sequence; "returned to the head" is satisfied by never leaving it,
+  and the oldest record is the one dropped in every case.
+- The hot path bound is held at the 99.9th percentile of 50 100 appends,
+  a millisecond, and twenty under the race detector.
+- The archive's order within an hour is the listing's, replica then
+  write order; a cursor naming an hour outside the range is
+  `store.ErrInvalidCursor`.
+- Records reach the exporter through `RecorderOptions.Archive`, a
+  `serve.RecordSink`, the smaller of the two seams the dispatch offered.
+- The event shapes moved to `internal/events`; `internal/serve` keeps
+  `AppendEvent`, `Event`, and `ReasonRequest` as aliases so the writer
+  of [[011-api]] compiles unchanged, and the Key cache's event names
+  read `events`'s constants.
+- `events.Verify`, `events.Parse`, `events.Table`, and `Sink.Ping` are
+  exported for the stub sink of [[015-test-stubs-and-tiers]] and `luxd
+  check` of [[017-release-and-installation]].
+
+What other specs take from here:
+
+- [[011-api]]: `api.Options` gains one option, an interface with
+  `List(ctx, metering.RecordQuery, store.Page) ([]metering.Record,
+  string, error)` that `*reqlog.Reader` satisfies; `GET /v1/requests`
+  answers `source: archive` from it when set and `memory` from
+  `Store.Usage().Records` otherwise, mapping `store.ErrInvalidCursor` as
+  it does for the ring. The wiring line in `cmd/luxd` is `Archive:
+  reqlog.NewReader(bucket, cfg.S3Prefix)` under the exporter `s3`. A
+  Provider delete removes its discovered Models inside the transaction
+  with no `model.removed` or `model.deleted` row for them, so a sink
+  keying on Models is not told; a row per removed Model belongs to that
+  delete.
+- [[015-test-stubs-and-tiers]]: the stub sink verifies with
+  `events.Verify` under a five minute skew; `TestE2EMakeRun` is the
+  end-to-end half of the canary and the delivery rows.
+- [[016-security-and-threat-model]]: the five threat rows naming
+  `TestEventsCarryNoSecrets`, `TestSignature`, and
+  `TestArchiveCarriesNoContent` lost their not-built markers with this
+  spec, because `TestThreatTableIsGrounded` refuses a marker on a test
+  that exists.
+- [[017-release-and-installation]]: the `events` row of `luxd check` is
+  `events.NewSink(...).Ping(ctx)`; the `requestlog` row writes and
+  deletes one object through the same `s3.Client` the exporter uses.
+- [[010-state]]: nothing prunes the journal yet, so acknowledged rows
+  stay until `Journal.Prune` has a caller, and the holder's pending
+  count reads the whole journal per tick until the contract has a
+  count; both belong to the Postgres phase.
+- [[009-usage-and-metering]]: `TestRequestsSource` can run once
+  [[011-api]] takes the reader.
