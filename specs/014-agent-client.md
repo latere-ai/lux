@@ -1,6 +1,6 @@
 ---
 title: "Agent client: the lux command and the skill"
-status: validated
+status: dispatched
 track: core
 depends_on:
   - specs/003-manifest-contract.md
