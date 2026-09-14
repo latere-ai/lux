@@ -73,6 +73,9 @@ type Options struct {
 	Keys *secrets.Keyring
 	// Clients is told of a deleted Provider; nil tells nothing.
 	Clients ClientRevoker
+	// Tunnel serves the two tunnel routes of spec 013; nil, the tunnel
+	// off, makes them not_found.
+	Tunnel TunnelRoutes
 	// ReadOnlyDir is the directory the file mode reads, named in the
 	// developer detail of read_only.
 	ReadOnlyDir string
@@ -268,6 +271,7 @@ func (h *Handler) routes() {
 			}))
 		}
 	}
+	h.tunnelRoutes()
 	h.mux.Handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
 	h.mux.Handle("/v1/openapi.json", h.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
 	h.mux.Handle("/.well-known/lux", h.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
