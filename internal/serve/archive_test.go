@@ -40,7 +40,7 @@ func TestRecorderFansOutToTheArchive(t *testing.T) {
 	if len(sink.recs) != 2 || sink.recs[0].ID != "req_1" || sink.recs[1].ID != "req_2" || sink.recs[0].Tokens.Input != 3 || sink.recs[0].Labels == nil {
 		t.Fatalf("archive got %+v", sink.recs)
 	}
-	ring, _, err := h.st.Usage().Records(t.Context(), metering.RecordQuery{Query: metering.Query{From: h.clock().Add(-time.Hour), To: h.clock().Add(time.Hour)}}, store.Page{})
+	ring, _, err := h.st.Usage().Records(t.Context(), metering.RecordQuery{From: h.clock().Add(-time.Hour), To: h.clock().Add(time.Hour)}, store.Page{})
 	if err != nil || len(ring) != 2 || ring[1].ID != sink.recs[0].ID || ring[1].Cost != sink.recs[0].Cost {
 		t.Fatalf("the ring holds %+v, %v", ring, err)
 	}

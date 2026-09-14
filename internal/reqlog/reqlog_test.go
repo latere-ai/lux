@@ -409,7 +409,7 @@ func TestArchiveRoundTrip(t *testing.T) {
 	}
 	rd := NewReader(h.srv.Client(true), "lux/")
 	from := h.c.Now().Truncate(time.Hour)
-	q := metering.RecordQuery{Query: metering.Query{From: from, To: from.Add(2 * time.Hour)}}
+	q := metering.RecordQuery{From: from, To: from.Add(2 * time.Hour)}
 	all, next, err := rd.List(t.Context(), q, store.Page{})
 	if err != nil || next != "" || len(all) != len(produced) {
 		t.Fatalf("List = %d, %q, %v", len(all), next, err)
@@ -422,12 +422,12 @@ func TestArchiveRoundTrip(t *testing.T) {
 	if err != nil || len(refused) != 8 {
 		t.Fatalf("refused = %d, %v", len(refused), err)
 	}
-	keyB, _, err := rd.List(t.Context(), metering.RecordQuery{Query: metering.Query{From: from, To: from.Add(2 * time.Hour), Keys: []string{"key_b"}}}, store.Page{})
+	keyB, _, err := rd.List(t.Context(), metering.RecordQuery{From: from, To: from.Add(2 * time.Hour), Keys: []string{"key_b"}}, store.Page{})
 	if err != nil || len(keyB) != 12 {
 		t.Fatalf("key_b = %d, %v", len(keyB), err)
 	}
 	// A range inside the first hour alone.
-	one, _, err := rd.List(t.Context(), metering.RecordQuery{Query: metering.Query{From: h.c.Now().Add(5 * time.Second), To: h.c.Now().Add(10 * time.Second)}}, store.Page{})
+	one, _, err := rd.List(t.Context(), metering.RecordQuery{From: h.c.Now().Add(5 * time.Second), To: h.c.Now().Add(10 * time.Second)}, store.Page{})
 	if err != nil || len(one) != 5 {
 		t.Fatalf("a five second range = %d, %v", len(one), err)
 	}
@@ -444,7 +444,7 @@ func TestArchiveReaderPages(t *testing.T) {
 	produced := h.twoHours(t)
 	rd := NewReader(h.srv.Client(true), "lux/")
 	from := h.c.Now().Truncate(time.Hour)
-	q := metering.RecordQuery{Query: metering.Query{From: from, To: from.Add(2 * time.Hour)}}
+	q := metering.RecordQuery{From: from, To: from.Add(2 * time.Hour)}
 	all, _, err := rd.List(t.Context(), q, store.Page{})
 	if err != nil {
 		t.Fatal(err)
@@ -490,7 +490,7 @@ func TestArchiveReaderPages(t *testing.T) {
 		t.Fatalf("the rest: %d %v", len(rest), err)
 	}
 
-	other := metering.RecordQuery{Query: metering.Query{From: from, To: from.Add(time.Hour)}}
+	other := metering.RecordQuery{From: from, To: from.Add(time.Hour)}
 	for name, cursor := range map[string]string{
 		"another query": next,
 		"garbage":       "not-base64!",
