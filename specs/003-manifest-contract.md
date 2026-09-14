@@ -1,6 +1,6 @@
 ---
 title: "Manifest contract: the four kinds, decoding, validation, defaulting, resolve"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/001-architecture.md
@@ -35,9 +35,10 @@ package.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built: `manifest` and `manifest/v1` are in the tree with the golden
+corpus under `manifest/testdata/v1/`, and every criterion below has its
+passing test. The Outcome records what was built and where the text
+below moved to describe it.
 
 ## Design
 
@@ -206,20 +207,25 @@ acceptance criteria hold them to that.
 | `annotations` | map | yes | keys as labels, values any string up to 4 KiB; total at most 64 KiB; `lux.latere.ai/` refused |
 
 Name rules. A `Provider`, `Key`, or `Budget` name is a DNS-1123 label
-of at most 63 characters. A `Model` name is one or two segments joined
+of at most 63 characters. A `Model` name is one or more segments joined
 by `/`, each segment `[a-z0-9]([a-z0-9._:-]*[a-z0-9])?`, at most 128
 characters in all, because model names carry dots (`gpt-4.1`), a local
 runtime's carry a colon tag (`llama3.1:8b`, [[013-tunnelled-runtimes]]),
-and a discovered model is named `<provider>/<upstream name>`, the form callers
-already write. A declared Model may use either form. No name of any
-kind begins with one of the id prefixes `prv_`, `mdl_`, `key_`,
-`bud_`; one that does is `reserved_prefix`, so a path segment that
-carries a prefix is an id and one that does not is a name, with no
-third case ([[011-api]]). Only a Model name can carry `_` at all, so
-the rule bites on `mdl_` alone and is stated for every kind so it
-never needs restating. The upstream name in a target is the
-provider's own string, any printable characters up to 256, never
-validated beyond that.
+and a discovered model is named `<provider name>/<upstream name>` with
+the upstream name taken verbatim, which may itself carry a `/`: an
+aggregator lists `anthropic/claude-sonnet-4`, and the discovered Model
+is `relay/anthropic/claude-sonnet-4`. The first segment of a name of two
+or more is what the data plane reads as the provider hint and the rest
+is the upstream name ([[004-request-path]], [[008-routing-and-models]]).
+A declared Model may use any of the forms. No name of any kind begins
+with one of the id prefixes `prv_`, `mdl_`, `key_`, `bud_`; one that
+does is `reserved_prefix`, so a path segment that carries a prefix is
+an id and one that does not is a name, with no third case
+([[011-api]]). Only a Model name can carry `_` at all, so the rule
+bites on `mdl_` alone and is stated for every kind so it never needs
+restating. The upstream name in a target is the provider's own
+string, any printable characters up to 256, never validated beyond
+that.
 
 `Provider.spec`. The mutability column names whether a field may change
 after create: `no`, or `yes` for any caller the authorizer allows.
@@ -231,9 +237,9 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | `baseURL` | string | none, required unless `tunnel` | yes | `https://`, a host under the upstream host rule below, an optional path, no userinfo, query, or fragment; `http://` and a loopback, link-local, or private host only when `Options.AllowPrivateUpstreams` is set, and then with a warning; the host of `Options.PublicURL` is `invalid_field`, because a provider that is this gateway is a loop |
 | `credential.value` | string | none | yes; bumps `status.credential.version` | write-only; optional: a Provider with neither `value` nor `valueFrom` injects no credential header, which is what a runtime on the operator's own network needs ([[005-providers]]); 1 to 4096 bytes when set; returned by no read, carried by no event or log |
 | `credential.valueFrom.env` | string | none | no | a POSIX variable name the file mode reads at start; `exclusive_fields` with `value`; `invalid_field` in server mode |
-| `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini` |
-| `credential.scheme` | enum | per dialect | yes | `bearer` prefixes `Bearer `; `raw` writes the value verbatim; `bearer` on `Authorization`, `raw` elsewhere |
-| `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB of visible ASCII and space with no CR or LF (`invalid_field`); `credential.header`, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix` |
+| `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini`; defaulted with `scheme` on every Provider that is not tunnelled, a Provider with no credential included, because the gateway strips a caller's copy of that header whether or not it injects one ([[005-providers]]) |
+| `credential.scheme` | enum | per dialect | yes | `bearer` prefixes `Bearer `; `raw` writes the value verbatim; `bearer` on `Authorization`, `raw` elsewhere; the default follows the dialect, not a header the caller chose |
+| `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB of visible ASCII and space with no CR or LF (`invalid_field`); the effective `credential.header`, given or the dialect's, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix`, compared case-insensitively |
 | `discovery.mode` | enum | `auto` | yes | `auto` lists the upstream's models on the discovery interval and declares each as a discovered Model ([[005-providers]]); `none` declares nothing |
 | `discovery.include`, `.exclude` | []string | empty | yes | globs under the glob rule below over upstream names; `include` empty is everything; `exclude` wins |
 | `health.mode` | enum | `probe` | yes | `probe` calls the upstream's model list on the health interval; `passive` infers health from traffic; `none` reports `Unknown` and never marks a target unavailable |
@@ -271,7 +277,7 @@ and no other ([[001-architecture]], invariant 2).
 | `pricing` | object | absent | yes | absent is unpriced, which `status.warnings` says; present requires `input` and `output` |
 | `pricing.currency` | string | `USD` | yes | an ISO 4217 code, upper case |
 | `pricing.per` | int | `1000000` | yes | tokens the prices are quoted per; `1`, `1000`, or `1000000` |
-| `pricing.input`, `.output`, `.cachedInput`, `.cacheWrite` | money | `cachedInput` defaults to `input`, `cacheWrite` to `input`; the first two required | yes | the money rule below, non-negative |
+| `pricing.input`, `.output`, `.cachedInput`, `.cacheWrite` | money | `cachedInput` defaults to `input`, `cacheWrite` to `input`; the first two required | yes | the money rule below, non-negative; `"0"` is a price, so the Go fields are `*v1.Money` and an absent price is told from a free one |
 | `modalities.input`, `.output` | []enum | `[text]`, `[text]` | yes | `text`, `image`, `audio`, `video`, `file`, `embedding`; non-empty, unique |
 | `contextWindow`, `maxOutputTokens` | int | absent | yes | positive; `maxOutputTokens` at most `contextWindow` when both are set |
 
@@ -288,13 +294,13 @@ the discovered one.
 | Field | Type | Default | Mutable | Rule |
 |---|---|---|---|---|
 | `models[]` | []string | none, required, non-empty | yes | at most 64 selectors, each a Model name or a glob under the glob rule; `*` alone is every model; duplicates `invalid_field`; each selector is a `model.use` decision at resolve, below |
-| `limits.requestsPerMinute`, `.tokensPerMinute` | int | `Defaults.RequestsPerMinute`, `Defaults.TokensPerMinute` | yes | `0` is none; above the authorizer's `Limits` is `ceiling_exceeded` |
-| `limits.spend.amount` | money | absent | yes | positive; above `Limits.MaxSpend` is `ceiling_exceeded`; requires `window` |
+| `limits.requestsPerMinute`, `.tokensPerMinute` | int | `Defaults.RequestsPerMinute`, `Defaults.TokensPerMinute` | yes | `0` is none; above the authorizer's `Limits` is `ceiling_exceeded`, and `0` is above any ceiling, because no limit exceeds every limit |
+| `limits.spend.amount` | money | absent | yes | positive; above `Limits.MaxSpend` is `ceiling_exceeded`, and so is an absent spend limit under a `MaxSpend`; requires `window` |
 | `limits.spend.currency` | string | `USD` | yes | ISO 4217; a request for a Model priced in another currency is `currency_mismatch` ([[007-keys-and-limits]]) |
 | `limits.spend.window` | window | none | yes | the window rule below; `none` is the key's lifetime |
 | `budget` | string | absent | yes | a `Budget` the caller may draw from, by name or `bud_` id; `Lookup.Budget` answers `not_found` otherwise; a spend limit and a budget may both be set and both hold |
-| `ttl` | duration | absent | no | Go syntax, at least `1m`; `expiresAt` is `createdAt` plus `ttl`; `exclusive_fields` with `expiresAt`; above `Limits.MaxTTL` is `ceiling_exceeded` |
-| `expiresAt` | timestamp | absent | yes | RFC 3339, in the future at resolve; absent and no `ttl` is never |
+| `ttl` | duration | absent | no | Go syntax, at least `1m`; `status.expiresAt` is `createdAt` plus `ttl`, `createdAt` being the existing object's on an update and `Now` on a create; `exclusive_fields` with `expiresAt`; above `Limits.MaxTTL` is `ceiling_exceeded`, and so is a Key that never expires under a `MaxTTL` |
+| `expiresAt` | timestamp | absent | yes | RFC 3339, in the future at resolve; copied to `status.expiresAt`, the one field the data plane reads for expiry; absent and no `ttl` is never |
 | `allowUnpriced` | bool | `false` | yes | with a spend limit or a budget, a request for a Model with no pricing is `model_unpriced` unless this is true ([[007-keys-and-limits]]) |
 | `passthrough` | bool | `false` | yes | admits routes the gateway does not translate, embeddings, files, batches, toward a provider one of the selectors reaches ([[004-request-path]]) |
 | `disabled` | bool | `false` | yes | refuses every request with `key_disabled` while true; the value is kept |
@@ -312,23 +318,31 @@ the discovered one.
 
 Shared rules:
 
-- Money is a decimal string `^[0-9]+(\.[0-9]{1,6})?$`, at most 18
+- Money is a decimal string `^[0-9]+(\.[0-9]{1,6})?$`, at most 12
   integer digits, parsed to an integer count of micro-units
-  (`v1.Money`), so no float touches a price. Rendered back with the
-  fraction digits it was given, and the arithmetic of
-  [[009-usage-and-metering]] is integer arithmetic on micro-units.
+  (`v1.Money`, an `int64`), so no float touches a price and every
+  amount fits the integer with headroom for the arithmetic of
+  [[009-usage-and-metering]], which multiplies a price by a token
+  count; a thirteenth integer digit is refused. Rendered back as the
+  shortest string naming the amount, the trailing zeros of the fraction
+  dropped, so `"100.50"` reads back `"100.5"`; a JSON number is refused,
+  because a float has already lost what the string keeps.
 - A window is a Go duration of at least `1m` and at most `8760h`, the
   word `month`, or the word `none`. A duration window is fixed, not
   rolling: window `n` covers `[n·d, (n+1)·d)` from the Unix epoch in
   UTC, so every replica agrees on the boundary without coordination.
   `month` is the calendar month in UTC. `none` never resets.
-- A glob is a string of `[a-z0-9._/*-]`, 1 to 128 characters, where
+- A glob is a string of `[a-z0-9._:/*-]`, 1 to 128 characters, where
   `*` matches any run of characters including `/` and every other
-  character matches itself. There is no `?`, no character class, and
-  no escape. A selector without `*` is an exact name.
-- A duration is Go syntax. A timestamp is RFC 3339. `status` in an
-  applied manifest is ignored, never an error, so a caller may `GET`,
-  edit, and `PUT` what it read. Every kind's `status` carries `id`,
+  character matches itself; the colon is in the alphabet because a
+  local runtime's names carry a tag. There is no `?`, no character
+  class, and no escape. A selector without `*` is an exact name and is
+  held to the Model name rule.
+- A duration is Go syntax, kept as the text the caller wrote
+  (`v1.Duration`), so `10m` reads back `10m`; one the configuration
+  supplies renders without the zero units Go's own formatting adds. A
+  timestamp is RFC 3339. `status` in an applied manifest is ignored,
+  never an error, so a caller may `GET`, edit, and `PUT` what it read. Every kind's `status` carries `id`,
   `version`, `owner`, `createdAt`, `updatedAt`, and `warnings`;
   `version` is the store's row version ([[010-state]]), which
   [[011-api]] also sends as the `ETag`, and the rest of `status` is the
@@ -346,36 +360,49 @@ file mode and the `lux` command leave it empty.
   `application/x-yaml`, `text/yaml`. Anything else is
   `unsupported_media_type`. A body that begins with `{` under a YAML
   type is decoded as JSON.
-- One decoder decides every field question. A YAML body is parsed by
-  `github.com/goccy/go-yaml` into a generic tree, the tree is held to
-  the two limits below, and it is re-encoded as JSON; that JSON, or the
-  JSON body as sent, is decoded by `encoding/json` with
-  `DisallowUnknownFields` into the kind's type. So an unknown field is
-  found by one decoder with one path spelling whichever format the body
-  came in, and YAML and JSON forms of one manifest decode to equal
-  objects by construction. A body that does not parse as JSON, or as
-  YAML under a YAML type, is `malformed_body`, with the parser's line
-  and column in the developer detail.
+- One schema decides every field question. A YAML body is parsed by
+  `github.com/goccy/go-yaml` into its syntax tree, and the tree is
+  turned into a generic one, anchors, aliases, and merge keys resolved
+  by this package so the expansion is counted against the limits below
+  as it happens; a JSON body is read token by token into the same
+  generic tree. The tree is then held to the kind's Go type by the
+  `json` tags of that type, the same tags `encoding/json` reads, which
+  is what gives an unknown field its full path, and `encoding/json`
+  with `DisallowUnknownFields` decodes it. So an unknown field is found
+  by one schema with one path spelling whichever format the body came
+  in, and YAML and JSON forms of one manifest decode to equal objects
+  by construction. A path is dotted for a field, `[n]` for a list
+  entry, and `["k"]` for a map key: `spec.targets[1].model`,
+  `metadata.labels["tier"]`. A body that does not parse as JSON, or as
+  YAML under a YAML type, a duplicate key in either format, and a
+  document that is not a mapping are `malformed_body`, with the
+  parser's line and column in the developer detail.
 - YAML is one document. A second document is `multi_document`.
-- Unknown fields anywhere are `unknown_field` with the path.
+- Unknown fields anywhere are `unknown_field` with the path. A value of
+  the wrong shape, a string for an integer, a list for an object, a
+  number for a money string, a string that is not RFC 3339 for a
+  timestamp, is `invalid_field` at the path from `Decode`, because
+  `v1.Money` and `time.Time` hold a value and not text.
 - `apiVersion`, `kind`, and `metadata.name` absent from the body take
   the hint's values, so a body of `{"spec": {...}}` on a kind's route is
   a complete manifest and the ceremony of the envelope is the route's,
   not the caller's. A field present in the body and different from the
   hint is refused: `unsupported_version`, `unsupported_kind`, or
-  `invalid_field` at `metadata.name`. Without a hint all three are
-  required, `apiVersion` and `kind` by `missing_field`.
+  `invalid_field` at `metadata.name`. Without a hint `apiVersion` and
+  `kind` are required, by `missing_field`; `metadata.name` may still be
+  absent and is then `Options.NewName`'s at resolve, or `missing_field`
+  when there is no generator, which is the file mode's case.
 - `apiVersion` other than `lux.latere.ai/v1beta1` is
   `unsupported_version`; an unknown `kind` is `unsupported_kind`. Both
   are checked before anything else, so a caller learns the version
   problem first.
 - The body limit is the API's (`LUX_MAX_MANIFEST_BYTES`); the package
-  itself sets none. The generic YAML tree is walked before it is
-  re-encoded: an expansion past 1 MiB of scalar bytes, which is what an
-  alias chain buys an attacker, and nesting past 64 levels are each
-  `invalid_field` at the path where the limit was crossed. The library's
-  own depth guard sits far above at ten thousand and is not the bound
-  this contract makes.
+  itself sets none. The generic tree, from either format, is held to
+  two bounds as it is built: an expansion past 1 MiB of scalar bytes,
+  which is what an alias chain buys an attacker, and nesting past 64
+  levels are each `invalid_field` at the path where the limit was
+  crossed. The library's own depth guard sits far above at ten
+  thousand and is not the bound this contract makes.
 - `Provider.spec.credential.value` and `Key.spec.value` are each
   decoded into a field the JSON and YAML encoders skip, so the type
   cannot be serialized with the value in it by accident; the store
@@ -391,12 +418,14 @@ type Actor struct {
 }
 
 // Lookup answers the references a manifest names, scoped to the actor:
-// it returns not_found for an object that does not exist and for one
-// the authorizer refuses (provider.read for a target, budget.draw for
-// a budget, model.use for a selector), so existence does not leak, and
-// authorizer_unavailable when it cannot decide. A Provider comes back
-// without its credential value. The API constructs it per request; an
-// importer constructs its own.
+// it returns manifest.ErrNotFound, or an *Error with code not_found, for
+// an object that does not exist and for one the authorizer refuses
+// (provider.read for a target, budget.draw for a budget, model.use for
+// a selector), so existence does not leak, and ErrAuthorizerUnavailable,
+// or any other error, when it cannot decide; a nil object with a nil
+// error reads as not_found, and a nil Lookup as authorizer_unavailable.
+// A Provider comes back without its credential value. The API
+// constructs it per request; an importer constructs its own.
 type Lookup interface {
 	Provider(ctx context.Context, nameOrID string) (*v1.Provider, error)
 	Budget(ctx context.Context, nameOrID string) (*v1.Budget, error)
@@ -451,7 +480,7 @@ type Options struct {
 func Resolve(ctx context.Context, in v1.Object, o Options) (*Resolved, error)
 
 type Resolved struct {
-	Object   v1.Object // spec and metadata fully resolved; status carries only warnings and, for a Key, the models each selector matched
+	Object   v1.Object // spec and metadata fully resolved; status carries only warnings and, for a Key, the models each selector matched and the effective expiresAt
 	Warnings []string
 }
 ```
@@ -465,7 +494,10 @@ The stages, in order, each one total before the next begins:
 2. Defaulting: every absent field with a default is set from the table
    and from `Defaults`; `metadata.name` from `NewName` when absent;
    `targets[].model` from the name; the credential header and scheme
-   from the dialect; `expiresAt` from `ttl` and `Now`.
+   from the dialect; `status.expiresAt` from `spec.expiresAt`, or from
+   `ttl` and the existing object's `createdAt`, `Now` on a create.
+   Stage 1 runs over the object as given and the later stages over a
+   copy, so the caller's object is never changed.
 3. References, through `Lookup`: every target's provider, the budget,
    and every selector. A `not_found` or `authorizer_unavailable` is
    returned with the field's path. For a Key, the models each selector
@@ -475,18 +507,28 @@ The stages, in order, each one total before the next begins:
    later and the data plane matches selectors at request time
    ([[007-keys-and-limits]]).
 4. Limits: `requestsPerMinute`, `tokensPerMinute`, `spend.amount`, and
-   the effective `ttl` are held to `Limits`; a value above is
-   `ceiling_exceeded` naming the field and the limit. A zero limit is
-   no limit.
+   the effective `ttl`, from `ttl` or from `expiresAt` less `createdAt`,
+   are held to `Limits`; a value above is `ceiling_exceeded` naming the
+   field and the limit in the developer detail. A zero `Limits` field is
+   no ceiling. On the manifest's side, no limit is above every ceiling:
+   a rate of `0`, an absent spend limit, and a Key that never expires
+   are each `ceiling_exceeded` under the matching ceiling, so a subject
+   with ceilings sets its Keys' limits explicitly, and an operator whose
+   `Defaults` are `0` while an authorizer grants ceilings has every
+   defaulted Key refused, which the authorizer's operator sees at once.
 5. Update rules, when `Existing` is set: every field the table marks
    `no` that differs is collected into one `immutable_field` error
-   naming every path. A `Provider` whose `credential.value` is absent on
-   update keeps its stored value; one whose value is present replaces
-   it and bumps the version. A `Key` update never changes the value: a
-   `spec.value` present on an update is `immutable_field` at
-   `spec.value` whether or not it equals the stored one, because the
-   stored one is a hash and cannot be compared, and a caller that wants
-   a new value rotates ([[007-keys-and-limits]]).
+   naming every path; a duration or a window is compared by value, so
+   `1h` and `60m` are one. A `Provider` whose `credential.value` is
+   absent on update keeps its stored value; one whose value is present
+   replaces it and bumps the version, the bump being the API's from
+   whether the resolved object carries a value. A `Key` update never
+   changes the value: a `spec.value` present on an update is
+   `immutable_field` at `spec.value` whether or not it equals the stored
+   one, and whatever its length, because the stored one is a hash and
+   cannot be compared, and a caller that wants a new value rotates
+   ([[007-keys-and-limits]]). An `Existing` of another kind is a
+   caller's mistake and a plain error, not a refusal.
 6. Consistency across fields: `maxOutputTokens` within `contextWindow`;
    `spend.amount` with `spend.window`; a `Budget` window and the Keys
    drawing from it need no cross-check, because the Key's currency is
@@ -500,15 +542,22 @@ surfaces. Discovery ([[005-providers]]) and the file mode
 
 ### Errors
 
-One type, `*manifest.Error{Code, Path, Message}`, where `Path` is the
-JSON path of the field and `Message` is one sentence in the user
-register. [[011-api]] owns the fixed sentence per code and the HTTP
-status, and its `TestErrorTable` asserts every code here has one.
+One type, `*manifest.Error{Code, Paths, Message, Detail}`, where
+`Paths` are the JSON paths of the fields the refusal names, one for
+most codes, two for `exclusive_fields`, every changed field for
+`immutable_field`, none for a body that did not parse; `Message` is
+the one fixed sentence of the code in the user register, which
+`Code.Message()` gives and which is [[011-api]]'s table verbatim, so
+the API writes the same sentence for the same code; and `Detail` is
+the developer's, the value, the rule, the line and column, apart from
+the sentence as the registers rule asks. [[011-api]] owns the HTTP
+status, and its `TestErrorTable` asserts every code here has one row
+there.
 
 | Code | When |
 |---|---|
 | `unsupported_media_type` | the content type is not JSON or YAML |
-| `malformed_body` | the body does not parse as JSON, or as YAML under a YAML type |
+| `malformed_body` | the body does not parse as JSON, or as YAML under a YAML type; a duplicate key in either; a document that is not a mapping |
 | `multi_document` | more than one YAML document |
 | `unsupported_version` | `apiVersion` is not `lux.latere.ai/v1beta1` |
 | `unsupported_kind` | `kind` is not one of the four |
@@ -564,11 +613,14 @@ set of files:
 | `manifest/testdata/v1/options.json` | the fixed options, below, so a reader can reproduce a golden file by hand |
 
 The directory is embedded by the `manifest` package and exported as
-`manifest.Corpus`, an `embed.FS` rooted at `testdata/v1`, so the
+`manifest.Corpus`, an `fs.FS` rooted at `testdata/v1` through `fs.Sub`
+over the embedded tree, since an `embed.FS` cannot be re-rooted, so the
 `manifest` group of [[018-conformance-suite]] reads the same files
 through the import from any module and never by a relative path;
 `//go:embed` cannot reach another package's directory, and a copy would
-drift.
+drift. The accepted cases are one installation's worth of objects and
+apply in kind order, Provider, Budget, Model, Key, because a Model
+names a Provider and a Key names Models and a Budget.
 
 The fixed options: `Now` is `2026-09-13T10:00:00Z`; `NewName` returns
 `fixed-name-0000`; `Defaults` is `{0, 0, 10m}`; `Limits` is zero;
@@ -577,29 +629,42 @@ The fixed options: `Now` is `2026-09-13T10:00:00Z`; `NewName` returns
 answers from the accepted corpus itself, so `openai` and `azure` are
 Providers, `team-research` is a Budget, `gpt-5` matches `gpt-5`, and
 `anthropic/*` matches `anthropic/claude-sonnet-4` and
-`anthropic/claude-opus-4`. The suite applies the accepted cases through
+`anthropic/claude-opus-4`; `Actor` is `https://login.example.com|alice`
+and is read by nothing. The suite applies the accepted cases through
 the API and compares the read-back's `spec` and `metadata` to the
 golden file; the refused cases it sends and compares the code and
-`details.paths`. A case the corpus cannot express, one that needs a
+`details.paths`. The golden of an accepted case is a fixed point:
+decoded and resolved again under the same options it is byte-identical,
+which is what lets a caller `GET`, edit, and `PUT` what it read. A case the corpus cannot express, one that needs a
 second object's state or a caller's identity, is a criterion of the
 kind's owner and not a corpus file.
 
 ### Package layout
 
-`manifest/v1` holds the types of every kind, `Money`, `Window`,
-`ModelRef`, and the `Object` interface every kind implements (`Kind()
-string`, `ID() string`, `Owner() string`, `Name() string`), which
-`Decode` returns and the store keys by; it imports nothing but the
-standard library, so `metering` imports it for `Pricing` and `Money`
-without pulling the resolver. It also holds `NewID(prefix string, now
+`manifest/v1` holds the types of every kind, `Money`, `Duration`,
+`Window` with its parser and its `Bounds`, `ModelRef`, and the `Object`
+interface every kind implements (`Kind() string`, `ID() string`,
+`Owner() string`, `Name() string`), which `Decode` returns and the
+store keys by; it imports nothing but the standard library, so
+`metering` imports it for `Pricing` and `Money` without pulling the
+resolver. The money and window parsers live here beside their types,
+`ParseMoney` and `Window.Validate`, because `Money`'s JSON decoding
+needs the parser. A kind's Go value stores no `apiVersion` and no
+`kind`: its kind is its type and its version is the package's, so its
+`MarshalJSON` writes both first and a caller building a literal fills
+neither, which is also why the interface method can be `Kind()`. A
+field whose explicit zero differs from its default is a pointer,
+`Target.Weight`, `KeyLimits.RequestsPerMinute` and `TokensPerMinute`,
+`BudgetSpec.Hard`, and the four prices, and is set on every resolved
+object. It also holds `NewID(prefix string, now
 time.Time, random io.Reader) string`, the one generator of every
 prefixed ULID in the tree, `prv_`, `mdl_`, `key_`, `bud_`, `req_`,
 `evt_`, and [[013-tunnelled-runtimes]]'s `tun_`: 48 bits of
 milliseconds and 80 random bits in Crockford base32, written with the
 standard library rather than a ULID module, so the binaries' build
 lists gain nothing for an identifier. `manifest` holds `Decode`,
-`Resolve`, the glob matcher, the money and window parsers, the upstream
-host rule, and the error type, and imports `manifest/v1`,
+`Resolve`, the glob matcher, the field rules, the upstream host rule,
+and the error type, and imports `manifest/v1`,
 `github.com/goccy/go-yaml` for the YAML parse, and the standard
 library. The YAML module is the one dependency this package adds to
 `./cmd/luxd` and `./cmd/lux`, and each binary's `depcheck` row names it
@@ -623,24 +688,100 @@ where `Defaults` come from ([[002-repository-scaffold]]) and `Limits`
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The four examples above decode from YAML and from their JSON forms to equal objects, and resolve without error under the corpus's fixed options | `TestDecodeYAMLAndJSONAgree`, `TestTheExamplesResolve` | not built |
-| Every unknown field, at any depth in every kind, is refused with its path, and the path is spelled the same from a YAML and a JSON body | `TestUnknownFieldNamesThePath`, table-driven over twenty paths in both formats | not built |
-| A second YAML document, a wrong version, a wrong kind, an unsupported content type, and a body that does not parse are refused with their codes, version before kind; `malformed_body` carries the line and column in the detail | `TestDecodeRefusals` | not built |
-| A name beginning with `prv_`, `mdl_`, `key_`, or `bud_` is `reserved_prefix` for every kind, and `openai/mdl_x` is a valid Model name | `TestNamesNeverLookLikeIds` | not built |
-| A body of `spec` alone decodes under a hint to the hinted version, kind, and name, byte-identical to the full envelope's result; a body whose envelope disagrees with the hint is refused with the field's code; without a hint the envelope is required | `TestHintFillsTheEnvelope`, `TestHintDisagreementIsRefused` | not built |
-| An alias chain past 1 MiB and nesting past 64 levels are each refused in under 100 ms | `TestYAMLLimits` | not built |
-| Every syntax rule in the field tables has a refusing case: the three name rules, money, window, glob, duration, RFC 3339, ISO 4217, header names, ranges of weight, priority, per, concurrency, timeout | `TestFieldSyntax`, table-driven | not built |
-| Every default in the tables is applied and returned; a field the caller set is never overwritten; the credential header and scheme follow the dialect; `expiresAt` is `Now` plus `ttl`; an absent name comes from `NewName` | `TestDefaultsFillOnlyAbsentFields`, `TestDialectDefaults`, `TestNameGeneration` | not built |
-| Each `exclusive_fields`, `duplicate_target`, and `missing_field` case in the tables is refused with the code | `TestExclusiveMissingAndDuplicates` | not built |
-| The upstream host rule: an IP literal is accepted; a single label, a loopback, link-local, and private address, `.local`, `.internal`, `http://`, userinfo, query, and fragment are `invalid_field`; with `AllowPrivateUpstreams` the private forms resolve with a warning; the `PublicURL` host is refused in both modes | `TestUpstreamHostRule` | not built |
-| `credential.value` is absent from the JSON and YAML encodings of a decoded Provider and present through the accessor; `valueFrom` is `invalid_field` in server mode and accepted in file mode | `TestCredentialValueNeverEncodes`, `TestValueFromIsFileModeOnly` | not built |
-| `Key.spec.value` of 32 bytes resolves and of 31 or 4097 is `invalid_field`; it is absent from the JSON and YAML encodings of the decoded Key and present through the accessor; with `valueFrom.env` it is `exclusive_fields`; in file mode it is `invalid_field`; on an update, equal to the stored value or not, it is `immutable_field` at `spec.value` | `TestSuppliedValueSchema`, table-driven | not built |
-| `Lookup` returning not-found and refused both surface as `not_found` with the field's path; unavailable surfaces as `authorizer_unavailable`; a selector matching nothing is a warning and the resolved Key records every selector's matches | `TestLookupErrors`, `TestSelectorsRecordTheirMatches` | not built |
-| Every immutable field changed on update is named in one `immutable_field` error; a Provider update without a value keeps the stored one and with a value bumps the version | `TestImmutableFields`, `TestCredentialUpdate` | not built |
-| Limits refuse with the field and the limit; a zero limit is no limit | `TestLimits` | not built |
-| The glob matcher: `*` matches across `/`, a selector without `*` is exact, and the same function accepts a selector and matches a name | `TestGlob`, table-driven | not built |
-| The window arithmetic: a duration window's boundary is the same for every `Now` inside it and differs across it; `month` resets on the first of the month UTC; `none` never resets | `TestWindows` | not built |
-| Money parses and renders without loss for every corpus value and refuses seven fraction digits and a nineteenth integer digit | `TestMoney` | not built |
-| Every accepted corpus case resolves byte-identically to its golden file under `options.json`, every refused case yields its code and paths, every kind has at least one accepted case, and every code of the table that stage 1 or 2 can raise has at least one refused case | `TestGoldenCorpus`, `TestCorpusCoversEveryDecodeCode` | not built |
-| `manifest/v1` imports the standard library alone, `manifest` adds only `manifest/v1` and `github.com/goccy/go-yaml`, and neither imports `internal/`, `gateway`, or `metering` | `TestManifestImports`, [[001-architecture]]'s `TestRootPackagesDialNothing` | not built |
-| `NewID` yields 26 Crockford base32 characters after the prefix, sorts by the time given, and ten thousand ids at one instant are distinct | `TestNewID` | not built |
+| The four examples above decode from YAML and from their JSON forms to equal objects, and resolve without error under the corpus's fixed options | `TestDecodeYAMLAndJSONAgree`, `TestTheExamplesResolve` | passing |
+| Every unknown field, at any depth in every kind, is refused with its path, and the path is spelled the same from a YAML and a JSON body | `TestUnknownFieldNamesThePath`, table-driven over twenty paths in both formats | passing |
+| A second YAML document, a wrong version, a wrong kind, an unsupported content type, and a body that does not parse are refused with their codes, version before kind; `malformed_body` carries the line and column in the detail | `TestDecodeRefusals` | passing |
+| A name beginning with `prv_`, `mdl_`, `key_`, or `bud_` is `reserved_prefix` for every kind, and `openai/mdl_x` and `relay/anthropic/claude-sonnet-4` are valid Model names | `TestNamesNeverLookLikeIds`, `TestFieldSyntax` | passing |
+| A body of `spec` alone decodes under a hint to the hinted version, kind, and name, byte-identical to the full envelope's result; a body whose envelope disagrees with the hint is refused with the field's code; without a hint the envelope is required | `TestHintFillsTheEnvelope`, `TestHintDisagreementIsRefused` | passing |
+| An alias chain past 1 MiB and nesting past 64 levels are each refused in under 100 ms | `TestYAMLLimits` | passing |
+| Every syntax rule in the field tables has a refusing case: the three name rules, money, window, glob, duration, RFC 3339, ISO 4217, header names, ranges of weight, priority, per, concurrency, timeout | `TestFieldSyntax`, table-driven | passing |
+| Every default in the tables is applied and returned; a field the caller set is never overwritten; the credential header and scheme follow the dialect; `expiresAt` is `Now` plus `ttl`; an absent name comes from `NewName` | `TestDefaultsFillOnlyAbsentFields`, `TestDialectDefaults`, `TestNameGeneration` | passing |
+| Each `exclusive_fields`, `duplicate_target`, and `missing_field` case in the tables is refused with the code | `TestExclusiveMissingAndDuplicates` | passing |
+| The upstream host rule: an IP literal is accepted; a single label, a loopback, link-local, and private address, `.local`, `.internal`, `http://`, userinfo, query, and fragment are `invalid_field`; with `AllowPrivateUpstreams` the private forms resolve with a warning; the `PublicURL` host is refused in both modes | `TestUpstreamHostRule` | passing |
+| `credential.value` is absent from the JSON and YAML encodings of a decoded Provider and present through the accessor; `valueFrom` is `invalid_field` in server mode and accepted in file mode | `TestCredentialValueNeverEncodes`, `TestValueFromIsFileModeOnly` | passing |
+| `Key.spec.value` of 32 bytes resolves and of 31 or 4097 is `invalid_field`; it is absent from the JSON and YAML encodings of the decoded Key and present through the accessor; with `valueFrom.env` it is `exclusive_fields`; in file mode it is `invalid_field`; on an update, equal to the stored value or not, it is `immutable_field` at `spec.value` | `TestSuppliedValueSchema`, table-driven | passing |
+| `Lookup` returning not-found and refused both surface as `not_found` with the field's path; unavailable surfaces as `authorizer_unavailable`; a selector matching nothing is a warning and the resolved Key records every selector's matches | `TestLookupErrors`, `TestSelectorsRecordTheirMatches` | passing |
+| Every immutable field changed on update is named in one `immutable_field` error; a Provider update without a value keeps the stored one and with a value bumps the version | `TestImmutableFields`, `TestCredentialUpdate` | passing |
+| Limits refuse with the field and the limit; a zero limit is no limit | `TestLimits` | passing |
+| The glob matcher: `*` matches across `/`, a selector without `*` is exact, and the same function accepts a selector and matches a name | `TestGlob`, table-driven | passing |
+| The window arithmetic: a duration window's boundary is the same for every `Now` inside it and differs across it; `month` resets on the first of the month UTC; `none` never resets | `TestWindows` in `manifest/v1` | passing |
+| Money parses and renders without loss for every corpus value, the shortest form of each, and refuses seven fraction digits and a thirteenth integer digit | `TestMoney` | passing |
+| Every accepted corpus case resolves byte-identically to its golden file under `options.json`, every refused case yields its code and paths, every kind has at least one accepted case, and every code of the table that stage 1 or 2 can raise has at least one refused case | `TestGoldenCorpus`, `TestCorpusCoversEveryDecodeCode` | passing |
+| `manifest/v1` imports the standard library alone, `manifest` adds only `manifest/v1` and `github.com/goccy/go-yaml`, and neither imports `internal/`, `gateway`, or `metering` | `TestManifestImports`, [[001-architecture]]'s `TestRootPackagesDialNothing` | passing |
+| `NewID` yields 26 Crockford base32 characters after the prefix, sorts by the time given, and ten thousand ids at one instant are distinct | `TestNewID` in `manifest/v1` | passing |
+
+## Outcome
+
+Built on 2026-09-14 in `manifest` and `manifest/v1`, with the golden
+corpus under `manifest/testdata/v1/`: seventeen accepted cases and
+eighty-four refused ones. Every criterion's named test passes;
+coverage is 95.4% of `manifest` and 98.8% of `manifest/v1`, and the
+gate passes whole. The Design text above was changed wherever the code
+had to depart from the dispatched text, so the two agree; the
+departures and their reasons:
+
+- Model names are one or more `/`-joined segments, not one or two. An
+  aggregator's upstream names carry a `/` themselves, so a discovered
+  Model named `<provider>/<upstream name>` can have three segments, and
+  the two-segment rule would have refused every such model at
+  discovery. The corpus carries `relay/anthropic/claude-sonnet-4`.
+  [[011-api]]'s model routes, which refuse three segments or more,
+  must admit them.
+- Money is at most 12 integer digits, not 18, and renders in its
+  shortest form rather than with the digits it was given: `v1.Money`
+  is an `int64` of micro-units, as [[009-usage-and-metering]]'s
+  arithmetic needs, and eighteen integer digits of micro-units do not
+  fit one; an integer cannot remember how many zeros it was written
+  with.
+- The glob alphabet gained `:`, so a selector can name a local
+  runtime's tagged model by prefix.
+- The error type carries `Paths`, plural, and a `Detail` apart from the
+  fixed `Message`: one refusal names two fields for `exclusive_fields`
+  and every changed field for `immutable_field`, and the registers rule
+  keeps the developer's detail out of the user's sentence.
+- Decoding holds the generic tree to the kind's type by its `json`
+  tags before `encoding/json` decodes it, because `encoding/json`'s
+  unknown-field error carries the key and no path; the money and
+  timestamp syntax is therefore refused at `Decode`, the two bounds
+  apply to JSON as to YAML, a duplicate key is `malformed_body`, and a
+  map key is spelled `["k"]` in a path.
+- A Key's effective expiry is `status.expiresAt`, from `spec.expiresAt`
+  or from `ttl` and `createdAt`, so `ttl` and `expiresAt` stay
+  exclusive in `spec` and a read-back re-applies; the Key's golden
+  therefore carries `expiresAt` beside `selectors` and `warnings`.
+- Under a ceiling, no limit is above it: a rate of `0`, an absent
+  spend limit, and a Key that never expires are `ceiling_exceeded`.
+  The text said only that a value above the ceiling is refused; a Key
+  asking for no limit asks for more than any ceiling grants.
+- `Corpus` is an `fs.FS` rooted at `testdata/v1` through `fs.Sub`, not
+  an `embed.FS`, which cannot be re-rooted.
+- The money and window parsers live in `manifest/v1`, because
+  `Money.UnmarshalJSON` needs the parser and `v1` imports nothing of
+  `manifest`. `TestWindows` and `TestNewID` live there with them.
+- A kind's Go value stores no `apiVersion` or `kind`; `MarshalJSON`
+  writes them. A struct field named `Kind` cannot coexist with the
+  `Kind()` method the `Object` interface names.
+- Fields whose explicit zero differs from their default are pointers:
+  `weight`, the two rates, `hard`, and the four prices. A free model
+  prices at `"0"`, and a fallback-only target weighs `0`.
+- Without a hint, `metadata.name` may be absent from a decoded body and
+  is `NewName`'s at resolve, or `missing_field` with no generator; the
+  text had listed it among the three required fields while also
+  letting `NewName` supply it.
+- Stage 1 runs over the caller's object and the later stages over a
+  copy, so `Resolve` never changes its input; the copy is through JSON,
+  which is why stage 1 has to run first: `omitempty` would turn an
+  empty modalities list into an absent one.
+
+What other specs carry from this: [[011-api]]'s model routes admit
+names of three or more segments, and its handlers take the fixed
+sentence from `manifest.Code.Message()` and the envelope's `paths` and
+`detail` from `Error.Paths` and `Error.Detail`; [[009-usage-and-metering]]'s
+`Cost` dereferences the `*v1.Money` prices and its `Window` function
+wraps `v1.Window.Bounds`; [[004-request-path]] and
+[[008-routing-and-models]] split a discovered name at its first `/`;
+[[006-identity]] and [[002-repository-scaffold]] note that `Defaults`
+of `0` under an authorizer's ceilings refuse every defaulted Key;
+[[018-conformance-suite]] applies the accepted corpus in kind order,
+`PUT`s the nameless Key case to `fixed-name-0000`, and expects the
+`platform-dev` case to carry a supplied value.

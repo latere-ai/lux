@@ -6,6 +6,14 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The manifest contract: `manifest` and `manifest/v1` decode a
+  `Provider`, `Model`, `Key`, or `Budget` from YAML or JSON with one
+  schema, refuse an unknown field with its path, validate every field
+  rule, fill every default, and resolve the references through a
+  `Lookup`; the golden corpus under `manifest/testdata/v1/` is the
+  contract's fixture. Fields of note: a Model name is any number of
+  `/`-joined segments; money is at most 12 integer digits and renders
+  in its shortest form; a Key's effective expiry is `status.expiresAt`.
 - The repository: the `luxd` binary serving its probes on two listeners,
   typed configuration from `LUX_*` variables, the quality gate, and the
   design specs. Nothing routes a model request yet; the specs say what
