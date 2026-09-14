@@ -8,3 +8,8 @@ package gateway
 // takes, so the two land in one package without a duplicate symbol and
 // the handler dials through nothing else.
 var _ ClientSource = (*Clients)(nil)
+
+// The seam between spec 004's handler and spec 008's router: the
+// concrete TargetRouter that NewTargetRouter builds is what
+// Options.Router takes.
+var _ Router = (*TargetRouter)(nil)
