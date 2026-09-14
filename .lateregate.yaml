@@ -4,6 +4,12 @@
 
 cover:
   trim_prefix: latere.ai/x/lux/
+  exempt:
+    # Spec 018's suite: TestContract is in the untagged run and skips
+    # without LUX_TEST_URL, so the package's whole body runs against a
+    # server the gate does not start and measures no statements here
+    # (spec 015).
+    test/conformance: a package whose whole body runs against a server the gate does not start
 
 spec:
   status:
