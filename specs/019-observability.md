@@ -81,16 +81,16 @@ reads beside this file ([[004-request-path]]).
 | `lux_refusals_total` | counter | `code` | [[011-api]] |
 | `lux_upstream_requests_total` | counter | `provider`, `status` | [[005-providers]] |
 | `lux_upstream_duration_seconds` | histogram | `provider` | [[005-providers]] |
-| `lux_provider_health` | gauge | `provider`, `state` | [[005-providers]] |
+| `lux_provider_health` | gauge | `provider`, `state` | [[005-providers]], not built |
 | `lux_key_cache_hits_total` | counter | `result` | [[007-keys-and-limits]] |
 | `lux_metering_flush_lag_seconds` | gauge | none | [[009-usage-and-metering]] |
-| `lux_events_pending` | gauge | none | [[012-request-log-and-events]] |
-| `lux_requestlog_dropped_total` | counter | none | [[012-request-log-and-events]] |
+| `lux_events_pending` | gauge | none | [[012-request-log-and-events]], not built |
+| `lux_requestlog_dropped_total` | counter | none | [[012-request-log-and-events]], not built |
 | `lux_authorizer_requests_total` | counter | `decision` | [[006-identity]] |
 | `lux_authorizer_duration_seconds` | histogram | `decision` | [[006-identity]] |
 | `lux_store_operations_total` | counter | `op`, `result` | [[010-state]] |
 | `lux_circuit_open` | gauge | `provider`, `model` | [[008-routing-and-models]] |
-| `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]] |
+| `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]], not built |
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream

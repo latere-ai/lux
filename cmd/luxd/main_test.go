@@ -142,7 +142,7 @@ func TestServeStartsTheJobs(t *testing.T) {
 	if code := srv.stop(); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if strings.Contains(srv.errOut.String(), "level=ERROR") {
+	if strings.Contains(srv.errOut.String(), `"level":"ERROR"`) {
 		t.Fatalf("the jobs logged an error:\n%s", srv.errOut.String())
 	}
 }
@@ -160,7 +160,7 @@ func TestServeStartsTheMeteringFlush(t *testing.T) {
 	if code := srv.stop(); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if strings.Contains(srv.errOut.String(), "level=ERROR") {
+	if strings.Contains(srv.errOut.String(), `"level":"ERROR"`) {
 		t.Fatalf("the flush logged an error:\n%s", srv.errOut.String())
 	}
 }
@@ -352,7 +352,7 @@ func TestServeAnswersTheProbesOnBothListenersAndStopsCleanly(t *testing.T) {
 		t.Errorf("GET / = %d %q", code, body)
 	}
 	if code, _ := get(t, publicURL+"/metrics"); code != 404 {
-		t.Errorf("GET /metrics on the public listener = %d, want 404 until a later spec mounts it", code)
+		t.Errorf("GET /metrics on the public listener = %d, want 404: the registry is the internal listener's alone", code)
 	}
 
 	if code := stop(); code != 0 {

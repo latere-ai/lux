@@ -118,7 +118,19 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	defer func() { _ = st.Close() }()
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
-	logger := slog.New(slog.NewTextHandler(stderr, nil))
+
+	// The telemetry of spec 019: traces, metrics, and logs through
+	// latere.ai/x/pkg/otel on the standard OTEL_* variables, exporting
+	// only with OTEL_EXPORTER_OTLP_ENDPOINT set; the doors and the control
+	// plane take their tracer from the provider it installs, and every
+	// line is JSON on stderr with service, version, and replica, behind
+	// the handler that truncates a Key value to its prefix before any
+	// exporter sees it, and the process's default logger is that one. The
+	// stop flushes every exporter after the listeners and the jobs have
+	// stopped.
+	logger, stopTelemetry := serve.Telemetry(ctx, version.Version, stderr)
+	slog.SetDefault(logger)
+	defer func() { _ = stopTelemetry(context.WithoutCancel(ctx)) }()
 
 	// The Key cache of spec 007: the doors' lookup, invalidated by the
 	// journal tail below, and emptied after a file-mode re-read, which
