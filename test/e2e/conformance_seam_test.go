@@ -27,14 +27,15 @@ func TestE2EConformance(t *testing.T) {
 // the stack's own issuer for whichever subject a case asks for, so every
 // case that needs a second subject runs rather than skips. The suite
 // mints and deletes its own Key, so the tier's fixture Key is not handed
-// over; the stub table's cases skip until lux-stubs serves the stubs
-// document the suite reads at its root.
+// over, and the stub table's cases run against the same lux-stubs the
+// stack is built on, whose index names every stub at its root.
 func runConformance(t *testing.T, s *stack, _ string) {
 	t.Helper()
 	issuer := strings.TrimRight(s.stubs.urls["issuer"], "/")
 	conformance.Run(t, conformance.Config{
-		URL:     s.gw.public,
-		Subject: issuer + "|dev",
+		URL:      s.gw.public,
+		StubsURL: s.stubs.urls["index"],
+		Subject:  issuer + "|dev",
 		Token: func(subject string) (string, bool) {
 			i := strings.LastIndexByte(subject, '|')
 			if i < 0 || strings.TrimRight(subject[:i], "/") != issuer {
