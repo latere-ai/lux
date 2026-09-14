@@ -63,7 +63,7 @@ later.
 | [013](013-tunnelled-runtimes.md) | Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | validated | 004, 005 |
 | [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | validated | 003, 011 |
 | [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | validated | 002, 005, 006, 012 |
-| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | in-progress | 001, 004, 006, 007 |
+| [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | testing | 001, 004, 006, 007 |
 | [017](017-release-and-installation.md) | Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades | medium | validated | 002, 015, 018 |
 | [018](018-conformance-suite.md) | Conformance suite: the contract, the doors, and the API as executable tests, against any server | large | validated | 003, 004, 011 |
 | [019](019-observability.md) | Observability: metrics, traces, logs, alerts | small | validated | 002, 004, 009 |

@@ -1,13 +1,13 @@
 ---
 title: "Security and threat model: what Lux protects, against whom, and how"
-status: in-progress
+status: testing
 track: core
 depends_on:
   - specs/001-architecture.md
   - specs/004-request-path.md
   - specs/006-identity.md
   - specs/007-keys-and-limits.md
-affects: [SECURITY.md, internal/auth/, internal/api/, internal/secrets/, internal/store/, gateway/, deploy/, docs/]
+affects: [SECURITY.md, internal/arch/, internal/auth/, internal/api/, internal/secrets/, internal/store/, gateway/, deploy/, docs/]
 effort: medium
 created: 2026-09-13
 updated: 2026-09-14
@@ -28,19 +28,29 @@ here, so a reviewer checks the design rather than taking the properties
 on faith.
 
 The rule this spec holds itself to: a row without a test is a claim, not
-a control. Every row below names a test, and one criterion reads this
-file and fails when a named test is not in the tree.
+a control. Every row below names a test, and a criterion reads this file
+against the tree and fails twice over: when a row names a test the tree
+does not hold without saying which spec owes it, and when a row still
+says a test is missing after that test lands.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0. The controls below are the
-ones the design needs to be safe in an installation its authors do not
-operate: envelope encryption with a rotation path ([[005-providers]]),
-the plane boundary that makes a Key useless on the control plane
-([[006-identity]]), and a record type that cannot carry content
-([[009-usage-and-metering]]).
+Most of the data plane is built. The kinds and their validation
+([[003-manifest-contract]]), the doors and the pipeline
+([[004-request-path]]), the sealed credential and the pinned upstream
+client ([[005-providers]]), the verifier, the authorizer, and the owner
+policy ([[006-identity]]), the Key value, its cache, and the limits
+([[007-keys-and-limits]]), routing and the circuit
+([[008-routing-and-models]]), and the store contract with its memory
+and file modes ([[010-state]]) are in the tree with their tests. The
+control plane is not: `/v1` ([[011-api]]), the events and the request
+log ([[012-request-log-and-events]]), the usage record
+([[009-usage-and-metering]]), the telemetry ([[019-observability]]),
+the tunnel ([[013-tunnelled-runtimes]]), the stubs and the tiers
+([[015-test-stubs-and-tiers]]), and the release
+([[017-release-and-installation]]) are dispatched or validated. So the
+threat table below is read twice: once for the rows the tree already
+proves, and once for the rows that name the spec that owes the test.
 
 ## Design
 
@@ -229,6 +239,47 @@ carries the manifests that do it.
   is [Cella](https://github.com/latere-ai/cella)'s problem, not this
   one's.
 
+### Design changes
+
+**2026-09-14.** The threat table was read against the tree, row by row,
+and changed where the tree disagreed with it.
+
+- The table gains a **State** column, and a test name the tree does not
+  hold carries the spec that owes it. `TestThreatTableIsGrounded` reads
+  both and fails when a row claims a control nobody proves, and when a
+  row still marks a test as owed after that test lands. This replaces
+  the earlier plan of one criterion reading the file: the criterion is
+  the same, but the marking has to be in the row for the test to know
+  which absences are expected.
+- Three rows named a test that never existed under that name. The
+  door's half of the plane boundary is [[004-request-path]]'s
+  `TestSuppliedValueOpensTheDoor`, not `TestSuppliedTokenIsAKeyAtTheDoor`;
+  `Lux-Request-Id` is `TestRequestIDOnEveryResponse`; and the unpriced
+  refusal passes today as [[007-keys-and-limits]]'s `TestUnpricedRule`,
+  with `TestUnpricedModelRefusedUnderABudget` still owed by
+  [[009-usage-and-metering]].
+- The outbound header row said the set is built and not copied. It is
+  not: [[004-request-path]] clones the caller's headers and applies a
+  removal list, then adds the Provider's declared headers and the
+  credential. The control against a caller writing its own header
+  through a body is that the intermediate representation has no header
+  member, which is what the row now says.
+- The smuggling row claims the hop-by-hop set is removed in both
+  directions. The request direction removes the fixed set and every
+  header the caller's `Connection` names; the response direction
+  removes the fixed set only, so a header the upstream's own
+  `Connection` names still reaches the caller.
+  [[004-request-path]] owes the symmetry and the test.
+- `TestBaseURLChangeIsAuthorizedAndAudited`,
+  `TestHopByHopHeadersAreRemovedBothWays`, and
+  `TestKeyLookupComparesNothing` are named by this spec and by no
+  other. Each now carries the spec that owes it, so the name is a
+  request rather than a claim.
+- `SECURITY.md` states its properties as a list, and each is a row of
+  the promises table above with the threat it answers. The property
+  about one usage record per request left the document, because the
+  record is [[009-usage-and-metering]]'s and is not built.
+
 ## Not in this spec
 
 The mechanisms themselves, each owned by the spec its row names; the
@@ -259,3 +310,20 @@ reporting address and the response times (`SECURITY.md`).
 | No header on an outbound request came from the caller's body or query, and the headers the caller's own request contributes are the ones the removal list of [[004-request-path]] leaves | [[004-request-path]]'s `TestSameDialectSameBytes`, `TestCallerCredentialsNeverForwarded`, and `TestProviderHeadersAndCredentialSchemes` | passing |
 | A name, label value, and model string carrying newlines, ANSI escapes, and JSON control characters produce one escaped log line and one valid event body each, and add no field | `TestLogFieldsAreTheTable` with [[019-observability]]'s field tables | not built, 012, 019 |
 | With `LUX_AUTHORIZER_URL` unset and `LUX_ADMIN_SUBJECTS` empty, no subject can apply a `Provider` or a `Model`; with an authorizer set the variable changes no decision | [[006-identity]]'s `TestOwnerPolicy` and `TestAdminSubjectsIgnoredUnderAnAuthorizer` | passing |
+
+The four criteria this spec owns pass, and so does every criterion whose
+mechanism is in the tree. What keeps the spec at `testing` is the
+criteria whose test belongs to a spec that is not built:
+[[009-usage-and-metering]] owes the record canary,
+[[011-api]] owes the rotate, route, and rate limit halves and the
+`TestKeyValueNeverAppearsInLogs` paths,
+[[012-request-log-and-events]] owes the event signature and the archive,
+[[013-tunnelled-runtimes]] owes the tunnel rows,
+[[015-test-stubs-and-tiers]] owes the e2e sweep of the canaries,
+[[017-release-and-installation]] owes the hardened Deployment,
+[[019-observability]] owes the log and span canaries, and
+[[020-building-a-plane]] owes the sandbox composition. Two tests are
+owed by specs that are already complete and are cross-spec work:
+[[004-request-path]]'s `TestHopByHopHeadersAreRemovedBothWays`, with
+the response-direction fix it needs, and
+[[007-keys-and-limits]]'s `TestKeyLookupComparesNothing`.
