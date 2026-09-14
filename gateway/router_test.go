@@ -336,14 +336,12 @@ func TestCircuitStates(t *testing.T) {
 	var admitted sync.Map
 	start.Add(1)
 	for i := range rivals {
-		done.Add(1)
-		go func() {
-			defer done.Done()
+		done.Go(func() {
 			start.Wait()
 			if f.r.Allow(target) {
 				admitted.Store(i, true)
 			}
-		}()
+		})
 	}
 	start.Done()
 	done.Wait()

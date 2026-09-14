@@ -153,7 +153,7 @@ func (r *TargetRouter) Targets(ctx context.Context, m *v1.Model) ([]Target, erro
 		if t.Weight != nil {
 			weight = *t.Weight
 		}
-		cands = append(cands, candidate{Target: Target{Provider: p, Model: t.Model}, weight: weight, priority: t.Priority})
+		cands = append(cands, candidate{Provider: p, Model: t.Model, weight: weight, priority: t.Priority})
 	}
 	return r.order(cands), nil
 }
