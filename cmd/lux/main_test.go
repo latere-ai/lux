@@ -101,8 +101,8 @@ func TestBinaryExitCodes(t *testing.T) {
 	if code, out, errOut := lux(t, nil, "frobnicate"); code != 2 || out != "" || !strings.HasPrefix(errOut, `There is no command "frobnicate".`) {
 		t.Fatalf("a usage error: exit %d stdout %q stderr %q", code, out, errOut)
 	}
-	if code, _, errOut := lux(t, []string{"LUX_URL=" + srv.URL, "LUX_TOKEN=t"}, "serve", "--dialect", "openai"); code != 2 || !strings.Contains(errOut, "There is no command") {
-		t.Fatalf("lux serve before spec 013: exit %d stderr %q", code, errOut)
+	if code, _, errOut := lux(t, []string{"LUX_URL=" + srv.URL, "LUX_TOKEN=t"}, "serve", "--dialect", "openai"); code != 2 || !strings.Contains(errOut, "lux serve needs -dialect, -upstream, and -as.") {
+		t.Fatalf("lux serve without its flags: exit %d stderr %q", code, errOut)
 	}
 }
 

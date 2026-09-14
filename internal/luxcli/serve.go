@@ -162,8 +162,10 @@ func (a *app) attach(opts agent.Options, refreshable bool) error {
 	for {
 		started := time.Now()
 		err := agent.Run(a.ctx, opts)
-		if a.ctx.Err() != nil {
+		select {
+		case <-a.ctx.Done():
 			return nil // SIGINT or SIGTERM: the session was closed cleanly
+		default:
 		}
 		if time.Since(started) > backoffMax {
 			delay = backoffMin
