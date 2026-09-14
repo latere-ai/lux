@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"maps"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"latere.ai/x/pkg/authz/stub"
 
 	"latere.ai/x/lux/internal/events"
+	"latere.ai/x/lux/test/stubs/index"
 	"latere.ai/x/lux/test/stubs/provider"
 	"latere.ai/x/lux/test/stubs/sink"
 )
@@ -164,6 +166,47 @@ func TestLuxStubsServesEveryStub(t *testing.T) {
 	}
 	if code := s.stop(); code != 0 {
 		t.Fatalf("exit %d; stderr %q", code, s.errOut.String())
+	}
+}
+
+// TestLuxStubsIndexNamesEveryStub: GET / on the index answers the
+// document a caller handed one address reads, naming the URL of every
+// other stub of the run and the credential the providers require, and
+// each URL it names answers as that stub.
+func TestLuxStubsIndexNamesEveryStub(t *testing.T) {
+	s := start(t, "-credential", "sk-index")
+	code, body := do(t, http.MethodGet, s.urls["index"]+"/", "", nil)
+	if code != 200 {
+		t.Fatalf("GET index/ = %d %s", code, body)
+	}
+	var doc index.Document
+	if err := json.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("the index document: %v\n%s", err, body)
+	}
+	for _, d := range dialects {
+		if got := doc.Providers[string(d)]; got != s.urls[string(d)] {
+			t.Errorf("providers.%s = %q, the %s line says %q", d, got, d, s.urls[string(d)])
+		}
+	}
+	if doc.Issuer != s.urls["issuer"] || doc.Authorizer != s.urls["authorizer"] || doc.Sink != s.urls["sink"] {
+		t.Errorf("the document names issuer %q authorizer %q sink %q", doc.Issuer, doc.Authorizer, doc.Sink)
+	}
+	if doc.Credential != "sk-index" {
+		t.Errorf("credential %q, want the -credential flag's", doc.Credential)
+	}
+	// The addresses it names are the stubs themselves.
+	if code, body := do(t, http.MethodGet, doc.Providers["openai"]+"/v1/models", "", bearer(doc.Credential)); code != 200 || !strings.Contains(body, provider.ModelName("openai")) {
+		t.Errorf("the openai URL the document names = %d %s", code, body)
+	}
+	if code, body := do(t, http.MethodGet, doc.Sink+"/_events", "", nil); code != 200 || body != "[]" {
+		t.Errorf("the sink URL the document names = %d %s", code, body)
+	}
+	// -issuer-url is what the document reports, because that is the URL
+	// the other processes reach the issuer at.
+	other := start(t, "-issuer-url", "http://issuer.example.com:9000")
+	_, body = do(t, http.MethodGet, other.urls["index"]+"/", "", nil)
+	if err := json.Unmarshal([]byte(body), &doc); err != nil || doc.Issuer != "http://issuer.example.com:9000" {
+		t.Errorf("under -issuer-url the document names issuer %q: %v", doc.Issuer, err)
 	}
 }
 

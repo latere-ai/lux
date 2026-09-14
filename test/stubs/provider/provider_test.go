@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,53 @@ func TestProviderStubRoutes(t *testing.T) {
 	resp = send(t, srv, http.MethodPost, "/v1beta/models/m:frobnicate", `{}`, nil)
 	if resp.status != http.StatusNotFound {
 		t.Fatalf("an unknown gemini verb = %d", resp.status)
+	}
+}
+
+// TestChatStreamFrameBudget: a streamed chat answer of n content events
+// is n frames, the final usage frame, and [DONE], with the finish reason
+// on the last content frame rather than a frame of its own, so a reader
+// counting frames reads the count the upstream model name asked for. A
+// stream of no content events keeps a frame for the finish reason, since
+// no content frame could carry it.
+func TestChatStreamFrameBudget(t *testing.T) {
+	srv := start(t, v1.DialectOpenAI)
+	for _, tc := range []struct {
+		model          string
+		events, frames int
+	}{
+		{"events-3", 3, 5},
+		{"m", DefaultEvents, DefaultEvents + 2},
+		{"events-0", 0, 3},
+	} {
+		resp := send(t, srv, http.MethodPost, "/v1/chat/completions", `{"model":"`+tc.model+`","stream":true,"messages":[{"role":"user","content":"hi"}]}`, nil)
+		fs := frames(resp.body)
+		if len(fs) != tc.frames {
+			t.Errorf("%s: %d frames, want %d\n%s", tc.model, len(fs), tc.frames, resp.body)
+			continue
+		}
+		if n, _ := contentEvents(v1.DialectOpenAI, fs); n != tc.events {
+			t.Errorf("%s: %d content frames, want %d\n%s", tc.model, n, tc.events, resp.body)
+		}
+		if usageEvents(v1.DialectOpenAI, fs) != 1 {
+			t.Errorf("%s: the usage frame is not the one before [DONE]\n%s", tc.model, resp.body)
+		}
+		if fs[len(fs)-1].data != "[DONE]" {
+			t.Errorf("%s: the last frame is %q", tc.model, fs[len(fs)-1].data)
+		}
+		var stops int
+		for _, f := range fs[:len(fs)-1] {
+			var doc map[string]any
+			if decodeJSON([]byte(f.data), &doc) != nil {
+				continue
+			}
+			if v, ok := lookup(doc, "choices.0.finish_reason"); ok && v == "stop" {
+				stops++
+			}
+		}
+		if stops != 1 {
+			t.Errorf("%s: %d frames carry a finish reason, want one\n%s", tc.model, stops, resp.body)
+		}
 	}
 }
 
@@ -358,6 +406,36 @@ func TestReceivedRecording(t *testing.T) {
 	}
 	if resp := send(t, srv, http.MethodGet, "/_received", "", nil); string(resp.body) != "[]" {
 		t.Fatalf("after DELETE: %s", resp.body)
+	}
+}
+
+// TestReceivedWireNames: the record's members are method, path, query,
+// headers, and body on the wire, the names a reader in another process
+// decodes, so a rename here is a failure rather than an empty field
+// there.
+func TestReceivedWireNames(t *testing.T) {
+	srv := start(t, v1.DialectOpenAI)
+	send(t, srv, http.MethodPost, "/v1/chat/completions?tag=a", `{"model":"m"}`, http.Header{"X-Trace": {"one"}})
+	var raw []map[string]any
+	if err := decodeJSON(send(t, srv, http.MethodGet, "/_received", "", nil).body, &raw); err != nil || len(raw) != 1 {
+		t.Fatalf("GET /_received: %v, %d records", err, len(raw))
+	}
+	got := raw[0]
+	for name, want := range map[string]any{"method": http.MethodPost, "path": "/v1/chat/completions", "query": "tag=a", "body": `{"model":"m"}`} {
+		if got[name] != want {
+			t.Errorf("%s = %v, want %v", name, got[name], want)
+		}
+	}
+	headers, ok := got["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("headers is %T; the record's members are %v", got["headers"], slices.Sorted(maps.Keys(got)))
+	}
+	trace, _ := headers["X-Trace"].([]any)
+	if len(trace) != 1 || trace[0] != "one" {
+		t.Errorf("headers.X-Trace = %v", headers["X-Trace"])
+	}
+	if len(got) != 5 {
+		t.Errorf("the record carries %v", slices.Sorted(maps.Keys(got)))
 	}
 }
 

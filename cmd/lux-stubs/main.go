@@ -3,8 +3,9 @@
 
 // Command lux-stubs serves every stub of spec 015 on one loopback address
 // each: a stub provider per dialect, the stub issuer and the stub
-// authorizer of latere.ai/x/pkg, and the stub sink. It prints one line
-// per stub with its URL and exits on SIGTERM. It is wiring only: the
+// authorizer of latere.ai/x/pkg, the stub sink, and the index, whose
+// GET / names them all for a caller handed one address. It prints one
+// line per stub with its URL and exits on SIGTERM. It is wiring only: the
 // behaviour lives in the packages under test/stubs and in pkg. It runs
 // in tests, under make run, and beside the conformance suite, and never
 // in an installation.
@@ -27,14 +28,20 @@ import (
 
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/test/stubs/authorizer"
+	"latere.ai/x/lux/test/stubs/index"
 	"latere.ai/x/lux/test/stubs/issuer"
 	"latere.ai/x/lux/test/stubs/provider"
 	"latere.ai/x/lux/test/stubs/sink"
 )
 
 // names are the stubs in the order their lines are printed: the four
-// providers by dialect, then the issuer, the authorizer, and the sink.
-var names = []string{"openai", "anthropic", "gemini", "lux", "issuer", "authorizer", "sink"}
+// providers by dialect, then the issuer, the authorizer, the sink, and
+// the index, whose document names the six before it.
+var names = []string{"openai", "anthropic", "gemini", "lux", "issuer", "authorizer", "sink", "index"}
+
+// dialects are the four the binary starts a stub provider for, in the
+// order their lines are printed.
+var dialects = []v1.Dialect{v1.DialectOpenAI, v1.DialectAnthropic, v1.DialectGemini, v1.DialectLux}
 
 // shutdownGrace bounds the drain at stop.
 const shutdownGrace = 5 * time.Second
@@ -71,7 +78,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Every address is bound before anything serves, so a taken port
-	// fails the start rather than one stub of seven.
+	// fails the start rather than one stub of the set.
 	var lc net.ListenConfig
 	listeners := map[string]net.Listener{}
 	for _, name := range names {
@@ -93,7 +100,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	handlers := map[string]http.Handler{}
-	for _, d := range []v1.Dialect{v1.DialectOpenAI, v1.DialectAnthropic, v1.DialectGemini, v1.DialectLux} {
+	doc := index.Document{Providers: map[string]string{}, Issuer: *issuerURL, Authorizer: urls["authorizer"], Sink: urls["sink"], Credential: *credential}
+	for _, d := range dialects {
+		doc.Providers[string(d)] = urls[string(d)]
+	}
+	handlers["index"] = index.New(doc)
+	for _, d := range dialects {
 		handlers[string(d)] = provider.New(provider.Options{Dialect: d, Credential: *credential})
 	}
 	iss := issuer.NewHandler(*issuerURL, *es256)

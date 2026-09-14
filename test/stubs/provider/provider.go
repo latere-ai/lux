@@ -52,12 +52,14 @@ type Options struct {
 }
 
 // Received is one request as the stub saw it: the method, the path, the
-// query, every header, and the body as text.
+// query, every header, and the body as text. The wire names are what a
+// reader across a process boundary decodes, the conformance suite of
+// spec 018 among them, so the header map is headers there.
 type Received struct {
 	Method string      `json:"method"`
 	Path   string      `json:"path"`
 	Query  string      `json:"query"`
-	Header http.Header `json:"header"`
+	Header http.Header `json:"headers"`
 	Body   string      `json:"body"`
 }
 
