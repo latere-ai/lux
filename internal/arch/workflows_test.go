@@ -1,0 +1,288 @@
+// SPDX-FileCopyrightText: 2026 Latere AI
+// SPDX-License-Identifier: Apache-2.0
+
+package arch
+
+import (
+	"bytes"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/goccy/go-yaml"
+)
+
+// imageRef matches a registry reference under ghcr.io and captures the
+// namespace segment: a literal there would be a fixed namespace.
+var imageRef = regexp.MustCompile(`ghcr\.io/([^/\s"'` + "`" + `]+)/`)
+
+// derived reports whether a namespace segment is computed at run time
+// or is a placeholder for a reader, rather than a literal account.
+func derived(segment string) bool {
+	return strings.HasPrefix(segment, "${") || strings.HasPrefix(segment, "$") || strings.Contains(segment, "<") || segment == "OWNER"
+}
+
+// TestReleasePublishesUnderTheOwnersNamespace is spec 001's invariant 8
+// as spec 017's test: no workflow, deploy manifest, document, script,
+// or Dockerfile names a fixed image namespace under ghcr.io; the
+// published references derive from github.repository_owner at run time,
+// and the release workflow reads that variable.
+func TestReleasePublishesUnderTheOwnersNamespace(t *testing.T) {
+	dir := root(t)
+	var hits []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] && path != dir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		if filepath.Dir(path) == filepath.Join(dir, "internal", "arch") && strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.IndexByte(data, 0) >= 0 {
+			return nil
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			for _, m := range imageRef.FindAllStringSubmatch(line, -1) {
+				if !derived(m[1]) {
+					hits = append(hits, filepath.ToSlash(rel)+":"+strconv.Itoa(i+1)+": "+m[0])
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range hits {
+		t.Errorf("a fixed image namespace: %s", h)
+	}
+	release, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(release), "GITHUB_REPOSITORY_OWNER") {
+		t.Error("release.yml does not derive the namespace from the repository owner")
+	}
+	if strings.Contains(string(release), "tr '[:upper:]' '[:lower:]'") == false {
+		t.Error("release.yml does not lower the owner, which an image reference requires")
+	}
+}
+
+// workflow is the part of a workflow file these tests read.
+type workflow struct {
+	Permissions map[string]string `yaml:"permissions"`
+	Jobs        map[string]struct {
+		Permissions map[string]string `yaml:"permissions"`
+		Needs       any               `yaml:"needs"`
+		Steps       []struct {
+			Name string `yaml:"name"`
+			Uses string `yaml:"uses"`
+			Run  string `yaml:"run"`
+		} `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+func readWorkflow(t *testing.T, name string) (workflow, string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root(t), ".github", "workflows", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w workflow
+	if err := yaml.Unmarshal(data, &w); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	return w, string(data)
+}
+
+// pinned matches a third-party action pinned by a full commit with its
+// version in a comment, as every workflow of this repository pins.
+var pinned = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$`)
+
+// TestReleaseWorkflowNeverPushesToTheDefaultBranch is spec 017's row for
+// the fixture and the pipeline's shape: no step of release.yml pushes
+// to the default branch, the fixture job pushes its own branch and
+// opens a pull request, permissions are declared per job with contents
+// read as the workflow's default and contents write on publish and
+// fixture alone, the jobs run in the spec's order, and every third-party
+// action is pinned by commit.
+func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
+	w, text := readWorkflow(t, "release.yml")
+	if w.Permissions["contents"] != "read" || len(w.Permissions) != 1 {
+		t.Errorf("the workflow's default permissions are %v, want contents: read alone", w.Permissions)
+	}
+	want := []string{"gate-green", "build", "conformance", "publish", "install-release", "release-verify", "fixture"}
+	for _, name := range want {
+		if _, ok := w.Jobs[name]; !ok {
+			t.Errorf("release.yml has no %s job", name)
+		}
+	}
+	if len(w.Jobs) != len(want) {
+		t.Errorf("release.yml has %d jobs, want the %d of the spec", len(w.Jobs), len(want))
+	}
+	needs := func(name string) []string {
+		switch n := w.Jobs[name].Needs.(type) {
+		case string:
+			return []string{n}
+		case []any:
+			var out []string
+			for _, v := range n {
+				out = append(out, v.(string))
+			}
+			return out
+		}
+		return nil
+	}
+	for job, before := range map[string]string{"build": "gate-green", "conformance": "build", "publish": "conformance", "install-release": "publish", "release-verify": "publish", "fixture": "publish"} {
+		if !slices.Contains(needs(job), before) {
+			t.Errorf("%s does not run after %s: needs %v", job, before, needs(job))
+		}
+	}
+	pushes := regexp.MustCompile(`git push[^\n]*`)
+	for name, job := range w.Jobs {
+		if len(job.Permissions) == 0 {
+			t.Errorf("%s declares no permissions; every job declares its own", name)
+		}
+		write := job.Permissions["contents"] == "write"
+		if write != (name == "publish" || name == "fixture") {
+			t.Errorf("%s has contents: %s; publish and fixture alone write", name, job.Permissions["contents"])
+		}
+		for _, step := range job.Steps {
+			for _, push := range pushes.FindAllString(step.Run, -1) {
+				if name != "fixture" {
+					t.Errorf("%s pushes: %s", name, push)
+				}
+				if strings.Contains(push, "main") || strings.Contains(push, "default_branch") || !strings.Contains(push, "HEAD:refs/heads/conformance/fixture-") {
+					t.Errorf("fixture pushes %q, want its own conformance/fixture-<tag> branch and never the default branch", push)
+				}
+			}
+			if step.Uses != "" && !strings.HasPrefix(step.Uses, "./") && !pinned.MatchString(step.Uses) {
+				t.Errorf("%s uses %s, which is not pinned by a full commit", name, step.Uses)
+			}
+		}
+	}
+	fixture := w.Jobs["fixture"]
+	var opensPR, pushesBranch bool
+	for _, step := range fixture.Steps {
+		opensPR = opensPR || strings.Contains(step.Run, "gh pr create")
+		pushesBranch = pushesBranch || strings.Contains(step.Run, "HEAD:refs/heads/conformance/fixture-")
+	}
+	if !opensPR || !pushesBranch {
+		t.Error("the fixture job pushes a branch and opens a pull request titled conformance: fixture <tag>")
+	}
+	if !strings.Contains(text, `--title "conformance: fixture ${GITHUB_REF_NAME}"`) {
+		t.Error("the pull request is titled conformance: fixture <tag>")
+	}
+	for _, uses := range regexp.MustCompile(`(?m)uses: (\S+)( # v[0-9][^\n]*)?`).FindAllStringSubmatch(text, -1) {
+		if uses[2] == "" && !strings.HasPrefix(uses[1], "./") {
+			t.Errorf("uses: %s carries no version comment", uses[1])
+		}
+	}
+	// The pipeline's guards: the digests are pushed under no tag, the
+	// suite runs before publish tags them, and the notes are the
+	// CHANGELOG section through the gate's own rule.
+	for _, want := range []string{"push-by-digest=true", "docker buildx imagetools create -t", "go tool lateregate release-notes", "gh release download", "cosign verify-blob", "gh attestation verify", "run-blocks.sh ../docs/install.md"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("release.yml lacks %q", want)
+		}
+	}
+	verify, _ := readWorkflow(t, "verify.yml")
+	if _, ok := verify.Jobs["install"]; !ok {
+		t.Error("verify.yml has no install job walking docs/install.md on every push")
+	}
+	for name, job := range verify.Jobs {
+		for _, step := range job.Steps {
+			if step.Uses != "" && !pinned.MatchString(step.Uses) && !strings.HasPrefix(step.Uses, "latere-ai/ci/") {
+				t.Errorf("verify.yml %s uses %s, which is not pinned by a full commit", name, step.Uses)
+			}
+		}
+	}
+}
+
+// TestRunBlocksRunsTheFencedBlocksInOrder is the block runner of spec
+// 017 over a document of its own: the named yaml block is written to
+// its file first, the sh blocks run in order as one script so an export
+// carries over, a failing block stops the run with its step named, and
+// a prose block never runs. It needs bash, which the hermetic run lacks
+// and skips by name.
+func TestRunBlocksRunsTheFencedBlocksInOrder(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash is not on PATH, so the block runner is not exercised here")
+	}
+	runner := filepath.Join(root(t), "tools", "docs", "run-blocks.sh")
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "doc.md")
+	text := "# A document\n\n```yaml file=settings.yaml\nname: lux\n```\n\n```sh\nexport GREETING=hello\ntest -f settings.yaml\n```\n\nProse with a block nobody runs:\n\n```\nexit 7\n```\n\n```sh\necho \"$GREETING\" > out.txt\n```\n\n```sh\nfalse\n```\n\n```sh\necho never > never.txt\n```\n"
+	if err := os.WriteFile(doc, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", runner, doc)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("a failing block did not fail the run:\n%s", out)
+	}
+	for _, want := range []string{"run-blocks: wrote settings.yaml", "run-blocks: 4 step(s)", "run-blocks: step 1 (", "run-blocks: step 3 ("} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("the runner did not print %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(string(out), "run-blocks: step 4 (") {
+		t.Errorf("the block after the failure ran:\n%s", out)
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "out.txt")); err != nil || strings.TrimSpace(string(got)) != "hello" {
+		t.Errorf("out.txt = %q, %v: the export did not carry to the next block", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "never.txt")); err == nil {
+		t.Error("the block after the failure wrote its file")
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "settings.yaml")); err != nil || string(got) != "name: lux\n" {
+		t.Errorf("settings.yaml = %q, %v", got, err)
+	}
+	if err := os.Remove(filepath.Join(dir, "out.txt")); err != nil {
+		t.Fatal(err)
+	}
+	cmd = exec.Command("bash", runner, "--write", doc)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("--write: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out.txt")); err == nil {
+		t.Error("--write ran a step")
+	}
+	cmd = exec.Command("bash", runner, filepath.Join(dir, "missing.md"))
+	if err := cmd.Run(); err == nil {
+		t.Error("a missing document did not fail")
+	}
+	install, err := os.ReadFile(filepath.Join(root(t), "docs", "install.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(install), "\n```sh\n"); n < 6 {
+		t.Errorf("docs/install.md has %d sh blocks; the walk from nothing to a request through a door has more", n)
+	}
+	if !strings.Contains(string(install), "\n```yaml file=kind-lux.yaml\n") {
+		t.Error("docs/install.md does not hand the runner its cluster configuration as a named block")
+	}
+	for _, want := range []string{"LUX_INSTALL_IMAGE", "LUX_INSTALL_MANIFESTS", "luxd check", "lux providers create", "lux keys create", "/openai/v1/chat/completions"} {
+		if !strings.Contains(string(install), want) {
+			t.Errorf("docs/install.md lacks %q", want)
+		}
+	}
+}

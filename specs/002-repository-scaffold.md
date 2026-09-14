@@ -132,8 +132,8 @@ One binary, one image, one role per process: a Deployment selects the
 role by its args. Each role is a package under `internal/` with its own
 dependency allow list in the gate, so the binary carrying every role
 does not loosen what any one role may reach. An unknown subcommand is a
-usage error, exit 2. `check` and `rewrap` are unknown subcommands until their specs
-land.
+usage error, exit 2. `check` and `rewrap` landed with their specs,
+[[017-release-and-installation]] and [[005-providers]].
 
 ### Configuration
 

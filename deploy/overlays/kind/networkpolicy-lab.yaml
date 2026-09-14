@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# A laptop cluster's endpoints, an issuer and a model runtime on the
+# machine or a stub Pod beside the gateway, listen on ports of their own
+# over plain HTTP, and kind's network plugin enforces policies, so the
+# base's egress list, DNS, TLS endpoints, and Postgres, would cut the
+# gateway off from them. The lab admits every destination; the ingress
+# half stays the base's. A real installation keeps the base's list and
+# adds the port of an endpoint of its own to it.
+- op: replace
+  path: /spec/egress
+  value:
+    - {}

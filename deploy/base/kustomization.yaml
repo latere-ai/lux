@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The base of every installation (spec 017): the Deployment with the
+# hardening of the threat model, its Service, a ServiceAccount with no
+# token, the network policy, the disruption budget, and the alert rules.
+# It names no namespace, so an overlay names one, and no image registry:
+# the container image is `luxd`, which an overlay or the release pipeline
+# points at a real reference with an `images` entry. The deploy archive of
+# a release carries this file with that entry appended, the image pinned
+# to the tag by digest. The configuration comes from a ConfigMap named
+# luxd, which the overlay generates from its luxd.env, and the four
+# secrets from the Secret luxd-secrets an operator applies by hand from
+# deploy/bootstrap.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+  - prometheusrule.yaml

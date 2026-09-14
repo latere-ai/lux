@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The public port carries the dialect doors and /v1; the internal port
+# is named and reachable inside the namespace for /metrics and for the
+# tunnel forward route other replicas call (spec 013). An ingress fronts
+# the public port; nothing fronts the internal one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: luxd
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: luxd
+  ports:
+    - name: public
+      port: 8080
+      targetPort: public
+      protocol: TCP
+    - name: internal
+      port: 8081
+      targetPort: internal
+      protocol: TCP

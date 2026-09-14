@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# A node drain keeps one replica serving.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: luxd
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: luxd

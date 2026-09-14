@@ -32,6 +32,7 @@ import (
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/internal/check"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/reqlog"
@@ -62,17 +63,19 @@ func main() {
 
 // run dispatches the subcommand and returns the process exit code, so
 // tests drive it without a subprocess: 0 on a clean stop, 1 on a start-up
-// or runtime failure, 2 on a usage error. serve and rewrap are the
-// subcommands today; spec 002 keeps the table.
+// or runtime failure, 2 on a usage error. serve, check, and rewrap are
+// the three roles of spec 002's table, one package each under internal/.
 func run(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	name, rest := subcommand(args)
 	switch name {
 	case "", "serve":
 		return serveCmd(ctx, rest, getenv, stdout, stderr)
+	case "check":
+		return checkCmd(ctx, rest, getenv, stdout, stderr)
 	case "rewrap":
 		return rewrapCmd(rest, getenv, stderr)
 	default:
-		_, _ = fmt.Fprintf(stderr, "luxd: unknown subcommand %q; serve is the default, and rewrap is the other\n", name)
+		_, _ = fmt.Fprintf(stderr, "luxd: unknown subcommand %q; serve is the default, and check and rewrap are the others\n", name)
 		return 2
 	}
 }
@@ -500,6 +503,20 @@ func tunnelRoutes(tun *tunnel.Gateway) api.TunnelRoutes {
 		return nil
 	}
 	return tun
+}
+
+// checkCmd is the check role of spec 017: it reads the whole configuration,
+// prints one line per requirement of the installation on stdout in the
+// order internal/check fixes, and exits 1 when any line failed. It dials
+// the operator's endpoints and the providers and changes nothing, so it
+// is safe against a serving installation.
+func checkCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("luxd check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	return check.Run(ctx, check.Options{Getenv: getenv}, stdout)
 }
 
 // rewrapCmd is the rewrap role: it reads LUX_SECRETS_KEK and LUX_DB_URL

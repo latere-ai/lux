@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The public port on a NodePort the laptop reaches: kind maps node port
+# 30080 to localhost:30080 with the extraPortMappings docs/install.md
+# gives its cluster. The internal port stays inside the cluster. The
+# base's first port is the public one.
+- op: replace
+  path: /spec/type
+  value: NodePort
+- op: add
+  path: /spec/ports/0/nodePort
+  value: 30080

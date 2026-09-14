@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The stubs of spec 015 as one Pod in the installation's namespace, for
+# the two CI jobs that walk docs/install.md against a kind cluster (spec
+# 017): an issuer the job mints a token from, an authorizer, a sink, and
+# one stub provider per dialect for the first Provider the document
+# applies. The image is set by tools/docs/stubs-in-cluster.sh from the
+# job's candidate or the published tag. This file lives beside the
+# runner and not under deploy/, because a stub is never part of an
+# installation; an operator following the document never applies it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lux-stubs
+  namespace: lux
+  labels:
+    app: lux-stubs
+spec:
+  restartPolicy: Never
+  containers:
+    - name: lux-stubs
+      image: lux-stubs
+      imagePullPolicy: IfNotPresent
+      args:
+        - -openai-addr=0.0.0.0:9101
+        - -anthropic-addr=0.0.0.0:9102
+        - -gemini-addr=0.0.0.0:9103
+        - -lux-addr=0.0.0.0:9104
+        - -authorizer-addr=0.0.0.0:9105
+        - -issuer-addr=0.0.0.0:9106
+        - -sink-addr=0.0.0.0:9107
+        - -issuer-url=http://lux-stubs.lux.svc.cluster.local:9106
+        - -credential=stub-credential
+      ports:
+        - { name: openai, containerPort: 9101 }
+        - { name: anthropic, containerPort: 9102 }
+        - { name: gemini, containerPort: 9103 }
+        - { name: lux, containerPort: 9104 }
+        - { name: authorizer, containerPort: 9105 }
+        - { name: issuer, containerPort: 9106 }
+        - { name: sink, containerPort: 9107 }
+      readinessProbe:
+        httpGet:
+          path: /.well-known/openid-configuration
+          port: issuer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lux-stubs
+  namespace: lux
+spec:
+  selector:
+    app: lux-stubs
+  ports:
+    - { name: openai, port: 9101 }
+    - { name: anthropic, port: 9102 }
+    - { name: gemini, port: 9103 }
+    - { name: lux, port: 9104 }
+    - { name: authorizer, port: 9105 }
+    - { name: issuer, port: 9106 }
+    - { name: sink, port: 9107 }

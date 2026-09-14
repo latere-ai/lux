@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# Any cluster (spec 017): the base's two replicas over a Postgres store,
+# behind an ingress the installation adds. luxd.env names the public URL
+# and the issuer; the store's URL is one of the four values in
+# deploy/bootstrap's Secret. The Postgres store lands with spec 010's last
+# phase, so until then a gateway from this overlay refuses to start
+# naming LUX_DB_URL; the shape is here so an installation prepares for it
+# and so every overlay in the tree renders in CI. An installation that
+# autoscales adds `components: [../../components/hpa]` and drops the
+# replica count the base sets.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: lux
+resources:
+  - namespace.yaml
+  - ../../base
+configMapGenerator:
+  - name: luxd
+    envs:
+      - luxd.env

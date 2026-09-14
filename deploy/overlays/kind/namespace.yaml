@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The namespace the overlay installs into, so one apply is enough. The
+# base names none: an installation that already has one drops this file
+# and sets `namespace` in its own kustomization.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lux
+  labels:
+    app.kubernetes.io/name: luxd
