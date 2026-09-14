@@ -564,7 +564,7 @@ Provider ([[013-tunnelled-runtimes]]).
 | A public name resolving to a private address is refused at dial without `LUX_UPSTREAM_ALLOW_PRIVATE` and admitted with it | `TestPrivateAddressRefusedAtDial` | passing |
 | A request handed to a Provider's client toward another scheme, host, or port is refused before any dial and reaches the caller as `upstream_error` | `TestHostPin` | passing at the client: `ErrHostPinned` before any dial; the `upstream_error` mapping is [[004-request-path]]'s |
 | Every client `gateway.NewClientSource` builds carries `otel.Transport`, the outbound request to the stub provider carries `traceparent`, and no `Accept-Encoding` the caller did not send reaches it | `TestUpstreamClientIsInstrumented`, `TestNoCompressionAdded`, the `otel-client` gate | passing |
-| A non-streaming upstream response one byte over `LUX_MAX_BODY_BYTES` is `upstream_error` naming the cap; a stream of twice that size is relayed whole | `TestResponseBodyCap`, `TestStreamsAreNotCapped` | not built: the cap is applied where the door reads a body whole, in [[004-request-path]]'s handler |
+| A non-streaming upstream response one byte over `LUX_MAX_BODY_BYTES` is `upstream_error` naming the cap; a stream of twice that size is relayed whole | [[004-request-path]]'s `TestUpstreamBodyCap` | passing: the cap is applied where the door reads a body whole, in [[004-request-path]]'s handler, and `TestUpstreamBodyCap` proves both the over-cap refusal and the stream relayed whole |
 | `concurrency: 2` holds a third request until one finishes, and a wait past the request deadline is `provider_unavailable` | `TestConcurrencyLimitsInFlight` | passing at the client: the third request waits and a wait past the deadline is `ErrProviderBusy`; the `provider_unavailable` mapping is [[004-request-path]]'s |
 | Every operation in the dialect table reaches the upstream path the table names, and a model list route is reached by the jobs alone | `TestUpstreamPaths`, table-driven | passing for the model-list rows, `internal/serve`; the door operations' paths are [[004-request-path]]'s |
 | A `Provider` with `credential.scheme` `raw` and `credential.header` `api-key` reaches the stub with that one header carrying the bare value; `bearer` on any header prefixes `Bearer ` | `TestCredentialSchemes`, table-driven over the dialect defaults and one custom header | passing, `gateway` |
@@ -629,9 +629,9 @@ the Design above beside the rule it settles:
 - A tunnelled Provider is skipped by both jobs and refused by the client
   until [[013-tunnelled-runtimes]] gives it a carrier transport.
 
-Left `not built`, owned elsewhere: `TestResponseBodyCap` and
-`TestStreamsAreNotCapped`, which live in [[004-request-path]]'s
-handler; the door halves of `TestCredentialHeaderWins`,
+Owned elsewhere, in [[004-request-path]]: the upstream body cap and the
+stream relayed whole, `TestUpstreamBodyCap`; the door halves of
+`TestCredentialHeaderWins`,
 `TestNoForwardedHeaders`, `TestRedirectNotFollowed`, `TestHostPin`,
 `TestConcurrencyLimitsInFlight`, and `TestUpstreamPaths`; the
 selection half of `TestUnreachableLeavesSelection`
