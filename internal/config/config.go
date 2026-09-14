@@ -91,6 +91,16 @@ type Config struct {
 	DiscoveryInterval time.Duration
 	// HealthInterval is how often a Provider is probed.
 	HealthInterval time.Duration
+
+	// The key variables of spec 007.
+
+	// KeyCache is how long a Key lookup, positive or negative, is cached
+	// per replica on the data plane.
+	KeyCache time.Duration
+	// DefaultRequestsPerMinute and DefaultTokensPerMinute are the rates a
+	// Key without limits gets at resolve; 0 is no limit.
+	DefaultRequestsPerMinute int
+	DefaultTokensPerMinute   int
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -143,6 +153,7 @@ func Load(getenv Getenv) (Config, error) {
 	}
 	problems = append(problems, c.loadIdentity(getenv)...)
 	problems = append(problems, c.loadProviders(getenv)...)
+	problems = append(problems, c.loadKeys(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))
