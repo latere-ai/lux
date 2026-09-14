@@ -25,6 +25,16 @@ refused before it is pushed.
   per request per route class, opt-in behind `LUX_LATENCY` and never a
   pass/fail gate. `docs/performance.md` says what they measure and how to
   run them; the design is `specs/023-performance-and-benchmarks.md`.
+- `benchmarks/compare/` measures `luxd`'s proxy overhead against LiteLLM's on
+  loopback against a shared mock upstream, over 10 independent trials per
+  condition (passthrough and translated shapes, non-streaming and streaming):
+  `run.sh` drives the closed-loop load matrix, the load driver writes tidy
+  per-trial CSV, and `render.py` aggregates each condition to a median and a
+  95% confidence interval and draws the latency-percentile and throughput
+  figures (log scale, with CI bands and error bars). `RESULTS.md` reports the
+  numbers with their CIs and embeds the charts; `docs/performance.md` reports
+  the in-repo benchmarks over `-count=10` with `benchstat`. The whole harness
+  is opt-in and never enters `go build`, `go test`, the coverage gate, or CI.
 - `compose.yaml` and [`docs/quickstart.md`](docs/quickstart.md): try
   `luxd` on your machine with no checkout and no build, `docker compose
   up` against the published `luxd` and `lux-stubs` images and a few
