@@ -380,10 +380,14 @@ func sendErr(t *testing.T, g *Gateway, p *v1.Provider, method, path, body string
 // waitFor polls cond for up to five seconds.
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// Thirty seconds, not five: on a loaded runner a first h2c connect with
+	// its key fetch has taken longer than five, while a condition that can
+	// never hold is caught sooner by the callers' own checks, such as the
+	// agent ending before the session is held.
+	deadline := time.Now().Add(30 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
-			t.Fatalf("waited five seconds for %s", what)
+			t.Fatalf("waited thirty seconds for %s", what)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
