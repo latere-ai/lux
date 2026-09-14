@@ -1,6 +1,6 @@
 ---
 title: "Conformance suite: the contract, the doors, and the API as executable tests, against any server"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/003-manifest-contract.md
