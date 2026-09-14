@@ -467,3 +467,40 @@ func TestUsageStoreErrors(t *testing.T) {
 		}
 	}
 }
+
+// archiveLister is the request log archive's reader as the route sees
+// it: a fixed page with a cursor, recording the query it was asked.
+type archiveLister struct {
+	records []metering.Record
+	next    string
+	asked   []store.Page
+}
+
+func (a *archiveLister) List(_ context.Context, _ metering.RecordQuery, p store.Page) ([]metering.Record, string, error) {
+	a.asked = append(a.asked, p)
+	return a.records, a.next, nil
+}
+
+// TestRequestsArchiveSource: with a request log archive configured, GET
+// /v1/requests reads the archive and says so, paging through the
+// reader's cursor; the source is the deployment's and never the
+// caller's. The archive half of spec 009's TestRequestsSource row.
+func TestRequestsArchiveSource(t *testing.T) {
+	archive := &archiveLister{records: []metering.Record{{ID: "req_X"}, {ID: "req_Y"}}, next: "after-Y"}
+	h := newHarness(t, func(o *Options) { o.Archive = archive })
+	h.seed()
+	rec := h.request(http.MethodGet, "/v1/requests?limit=2", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	doc := body(t, rec)
+	if doc["source"] != sourceArchive || doc["next_cursor"] != "after-Y" {
+		t.Errorf("source %v, next_cursor %v", doc["source"], doc["next_cursor"])
+	}
+	if got := ids(t, rec); !reflect.DeepEqual(got, []string{"req_X", "req_Y"}) {
+		t.Errorf("items %v", got)
+	}
+	if len(archive.asked) != 1 || archive.asked[0].Limit != 2 {
+		t.Errorf("the archive was asked %v", archive.asked)
+	}
+}

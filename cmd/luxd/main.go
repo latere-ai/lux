@@ -165,6 +165,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// the process and GET /v1/requests reads this replica's memory.
 	recorderOptions := serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger}
 	var exporter *reqlog.Exporter
+	var archive api.RecordLister
 	if cfg.RequestLogExporter == config.ExporterS3 {
 		bucket, err := s3.New(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, s3.WithPathStyle(), s3.WithRetry(reqlog.WritePolicy))
 		if err != nil {
@@ -172,6 +173,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		}
 		exporter = reqlog.NewExporter(reqlog.ExporterOptions{Bucket: bucket, Prefix: cfg.S3Prefix, Metrics: reg, Logger: logger})
 		recorderOptions.Archive = exporter
+		archive = reqlog.NewReader(bucket, cfg.S3Prefix)
 		_, _ = fmt.Fprintf(stdout, "luxd: request log: archived to bucket %s at %s under %s, in batches of %d records or every %s\n", cfg.S3Bucket, cfg.S3Endpoint, cfg.S3Prefix, reqlog.FlushSize, reqlog.FlushInterval)
 	} else {
 		_, _ = fmt.Fprintln(stdout, "luxd: request log: not archived; GET /v1/requests reads this replica's memory")
@@ -252,6 +254,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Keys:                  cfg.SecretsKEK,
 		Clients:               clients,
 		ReadOnlyDir:           cfg.ManifestDir,
+		Archive:               archive,
 		Metrics:               reg,
 		Logger:                logger,
 	})

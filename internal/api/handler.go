@@ -25,6 +25,7 @@ import (
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
+	"latere.ai/x/lux/metering"
 )
 
 // MetricRefusals counts every error envelope written by code, spec
@@ -38,6 +39,13 @@ type ClientRevoker interface {
 }
 
 // Options is what New builds the surface from.
+// RecordLister pages the records of one source for GET /v1/requests,
+// shaped as store.Usage().Records is; the request log archive's reader
+// satisfies it.
+type RecordLister interface {
+	List(ctx context.Context, q metering.RecordQuery, p store.Page) ([]metering.Record, string, error)
+}
+
 type Options struct {
 	// Store holds desired state; in the file mode it is the read-only
 	// store over the directory. Required.
@@ -76,6 +84,10 @@ type Options struct {
 	// ReadOnlyDir is the directory the file mode reads, named in the
 	// developer detail of read_only.
 	ReadOnlyDir string
+	// Archive lists the request log archive of spec 012 for GET
+	// /v1/requests, whose source is then archive; nil answers the
+	// replica's own ring, source memory.
+	Archive RecordLister
 	// Metrics receives MetricRefusals; nil records none.
 	Metrics *metrics.Registry
 	// Logger receives the developer's lines, a handler panic among

@@ -106,17 +106,24 @@ func (c *call) requests(ctx context.Context) *Error {
 	if err := c.authorizeUsage(ctx, &q); err != nil {
 		return err
 	}
-	if q.empty {
-		return c.writeJSON(http.StatusOK, recordsResponse{Items: []metering.Record{}, Source: sourceMemory}, 0)
+	// The source is the deployment's, never the caller's: the archive
+	// when a request log exporter is configured, the replica's own ring
+	// otherwise.
+	source, list := sourceMemory, c.h.o.Store.Usage().Records
+	if c.h.o.Archive != nil {
+		source, list = sourceArchive, c.h.o.Archive.List
 	}
-	records, next, rerr := c.h.o.Store.Usage().Records(ctx, q.q, store.Page{Limit: q.limit, Cursor: q.cursor})
+	if q.empty {
+		return c.writeJSON(http.StatusOK, recordsResponse{Items: []metering.Record{}, Source: source}, 0)
+	}
+	records, next, rerr := list(ctx, q.q, store.Page{Limit: q.limit, Cursor: q.cursor})
 	if rerr != nil {
 		return mapError(rerr)
 	}
 	if records == nil {
 		records = []metering.Record{}
 	}
-	return c.writeJSON(http.StatusOK, recordsResponse{Items: records, NextCursor: next, Source: sourceMemory}, 0)
+	return c.writeJSON(http.StatusOK, recordsResponse{Items: records, NextCursor: next, Source: source}, 0)
 }
 
 // usageQuery parses the route's query, fills the range it left open,

@@ -365,9 +365,11 @@ events ([[011-api]]); the stub sink and its behaviour flags
 ## Outcome
 
 Complete on 2026-09-14 on this spec's own rows. The `source: archive`
-half of `GET /v1/requests` is [[011-api]]'s wiring and the end-to-end
-run against the stub sink is [[015-test-stubs-and-tiers]]'s; both are
-named below. Every row of the table has its test in the tree and the
+half of `GET /v1/requests` was wired the same day: with an exporter
+configured the route reads `reqlog.Reader` and says so
+(`internal/api`'s `TestRequestsArchiveSource`). The end-to-end run
+against the stub sink is [[015-test-stubs-and-tiers]]'s and is named
+below. Every row of the table has its test in the tree and the
 gate passes whole: `internal/events` at 97.1%, `internal/reqlog` at
 97.3%, `internal/config` at 99.6%, `internal/serve` at 97.4%, and
 `cmd/luxd` at 95.6% of statements.
