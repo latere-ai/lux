@@ -178,6 +178,12 @@ func TestAttemptOrder(t *testing.T) {
 			want:    []string{"c/m", "b/m", "a/m"},
 		},
 		{
+			name:    "a draw of one, outside the half-open interval, takes the last segment",
+			targets: []v1.Target{tw("a", "m", 100, 0), tw("b", "m", 100, 0), tw("c", "m", 100, 0)},
+			draw:    1,
+			want:    []string{"c/m", "b/m", "a/m"},
+		},
+		{
 			name:    "priority ascending across groups",
 			targets: []v1.Target{tw("a", "m", 100, 2), tw("b", "m", 100, 0), tw("c", "m", 100, 1)},
 			want:    []string{"b/m", "c/m", "a/m"},
