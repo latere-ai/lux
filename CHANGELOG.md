@@ -215,3 +215,24 @@ refused before it is pushed.
   `lux_requestlog_dropped_total` say how much waits and how much was
   lost. `GET /v1/requests` reads the archive as `source: archive` once
   the API takes the reader.
+- The `lux` command: one binary that speaks the `/v1` API from a shell
+  or from an agent. `lux apply -f` sends the documents of one or more
+  files in order and stops at the first refusal, and
+  `--credential-from-env NAME` sends a Provider's credential from the
+  environment and never from a file; `lux get`, `lux list`, and
+  `lux delete` address the four kinds by name or id, `lux keys rotate`
+  mints a new value, `lux usage` and `lux requests` read the two usage
+  routes, `lux whoami` says who the token belongs to, and `lux models`
+  asks the lux door which models a Key may call. `lux keys create`,
+  `lux providers create`, `lux models create`, and `lux budgets create`
+  build a manifest from flags, and `--dry-run` prints it instead of
+  sending it. Output is the server's own JSON, or `-o yaml`, `-o table`,
+  and `-o wide` rendered locally. Exit 0 is done; 1 is a refusal or an
+  unreachable server, with the server's sentence on stderr and the code,
+  the paths, the detail, and the request id under `-v`; 2 is a wrong
+  command with nothing sent. `LUX_URL` with `LUX_TOKEN` or
+  `LUX_TOKEN_FILE`, read on every request, reaches `/v1`; `LUX_KEY`
+  reaches a door, with `LUX_BASE_URL` and `LUX_API_KEY` as an SDK's
+  fallbacks. The skill at `skills/lux/SKILL.md` teaches an agent the
+  command, and `docs/cli.md` is its `-help`, command by command.
+  `lux serve` arrives with the tunnel.
