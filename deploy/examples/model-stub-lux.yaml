@@ -1,0 +1,12 @@
+# One routable name over the lux stub; see model-stub-openai.yaml.
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: stub-lux
+spec:
+  targets:
+    - provider: lux
+      model: stub-lux
+  pricing:
+    input: "1"
+    output: "2"

@@ -1,0 +1,10 @@
+# A spend window the Key below draws from: ten dollars a month, hard, so
+# a request past it is refused rather than billed.
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: dev
+spec:
+  amount: "10"
+  currency: USD
+  window: month

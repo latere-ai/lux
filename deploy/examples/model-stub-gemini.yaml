@@ -1,0 +1,12 @@
+# One routable name over the gemini stub; see model-stub-openai.yaml.
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: stub-gemini
+spec:
+  targets:
+    - provider: gemini
+      model: stub-gemini
+  pricing:
+    input: "1.25"
+    output: "5"

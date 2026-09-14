@@ -1,0 +1,14 @@
+# The one Key `make run` prints: every Model, drawing from the dev
+# Budget. In the file mode a Key's value is read from a variable and never
+# from a file, which is what valueFrom names; `make run-file` generates
+# STUB_DEV_KEY. In server mode the server mints the value and returns it
+# once, so `make run` applies this manifest without the valueFrom block.
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: dev
+spec:
+  models: ["*"]
+  budget: dev
+  valueFrom:
+    env: STUB_DEV_KEY
