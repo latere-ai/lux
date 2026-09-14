@@ -1,6 +1,6 @@
 ---
 title: "State: desired and observed, the store contract, memory, Postgres, the file mode"
-status: validated
+status: dispatched
 track: core
 depends_on:
   - specs/003-manifest-contract.md
