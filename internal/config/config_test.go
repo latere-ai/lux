@@ -6,21 +6,30 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func env(m map[string]string) Getenv {
 	return func(k string) string { return m[k] }
 }
 
+// issuer is the one variable a server-mode configuration cannot do
+// without, so every test that is not about it sets it.
+const issuer = "https://login.example.com"
+
 func TestLoadAppliesEveryDefault(t *testing.T) {
-	c, err := Load(env(nil))
+	c, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{PublicAddr: ":8080", InternalAddr: ":8081", DBMaxConns: 8}
-	if c != want {
+	want := Config{
+		PublicAddr: ":8080", InternalAddr: ":8081", DBMaxConns: 8,
+		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
+	}
+	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
 	}
 }
@@ -28,26 +37,47 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 func TestLoadReadsEveryVariable(t *testing.T) {
 	dir := t.TempDir()
 	c, err := Load(env(map[string]string{
-		"LUX_PUBLIC_ADDR":   "127.0.0.1:9000",
-		"LUX_INTERNAL_ADDR": "127.0.0.1:9001",
-		"LUX_MANIFEST_DIR":  dir,
+		"LUX_PUBLIC_ADDR":           "127.0.0.1:9000",
+		"LUX_INTERNAL_ADDR":         "127.0.0.1:9001",
+		"LUX_MANIFEST_DIR":          dir,
+		"LUX_OIDC_ISSUERS":          issuer + "/, http://issuer.internal.example",
+		"LUX_OIDC_AUDIENCE":         "gateway",
+		"LUX_OIDC_INSECURE_ISSUERS": "http://issuer.internal.example/",
+		"LUX_AUTHORIZER_URL":        "https://authz.example.com/decide",
+		"LUX_AUTHORIZER_TOKEN":      " s3cret\n",
+		"LUX_AUTHORIZER_TIMEOUT":    "2s",
+		"LUX_ADMIN_SUBJECTS":        issuer + "|alice, " + issuer + "|ops",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{PublicAddr: "127.0.0.1:9000", InternalAddr: "127.0.0.1:9001", ManifestDir: dir, DBMaxConns: 8}
-	if c != want {
+	want := Config{
+		PublicAddr: "127.0.0.1:9000", InternalAddr: "127.0.0.1:9001", ManifestDir: dir, DBMaxConns: 8,
+		OIDCIssuers:         []string{issuer, "http://issuer.internal.example"},
+		OIDCAudience:        "gateway",
+		OIDCInsecureIssuers: []string{"http://issuer.internal.example"},
+		AuthorizerURL:       "https://authz.example.com/decide",
+		AuthorizerToken:     "s3cret",
+		AuthorizerTimeout:   2 * time.Second,
+		AdminSubjects:       []string{issuer + "|alice", issuer + "|ops"},
+	}
+	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
 	}
 	c, err = Load(env(map[string]string{
+		"LUX_OIDC_ISSUERS": issuer,
 		"LUX_DB_URL":       "postgres://lux:secret@db.example.com:5432/lux?sslmode=require",
 		"LUX_DB_MAX_CONNS": "20",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = Config{PublicAddr: ":8080", InternalAddr: ":8081", DBURL: "postgres://lux:secret@db.example.com:5432/lux?sslmode=require", DBMaxConns: 20}
-	if c != want {
+	want = Config{
+		PublicAddr: ":8080", InternalAddr: ":8081",
+		DBURL: "postgres://lux:secret@db.example.com:5432/lux?sslmode=require", DBMaxConns: 20,
+		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
+	}
+	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
 	}
 }
@@ -58,6 +88,7 @@ func TestLoadReportsEveryProblemInOneSortedMessage(t *testing.T) {
 		"LUX_INTERNAL_ADDR": "nope",
 		"LUX_DB_URL":        "mysql://db.example.com/lux",
 		"LUX_DB_MAX_CONNS":  "0",
+		"LUX_OIDC_ISSUERS":  issuer,
 	}))
 	if err == nil {
 		t.Fatal("Load() accepted four bad values")
@@ -93,24 +124,31 @@ func TestLoadReportsEveryProblemInOneSortedMessage(t *testing.T) {
 }
 
 func TestLoadTreatsBlankAsUnset(t *testing.T) {
-	c, err := Load(env(map[string]string{"LUX_PUBLIC_ADDR": "  ", "LUX_INTERNAL_ADDR": "", "LUX_MANIFEST_DIR": " ", "LUX_DB_URL": "\t", "LUX_DB_MAX_CONNS": " "}))
+	c, err := Load(env(map[string]string{
+		"LUX_PUBLIC_ADDR": "  ", "LUX_INTERNAL_ADDR": "", "LUX_MANIFEST_DIR": " ", "LUX_DB_URL": "\t", "LUX_DB_MAX_CONNS": " ",
+		"LUX_OIDC_ISSUERS": issuer, "LUX_OIDC_AUDIENCE": " ", "LUX_AUTHORIZER_URL": " ", "LUX_AUTHORIZER_TOKEN": "",
+		"LUX_AUTHORIZER_TIMEOUT": "  ", "LUX_ADMIN_SUBJECTS": " , ",
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.PublicAddr != DefaultPublicAddr || c.InternalAddr != DefaultInternalAddr || c.ManifestDir != "" || c.DBURL != "" || c.DBMaxConns != DefaultDBMaxConns {
 		t.Fatalf("blank values did not fall back to defaults: %+v", c)
 	}
+	if c.OIDCAudience != DefaultOIDCAudience || c.AuthorizerURL != "" || c.AuthorizerTimeout != DefaultAuthorizerTimeout || c.AdminSubjects != nil {
+		t.Fatalf("blank identity values did not fall back to defaults: %+v", c)
+	}
 }
 
 func TestLoadRefusesOneSocketForBothListeners(t *testing.T) {
-	_, err := Load(env(map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:9000", "LUX_INTERNAL_ADDR": "127.0.0.1:9000"}))
+	_, err := Load(env(map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:9000", "LUX_INTERNAL_ADDR": "127.0.0.1:9000", "LUX_OIDC_ISSUERS": issuer}))
 	if err == nil || !strings.Contains(err.Error(), "must differ from LUX_PUBLIC_ADDR; both are 127.0.0.1:9000") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestLoadAllowsPortZeroOnBothListeners(t *testing.T) {
-	if _, err := Load(env(map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:0", "LUX_INTERNAL_ADDR": "127.0.0.1:0"})); err != nil {
+	if _, err := Load(env(map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:0", "LUX_INTERNAL_ADDR": "127.0.0.1:0", "LUX_OIDC_ISSUERS": issuer})); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -163,7 +201,7 @@ func TestDatabaseURLIsCheckedAndNeverEchoed(t *testing.T) {
 		"not a URL":      {"postgres://lux:" + password + "@db.example.com:port/lux", "does not parse as a URL"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load(env(map[string]string{"LUX_DB_URL": tc.url}))
+			_, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_DB_URL": tc.url}))
 			if err == nil || !strings.Contains(err.Error(), "LUX_DB_URL "+tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
@@ -173,7 +211,7 @@ func TestDatabaseURLIsCheckedAndNeverEchoed(t *testing.T) {
 		})
 	}
 	for _, ok := range []string{"postgres://db.example.com/lux", "postgresql://db.example.com/lux?sslmode=disable", "POSTGRES://db.example.com/lux"} {
-		if _, err := Load(env(map[string]string{"LUX_DB_URL": ok})); err != nil {
+		if _, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_DB_URL": ok})); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}
 	}
@@ -186,18 +224,18 @@ func TestDBMaxConnsIsBoundedAndReadOnlyWithADatabase(t *testing.T) {
 		"letters": {"many", `is "many", not an integer`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load(env(map[string]string{"LUX_DB_URL": "postgres://db.example.com/lux", "LUX_DB_MAX_CONNS": tc.value}))
+			_, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_DB_URL": "postgres://db.example.com/lux", "LUX_DB_MAX_CONNS": tc.value}))
 			if err == nil || !strings.Contains(err.Error(), "LUX_DB_MAX_CONNS "+tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
 		})
 	}
 	for _, edge := range []string{"1", "100"} {
-		if _, err := Load(env(map[string]string{"LUX_DB_URL": "postgres://db.example.com/lux", "LUX_DB_MAX_CONNS": edge})); err != nil {
+		if _, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_DB_URL": "postgres://db.example.com/lux", "LUX_DB_MAX_CONNS": edge})); err != nil {
 			t.Errorf("%s: %v", edge, err)
 		}
 	}
-	c, err := Load(env(map[string]string{"LUX_DB_MAX_CONNS": "many"}))
+	c, err := Load(env(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_DB_MAX_CONNS": "many"}))
 	if err != nil || c.DBMaxConns != DefaultDBMaxConns {
 		t.Fatalf("without LUX_DB_URL the pool size is not read: %+v, %v", c, err)
 	}

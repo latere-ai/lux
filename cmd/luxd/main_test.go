@@ -18,10 +18,43 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"latere.ai/x/pkg/authkit/issuertest"
 )
 
 func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
+}
+
+// serveEnv is the smallest environment serve starts under: loopback
+// listeners and one issuer, a stub on loopback so the start-up fetch of
+// spec 006 has something to reach. The extra entries override.
+func serveEnv(t *testing.T, extra map[string]string) map[string]string {
+	t.Helper()
+	m := map[string]string{
+		"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
+		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
+		"LUX_OIDC_ISSUERS":  issuertest.New(t).URL(),
+	}
+	maps.Copy(m, extra)
+	return m
+}
+
+// TestServeRefusesToStartWithoutAnIssuer is spec 006's first start-up
+// rule at the process: no issuer and no manifest directory is exit 1
+// with the one configuration line naming the variable.
+func TestServeRefusesToStartWithoutAnIssuer(t *testing.T) {
+	var errOut bytes.Buffer
+	code := run(t.Context(), nil, env(map[string]string{
+		"LUX_PUBLIC_ADDR":   "127.0.0.1:0",
+		"LUX_INTERNAL_ADDR": "127.0.0.1:0",
+	}), io.Discard, &errOut)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if got := errOut.String(); !strings.HasPrefix(got, "luxd: configuration: ") || !strings.Contains(got, "LUX_OIDC_ISSUERS is unset") {
+		t.Fatalf("stderr = %q", got)
+	}
 }
 
 func TestVersionFlagPrintsTheIdentityAndExitsZero(t *testing.T) {
@@ -86,10 +119,10 @@ func TestOccupiedAddressExitsOne(t *testing.T) {
 		{"internal", "127.0.0.1:0", ln.Addr().String()},
 	} {
 		var errOut bytes.Buffer
-		code := run(t.Context(), nil, env(map[string]string{
+		code := run(t.Context(), nil, env(serveEnv(t, map[string]string{
 			"LUX_PUBLIC_ADDR":   tc.public,
 			"LUX_INTERNAL_ADDR": tc.internal,
-		}), io.Discard, &errOut)
+		})), io.Discard, &errOut)
 		if code != 1 || !strings.Contains(errOut.String(), "address already in use") {
 			t.Fatalf("%s: exit %d, stderr %q", tc.name, code, errOut.String())
 		}
@@ -130,8 +163,7 @@ type server struct {
 func startServe(t *testing.T, extra map[string]string) server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	vars := map[string]string{"LUX_PUBLIC_ADDR": "127.0.0.1:0", "LUX_INTERNAL_ADDR": "127.0.0.1:0"}
-	maps.Copy(vars, extra)
+	vars := serveEnv(t, extra)
 	out, errOut := &syncBuffer{}, &syncBuffer{}
 	codec := make(chan int, 1)
 	go func() { codec <- run(ctx, nil, env(vars), out, errOut) }()
@@ -265,7 +297,7 @@ func TestMemoryStoreLogsItsAssumptions(t *testing.T) {
 // with state in memory.
 func TestDatabaseIsNotSelectableYet(t *testing.T) {
 	var errOut bytes.Buffer
-	code := run(t.Context(), nil, env(map[string]string{"LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
+	code := run(t.Context(), nil, env(map[string]string{"LUX_OIDC_ISSUERS": "https://login.example.com", "LUX_DB_URL": "postgres://lux:secret@db.example.com/lux"}), io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("exit %d", code)
 	}

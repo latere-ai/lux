@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Defaults for the optional variables.
@@ -54,6 +55,26 @@ type Config struct {
 	DBURL string
 	// DBMaxConns is the pool size with DBURL, DefaultDBMaxConns without.
 	DBMaxConns int
+
+	// The identity variables of spec 006.
+
+	// OIDCIssuers are the issuer URLs whose tokens the control plane
+	// accepts, each without its trailing slash. Empty in the file mode.
+	OIDCIssuers []string
+	// OIDCAudience is the one audience a caller token must contain.
+	OIDCAudience string
+	// OIDCInsecureIssuers are the issuers from the list that may use
+	// http:// on a host other than loopback.
+	OIDCInsecureIssuers []string
+	// AuthorizerURL and AuthorizerToken are the operator's authorization
+	// endpoint and its bearer; an empty URL selects the owner policy.
+	AuthorizerURL   string
+	AuthorizerToken string
+	// AuthorizerTimeout bounds one decision, the retry included.
+	AuthorizerTimeout time.Duration
+	// AdminSubjects are the rendered subjects the owner policy lets act on
+	// every object; read and unused when an authorizer is set.
+	AdminSubjects []string
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -104,6 +125,7 @@ func Load(getenv Getenv) (Config, error) {
 	if c.ManifestDir != "" && c.DBURL != "" {
 		problems = append(problems, "LUX_DB_URL and LUX_MANIFEST_DIR are both set; desired state comes from the directory or the database, not both")
 	}
+	problems = append(problems, c.loadIdentity(getenv)...)
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))

@@ -26,6 +26,7 @@ import (
 	"latere.ai/x/pkg/health"
 	"latere.ai/x/pkg/metrics"
 
+	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/filemode"
@@ -105,6 +106,16 @@ func serve(ctx context.Context, args []string, getenv config.Getenv, stdout, std
 		stopHUP := reloadOnHUP(ctx, files, stdout, stderr)
 		defer stopHUP()
 	}
+
+	// Identity of spec 006: the issuers are fetched and checked once here,
+	// so a deployment that cannot reach its issuer fails at start and not
+	// at the first request. The /v1 handlers that authenticate and ask the
+	// authorizer mount with spec 011.
+	identity, err := auth.Startup(ctx, cfg, nil)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", identity.String())
 
 	draining := make(chan struct{})
 	probes := health.Handler(health.Options{

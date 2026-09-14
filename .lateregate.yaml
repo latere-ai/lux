@@ -48,11 +48,27 @@ depcheck:
   packages:
     latere.ai/x/lux/cmd/luxd:
       decision: >-
-        the gateway reaches latere.ai/x/pkg and the standard library; the
-        Postgres driver joins with spec 010 and the OpenTelemetry SDK with
-        spec 019, and nothing else does without a row here (spec 001)
+        the gateway reaches latere.ai/x/pkg and the standard library, the
+        YAML decoder of spec 003, and the OpenTelemetry SDK with what it
+        pulls in, which joined with spec 006 through the shared verifier's
+        tracing transport; the Postgres driver joins with spec 010's
+        Postgres store, and nothing else does without a row here (spec 001)
       allow:
         latere.ai/x/pkg: the shared library every Latere service is built on (spec 002)
+        go.opentelemetry.io: >-
+          the OpenTelemetry SDK spec 001 admits, reached through
+          latere.ai/x/pkg/otel by the verifier of spec 006 and the traces
+          of spec 019
+        google.golang.org/grpc: the OTLP exporters' transport, a dependency of the OpenTelemetry SDK
+        google.golang.org/protobuf: the OTLP wire format, a dependency of the OpenTelemetry SDK
+        google.golang.org/genproto: the OTLP status types, a dependency of the OpenTelemetry SDK
+        golang.org/x: the Go project's extended library, a dependency of the OpenTelemetry SDK and gRPC
+        github.com/grpc-ecosystem/grpc-gateway: the OTLP HTTP exporters' dependency
+        github.com/go-logr: the OpenTelemetry SDK's logging seam
+        github.com/google/uuid: request ids in latere.ai/x/pkg/httpjson
+        github.com/felixge/httpsnoop: the response recorder of the SDK's HTTP instrumentation
+        github.com/cespare/xxhash: a hash the OpenTelemetry SDK's metric pipeline uses
+        github.com/cenkalti/backoff: the OTLP exporters' retry
         github.com/goccy/go-yaml: >-
           the YAML decoder spec 003 names, reached through manifest by the
           file mode of spec 010, which decodes a directory of manifests at
@@ -70,10 +86,3 @@ identity:
   # The default audience a deployment verifies unless it configures its
   # own.
   reached_by: self-hosted
-  waive:
-    verifier:
-      until: 2026-12-31
-      reason: spec 006 builds identity in phase 2 through authkit/jwt
-    authorizer:
-      until: 2026-12-31
-      reason: pkg/authz is in pkg v0.65.0 and spec 006 adopts it in phase 2
