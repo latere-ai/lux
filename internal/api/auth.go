@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"time"
@@ -61,8 +62,8 @@ func (c *call) info() authz.Caller {
 // authorize asks the request's own action and remembers what the allow
 // granted the subject. A deny is forbidden with the reason in the
 // detail; no decision is authorizer_unavailable.
-func (c *call) authorize(action string, res authz.Resource) (auth.Decision, *Error) {
-	d, err := c.h.o.Authorizer.Decide(c.r.Context(), c.caller, action, res, c.info())
+func (c *call) authorize(ctx context.Context, action string, res authz.Resource) (auth.Decision, *Error) {
+	d, err := c.h.o.Authorizer.Decide(ctx, c.caller, action, res, c.info())
 	if err != nil {
 		return auth.Decision{}, mapError(err)
 	}

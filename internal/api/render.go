@@ -45,7 +45,8 @@ func setIdentity(obj v1.Object, id, owner string, createdAt timeRef) {
 	}
 }
 
-// versionOf is the status.version the store wrote back.
+// versionOf is the status.version the store wrote back, 0 for a value
+// that is none of the four kinds.
 func versionOf(obj v1.Object) int64 {
 	switch x := obj.(type) {
 	case *v1.Provider:
@@ -54,12 +55,14 @@ func versionOf(obj v1.Object) int64 {
 		return x.Status.Version
 	case *v1.Key:
 		return x.Status.Version
-	default:
-		return obj.(*v1.Budget).Status.Version
+	case *v1.Budget:
+		return x.Status.Version
 	}
+	return 0
 }
 
-// createdAtOf is the object's status.createdAt.
+// createdAtOf is the object's status.createdAt, zero for a value that is
+// none of the four kinds.
 func createdAtOf(obj v1.Object) timeRef {
 	switch x := obj.(type) {
 	case *v1.Provider:
@@ -68,7 +71,8 @@ func createdAtOf(obj v1.Object) timeRef {
 		return timeRef{x.Status.CreatedAt}
 	case *v1.Key:
 		return timeRef{x.Status.CreatedAt}
-	default:
-		return timeRef{obj.(*v1.Budget).Status.CreatedAt}
+	case *v1.Budget:
+		return timeRef{x.Status.CreatedAt}
 	}
+	return timeRef{}
 }

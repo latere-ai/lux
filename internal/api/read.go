@@ -4,7 +4,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -20,21 +22,21 @@ import (
 
 // read is GET /v1/{kind}s/{id-or-name}: load, authorize the kind's read
 // on what was loaded, render, answer with the ETag.
-func (c *call) read(k kind, ref string) *Error {
+func (c *call) read(ctx context.Context, k kind, ref string) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
-	obj, version, err := c.load(k, ref)
+	obj, version, err := c.load(ctx, k, ref)
 	if err != nil {
 		return err
 	}
 	if !c.h.fileMode() {
 		res, _ := auth.ResourceFor(k.read, obj)
-		if _, err := c.authorize(k.read, res); err != nil {
+		if _, err := c.authorize(ctx, k.read, res); err != nil {
 			return err
 		}
 	}
-	if err := c.render(c.r.Context(), obj); err != nil {
+	if err := c.render(ctx, obj); err != nil {
 		return err
 	}
 	return c.writeJSON(http.StatusOK, obj, version)
@@ -56,7 +58,7 @@ type listResponse struct {
 // list is GET /v1/{kind}s: the query parsed strictly, the kind's list
 // action asked for its filter, the selectors intersected with it, and
 // the page rendered.
-func (c *call) list(k kind) *Error {
+func (c *call) list(ctx context.Context, k kind) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
@@ -67,7 +69,7 @@ func (c *call) list(k kind) *Error {
 	var filter *authz.Filter
 	if !c.h.fileMode() {
 		res, _ := auth.ResourceFor(k.list, zeroObject(k.name))
-		d, err := c.authorize(k.list, res)
+		d, err := c.authorize(ctx, k.list, res)
 		if err != nil {
 			return err
 		}
@@ -77,9 +79,8 @@ func (c *call) list(k kind) *Error {
 	if empty {
 		return c.writeJSON(http.StatusOK, listResponse{Items: []v1.Object{}}, 0)
 	}
-	ctx := c.r.Context()
 	if q.provider != "" {
-		id, err := c.providerID(q.provider)
+		id, err := c.providerID(ctx, q.provider)
 		if err != nil {
 			return err
 		}
@@ -89,7 +90,8 @@ func (c *call) list(k kind) *Error {
 		f.Provider = id
 	}
 	items := make([]v1.Object, 0, q.limit)
-	cursor, next := q.cursor, ""
+	cursor := q.cursor
+	var next string
 	for {
 		page, n, lerr := c.h.o.Store.Objects().List(ctx, k.name, f, store.Page{Limit: q.limit, Cursor: cursor})
 		if lerr != nil {
@@ -120,11 +122,11 @@ func (c *call) list(k kind) *Error {
 // providerID resolves the ?provider= selector to a prv_ id: the id as
 // given, or the live Provider of the name; "" when none, which is an
 // empty list and never not_found.
-func (c *call) providerID(ref string) (string, *Error) {
+func (c *call) providerID(ctx context.Context, ref string) (string, *Error) {
 	if strings.HasPrefix(ref, v1.PrefixProvider) {
 		return ref, nil
 	}
-	obj, _, err := c.h.o.Store.Objects().ByName(c.r.Context(), v1.KindProvider, ref)
+	obj, _, err := c.h.o.Store.Objects().ByName(ctx, v1.KindProvider, ref)
 	if errors.Is(err, store.ErrNotFound) {
 		return "", nil
 	}
@@ -214,9 +216,7 @@ func (q listQuery) intersect(filter *authz.Filter) (f store.Filter, owners []str
 	}
 	f = store.Filter{Owner: q.owner, Source: q.source}
 	labels := map[string]string{}
-	for k, v := range q.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, q.labels)
 	if filter != nil {
 		for k, v := range filter.Labels {
 			if prev, ok := labels[k]; ok && prev != v {

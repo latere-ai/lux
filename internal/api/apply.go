@@ -36,7 +36,7 @@ const applyRetries = 3
 // against what was read, Resolve with Existing, the status the API
 // fills, and one Transact for the object, its journal row, and a Key's
 // hash or a Provider's sealed credential.
-func (c *call) apply(k kind, name string) *Error {
+func (c *call) apply(ctx context.Context, k kind, name string) *Error {
 	if name == "" {
 		return refuse(CodeNotFound, "the path names no "+k.name)
 	}
@@ -58,7 +58,6 @@ func (c *call) apply(k kind, name string) *Error {
 	if derr != nil {
 		return mapError(derr)
 	}
-	ctx := c.r.Context()
 	for attempt := 1; ; attempt++ {
 		status, obj, version, err := c.applyOnce(ctx, k, name, in, pre)
 		if err != nil && err.Code == CodeConflict && pre.none() && attempt < applyRetries {
@@ -83,7 +82,7 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		action, subject = k.update, existing
 	}
 	res, _ := auth.ResourceFor(action, subject)
-	decision, err := c.authorize(action, res)
+	decision, err := c.authorize(ctx, action, res)
 	if err != nil {
 		return 0, nil, 0, err
 	}
@@ -213,7 +212,11 @@ func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (writ
 	k.Status.Prefix = serve.KeyPrefix(value, supplied)
 	w.write = func(ctx context.Context, tx store.Store) error { return tx.Keys().Put(ctx, k.Status.ID, hash) }
 	if !supplied {
-		w.after = func(obj v1.Object) { obj.(*v1.Key).Status.Value = value }
+		w.after = func(obj v1.Object) {
+			if key, ok := obj.(*v1.Key); ok {
+				key.Status.Value = value
+			}
+		}
 	}
 	return w, nil
 }
@@ -272,8 +275,7 @@ func (c *call) readBody() ([]byte, *Error) {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(c.w, c.r.Body, limit))
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, refuse(CodeBodyTooLarge, "the body crossed LUX_MAX_MANIFEST_BYTES "+strconv.FormatInt(limit, 10))
 		}
 		return nil, refuse(CodeMalformedBody, "reading the body: "+err.Error())

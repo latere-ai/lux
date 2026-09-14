@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"latere.ai/x/lux/internal/auth"
@@ -17,7 +18,7 @@ import (
 // prefix rewritten in one transaction with the key.rotated row, and 200
 // with status.value. A repeat is a second rotation; the route takes no
 // idempotency key by design.
-func (c *call) rotate(ref string) *Error {
+func (c *call) rotate(ctx context.Context, ref string) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
@@ -29,13 +30,16 @@ func (c *call) rotate(ref string) *Error {
 		return refuse(CodeInvalidField, "If-None-Match has no meaning on a rotate", "If-None-Match")
 	}
 	k := kindOf(v1.KindKey)
-	obj, version, err := c.load(k, ref)
+	obj, version, err := c.load(ctx, k, ref)
 	if err != nil {
 		return err
 	}
-	key := obj.(*v1.Key)
+	key, ok := obj.(*v1.Key)
+	if !ok {
+		return refuse(CodeInternal, "")
+	}
 	res, _ := auth.ResourceFor(k.update, key)
-	if _, err := c.authorize(k.update, res); err != nil {
+	if _, err := c.authorize(ctx, k.update, res); err != nil {
 		return err
 	}
 	if err := pre.check(true, version); err != nil {
@@ -52,7 +56,6 @@ func (c *call) rotate(ref string) *Error {
 	previous := key.Status.Prefix
 	key.Status.Prefix = serve.KeyPrefix(value, false)
 	key.Status.UpdatedAt = c.start
-	ctx := c.r.Context()
 	terr := c.h.o.Store.Transact(ctx, func(tx store.Store) error {
 		if err := tx.Keys().Put(ctx, key.Status.ID, serve.HashKeyValue(value)); err != nil {
 			return err

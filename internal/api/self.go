@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"latere.ai/x/pkg/authz"
@@ -41,7 +42,7 @@ type SelfLimits struct {
 
 // self asks no action: asking permission to see the identity the caller
 // just presented would be a category error.
-func (c *call) self() *Error {
+func (c *call) self(context.Context) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
@@ -89,7 +90,7 @@ type WellKnown struct {
 
 // wellKnown needs no bearer: a document that describes the API carries
 // no installation's data.
-func (c *call) wellKnown() *Error {
+func (c *call) wellKnown(context.Context) *Error {
 	base := c.h.o.PublicURL.String()
 	doc := WellKnown{
 		Name: "lux", Version: c.h.o.Version, APIVersion: v1.APIVersion,

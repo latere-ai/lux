@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -38,11 +39,16 @@ type member struct {
 	value any
 }
 
-// obj builds an ordered object from alternating keys and values.
+// obj builds an ordered object from alternating keys and values; a key
+// that is not a string is a bug in the generator and a panic.
 func obj(kv ...any) ordered {
 	out := make(ordered, 0, len(kv)/2)
 	for i := 0; i+1 < len(kv); i += 2 {
-		out = append(out, member{kv[i].(string), kv[i+1]})
+		key, ok := kv[i].(string)
+		if !ok {
+			panic("api: an OpenAPI member key is not a string")
+		}
+		out = append(out, member{key, kv[i+1]})
 	}
 	return out
 }
@@ -109,9 +115,14 @@ func toYAML(v any) any {
 }
 
 // OpenAPIYAML renders the document as the YAML committed at
-// api/openapi.yaml.
-func OpenAPIYAML() ([]byte, error) {
-	return yaml.MarshalWithOptions(toYAML(openAPIDocument()), yaml.Indent(2), yaml.UseLiteralStyleIfMultiline(true))
+// api/openapi.yaml. A document that does not encode is a bug in the
+// generator and a panic, as it is for the JSON.
+func OpenAPIYAML() []byte {
+	data, err := yaml.MarshalWithOptions(toYAML(openAPIDocument()), yaml.Indent(2), yaml.UseLiteralStyleIfMultiline(true))
+	if err != nil {
+		panic("api: the OpenAPI document does not encode as YAML: " + err.Error())
+	}
+	return data
 }
 
 // openAPIJSON renders the document as the JSON GET /v1/openapi.json
@@ -126,7 +137,7 @@ func openAPIJSON() []byte {
 
 // openAPI is GET /v1/openapi.json; no bearer, because a document that
 // describes the API carries no installation's data.
-func (c *call) openAPI() *Error {
+func (c *call) openAPI(context.Context) *Error {
 	h := c.w.Header()
 	h.Set("Content-Type", "application/json")
 	h.Set("Content-Length", strconv.Itoa(len(c.h.openapi)))
@@ -331,8 +342,8 @@ func (s *schemas) kind(name string) {
 		"kind", obj("type", "string", "const", name),
 	)
 	for _, p := range s.properties(t) {
-		if p.key == "status" {
-			p.value = p.value.(ordered).set("readOnly", true).set("description", "Written by the server and ignored on apply.")
+		if status, ok := p.value.(ordered); ok && p.key == "status" {
+			p.value = status.set("readOnly", true).set("description", "Written by the server and ignored on apply.")
 		}
 		props = append(props, p)
 	}
@@ -412,8 +423,7 @@ func (s *schemas) of(t reflect.Type) ordered {
 // write-only members included as writeOnly strings.
 func (s *schemas) properties(t reflect.Type) ordered {
 	props := ordered{}
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if wo := f.Tag.Get("writeonly"); wo != "" {
 			props = append(props, member{wo, obj("type", "string", "writeOnly", true, "description", "Write-only: decoded into a member no encoding carries, so no response, event, or log line returns it.")})
 			continue
@@ -434,8 +444,7 @@ func (s *schemas) properties(t reflect.Type) ordered {
 // exported fields with no omitempty and no omitzero.
 func required(t reflect.Type) []string {
 	var out []string
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if !f.IsExported() {
 			continue
 		}

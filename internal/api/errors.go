@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"latere.ai/x/pkg/httpjson"
@@ -178,14 +179,14 @@ func (e *Error) Error() string {
 }
 
 func joinPaths(paths []string) string {
-	out := ""
+	var out strings.Builder
 	for i, p := range paths {
 		if i > 0 {
-			out += ", "
+			out.WriteString(", ")
 		}
-		out += p
+		out.WriteString(p)
 	}
-	return out
+	return out.String()
 }
 
 // refuse builds an Error naming the paths.
@@ -201,16 +202,13 @@ func refuse(code Code, detail string, paths ...string) *Error {
 // else, a Lookup's pass-through of its store's failure included, as
 // store_unavailable with the developer's line.
 func mapError(err error) *Error {
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e
 	}
-	var me *manifest.Error
-	if errors.As(err, &me) {
+	if me, ok := errors.AsType[*manifest.Error](err); ok {
 		return &Error{Code: Code(me.Code), Paths: me.Paths, Detail: me.Detail}
 	}
-	var ae *auth.Error
-	if errors.As(err, &ae) {
+	if ae, ok := errors.AsType[*auth.Error](err); ok {
 		return &Error{Code: Code(ae.Code), Detail: ae.Detail}
 	}
 	switch {

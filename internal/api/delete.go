@@ -19,7 +19,7 @@ import (
 // and a Provider a declared Model targets, then one transaction for the
 // row, a Key's hash, a Provider's discovered Models and credential, and
 // the journal row; 204 with no body.
-func (c *call) delete(k kind, ref string) *Error {
+func (c *call) delete(ctx context.Context, k kind, ref string) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
@@ -30,18 +30,17 @@ func (c *call) delete(k kind, ref string) *Error {
 	if pre.free {
 		return refuse(CodeInvalidField, "If-None-Match has no meaning on a delete", "If-None-Match")
 	}
-	obj, version, err := c.load(k, ref)
+	obj, version, err := c.load(ctx, k, ref)
 	if err != nil {
 		return err
 	}
 	res, _ := auth.ResourceFor(k.del, obj)
-	if _, err := c.authorize(k.del, res); err != nil {
+	if _, err := c.authorize(ctx, k.del, res); err != nil {
 		return err
 	}
 	if err := pre.check(true, version); err != nil {
 		return err
 	}
-	ctx := c.r.Context()
 	if err := c.checkInUse(ctx, obj); err != nil {
 		return err
 	}

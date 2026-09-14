@@ -1,0 +1,1659 @@
+openapi: 3.1.0
+info:
+  title: Lux API
+  version: v1
+  description: "The control plane of Lux under /v1: apply a Provider, Model, Key, or Budget by name with PUT, read one by id or name, list with limit and cursor, delete, and rotate a Key. Every request body is a manifest of lux.latere.ai/v1beta1 in JSON or YAML; every response is JSON; every refusal is one envelope with one code from the error table in x-lux-errors. Every URL is under LUX_PUBLIC_URL."
+paths:
+  /v1/providers:
+    get:
+      operationId: listProviders
+      summary: List Providers under the authorizer's filter, paged by limit and cursor.
+      x-lux-action: provider.list
+      parameters:
+      - $ref: "#/components/parameters/label"
+      - $ref: "#/components/parameters/owner"
+      - $ref: "#/components/parameters/limit"
+      - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: One page.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/providers/{name}:
+    put:
+      operationId: applyProvider
+      summary: Create the Provider when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      x-lux-action: provider.create or provider.update
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Provider's name on an apply; its name or its prv_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      - $ref: "#/components/parameters/ifNoneMatch"
+      requestBody:
+        required: true
+        description: A Provider manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Provider"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/Provider"
+      responses:
+        "200":
+          description: The object as updated.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        "201":
+          description: The object as created; a Key carries status.value once.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: readProvider
+      summary: Read one Provider by id or name, with its status.
+      x-lux-action: provider.read
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Provider's name on an apply; its name or its prv_ id otherwise.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteProvider
+      summary: Delete one Provider by id or name; 204 with no body.
+      x-lux-action: provider.delete
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Provider's name on an apply; its name or its prv_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      responses:
+        "204":
+          description: Deleted.
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/models:
+    get:
+      operationId: listModels
+      summary: List Models under the authorizer's filter, paged by limit and cursor.
+      x-lux-action: model.list
+      parameters:
+      - $ref: "#/components/parameters/label"
+      - $ref: "#/components/parameters/owner"
+      - $ref: "#/components/parameters/limit"
+      - $ref: "#/components/parameters/cursor"
+      - $ref: "#/components/parameters/source"
+      - $ref: "#/components/parameters/provider"
+      responses:
+        "200":
+          description: One page.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/models/{name}:
+    put:
+      operationId: applyModel
+      summary: Create the Model when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      x-lux-action: model.create or model.update
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Model's name on an apply; its name or its mdl_ id otherwise. A Model name may carry /, so the route matches any number of segments, percent-encoded or not.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      - $ref: "#/components/parameters/ifNoneMatch"
+      requestBody:
+        required: true
+        description: A Model manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Model"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/Model"
+      responses:
+        "200":
+          description: The object as updated.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Model"
+        "201":
+          description: The object as created; a Key carries status.value once.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Model"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: readModel
+      summary: Read one Model by id or name, with its status.
+      x-lux-action: model.read
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Model's name on an apply; its name or its mdl_ id otherwise. A Model name may carry /, so the route matches any number of segments, percent-encoded or not.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Model"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteModel
+      summary: Delete one Model by id or name; 204 with no body.
+      x-lux-action: model.delete
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Model's name on an apply; its name or its mdl_ id otherwise. A Model name may carry /, so the route matches any number of segments, percent-encoded or not.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      responses:
+        "204":
+          description: Deleted.
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/keys:
+    get:
+      operationId: listKeys
+      summary: List Keys under the authorizer's filter, paged by limit and cursor.
+      x-lux-action: key.list
+      parameters:
+      - $ref: "#/components/parameters/label"
+      - $ref: "#/components/parameters/owner"
+      - $ref: "#/components/parameters/limit"
+      - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: One page.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/keys/{name}:
+    put:
+      operationId: applyKey
+      summary: Create the Key when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      x-lux-action: key.create or key.update
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Key's name on an apply; its name or its key_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      - $ref: "#/components/parameters/ifNoneMatch"
+      requestBody:
+        required: true
+        description: A Key manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Key"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/Key"
+      responses:
+        "200":
+          description: The object as updated.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Key"
+        "201":
+          description: The object as created; a Key carries status.value once.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Key"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: readKey
+      summary: Read one Key by id or name, with its status.
+      x-lux-action: key.read
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Key's name on an apply; its name or its key_ id otherwise.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Key"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteKey
+      summary: Delete one Key by id or name; 204 with no body.
+      x-lux-action: key.delete
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Key's name on an apply; its name or its key_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      responses:
+        "204":
+          description: Deleted.
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/keys/{name}/rotate:
+    post:
+      operationId: rotateKey
+      summary: Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.
+      x-lux-action: key.update
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Key's name on an apply; its name or its key_ id otherwise.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The Key with its new value.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Key"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/budgets:
+    get:
+      operationId: listBudgets
+      summary: List Budgets under the authorizer's filter, paged by limit and cursor.
+      x-lux-action: budget.list
+      parameters:
+      - $ref: "#/components/parameters/label"
+      - $ref: "#/components/parameters/owner"
+      - $ref: "#/components/parameters/limit"
+      - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: One page.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetList"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/budgets/{name}:
+    put:
+      operationId: applyBudget
+      summary: Create the Budget when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      x-lux-action: budget.create or budget.update
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Budget's name on an apply; its name or its bud_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      - $ref: "#/components/parameters/ifNoneMatch"
+      requestBody:
+        required: true
+        description: A Budget manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Budget"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/Budget"
+      responses:
+        "200":
+          description: The object as updated.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+        "201":
+          description: The object as created; a Key carries status.value once.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: readBudget
+      summary: Read one Budget by id or name, with its status.
+      x-lux-action: budget.read
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Budget's name on an apply; its name or its bud_ id otherwise.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The object.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteBudget
+      summary: Delete one Budget by id or name; 204 with no body.
+      x-lux-action: budget.delete
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: The Budget's name on an apply; its name or its bud_ id otherwise.
+        schema:
+          type: string
+      - $ref: "#/components/parameters/ifMatch"
+      responses:
+        "204":
+          description: Deleted.
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/self:
+    get:
+      operationId: readSelf
+      summary: The caller's identity, who decides permission, and what this replica remembers granting the subject.
+      x-lux-action: none
+      responses:
+        "200":
+          description: The caller.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Self"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/openapi.json:
+    get:
+      operationId: readOpenAPI
+      summary: This document as JSON; no bearer.
+      x-lux-action: none
+      parameters: []
+      responses:
+        "200":
+          description: The document.
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    security: []
+  /.well-known/lux:
+    get:
+      operationId: readWellKnown
+      summary: "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer."
+      x-lux-action: none
+      parameters: []
+      responses:
+        "200":
+          description: The server.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnown"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A token from an issuer in LUX_OIDC_ISSUERS with aud containing LUX_OIDC_AUDIENCE.
+  parameters:
+    label:
+      name: label
+      in: query
+      required: false
+      description: k=v, repeatable; every pair must match.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    owner:
+      name: owner
+      in: query
+      required: false
+      description: A rendered subject; intersected with the authorizer's filter, so one outside it is an empty list.
+      schema:
+        type: string
+    limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size, default 50, at most 200; above is invalid_field.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The previous page's next_cursor, opaque; one from another kind or filter is invalid_field.
+      schema:
+        type: string
+    source:
+      name: source
+      in: query
+      required: false
+      description: Models by source.
+      schema:
+        type: string
+        enum:
+        - declared
+        - discovered
+    provider:
+      name: provider
+      in: query
+      required: false
+      description: Models with a target on the Provider, by name or prv_ id.
+      schema:
+        type: string
+    ifMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: "* for the object must exist, or one quoted integer for exactly this version; a mismatch is conflict, a free name not_found. Anything else is invalid_field."
+      schema:
+        type: string
+    ifNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: "* for create only; a taken name is already_exists. Anything else is invalid_field."
+      schema:
+        type: string
+  headers:
+    Lux-Request-Id:
+      description: The server's id of this request, req_ and a ULID; a caller's own is replaced.
+      schema:
+        type: string
+    ETag:
+      description: The object's status.version as one quoted integer, the value If-Match takes.
+      schema:
+        type: string
+    RateLimit-Limit:
+      description: The subject's requests a minute on this replica.
+      schema:
+        type: integer
+    RateLimit-Remaining:
+      description: Requests left in the window.
+      schema:
+        type: integer
+    RateLimit-Reset:
+      description: Seconds until the window is full again.
+      schema:
+        type: integer
+  schemas:
+    Provider:
+      type: object
+      required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+      properties:
+        apiVersion:
+          type: string
+          const: lux.latere.ai/v1beta1
+        kind:
+          type: string
+          const: Provider
+        metadata:
+          $ref: "#/components/schemas/ObjectMeta"
+        spec:
+          $ref: "#/components/schemas/ProviderSpec"
+        status:
+          $ref: "#/components/schemas/ProviderStatus"
+          readOnly: true
+          description: Written by the server and ignored on apply.
+    ObjectMeta:
+      type: object
+      properties:
+        name:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+    ProviderSpec:
+      type: object
+      required:
+      - tunnel
+      - concurrency
+      properties:
+        dialect:
+          type: string
+          enum:
+          - openai
+          - anthropic
+          - gemini
+          - lux
+        tunnel:
+          type: boolean
+        baseURL:
+          type: string
+        credential:
+          $ref: "#/components/schemas/Credential"
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        discovery:
+          $ref: "#/components/schemas/Discovery"
+        health:
+          $ref: "#/components/schemas/Health"
+        timeout:
+          type: string
+          description: A Go duration, such as 10m or 168h.
+        concurrency:
+          type: integer
+    Credential:
+      type: object
+      properties:
+        value:
+          type: string
+          writeOnly: true
+          description: "Write-only: decoded into a member no encoding carries, so no response, event, or log line returns it."
+        valueFrom:
+          $ref: "#/components/schemas/ValueFrom"
+        header:
+          type: string
+        scheme:
+          type: string
+          enum:
+          - bearer
+          - raw
+    ValueFrom:
+      type: object
+      properties:
+        env:
+          type: string
+    Discovery:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - auto
+          - none
+        include:
+          type: array
+          items:
+            type: string
+        exclude:
+          type: array
+          items:
+            type: string
+    Health:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - probe
+          - passive
+          - none
+    ProviderStatus:
+      type: object
+      required:
+      - warnings
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        owner:
+          type: string
+        credential:
+          $ref: "#/components/schemas/CredentialStatus"
+        health:
+          $ref: "#/components/schemas/HealthStatus"
+        discovered:
+          $ref: "#/components/schemas/DiscoveredStatus"
+        tunnel:
+          $ref: "#/components/schemas/TunnelStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+    CredentialStatus:
+      type: object
+      required:
+      - set
+      - version
+      properties:
+        set:
+          type: boolean
+        version:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+    HealthStatus:
+      type: object
+      required:
+      - state
+      - lastError
+      properties:
+        state:
+          type: string
+          enum:
+          - Unknown
+          - Healthy
+          - Degraded
+          - Unreachable
+        since:
+          type: string
+          format: date-time
+        lastProbeAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+    DiscoveredStatus:
+      type: object
+      required:
+      - count
+      properties:
+        count:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+    TunnelStatus:
+      type: object
+      required:
+      - state
+      properties:
+        state:
+          type: string
+          enum:
+          - Connected
+          - Disconnected
+        session:
+          type: string
+        subject:
+          type: string
+        agent:
+          type: string
+        since:
+          type: string
+          format: date-time
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+    ProviderList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Provider"
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last.
+    Model:
+      type: object
+      required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+      properties:
+        apiVersion:
+          type: string
+          const: lux.latere.ai/v1beta1
+        kind:
+          type: string
+          const: Model
+        metadata:
+          $ref: "#/components/schemas/ObjectMeta"
+        spec:
+          $ref: "#/components/schemas/ModelSpec"
+        status:
+          $ref: "#/components/schemas/ModelStatus"
+          readOnly: true
+          description: Written by the server and ignored on apply.
+    ModelSpec:
+      type: object
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Target"
+        fallback:
+          type: string
+          enum:
+          - onError
+          - never
+        pricing:
+          $ref: "#/components/schemas/Pricing"
+        modalities:
+          $ref: "#/components/schemas/Modalities"
+        contextWindow:
+          type: integer
+        maxOutputTokens:
+          type: integer
+    Target:
+      type: object
+      required:
+      - priority
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        weight:
+          type: integer
+        priority:
+          type: integer
+    Pricing:
+      type: object
+      properties:
+        currency:
+          type: string
+        per:
+          type: integer
+        input:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        output:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        cachedInput:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        cacheWrite:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+    Modalities:
+      type: object
+      properties:
+        input:
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+            - file
+            - embedding
+        output:
+          type: array
+          items:
+            type: string
+            enum:
+            - text
+            - image
+            - audio
+            - video
+            - file
+            - embedding
+    ModelStatus:
+      type: object
+      required:
+      - warnings
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        owner:
+          type: string
+        source:
+          type: string
+          enum:
+          - declared
+          - discovered
+        available:
+          type: boolean
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/TargetStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+    TargetStatus:
+      type: object
+      required:
+      - provider
+      - model
+      - health
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        health:
+          type: string
+          enum:
+          - Unknown
+          - Healthy
+          - Degraded
+          - Unreachable
+    ModelList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Model"
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last.
+    Key:
+      type: object
+      required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+      properties:
+        apiVersion:
+          type: string
+          const: lux.latere.ai/v1beta1
+        kind:
+          type: string
+          const: Key
+        metadata:
+          $ref: "#/components/schemas/ObjectMeta"
+        spec:
+          $ref: "#/components/schemas/KeySpec"
+        status:
+          $ref: "#/components/schemas/KeyStatus"
+          readOnly: true
+          description: Written by the server and ignored on apply.
+    KeySpec:
+      type: object
+      required:
+      - allowUnpriced
+      - passthrough
+      - disabled
+      properties:
+        models:
+          type: array
+          items:
+            type: string
+        value:
+          type: string
+          writeOnly: true
+          description: "Write-only: decoded into a member no encoding carries, so no response, event, or log line returns it."
+        valueFrom:
+          $ref: "#/components/schemas/ValueFrom"
+        limits:
+          $ref: "#/components/schemas/KeyLimits"
+        budget:
+          type: string
+        ttl:
+          type: string
+          description: A Go duration, such as 10m or 168h.
+        expiresAt:
+          type: string
+          format: date-time
+        allowUnpriced:
+          type: boolean
+        passthrough:
+          type: boolean
+        disabled:
+          type: boolean
+    KeyLimits:
+      type: object
+      properties:
+        requestsPerMinute:
+          type: integer
+        tokensPerMinute:
+          type: integer
+        spend:
+          $ref: "#/components/schemas/Spend"
+    Spend:
+      type: object
+      properties:
+        amount:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        currency:
+          type: string
+        window:
+          type: string
+          description: "A spend window: a Go duration from 1m to 8760h, month, or none."
+    KeyStatus:
+      type: object
+      required:
+      - warnings
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        owner:
+          type: string
+        prefix:
+          type: string
+        value:
+          type: string
+        state:
+          type: string
+          enum:
+          - Active
+          - Disabled
+          - Expired
+          - Exhausted
+        selectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelectorStatus"
+        budget:
+          $ref: "#/components/schemas/BudgetRef"
+        usage:
+          $ref: "#/components/schemas/KeyUsage"
+        lastUsedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+    SelectorStatus:
+      type: object
+      required:
+      - selector
+      - matched
+      properties:
+        selector:
+          type: string
+        matched:
+          type: array
+          items:
+            type: string
+    BudgetRef:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        id:
+          type: string
+    KeyUsage:
+      type: object
+      required:
+      - total
+      properties:
+        window:
+          $ref: "#/components/schemas/UsageWindow"
+        total:
+          $ref: "#/components/schemas/UsageTotal"
+    UsageWindow:
+      type: object
+      required:
+      - requests
+      - tokens
+      - spend
+      properties:
+        requests:
+          type: integer
+        tokens:
+          type: integer
+        spend:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        resetsAt:
+          type: string
+          format: date-time
+    UsageTotal:
+      type: object
+      required:
+      - requests
+      - tokens
+      - spend
+      properties:
+        requests:
+          type: integer
+        tokens:
+          type: integer
+        spend:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+    KeyList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Key"
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last.
+    Budget:
+      type: object
+      required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+      properties:
+        apiVersion:
+          type: string
+          const: lux.latere.ai/v1beta1
+        kind:
+          type: string
+          const: Budget
+        metadata:
+          $ref: "#/components/schemas/ObjectMeta"
+        spec:
+          $ref: "#/components/schemas/BudgetSpec"
+        status:
+          $ref: "#/components/schemas/BudgetStatus"
+          readOnly: true
+          description: Written by the server and ignored on apply.
+    BudgetSpec:
+      type: object
+      properties:
+        amount:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        currency:
+          type: string
+        window:
+          type: string
+          description: "A spend window: a Go duration from 1m to 8760h, month, or none."
+        hard:
+          type: boolean
+    BudgetStatus:
+      type: object
+      required:
+      - warnings
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        owner:
+          type: string
+        state:
+          type: string
+          enum:
+          - Open
+          - Exhausted
+        spent:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        remaining:
+          type: string
+          pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+          description: A money amount as a decimal string of at most 12 integer and 6 fraction digits.
+        resetsAt:
+          type: string
+          format: date-time
+        keys:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+    BudgetList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Budget"
+        next_cursor:
+          type: string
+          description: The cursor of the next page; absent on the last.
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          - details
+          properties:
+            code:
+              type: string
+              enum:
+              - malformed_body
+              - multi_document
+              - unsupported_version
+              - unsupported_kind
+              - unknown_field
+              - missing_field
+              - invalid_field
+              - reserved_prefix
+              - exclusive_fields
+              - duplicate_target
+              - invalid_request
+              - upstream_rejected
+              - dialect_unsupported
+              - provider_required
+              - currency_mismatch
+              - unauthenticated
+              - forbidden
+              - key_disabled
+              - key_expired
+              - route_not_allowed
+              - model_not_allowed
+              - model_unpriced
+              - not_found
+              - model_not_found
+              - read_only
+              - already_exists
+              - conflict
+              - immutable_field
+              - budget_in_use
+              - provider_in_use
+              - body_too_large
+              - unsupported_media_type
+              - ceiling_exceeded
+              - rate_limited
+              - spend_exceeded
+              - budget_exhausted
+              - internal
+              - upstream_error
+              - authorizer_unavailable
+              - store_unavailable
+              - provider_unavailable
+              - upstream_timeout
+            message:
+              type: string
+              description: The one fixed user sentence of the code.
+            details:
+              type: object
+              required:
+              - request_id
+              properties:
+                request_id:
+                  type: string
+                paths:
+                  type: array
+                  items:
+                    type: string
+                  description: The JSON paths of the fields the code names.
+                detail:
+                  type: string
+                  description: One developer sentence.
+    Self:
+      $ref: "#/components/schemas/Self"
+    SelfLimits:
+      $ref: "#/components/schemas/SelfLimits"
+    Filter:
+      $ref: "#/components/schemas/Filter"
+    WellKnown:
+      $ref: "#/components/schemas/WellKnown"
+security:
+- bearer: []
+x-lux-errors:
+- code: malformed_body
+  status: 400
+  message: The request body is not valid JSON or YAML.
+- code: multi_document
+  status: 400
+  message: Send one manifest per request.
+- code: unsupported_version
+  status: 400
+  message: This server serves lux.latere.ai/v1beta1.
+- code: unsupported_kind
+  status: 400
+  message: This server does not serve that kind.
+- code: unknown_field
+  status: 400
+  message: The manifest has a field this schema does not know.
+- code: missing_field
+  status: 400
+  message: A required field is missing.
+- code: invalid_field
+  status: 400
+  message: A field has a value it cannot take.
+- code: reserved_prefix
+  status: 400
+  message: That name is reserved for the gateway.
+- code: exclusive_fields
+  status: 400
+  message: Two fields that cannot be set together are set.
+- code: duplicate_target
+  status: 400
+  message: Two targets name the same provider and model.
+- code: invalid_request
+  status: 400
+  message: The request body is not valid for this request.
+- code: upstream_rejected
+  status: 400
+  message: The provider rejected this request.
+- code: dialect_unsupported
+  status: 400
+  message: This door cannot reach the provider that serves this model.
+- code: provider_required
+  status: 400
+  message: Name a provider with the Lux-Provider header.
+- code: currency_mismatch
+  status: 400
+  message: The budget and the model are priced in different currencies.
+- code: unauthenticated
+  status: 401
+  message: This request needs a valid credential.
+- code: forbidden
+  status: 403
+  message: You do not have permission to do this.
+- code: key_disabled
+  status: 403
+  message: This key is disabled.
+- code: key_expired
+  status: 403
+  message: This key has expired.
+- code: route_not_allowed
+  status: 403
+  message: This key may not use this route.
+- code: model_not_allowed
+  status: 403
+  message: This key may not use that model.
+- code: model_unpriced
+  status: 403
+  message: This model has no price, and this key spends under a limit.
+- code: not_found
+  status: 404
+  message: There is no such object.
+- code: model_not_found
+  status: 404
+  message: There is no model of that name.
+- code: read_only
+  status: 405
+  message: This server reads its manifests from a directory and cannot change them.
+- code: already_exists
+  status: 409
+  message: An object of this kind already has that name.
+- code: conflict
+  status: 409
+  message: The object changed since you read it; read it again and retry.
+- code: immutable_field
+  status: 409
+  message: This field cannot be changed after the object is created.
+- code: budget_in_use
+  status: 409
+  message: Keys still draw from this budget.
+- code: provider_in_use
+  status: 409
+  message: Models still target this provider.
+- code: body_too_large
+  status: 413
+  message: The request body is larger than this server accepts.
+- code: unsupported_media_type
+  status: 415
+  message: Send the manifest as JSON or YAML.
+- code: ceiling_exceeded
+  status: 422
+  message: The value is above what you may ask for.
+- code: rate_limited
+  status: 429
+  message: Too many requests; wait and retry.
+- code: spend_exceeded
+  status: 429
+  message: This key has spent its limit for the window.
+- code: budget_exhausted
+  status: 429
+  message: The budget has nothing left for the window.
+- code: internal
+  status: 500
+  message: Something went wrong on this server.
+- code: upstream_error
+  status: 502
+  message: The provider returned an error.
+- code: authorizer_unavailable
+  status: 503
+  message: The permission service is unavailable; retry shortly.
+- code: store_unavailable
+  status: 503
+  message: This server cannot reach its store; retry shortly.
+- code: provider_unavailable
+  status: 503
+  message: No provider for this model is available right now.
+- code: upstream_timeout
+  status: 504
+  message: The provider did not answer in time.

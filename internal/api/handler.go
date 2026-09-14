@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -157,8 +158,9 @@ type call struct {
 	addr   string      // the client address of spec 011
 }
 
-// handlerFunc is one route: it answers or returns the refusal.
-type handlerFunc func(c *call) *Error
+// handlerFunc is one route: it answers or returns the refusal, under the
+// request's context.
+type handlerFunc func(c *call, ctx context.Context) *Error
 
 // ServeHTTP mints the request id, echoes the caller's X-Request-Id under
 // spec 011's rule, refuses the file mode's writes before any body is
@@ -172,9 +174,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
 		hdr.Set("X-Request-Id", xid)
 	}
+	ctx := r.Context()
 	defer func() {
 		if p := recover(); p != nil {
-			h.logger.ErrorContext(r.Context(), "api: handler panic", "request_id", c.id, "method", r.Method, "path", r.URL.Path, "panic", p, "stack", string(debug.Stack()))
+			h.logger.ErrorContext(ctx, "api: handler panic", "request_id", c.id, "method", r.Method, "path", r.URL.Path, "panic", p, "stack", string(debug.Stack()))
 			if !c.w.committed {
 				c.fail(refuse(CodeInternal, ""))
 			}
@@ -191,7 +194,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.fail(refuse(CodeNotFound, r.Method+" "+p+" is not in the route table"))
 		return
 	}
-	h.mux.ServeHTTP(c.w, r.WithContext(withCall(r.Context(), c)))
+	h.mux.ServeHTTP(c.w, r.WithContext(withCall(ctx, c)))
 }
 
 // Unmounted is the handler the public listener serves under /v1 in the
@@ -247,21 +250,21 @@ func echoable(s string) bool {
 func (h *Handler) routes() {
 	for _, k := range kinds {
 		h.mux.Handle("/v1/"+k.plural, h.route(map[string]handlerFunc{
-			http.MethodGet: func(c *call) *Error { return c.list(k) },
+			http.MethodGet: func(c *call, ctx context.Context) *Error { return c.list(ctx, k) },
 		}))
 		item := "/v1/" + k.plural + "/{name}"
 		if k.name == v1.KindModel {
 			item = "/v1/" + k.plural + "/{name...}"
 		}
 		methods := map[string]handlerFunc{
-			http.MethodPut:    func(c *call) *Error { return c.apply(k, c.r.PathValue("name")) },
-			http.MethodGet:    func(c *call) *Error { return c.read(k, c.r.PathValue("name")) },
-			http.MethodDelete: func(c *call) *Error { return c.delete(k, c.r.PathValue("name")) },
+			http.MethodPut:    func(c *call, ctx context.Context) *Error { return c.apply(ctx, k, c.r.PathValue("name")) },
+			http.MethodGet:    func(c *call, ctx context.Context) *Error { return c.read(ctx, k, c.r.PathValue("name")) },
+			http.MethodDelete: func(c *call, ctx context.Context) *Error { return c.delete(ctx, k, c.r.PathValue("name")) },
 		}
 		h.mux.Handle(item, h.route(methods))
 		if k.name == v1.KindKey {
 			h.mux.Handle(item+"/rotate", h.route(map[string]handlerFunc{
-				http.MethodPost: func(c *call) *Error { return c.rotate(c.r.PathValue("name")) },
+				http.MethodPost: func(c *call, ctx context.Context) *Error { return c.rotate(ctx, c.r.PathValue("name")) },
 			}))
 		}
 	}
@@ -287,7 +290,7 @@ func (h *Handler) route(methods map[string]handlerFunc) http.Handler {
 			c.fail(refuse(CodeNotFound, r.Method+" "+r.URL.Path+" is not in the route table"))
 			return
 		}
-		if err := fn(c); err != nil {
+		if err := fn(c, r.Context()); err != nil {
 			c.fail(err)
 		}
 	})

@@ -75,7 +75,7 @@ func validModelName(s string) bool {
 // carries the kind's prefix, not_found when it carries another kind's,
 // a name otherwise. A missing object is not_found; nil and no error is
 // never returned.
-func (c *call) load(k kind, ref string) (v1.Object, int64, *Error) {
+func (c *call) load(ctx context.Context, k kind, ref string) (v1.Object, int64, *Error) {
 	if ref == "" || (k.name == v1.KindModel && !hasKindPrefix(ref) && !validModelName(ref)) {
 		return nil, 0, refuse(CodeNotFound, "the path names no "+k.name)
 	}
@@ -86,11 +86,11 @@ func (c *call) load(k kind, ref string) (v1.Object, int64, *Error) {
 	)
 	switch {
 	case strings.HasPrefix(ref, k.prefix):
-		obj, version, err = c.h.o.Store.Objects().Get(c.r.Context(), k.name, ref)
+		obj, version, err = c.h.o.Store.Objects().Get(ctx, k.name, ref)
 	case hasKindPrefix(ref):
 		return nil, 0, refuse(CodeNotFound, strconv.Quote(ref)+" is an id of another kind, and no "+k.name+" has it")
 	default:
-		obj, version, err = c.h.o.Store.Objects().ByName(c.r.Context(), k.name, ref)
+		obj, version, err = c.h.o.Store.Objects().ByName(ctx, k.name, ref)
 	}
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, 0, refuse(CodeNotFound, "no "+k.name+" "+strconv.Quote(ref))
