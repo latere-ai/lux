@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,9 +77,7 @@ func sendCtx(t *testing.T, ctx context.Context, srv *server, method, path, body 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	if req.Header.Get(srv.stub.Dialect().CredentialHeader()) == "" {
 		credential(srv.stub.Dialect(), req.Header, DefaultCredential)
 	}

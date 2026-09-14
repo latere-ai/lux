@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -200,9 +201,7 @@ func checkRow(t *testing.T, srv *server, d v1.Dialect, path, body string, header
 	case KindHang:
 		ctx := shortly(t, 150*time.Millisecond)
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+path, strings.NewReader(body))
-		for k, v := range header {
-			req.Header[k] = v
-		}
+		maps.Copy(req.Header, header)
 		credential(d, req.Header, DefaultCredential)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

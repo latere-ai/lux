@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -109,9 +110,7 @@ func do(t *testing.T, method, url, body string, header http.Header) (int, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)

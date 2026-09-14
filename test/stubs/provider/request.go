@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -117,8 +118,8 @@ func lastUserText(d v1.Dialect, rt routeKind, doc map[string]any) string {
 // role is user, or names no role, and returns the text of its member.
 func lastUserOf(list any, member string) string {
 	items, _ := list.([]any)
-	for i := len(items) - 1; i >= 0; i-- {
-		m, ok := items[i].(map[string]any)
+	for _, item := range slices.Backward(items) {
+		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -153,8 +154,8 @@ func lastString(v any) string {
 		return s
 	}
 	items, _ := v.([]any)
-	for i := len(items) - 1; i >= 0; i-- {
-		if s, ok := items[i].(string); ok {
+	for _, item := range slices.Backward(items) {
+		if s, ok := item.(string); ok {
 			return s
 		}
 	}

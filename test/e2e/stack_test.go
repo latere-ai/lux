@@ -315,9 +315,7 @@ func doCtx(t *testing.T, ctx context.Context, method, url string, header http.He
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)
