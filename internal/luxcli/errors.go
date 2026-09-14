@@ -115,8 +115,7 @@ func (a *app) serverLine() string {
 // named by LUX_TOKEN_FILE could not be read or is empty, which is exit 2
 // with the variable named, since no request was made.
 func tokenFileError(err error) (error, bool) {
-	var pe *os.PathError
-	if errors.As(err, &pe) {
+	if _, ok := errors.AsType[*os.PathError](err); ok {
 		return &usageError{msg: EnvTokenFile + " names a file that cannot be read."}, true
 	}
 	if errors.Is(err, luxclient.ErrEmptyToken) {

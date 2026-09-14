@@ -106,7 +106,7 @@ func startGateway(t *testing.T) *gatewayHarness {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	base, _ := url.Parse("http://localhost:" + port)
 	reg := metrics.NewRegistry()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	defaults := manifest.Defaults{Timeout: 10 * time.Minute}
 	keyCache := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: time.Second, Tail: 20 * time.Millisecond, Metrics: reg, Logger: logger})
 	credentials := &serve.StoreCredentials{Credentials: st.Credentials(), Keys: keys}

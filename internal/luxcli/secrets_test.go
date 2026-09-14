@@ -4,6 +4,7 @@
 package luxcli
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -73,7 +74,7 @@ func TestSecretsGoOneWay(t *testing.T) {
 		// The server's own detail is printed as the server wrote it; a
 		// server that echoes a token is the server's leak, not the
 		// command's, so the check is on the command's own lines.
-		for _, line := range strings.Split(r.stderr, "\n") {
+		for line := range strings.SplitSeq(r.stderr, "\n") {
 			if !strings.HasPrefix(line, "detail: ") {
 				noSecret(t, source+" refusal stderr", line)
 			}
@@ -83,9 +84,7 @@ func TestSecretsGoOneWay(t *testing.T) {
 		// the token.
 		r = run(t, func() map[string]string {
 			m := map[string]string{}
-			for k, v := range env {
-				m[k] = v
-			}
+			maps.Copy(m, env)
 			m["LUX_URL"] = "http://127.0.0.1:1"
 			return m
 		}(), "apply", "-f", keyFile, "-v")

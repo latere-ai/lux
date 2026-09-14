@@ -18,8 +18,11 @@ type command struct {
 	brief   string
 	summary string
 	plane   plane
-	flags   func(a *app, fs *flag.FlagSet) any
-	run     func(a *app, own any, args []string) error
+	// setup registers the command's own flags and returns what runs it
+	// once they are parsed; a command with no flags of its own leaves it
+	// nil and run is called directly.
+	setup func(a *app, fs *flag.FlagSet) func(args []string) error
+	run   func(a *app, args []string) error
 }
 
 // root is the command with no words: its help lists the others.
@@ -61,7 +64,7 @@ func init() {
 				"document, and a file may hold several YAML documents; they apply in\n" +
 				"file order and the first refusal stops the run. A create of a Key\n" +
 				"prints its value once, in status.value.",
-			plane: planeControl, flags: applyFlags, run: runApply,
+			plane: planeControl, setup: applyFlags,
 		},
 		{
 			name:  "get",
@@ -78,14 +81,14 @@ func init() {
 			summary: "List the objects of a kind, following every page to the end or to\n" +
 				"-limit items, and print one list. -source and -provider apply to\n" +
 				"models alone.",
-			plane: planeControl, flags: listFlags, run: runList,
+			plane: planeControl, setup: listFlags,
 		},
 		{
 			name:    "delete",
 			brief:   "delete one object",
 			usage:   "lux delete <kind> <name> [flags]",
 			summary: "Delete one object. Nothing is printed on success.",
-			plane:   planeControl, flags: deleteFlags, run: runDelete,
+			plane:   planeControl, setup: deleteFlags,
 		},
 		{
 			name:  "keys rotate",
@@ -101,7 +104,7 @@ func init() {
 			usage: "lux usage [flags]",
 			summary: "Read usage aggregated over a range, grouped by up to three dimensions\n" +
 				"with -by and bucketed with -interval. -since 24h is -from now-24h.",
-			plane: planeUsage, flags: usageFlags, run: runUsage,
+			plane: planeUsage, setup: usageFlags,
 		},
 		{
 			name:  "requests",
@@ -109,7 +112,7 @@ func init() {
 			usage: "lux requests [flags]",
 			summary: "Read the request records themselves, newest first, following every\n" +
 				"page to the end or to -limit records.",
-			plane: planeUsage, flags: requestsFlags, run: runRequests,
+			plane: planeUsage, setup: requestsFlags,
 		},
 		{
 			name:  "models",
@@ -133,7 +136,7 @@ func init() {
 			summary: "Build a Key from flags and apply it, printing its value once. -dry-run\n" +
 				"prints the manifest instead and sends nothing, which is how a first\n" +
 				"file gets written.",
-			plane: planeControl, flags: keysCreateFlags, run: runKeysCreate,
+			plane: planeControl, setup: keysCreateFlags,
 		},
 		{
 			name:  "providers create",
@@ -142,7 +145,7 @@ func init() {
 			summary: "Build a Provider from flags and apply it. The credential comes from\n" +
 				"the environment variable -credential-from-env names and is never\n" +
 				"written into the manifest -dry-run prints.",
-			plane: planeControl, flags: providersCreateFlags, run: runProvidersCreate,
+			plane: planeControl, setup: providersCreateFlags,
 		},
 		{
 			name:  "models create",
@@ -150,7 +153,7 @@ func init() {
 			usage: "lux models create <name> -target <provider>/<model>[@<weight>[:<priority>]]... [flags]",
 			summary: "Build a Model from flags and apply it. -target repeats, one per\n" +
 				"provider the model reaches.",
-			plane: planeControl, flags: modelsCreateFlags, run: runModelsCreate,
+			plane: planeControl, setup: modelsCreateFlags,
 		},
 		{
 			name:  "budgets create",
@@ -158,7 +161,7 @@ func init() {
 			usage: "lux budgets create <name> -amount <a> [flags]",
 			summary: "Build a Budget from flags and apply it. A budget is hard unless -soft\n" +
 				"is given.",
-			plane: planeControl, flags: budgetsCreateFlags, run: runBudgetsCreate,
+			plane: planeControl, setup: budgetsCreateFlags,
 		},
 	}
 }
@@ -206,8 +209,8 @@ func (a *app) help(cmd *command) string {
 	if cmd == root {
 		fs.BoolVar(&probe.showVersion, "version", false, "print the build identity and exit")
 	}
-	if cmd.flags != nil {
-		cmd.flags(probe, fs)
+	if cmd.setup != nil {
+		cmd.setup(probe, fs)
 	}
 	var flags bytes.Buffer
 	fs.SetOutput(&flags)

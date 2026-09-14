@@ -121,7 +121,7 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 		return out, nil
 	}
 	if e, ok := decodeError(resp.StatusCode, data, out.RequestID, resp.Header.Get("Retry-After")); ok {
-		return nil, e
+		return nil, &e
 	}
 	return nil, &UnreadableError{Method: req.Method, URL: target, Status: resp.StatusCode, RequestID: out.RequestID, Body: data}
 }

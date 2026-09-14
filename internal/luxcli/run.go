@@ -114,9 +114,9 @@ func (a *app) run() error {
 		return &usageError{cmd: root, msg: "There is no command " + quote(strings.Join(rest[:min(len(rest), 2)], " ")) + "."}
 	}
 	fs := a.flagSet(cmd.name, cmd.plane != planeUsage)
-	var own any
-	if cmd.flags != nil {
-		own = cmd.flags(a, fs)
+	runner := func(args []string) error { return cmd.run(a, args) }
+	if cmd.setup != nil {
+		runner = cmd.setup(a, fs)
 	}
 	positional, err := parseInterleaved(fs, args)
 	if err != nil {
@@ -127,7 +127,7 @@ func (a *app) run() error {
 	if err := a.checkOutput(); err != nil {
 		return err
 	}
-	return cmd.run(a, own, positional)
+	return runner(positional)
 }
 
 // flagSet is a FlagSet with the global flags. withKey leaves -key out,
@@ -201,8 +201,7 @@ func (a *app) exit(err error) int {
 	if err == nil {
 		return ExitOK
 	}
-	var ue *usageError
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*usageError](err); ok {
 		_, _ = fmt.Fprintln(a.o.Stderr, ue.msg)
 		if ue.cmd != nil {
 			_, _ = fmt.Fprintln(a.o.Stderr, "Usage: "+ue.cmd.usage)

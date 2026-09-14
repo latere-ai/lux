@@ -5,6 +5,7 @@ package luxcli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ type keysCreateOptions struct {
 	passthrough, dryRun        bool
 }
 
-func keysCreateFlags(_ *app, fs *flag.FlagSet) any {
+func keysCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &keysCreateOptions{}
 	fs.StringVar(&o.models, "models", "", "the model selectors, comma separated; required")
 	fs.IntVar(&o.rpm, "rpm", 0, "requests a minute; 0 is no limit")
@@ -35,11 +36,10 @@ func keysCreateFlags(_ *app, fs *flag.FlagSet) any {
 	fs.Var(&o.labels, "label", "a label, k=v; repeatable")
 	fs.BoolVar(&o.passthrough, "passthrough", false, "let the Key call any route the dialect has, translated or not")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
-	return o
+	return func(args []string) error { return runKeysCreate(a, o, args) }
 }
 
-func runKeysCreate(a *app, own any, args []string) error {
-	o := own.(*keysCreateOptions)
+func runKeysCreate(a *app, o *keysCreateOptions, args []string) error {
 	if err := want("keys create", args, 1, "a name"); err != nil {
 		return err
 	}
@@ -87,18 +87,17 @@ type providersCreateOptions struct {
 	dryRun                       bool
 }
 
-func providersCreateFlags(_ *app, fs *flag.FlagSet) any {
+func providersCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &providersCreateOptions{}
 	fs.StringVar(&o.dialect, "dialect", "", "the dialect the provider speaks: openai, anthropic, gemini, or lux; required")
 	fs.StringVar(&o.baseURL, "base-url", "", "the provider's base URL; required")
 	fs.StringVar(&o.credential, "credential-from-env", "", "NAME: send the variable's value as the credential")
 	fs.Var(&o.headers, "header", "a header sent to the provider, k=v; repeatable")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
-	return o
+	return func(args []string) error { return runProvidersCreate(a, o, args) }
 }
 
-func runProvidersCreate(a *app, own any, args []string) error {
-	o := own.(*providersCreateOptions)
+func runProvidersCreate(a *app, o *providersCreateOptions, args []string) error {
 	if err := want("providers create", args, 1, "a name"); err != nil {
 		return err
 	}
@@ -125,18 +124,17 @@ type modelsCreateOptions struct {
 	dryRun                           bool
 }
 
-func modelsCreateFlags(_ *app, fs *flag.FlagSet) any {
+func modelsCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &modelsCreateOptions{}
 	fs.Var(&o.targets, "target", "a target, <provider>/<model>[@<weight>[:<priority>]]; repeatable, at least one")
 	fs.StringVar(&o.priceInput, "price-input", "", "the price of a million input tokens; with -price-output")
 	fs.StringVar(&o.priceOutput, "price-output", "", "the price of a million output tokens; with -price-input")
 	fs.StringVar(&o.fallbck, "fallback", "", "onError or never")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
-	return o
+	return func(args []string) error { return runModelsCreate(a, o, args) }
 }
 
-func runModelsCreate(a *app, own any, args []string) error {
-	o := own.(*modelsCreateOptions)
+func runModelsCreate(a *app, o *modelsCreateOptions, args []string) error {
 	if err := want("models create", args, 1, "a name"); err != nil {
 		return err
 	}
@@ -198,18 +196,17 @@ type budgetsCreateOptions struct {
 	soft, dryRun             bool
 }
 
-func budgetsCreateFlags(_ *app, fs *flag.FlagSet) any {
+func budgetsCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &budgetsCreateOptions{}
 	fs.StringVar(&o.amount, "amount", "", "the amount per window; required")
 	fs.StringVar(&o.currency, "currency", "", "the currency; USD when unset")
 	fs.StringVar(&o.window, "window", "", "the window: month, none, or a duration; month when unset")
 	fs.BoolVar(&o.soft, "soft", false, "warn past the amount instead of refusing")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
-	return o
+	return func(args []string) error { return runBudgetsCreate(a, o, args) }
 }
 
-func runBudgetsCreate(a *app, own any, args []string) error {
-	o := own.(*budgetsCreateOptions)
+func runBudgetsCreate(a *app, o *budgetsCreateOptions, args []string) error {
 	if err := want("budgets create", args, 1, "a name"); err != nil {
 		return err
 	}
@@ -244,7 +241,11 @@ func (a *app) create(obj v1.Object, plural, name string, dryRun bool, credential
 		return err
 	}
 	if credential != "" {
-		if body, err = withCredential(obj.(*v1.Provider), credential); err != nil {
+		p, ok := obj.(*v1.Provider)
+		if !ok {
+			return errors.New("a credential was given for an object that is not a Provider")
+		}
+		if body, err = withCredential(p, credential); err != nil {
 			return err
 		}
 	}

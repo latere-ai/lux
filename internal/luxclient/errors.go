@@ -74,14 +74,16 @@ func (e *UnreadableError) Error() string {
 	return e.Method + " " + e.URL + ": status " + strconv.Itoa(e.Status) + " with a body this client does not read: " + strconv.Quote(excerpt)
 }
 
-// decodeError reads a refusal's envelope into an *Error, or reports
-// false for a body that is not one.
-func decodeError(status int, body []byte, requestID string, retryAfter string) (*Error, bool) {
+// decodeError reads a refusal's envelope into an Error, or reports
+// false for a body that is not one. The value is returned rather than
+// a pointer so a body that is not an envelope is a zero value and not a
+// nil error.
+func decodeError(status int, body []byte, requestID string, retryAfter string) (Error, bool) {
 	var env httpjson.ErrorEnvelope
-	if err := json.Unmarshal(body, &env); err != nil || env.Error.Code == "" {
-		return nil, false
+	if json.Unmarshal(body, &env) != nil || env.Error.Code == "" {
+		return Error{}, false
 	}
-	e := &Error{Status: status, Code: env.Error.Code, Message: env.Error.Message, RequestID: requestID}
+	e := Error{Status: status, Code: env.Error.Code, Message: env.Error.Message, RequestID: requestID}
 	if id, ok := env.Error.Details["request_id"].(string); ok && id != "" {
 		e.RequestID = id
 	}

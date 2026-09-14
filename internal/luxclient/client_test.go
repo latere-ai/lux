@@ -6,6 +6,7 @@ package luxclient
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -60,15 +61,8 @@ func newFake(t *testing.T) *fake {
 }
 
 func readAll(r *http.Request) (string, error) {
-	var b strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, err := r.Body.Read(buf)
-		b.Write(buf[:n])
-		if err != nil {
-			return b.String(), nil
-		}
-	}
+	data, err := io.ReadAll(r.Body)
+	return string(data), err
 }
 
 func (f *fake) on(method, path string, status int, body string) {
@@ -329,7 +323,7 @@ func TestListFollowsNextCursor(t *testing.T) {
 		t.Fatalf("unbounded one page: %s %v", resp.Body, err)
 	}
 	f.on(http.MethodGet, "/v1/models", 200, `{"items":[{"x":1},{"y":2}]}`+"\n")
-	resp, err = c.Requests(t.Context(), nil, 1)
+	_, err = c.Requests(t.Context(), nil, 1)
 	if err == nil {
 		t.Fatal("requests has no answer here and must be not_found")
 	}

@@ -50,7 +50,7 @@ func (a *app) answer(resp *luxclient.Response, err error) error {
 	return a.print(resp.Body)
 }
 
-func runGet(a *app, _ any, args []string) error {
+func runGet(a *app, args []string) error {
 	if err := want("get", args, 2, "a kind and a name"); err != nil {
 		return err
 	}
@@ -71,18 +71,17 @@ type listOptions struct {
 	limit                   int
 }
 
-func listFlags(_ *app, fs *flag.FlagSet) any {
+func listFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &listOptions{}
 	fs.Var(&o.labels, "l", "a label selector, k=v; repeatable, every pair must match")
 	fs.StringVar(&o.owner, "owner", "", "objects of this owner")
 	fs.StringVar(&o.source, "source", "", "models alone: declared or discovered")
 	fs.StringVar(&o.provider, "provider", "", "models alone: those with a target on this provider")
 	fs.IntVar(&o.limit, "limit", 0, "stop after this many items; 0 is every item")
-	return o
+	return func(args []string) error { return runList(a, o, args) }
 }
 
-func runList(a *app, own any, args []string) error {
-	o := own.(*listOptions)
+func runList(a *app, o *listOptions, args []string) error {
 	if err := want("list", args, 1, "a kind"); err != nil {
 		return err
 	}
@@ -118,14 +117,13 @@ func runList(a *app, own any, args []string) error {
 
 type deleteOptions struct{ ifMatch string }
 
-func deleteFlags(_ *app, fs *flag.FlagSet) any {
+func deleteFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &deleteOptions{}
 	fs.StringVar(&o.ifMatch, "if-match", "", "delete only at this version, or * for any")
-	return o
+	return func(args []string) error { return runDelete(a, o, args) }
 }
 
-func runDelete(a *app, own any, args []string) error {
-	o := own.(*deleteOptions)
+func runDelete(a *app, o *deleteOptions, args []string) error {
 	if err := want("delete", args, 2, "a kind and a name"); err != nil {
 		return err
 	}
@@ -155,7 +153,7 @@ func checkIfMatch(v string) error {
 	return nil
 }
 
-func runRotate(a *app, _ any, args []string) error {
+func runRotate(a *app, args []string) error {
 	if err := want("keys rotate", args, 1, "a name"); err != nil {
 		return err
 	}
@@ -166,7 +164,7 @@ func runRotate(a *app, _ any, args []string) error {
 	return a.answer(c.Rotate(a.ctx, args[0]))
 }
 
-func runWhoami(a *app, _ any, args []string) error {
+func runWhoami(a *app, args []string) error {
 	if err := want("whoami", args, 0, "no argument"); err != nil {
 		return err
 	}
@@ -177,7 +175,7 @@ func runWhoami(a *app, _ any, args []string) error {
 	return a.answer(c.Self(a.ctx))
 }
 
-func runModels(a *app, _ any, args []string) error {
+func runModels(a *app, args []string) error {
 	if err := want("models", args, 0, "no argument"); err != nil {
 		return err
 	}

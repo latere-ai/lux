@@ -23,12 +23,12 @@ type applyOptions struct {
 	ifMatch     string
 }
 
-func applyFlags(_ *app, fs *flag.FlagSet) any {
+func applyFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := &applyOptions{}
 	fs.Var(&o.files, "f", "a manifest file; repeatable, applied in order")
 	fs.Var(&o.credentials, "credential-from-env", "NAME or <provider>=NAME: send the variable's value as the Provider's credential")
 	fs.StringVar(&o.ifMatch, "if-match", "", "apply only at this version, or * to update an existing object; one document")
-	return o
+	return func(args []string) error { return runApply(a, o, args) }
 }
 
 // document is one manifest on its way to the server: where it came from,
@@ -43,8 +43,7 @@ type document struct {
 	name        string
 }
 
-func runApply(a *app, own any, args []string) error {
-	o := own.(*applyOptions)
+func runApply(a *app, o *applyOptions, args []string) error {
 	if len(args) > 0 {
 		return &usageError{cmd: byName("apply"), msg: "lux apply takes no argument; name the files with -f."}
 	}
@@ -120,8 +119,7 @@ func readDocuments(file string) ([]*document, error) {
 // sentence after the file and the document, with the developer detail
 // left to -v, where a server refusal would have put it.
 func decodeError(file string, index int, err error) error {
-	var me *manifest.Error
-	if errors.As(err, &me) {
+	if me, ok := errors.AsType[*manifest.Error](err); ok {
 		msg := me.Message
 		if msg == "" {
 			msg = messageRefused
@@ -214,7 +212,10 @@ func (a *app) injectCredentials(docs []*document, flags multi) error {
 			return &usageError{msg: "-credential-from-env " + quote(variable) + " needs a Provider name, since the documents hold " + strings.Join(names, " and ") + "; write <provider>=" + variable + "."}
 		}
 		d := providers[0]
-		p := d.obj.(*v1.Provider)
+		p, ok := d.obj.(*v1.Provider)
+		if !ok {
+			return errors.New("a document filtered as a Provider is not one")
+		}
 		if p.Spec.Credential != nil {
 			if _, has := p.Spec.Credential.Value(); has || p.Spec.Credential.ValueFrom != nil {
 				return &usageError{msg: where(d.file, d.index) + "The Provider " + quote(d.name) + " already carries a credential; drop it from the file or drop -credential-from-env."}
@@ -245,7 +246,10 @@ func withCredential(p *v1.Provider, value string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	o := v.(*object)
+	o, ok := v.(*object)
+	if !ok {
+		return nil, errors.New("the encoded Provider is not an object")
+	}
 	spec, ok := o.m["spec"].(*object)
 	if !ok {
 		spec = newObject()
@@ -273,7 +277,10 @@ func manifestJSON(obj v1.Object) (*object, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the manifest does not decode: %w", err)
 	}
-	o := v.(*object)
+	o, ok := v.(*object)
+	if !ok {
+		return nil, errors.New("the encoded manifest is not an object")
+	}
 	o.del("status")
 	return o, nil
 }

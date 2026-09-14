@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 )
@@ -18,9 +19,7 @@ import (
 // next_cursor is absent, and whose other members are the last page's.
 func (c *Client) List(ctx context.Context, path string, query url.Values, limit int) (*Response, error) {
 	q := url.Values{}
-	for k, v := range query {
-		q[k] = v
-	}
+	maps.Copy(q, query)
 	var (
 		first   *Response
 		items   []json.RawMessage
@@ -53,7 +52,11 @@ func (c *Client) List(ctx context.Context, path string, query url.Values, limit 
 	if limit > 0 && len(items) > limit {
 		items = items[:limit]
 	}
-	first.Body = assemble(items, members)
+	body, err := assemble(items, members)
+	if err != nil {
+		return nil, err
+	}
+	first.Body = body
 	return first, nil
 }
 
@@ -117,7 +120,7 @@ func parsePage(body []byte) (page, error) {
 // assemble renders one envelope: items first, then the other members in
 // their order, next_cursor left out, and the newline every body of the
 // API ends in.
-func assemble(items []json.RawMessage, members []member) []byte {
+func assemble(items []json.RawMessage, members []member) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString(`{"items":[`)
 	for i, it := range items {
@@ -129,11 +132,14 @@ func assemble(items []json.RawMessage, members []member) []byte {
 	b.WriteByte(']')
 	for _, m := range members {
 		b.WriteByte(',')
-		k, _ := json.Marshal(m.key)
+		k, err := json.Marshal(m.key)
+		if err != nil {
+			return nil, err
+		}
 		b.Write(k)
 		b.WriteByte(':')
 		b.Write(m.raw)
 	}
 	b.WriteString("}\n")
-	return b.Bytes()
+	return b.Bytes(), nil
 }

@@ -54,7 +54,10 @@ func (o *object) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		key, _ := json.Marshal(k)
+		key, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
 		b.Write(key)
 		b.WriteByte(':')
 		v, err := json.Marshal(o.m[k])
@@ -339,7 +342,7 @@ func (a *app) grid(cols []column, rows []*object) string {
 // path reads a dotted member path.
 func path(o *object, p string) any {
 	var cur any = o
-	for _, seg := range strings.Split(p, ".") {
+	for seg := range strings.SplitSeq(p, ".") {
 		obj, ok := cur.(*object)
 		if !ok {
 			return nil

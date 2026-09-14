@@ -33,19 +33,19 @@ func usageFilters(fs *flag.FlagSet) *usageOptions {
 	return o
 }
 
-func usageFlags(_ *app, fs *flag.FlagSet) any {
+func usageFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := usageFilters(fs)
 	fs.Var(&o.by, "by", "a dimension to group by: key, model, provider, owner, door, status, or label:<k>; repeatable, at most three")
 	fs.StringVar(&o.interval, "interval", "", "the bucket: hour, day, month, or total")
-	return o
+	return func(args []string) error { return runUsage(a, o, args) }
 }
 
-func requestsFlags(_ *app, fs *flag.FlagSet) any {
+func requestsFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := usageFilters(fs)
 	fs.StringVar(&o.status, "status", "", "ok, refused, or failed")
 	fs.StringVar(&o.errorCode, "error", "", "records refused or failed with this code")
 	fs.IntVar(&o.limit, "limit", 0, "stop after this many records; 0 is every record")
-	return o
+	return func(args []string) error { return runRequests(a, o, args) }
 }
 
 // query renders the filters as the routes' parameters.
@@ -81,8 +81,7 @@ func (a *app) query(o *usageOptions) (url.Values, error) {
 	return q, nil
 }
 
-func runUsage(a *app, own any, args []string) error {
-	o := own.(*usageOptions)
+func runUsage(a *app, o *usageOptions, args []string) error {
 	if err := want("usage", args, 0, "no argument"); err != nil {
 		return err
 	}
@@ -103,8 +102,7 @@ func runUsage(a *app, own any, args []string) error {
 	return a.answer(c.Usage(a.ctx, q))
 }
 
-func runRequests(a *app, own any, args []string) error {
-	o := own.(*usageOptions)
+func runRequests(a *app, o *usageOptions, args []string) error {
 	if err := want("requests", args, 0, "no argument"); err != nil {
 		return err
 	}

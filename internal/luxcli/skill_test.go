@@ -109,8 +109,8 @@ func TestSkillNamesOnlyRealCommands(t *testing.T) {
 		}
 		probe := &app{o: Options{}}
 		fs := probe.flagSet(cmd.name, cmd.plane != planeUsage)
-		if cmd.flags != nil {
-			cmd.flags(probe, fs)
+		if cmd.setup != nil {
+			cmd.setup(probe, fs)
 		}
 		for _, w := range rest {
 			if !strings.HasPrefix(w, "-") {
