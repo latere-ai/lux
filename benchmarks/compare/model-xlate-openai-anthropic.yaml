@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# A routable model whose target speaks the anthropic dialect, reached
+# through the /openai door. It forces luxd's translated path (openaichat
+# frontend, anthropic backend) so the benchmark can measure translation
+# overhead against LiteLLM doing the same OpenAI-in, Anthropic-upstream
+# conversion. run.sh applies this over the control plane after `make run`.
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: xlate-openai-anthropic
+spec:
+  targets:
+    - provider: anthropic
+      model: stub-anthropic
+  pricing:
+    input: "3"
+    output: "15"
