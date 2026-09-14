@@ -542,9 +542,9 @@ Provider ([[013-tunnelled-runtimes]]).
 
 ## Outcome
 
-Built on 2026-09-14 in twelve commits on `main`, over the memory
+Built on 2026-09-14 in fourteen commits on `main`, over the memory
 store and the file mode of [[010-state]], and proven by the whole gate,
-sixteen gates, and per-package coverage of 94.6% for `internal/secrets`,
+fifteen gates, and per-package coverage of 94.6% for `internal/secrets`,
 97.7% for `gateway`, 95.8% for `internal/serve`, 96.2% for
 `internal/rewrap`, 99.4% for `internal/config`, and 94.3% for
 `cmd/luxd`. What diverged from the text as dispatched, each fixed in
