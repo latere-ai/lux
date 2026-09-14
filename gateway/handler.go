@@ -112,6 +112,7 @@ type call struct {
 	targets []Target
 	counted *int64 // the estimator's count of the input, once it has been asked for
 	lease   Lease
+	settled bool // the lease was settled before finish
 	tokens  Tokens
 	rec     Record
 }
@@ -148,6 +149,20 @@ func echoable(s string) bool {
 	return true
 }
 
+// settle replaces the lease's reservation with the measured tokens,
+// once. respondWhole calls it before the body is written, so a caller
+// that acts on the answer at once, with its next request, meets the
+// ledger the answer moved and a Budget the answer exhausted refuses
+// that next request; finish calls it for every other path, after the
+// last byte, which for a stream is when the tokens are known.
+func (c *call) settle(ctx context.Context) {
+	if c.lease == nil || c.settled {
+		return
+	}
+	c.settled = true
+	c.lease.Settle(context.WithoutCancel(ctx), c.tokens)
+}
+
 // finish answers a failure the pipeline returned, settles the lease, and
 // writes the record. A failure after the first byte has already ended
 // the stream with the door's frame; one before it is the envelope.
@@ -168,9 +183,7 @@ func (c *call) finish(ctx context.Context, f *failure) {
 			writeFailure(c.w, c.door, c.id, f)
 		}
 	}
-	if c.lease != nil {
-		c.lease.Settle(context.WithoutCancel(ctx), c.tokens)
-	}
+	c.settle(ctx)
 	c.rec.EndedAt = c.h.now()
 	c.rec.Latency = c.rec.EndedAt.Sub(c.start)
 	if !c.w.first.IsZero() {

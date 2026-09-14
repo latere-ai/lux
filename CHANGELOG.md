@@ -6,6 +6,10 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A whole answer's spend is settled before its body reaches the caller,
+  so the request a caller sends the moment it has the answer meets the
+  Budget and spend the answer moved; before, a fast caller could slip
+  one more request past a Budget the previous answer had exhausted.
 - `lux-stubs`: an eighth listener, the index, whose `GET /` answers one
   document naming the URL of every other stub of the run and the
   credential the stub providers require, so a suite or a script handed

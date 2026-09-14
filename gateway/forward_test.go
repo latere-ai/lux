@@ -737,3 +737,55 @@ func TestHopByHopHeadersAreRemovedBothWays(t *testing.T) {
 		}
 	}
 }
+
+// settleWatcher is the caller's connection in TestWholeResponseSettlesBeforeItsBody:
+// at the first body byte it notes whether the lease was settled yet.
+type settleWatcher struct {
+	http.ResponseWriter
+	lease           *fakeLease
+	checked         bool
+	settledAtWrite  bool
+	settledAtHeader bool
+}
+
+func (s *settleWatcher) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+func (s *settleWatcher) settledCount() int {
+	s.lease.mu.Lock()
+	defer s.lease.mu.Unlock()
+	return len(s.lease.settled)
+}
+
+func (s *settleWatcher) WriteHeader(status int) {
+	s.settledAtHeader = s.settledCount() > 0
+	s.ResponseWriter.WriteHeader(status)
+}
+
+func (s *settleWatcher) Write(p []byte) (int, error) {
+	if !s.checked {
+		s.checked, s.settledAtWrite = true, s.settledCount() > 0
+	}
+	return s.ResponseWriter.Write(p)
+}
+
+// TestWholeResponseSettlesBeforeItsBody: a whole answer's measured
+// tokens are settled before its status and body reach the caller, so a
+// caller that sends its next request the moment it has the answer meets
+// the ledger the answer moved, and a Budget the answer exhausted refuses
+// that request rather than racing the settle.
+func TestWholeResponseSettlesBeforeItsBody(t *testing.T) {
+	w := newWorld(t)
+	w.openai.respondJSON(200, `{"id":"c1","object":"chat.completion","model":"gpt-4.1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`)
+	rec := httptest.NewRecorder()
+	seen := &settleWatcher{ResponseWriter: rec, lease: w.limiter.lease}
+	w.h.ServeHTTP(seen, w.request(http.MethodPost, "/openai/v1/chat/completions", chatBody("gpt", false)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if !seen.settledAtHeader || !seen.settledAtWrite {
+		t.Fatalf("the answer reached the caller before the lease was settled: header %v, body %v", seen.settledAtHeader, seen.settledAtWrite)
+	}
+	if got := w.limiter.lease.settled; len(got) != 1 || got[0] != (Tokens{Input: 3, Output: 2}) {
+		t.Fatalf("settled %+v, want the measured tokens once", got)
+	}
+}

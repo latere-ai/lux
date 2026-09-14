@@ -343,7 +343,12 @@ is the Key's spec, or `LUX_DEFAULT_REQUESTS_PER_MINUTE` and
 `LUX_DEFAULT_TOKENS_PER_MINUTE` where the spec names none.
 
 A request costs one from the request bucket at stage 7. The token
-bucket is charged a reservation before the request and settled after:
+bucket is charged a reservation before the request and settled once
+the measured tokens are known, which for a whole answer is before its
+body is written to the caller, so the next request a caller sends the
+moment it has the answer meets the settled ledger, and a Budget that
+answer exhausted refuses it (`TestWholeResponseSettlesBeforeItsBody`);
+a stream settles when it ends:
 
 ```
 reserve  = estimate(input tokens) + requested max output tokens, or 1024 when unrequested

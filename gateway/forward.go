@@ -486,6 +486,7 @@ func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Re
 		c.w.Header().Set("Content-Type", "application/json")
 	case m == modeEstimate:
 	}
+	c.settle(ctx)
 	c.w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	c.w.WriteHeader(resp.StatusCode)
 	_, _ = c.w.Write(body)
