@@ -109,7 +109,7 @@ type call struct {
 	route     route
 	key       *v1.Key
 	body      []byte
-	probe     probe
+	probe     bridge.Call
 	model     *v1.Model
 	targets   []Target
 	irReq     *ir.Request // the decoded request, when a translation or an estimate needs one
@@ -289,18 +289,18 @@ func (c *call) authenticate(ctx context.Context) *failure {
 // resolveModel is stage 5: the name from the path or the probe, the
 // Model by exact name, the Key's selectors.
 func (c *call) resolveModel(ctx context.Context) *failure {
-	p, err := probeBody(c.body)
+	p, err := bridge.Probe(c.body)
 	if err != nil {
 		return fail(CodeInvalidRequest, err.Error())
 	}
 	c.probe = p
-	c.rec.Stream = p.stream || c.route.op == opGeminiStream
+	c.rec.Stream = p.Stream || c.route.op == opGeminiStream
 	name := c.route.model
 	if c.route.modelFromBody() {
-		if !p.hasModel {
+		if !p.HasModel {
 			return fail(CodeInvalidRequest, "the body has no string model member")
 		}
-		name = p.model
+		name = p.Model
 	}
 	m, f := c.lookupModel(ctx, name)
 	if f != nil {
@@ -404,7 +404,7 @@ func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 		return nil
 	}
 	if !res.Opaque && !c.route.count() {
-		res.OutputTokens = c.probe.maxTokens
+		res.OutputTokens = c.probe.MaxTokens
 		if res.OutputTokens == 0 {
 			res.OutputTokens = defaultOutputTokens
 		}

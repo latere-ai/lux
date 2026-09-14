@@ -111,10 +111,10 @@ func (c *call) outbound(ctx context.Context, t Target, m mode) (*http.Request, [
 	case modePassthrough:
 		body, path = c.body, c.passthroughTarget(t)
 		if t.Model != c.model.Metadata.Name && c.door != v1.DialectGemini {
-			body = rewriteModel(body, t.Model)
+			body = bridge.SetModel(body, t.Model)
 		}
-		if c.route.op == opChatCompletions && c.probe.stream && p.Spec.Dialect == v1.DialectOpenAI {
-			body = setIncludeUsage(body)
+		if c.route.op == opChatCompletions && c.probe.Stream && p.Spec.Dialect == v1.DialectOpenAI {
+			body = bridge.SetIncludeUsage(body)
 		}
 	case modeTranslate:
 		req, err := frontendFor(c.route.op).DecodeRequest(c.body)
@@ -131,7 +131,7 @@ func (c *call) outbound(ctx context.Context, t Target, m mode) (*http.Request, [
 			return nil, nil, fail(CodeInvalidRequest, err.Error())
 		}
 		if c.route.count() {
-			body = removeMember(removeMember(body, "max_tokens"), "stream")
+			body = bridge.RemoveMember(bridge.RemoveMember(body, "max_tokens"), "stream")
 		}
 		path = upstreamPath(p.Spec.Dialect, c.route.op, responses)
 		loss = req.Loss.Strings()
@@ -465,7 +465,7 @@ func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Re
 		c.tokens = Tokens{}
 	case m == modePassthrough:
 		if t.Model != c.model.Metadata.Name && c.door != v1.DialectGemini {
-			body = rewriteModel(body, c.model.Metadata.Name)
+			body = bridge.SetModel(body, c.model.Metadata.Name)
 		}
 		if u, ok := bridge.UsageOf(wireOf(td), body); ok {
 			c.tokens = tokensOf(u)

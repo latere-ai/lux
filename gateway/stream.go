@@ -63,7 +63,7 @@ func relayFrames(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner, na
 		if len(frame) == 0 {
 			return nil
 		}
-		out := rewriteFrame(frame, name)
+		out := bridge.SetModelInFrame(frame, name)
 		frame = frame[:0]
 		if _, err := dst.Write(out); err != nil {
 			return &writeError{err}
@@ -89,28 +89,6 @@ func relayFrames(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner, na
 			return err
 		}
 	}
-}
-
-// rewriteFrame rewrites the model member of every data line of one SSE
-// frame and leaves every other byte as it was.
-func rewriteFrame(frame []byte, name string) []byte {
-	var out []byte
-	for i, line := range bytes.SplitAfter(frame, []byte("\n")) {
-		if i > 0 && len(line) == 0 {
-			break
-		}
-		body := bytes.TrimRight(line, "\r\n")
-		if rest, ok := bytes.CutPrefix(body, []byte("data:")); ok {
-			data := bytes.TrimPrefix(rest, []byte(" "))
-			rewritten := rewriteModel(data, name)
-			out = append(out, "data: "...)
-			out = append(out, rewritten...)
-			out = append(out, line[len(body):]...)
-			continue
-		}
-		out = append(out, line...)
-	}
-	return out
 }
 
 // streamPassthrough relays a streamed upstream response as it arrives:

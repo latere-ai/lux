@@ -122,38 +122,10 @@ func TestResponseEvents(t *testing.T) {
 	}
 }
 
-func TestRewriteFrame(t *testing.T) {
-	frame := "event: message_start\r\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"up\"}}\r\n: comment\ndata:{\"model\":\"up\"}\n\n"
-	want := "event: message_start\r\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"name\"}}\r\n: comment\ndata: {\"model\":\"name\"}\n\n"
-	if got := string(rewriteFrame([]byte(frame), "name")); got != want {
-		t.Errorf("rewriteFrame\n got %q\nwant %q", got, want)
-	}
-	if got := string(rewriteFrame([]byte("data: [DONE]\n\n"), "name")); got != "data: [DONE]\n\n" {
-		t.Errorf("[DONE] %q", got)
-	}
+// TestWriteError: a failure writing to the caller renders and unwraps.
+func TestWriteError(t *testing.T) {
 	we := &writeError{err: errors.New("pipe")}
 	if we.Error() != "writing to the caller: pipe" || !errors.Is(we, we.err) {
 		t.Error("writeError")
-	}
-}
-
-func TestRemoveMember(t *testing.T) {
-	cases := []struct{ in, key, want string }{
-		{`{"a":1,"max_tokens":5,"b":2}`, "max_tokens", `{"a":1,"b":2}`},
-		{`{"max_tokens":5,"b":2}`, "max_tokens", `{"b":2}`},
-		{`{"a":1,"max_tokens":5}`, "max_tokens", `{"a":1}`},
-		{`{"a":1, "max_tokens" : {"x":[1]} }`, "max_tokens", `{"a":1 }`},
-		{`{"max_tokens":5}`, "max_tokens", `{}`},
-		{`{"a":1}`, "max_tokens", `{"a":1}`},
-		{`[1]`, "max_tokens", `[1]`},
-	}
-	for _, c := range cases {
-		got := string(removeMember([]byte(c.in), c.key))
-		if got != c.want {
-			t.Errorf("removeMember(%s, %s) = %s, want %s", c.in, c.key, got, c.want)
-		}
-		if !json.Valid([]byte(got)) {
-			t.Errorf("removeMember(%s) = %s is not valid JSON", c.in, got)
-		}
 	}
 }
