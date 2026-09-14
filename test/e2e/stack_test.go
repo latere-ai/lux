@@ -35,10 +35,12 @@ import (
 	"latere.ai/x/lux/test/stubs/sink"
 )
 
-// The binaries TestMain builds, and the module root.
+// The binaries TestMain builds, and the module root. lux is built
+// beside the two servers because spec 020's sandbox composition runs it
+// as the workload inside the sandbox, holding a placeholder alone.
 var (
-	luxdBin, stubsBin string
-	root              string
+	luxdBin, stubsBin, luxBin string
+	root                      string
 )
 
 // kek is one 32-byte key encryption key in LUX_SECRETS_KEK's syntax.
@@ -63,7 +65,7 @@ func build() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, name := range []string{"luxd", "lux-stubs"} {
+	for _, name := range []string{"luxd", "lux-stubs", "lux"} {
 		cmd := exec.Command("go", "build", "-o", filepath.Join(dir, name), "./cmd/"+name)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -71,7 +73,7 @@ func build() (string, error) {
 			return "", fmt.Errorf("go build ./cmd/%s: %w\n%s", name, err, out)
 		}
 	}
-	luxdBin, stubsBin = filepath.Join(dir, "luxd"), filepath.Join(dir, "lux-stubs")
+	luxdBin, stubsBin, luxBin = filepath.Join(dir, "luxd"), filepath.Join(dir, "lux-stubs"), filepath.Join(dir, "lux")
 	return dir, nil
 }
 
