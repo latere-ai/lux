@@ -19,8 +19,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"latere.ai/x/pkg/llmdialect/bridge"
-	"latere.ai/x/pkg/llmdialect/ir"
-	"latere.ai/x/pkg/llmdialect/tokencount"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -105,18 +103,17 @@ type call struct {
 	start time.Time
 	span  trace.Span // lux.request, ended by finish
 
-	door      v1.Dialect
-	route     route
-	key       *v1.Key
-	body      []byte
-	probe     bridge.Call
-	model     *v1.Model
-	targets   []Target
-	irReq     *ir.Request // the decoded request, when a translation or an estimate needs one
-	decodeErr error
-	lease     Lease
-	tokens    Tokens
-	rec       Record
+	door    v1.Dialect
+	route   route
+	key     *v1.Key
+	body    []byte
+	probe   bridge.Call
+	model   *v1.Model
+	targets []Target
+	counted *int64 // the estimator's count of the input, once it has been asked for
+	lease   Lease
+	tokens  Tokens
+	rec     Record
 }
 
 // ServeHTTP runs the pipeline inside the lux.request span, answers the
@@ -352,9 +349,6 @@ func (c *call) selectTargets(ctx context.Context) *failure {
 	if len(c.targets) == 0 {
 		return fail(CodeDialectUnsupported, "the /"+string(c.door)+" door cannot reach "+c.route.template+" on a target of dialect "+strings.Join(dialects, ", "))
 	}
-	if c.modeFor(c.targets[0]) != modePassthrough {
-		c.decode()
-	}
 	return nil
 }
 
@@ -382,23 +376,12 @@ func (c *call) modeFor(t Target) mode {
 	return modeTranslate
 }
 
-// decode reads the body with the door's codec once, for the reservation's
-// estimate and for a count; a translation decodes again per target so
-// its loss report is that target's alone.
-func (c *call) decode() {
-	if c.irReq != nil || c.decodeErr != nil {
-		return
-	}
-	fe := frontendFor(c.route.op)
-	if fe == nil {
-		return
-	}
-	c.irReq, c.decodeErr = fe.DecodeRequest(c.body)
-}
-
 // reserve is stage 7. The reservation is spec 007's: the input estimate
 // and the requested output, or 1024; a count and an opaque route reserve
-// zero tokens.
+// zero tokens. The estimate is the estimator's over a body the door's
+// codec must decode, which is read once here and once more per attempt
+// so the loss report is that target's alone, and the byte heuristic on
+// a passthrough, whose body no codec reads.
 func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 	if c.h.o.Limiter == nil {
 		return nil
@@ -408,8 +391,8 @@ func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 		if res.OutputTokens == 0 {
 			res.OutputTokens = defaultOutputTokens
 		}
-		if c.irReq != nil {
-			res.InputTokens = tokencount.Estimate(c.irReq)
+		if c.modeFor(c.targets[0]) != modePassthrough {
+			res.InputTokens = c.inputEstimate()
 		} else {
 			res.InputTokens = int64(len(c.body)) / 4
 		}
@@ -464,18 +447,22 @@ func (c *call) readModel(ctx context.Context) *failure {
 	return nil
 }
 
-// estimate answers a token count no upstream answers:
-// {"input_tokens": n} from tokencount.Estimate over the decoded request,
-// with Lux-Estimated: true so a caller can tell a heuristic from a
-// tokenizer's answer. The record says ok with zero tokens.
-func (c *call) estimate() *failure {
-	c.decode()
-	if c.decodeErr != nil {
-		return fail(CodeInvalidRequest, c.decodeErr.Error())
+// estimate answers a token count no upstream answers: the door's count
+// body, {"input_tokens": n}, with n the bridge's estimate over the
+// request read through the door's codec, and Lux-Estimated: true so a
+// caller can tell a heuristic from a tokenizer's answer. A body the
+// codec refuses is invalid_request with the codec's words as the detail.
+// The record says ok with zero tokens.
+func (c *call) estimate(ctx context.Context) *failure {
+	w := wireOf(c.door)
+	n, estimated, err := bridge.CountTokens(w, c.body)
+	if err != nil {
+		return c.bridgeFailure(ctx, err)
 	}
-	n := tokencount.Estimate(c.irReq)
-	c.w.Header().Set(HeaderEstimated, "true")
-	c.writeJSON(http.StatusOK, []byte(`{"input_tokens":`+strconv.FormatInt(n, 10)+"}\n"))
+	if estimated {
+		c.w.Header().Set(HeaderEstimated, "true")
+	}
+	c.writeJSON(http.StatusOK, bridge.CountBody(w, n))
 	return nil
 }
 
@@ -489,14 +476,26 @@ func (c *call) writeJSON(status int, body []byte) {
 }
 
 // estimatedTokens is the record's block when the upstream reported no
-// usage: the estimator over the decoded request, and the body's length
-// in bytes divided by four when the door has no codec for the body.
+// usage: the estimator over the request, and the body's length in bytes
+// divided by four when the door has no codec for the body.
 func (c *call) estimatedTokens() Tokens {
-	c.decode()
-	if c.irReq != nil {
-		return Tokens{Input: tokencount.Estimate(c.irReq), Estimated: true}
+	return Tokens{Input: c.inputEstimate(), Estimated: true}
+}
+
+// inputEstimate is the estimator's count of the request's input, read
+// through the door's wire by bridge.CountTokens, and the body's length in
+// bytes divided by four when the wire has no codec or its codec refuses
+// the body. It is computed once, for the reservation and for a record
+// whose upstream reported nothing.
+func (c *call) inputEstimate() int64 {
+	if c.counted == nil {
+		n := int64(len(c.body)) / 4
+		if m, _, err := bridge.CountTokens(wireOf(c.door), c.body); err == nil {
+			n = m
+		}
+		c.counted = &n
 	}
-	return Tokens{Input: int64(len(c.body)) / 4, Estimated: true}
+	return *c.counted
 }
 
 // responseWriter wraps the caller's connection: it notes the commit

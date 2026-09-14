@@ -12,7 +12,6 @@ import (
 	"net/http"
 
 	"latere.ai/x/pkg/llmdialect/bridge"
-	"latere.ai/x/pkg/llmdialect/ir"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -145,61 +144,45 @@ func (c *call) endStream(f *failure) *failure {
 	return f
 }
 
-// streamTranslated relays a stream through the codecs: each upstream
-// event decoded with the target's EventDecoder and encoded with the
-// door's EventEncoder, flushed per event, the Model's name written on
-// message_start and the usage read from every event that carries it. A
-// target that answered a stream request with one JSON body is decoded
-// whole and re-emitted as the door's event sequence.
+// streamTranslated relays a stream through the bridge: each upstream
+// event decoded with the target's codec and encoded with the door's,
+// flushed per event, the Model's name written on message_start and the
+// usage read from every event that carries it. A target that answered a
+// stream request with one JSON body is decoded whole and re-emitted as
+// the door's event sequence. The status and the headers are written
+// when the first event arrives. A stream that fails past its first
+// event ends with the door's one error frame, which endStream writes,
+// so the bridge is given no Fail of its own: one writer of the frame,
+// never two.
 func (c *call) streamTranslated(ctx context.Context, t Target, resp *http.Response) *failure {
-	cs := c.codecsFor(t)
-	var next func() (ir.Event, error)
+	b, f := c.bridgeFor(ctx, t)
+	if f != nil {
+		return f
+	}
+	c.w.Header().Set("Content-Type", "text/event-stream")
+	opts := bridge.StreamOptions{
+		Model: c.model.Metadata.Name,
+		FirstByte: func() error {
+			c.w.WriteHeader(http.StatusOK)
+			c.w.Flush()
+			return nil
+		},
+		Flush: c.w.Flush,
+	}
+	var usage bridge.Usage
+	var err error
 	if isSSE(resp.Header.Get("Content-Type")) {
-		dec := cs.backend.NewEventDecoder(resp.Body)
-		next = dec.Next
+		usage, err = b.Stream(c.w, resp.Body, opts)
 	} else {
 		body, f := c.readWhole(ctx, resp)
 		if f != nil {
 			return f
 		}
-		irResp, err := cs.backend.DecodeResponse(body)
-		if err != nil {
-			return fail(CodeUpstreamError, "decoding the upstream response: "+err.Error())
-		}
-		events := responseEvents(irResp)
-		next = func() (ir.Event, error) {
-			if len(events) == 0 {
-				return ir.Event{}, io.EOF
-			}
-			ev := events[0]
-			events = events[1:]
-			return ev, nil
-		}
+		usage, err = b.StreamResponse(c.w, body, opts)
 	}
-	c.w.Header().Set("Content-Type", "text/event-stream")
-	c.w.WriteHeader(http.StatusOK)
-	c.w.Flush()
-	enc := cs.frontend.NewEventEncoder(c.w)
-	var parts usageParts
-	for {
-		ev, err := next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			c.tokens, _ = parts.tokens()
-			return c.endStream(c.streamFailure(ctx, err))
-		}
-		if ev.Type == ir.EventMessageStart {
-			ev.Model = c.model.Metadata.Name
-		}
-		parts.fromIR(ev.Usage)
-		if err := enc.Encode(ev); err != nil {
-			c.tokens, _ = parts.tokens()
-			return c.endStream(c.streamFailure(ctx, &writeError{err}))
-		}
-		c.w.Flush()
+	c.tokens = tokensOf(usage)
+	if err != nil {
+		return c.endStream(c.bridgeFailure(ctx, err))
 	}
-	c.tokens, _ = parts.tokens()
 	return nil
 }

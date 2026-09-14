@@ -4,56 +4,80 @@
 package gateway
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
+	"fmt"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"latere.ai/x/pkg/llmdialect"
+	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-func TestCodecsPerRoute(t *testing.T) {
-	for _, op := range []operation{opChatCompletions, opResponses, opMessages, opAnthropicCount, opGenerate, opLuxCount} {
-		if frontendFor(op) == nil {
-			t.Errorf("no frontend for operation %d", op)
+// TestDialectsPerRouteAndTarget: each translated route and each count
+// names its door's codec dialect and a route with none names none; an
+// openai target is the Responses dialect for the reasoning family and
+// Chat for every other name, a gemini target has none; a dropped dialect
+// header's loss entry is header.<name> in lower case.
+func TestDialectsPerRouteAndTarget(t *testing.T) {
+	routes := map[operation]ir.Dialect{
+		opChatCompletions: ir.DialectOpenAIChat, opResponses: ir.DialectOpenAIResponses,
+		opMessages: ir.DialectAnthropicMessages, opAnthropicCount: ir.DialectAnthropicMessages,
+		opGenerate: ir.DialectLux, opLuxCount: ir.DialectLux,
+		opEmbeddings: "", opGeminiGenerate: "", opGeminiStream: "", opGeminiCount: "", opGeminiEmbed: "",
+		opModelsList: "", opModelsRead: "", opOpaque: "", opNone: "",
+	}
+	for op, want := range routes {
+		if got := doorDialect(op); got != want {
+			t.Errorf("doorDialect(%d) = %q, want %q", op, got, want)
 		}
 	}
-	for _, op := range []operation{opEmbeddings, opGeminiGenerate, opModelsList, opOpaque, opNone} {
-		if frontendFor(op) != nil {
-			t.Errorf("a frontend for operation %d", op)
+	targets := []struct {
+		d        v1.Dialect
+		upstream string
+		want     ir.Dialect
+	}{
+		{v1.DialectOpenAI, "gpt-5", ir.DialectOpenAIResponses},
+		{v1.DialectOpenAI, "o3-mini", ir.DialectOpenAIResponses},
+		{v1.DialectOpenAI, "gpt-4.1", ir.DialectOpenAIChat},
+		{v1.DialectAnthropic, "claude", ir.DialectAnthropicMessages},
+		{v1.DialectLux, "x", ir.DialectLux},
+		{v1.DialectGemini, "x", ""},
+		{"", "x", ""},
+	}
+	for _, c := range targets {
+		if got := targetDialect(c.d, c.upstream); got != c.want {
+			t.Errorf("targetDialect(%s, %s) = %q, want %q", c.d, c.upstream, got, c.want)
 		}
-	}
-	m := &v1.Model{}
-	m.Spec.MaxOutputTokens = 256
-	if be, responses := backendFor(v1.DialectOpenAI, m, "gpt-5"); be == nil || !responses || be.Name() != ir.DialectOpenAIResponses {
-		t.Error("gpt-5 is not served on /responses")
-	}
-	if be, responses := backendFor(v1.DialectOpenAI, m, "gpt-4.1"); be == nil || responses || be.Name() != ir.DialectOpenAIChat {
-		t.Error("gpt-4.1 is not served on /chat/completions")
-	}
-	be, _ := backendFor(v1.DialectAnthropic, m, "claude")
-	body, err := be.EncodeRequest(&ir.Request{Model: "claude", Messages: []ir.Message{{Role: ir.RoleUser, Blocks: []ir.Block{{Type: ir.BlockText, Text: "x"}}}}})
-	if err != nil || !strings.Contains(string(body), `"max_tokens":256`) {
-		t.Errorf("the Model's maxOutputTokens is not the codec's default: %s %v", body, err)
-	}
-	be, _ = backendFor(v1.DialectAnthropic, nil, "claude")
-	body, _ = be.EncodeRequest(&ir.Request{Model: "claude", Messages: []ir.Message{{Role: ir.RoleUser, Blocks: []ir.Block{{Type: ir.BlockText, Text: "x"}}}}})
-	if !strings.Contains(string(body), `"max_tokens":4096`) {
-		t.Errorf("no Model falls back to the codec's 4096: %s", body)
-	}
-	if be, _ := backendFor(v1.DialectLux, m, "x"); be == nil || be.Name() != ir.DialectLux {
-		t.Error("no lux backend")
-	}
-	if be, _ := backendFor(v1.DialectGemini, m, "x"); be != nil {
-		t.Error("a gemini backend exists")
-	}
-	if be, _ := backendFor("", m, "x"); be != nil {
-		t.Error("a backend for no dialect")
 	}
 	if lossHeader("Anthropic-Beta") != "header.anthropic-beta" {
 		t.Error("lossHeader")
+	}
+}
+
+// TestCodecOptionsFollowTheModel: the codec options are this package's,
+// computed per target as spec 004's table says. A Model's
+// maxOutputTokens is the anthropic codec's max_tokens when the caller
+// sent none, and a Model without one leaves the codec's 4096.
+func TestCodecOptionsFollowTheModel(t *testing.T) {
+	w := newWorld(t)
+	w.model("capped", target("ant", "claude-3")).Spec.MaxOutputTokens = 256
+	w.anthropic.respondJSON(200, anthropicResponse)
+	if rec := w.post("/openai/v1/chat/completions", chatBody("capped", false)); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if got := string(w.anthropic.last(t).Body); !strings.Contains(got, `"max_tokens":256`) {
+		t.Errorf("the Model's maxOutputTokens is not the codec's default: %s", got)
+	}
+	w.anthropic.respondJSON(200, anthropicResponse)
+	w.post("/openai/v1/chat/completions", chatBody("claude", false))
+	if got := string(w.anthropic.last(t).Body); !strings.Contains(got, `"max_tokens":4096`) {
+		t.Errorf("no maxOutputTokens does not fall back to the codec's 4096: %s", got)
 	}
 }
 
@@ -89,36 +113,51 @@ func TestBridgeable(t *testing.T) {
 	}
 }
 
-// TestResponseEvents re-emits a whole response as the event grammar,
-// one block each of text, thinking with a signature, a tool use, and a
-// block no dialect streams.
-func TestResponseEvents(t *testing.T) {
-	resp := &ir.Response{
-		ID: "r", Model: "m", StopReason: ir.StopToolUse, StopSequence: "",
-		Usage: ir.Usage{InputTokens: 1, OutputTokens: 2},
-		Blocks: []ir.Block{
-			{Type: ir.BlockText, Text: "hi"},
-			{Type: ir.BlockThinking, Text: "hm", Signature: "sig"},
-			{Type: ir.BlockToolUse, ToolUse: &ir.ToolUse{ID: "t", Name: "f", Args: json.RawMessage(`{"a":1}`)}},
-			{Type: ir.BlockToolUse, ToolUse: &ir.ToolUse{ID: "t2", Name: "g"}},
-			{Type: ir.BlockRedactedThinking, Redacted: "x"},
-		},
+// TestBridgeFailuresMapToCodes: the bridge's seven codes each map to the
+// code spec 004's table names, and a decode refusal is invalid_request
+// whatever its RefusalScope, because on this path the body is only ever
+// sent translated. A stream failure is classified like any cut after the
+// first byte, client_closed when the caller is gone and upstream_timeout
+// when the Provider's timeout passed; an error that is not the bridge's
+// is upstream_error with its message.
+func TestBridgeFailuresMapToCodes(t *testing.T) {
+	live := &call{r: httptest.NewRequest("POST", "/openai/v1/chat/completions", nil)}
+	cause := errors.New("the codec's words")
+	cases := []struct {
+		name   string
+		err    error
+		code   Code
+		detail string
+	}{
+		{"decode_request, surface", &bridge.Error{Code: bridge.DecodeRequest, Detail: "d", Scope: llmdialect.ScopeSurface, Err: cause}, CodeInvalidRequest, "d"},
+		{"decode_request, dialect", &bridge.Error{Code: bridge.DecodeRequest, Detail: "d", Scope: llmdialect.ScopeDialect, Err: cause}, CodeInvalidRequest, "d"},
+		{"encode_request", &bridge.Error{Code: bridge.EncodeRequest, Detail: "d", Err: cause}, CodeInvalidRequest, "d"},
+		{"decode_response", &bridge.Error{Code: bridge.DecodeResponse, Detail: "d", Err: cause}, CodeUpstreamError, "decoding the upstream response: d"},
+		{"encode_response", &bridge.Error{Code: bridge.EncodeResponse, Detail: "d", Err: cause}, CodeUpstreamError, "encoding the response for the door: d"},
+		{"stream_failed", &bridge.Error{Code: bridge.StreamFailed, Detail: cause.Error(), Err: cause}, CodeUpstreamError, "the upstream stream failed: " + cause.Error()},
+		{"stream_failed without a cause", &bridge.Error{Code: bridge.StreamFailed, Detail: "d"}, CodeUpstreamError, "the upstream stream failed: stream_failed: d"},
+		{"write_failed", &bridge.Error{Code: bridge.WriteFailed, Detail: "d", Err: cause}, ClientClosed, ""},
+		{"unsupported", &bridge.Error{Code: bridge.Unsupported, Detail: "d"}, CodeDialectUnsupported, "d"},
+		{"wrapped", fmt.Errorf("attempt: %w", &bridge.Error{Code: bridge.EncodeRequest, Detail: "d"}), CodeInvalidRequest, "d"},
+		{"not the bridge's", cause, CodeUpstreamError, cause.Error()},
 	}
-	events := responseEvents(resp)
-	var types []string
-	for _, ev := range events {
-		types = append(types, string(ev.Type))
+	for _, c := range cases {
+		f := live.bridgeFailure(t.Context(), c.err)
+		if f.code != c.code || f.detail != c.detail {
+			t.Errorf("%s: %s %q, want %s %q", c.name, f.code, f.detail, c.code, c.detail)
+		}
 	}
-	want := "message_start block_start text_delta block_stop block_start thinking_delta signature_delta block_stop block_start args_delta block_stop block_start block_stop block_start block_stop message_delta message_stop"
-	if got := strings.Join(types, " "); got != want {
-		t.Errorf("events\n got %s\nwant %s", got, want)
+	// A stream's failure follows the caller and the Provider's timeout.
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	closed := &call{r: httptest.NewRequest("POST", "/openai/v1/chat/completions", nil).WithContext(gone)}
+	if f := closed.bridgeFailure(t.Context(), &bridge.Error{Code: bridge.StreamFailed, Err: cause}); f.code != ClientClosed {
+		t.Errorf("caller gone: %s", f.code)
 	}
-	last := events[len(events)-2]
-	if last.Usage == nil || *last.Usage != resp.Usage || last.StopReason != ir.StopToolUse {
-		t.Errorf("message_delta %+v", last)
-	}
-	if events[0].ID != "r" || events[0].Model != "m" {
-		t.Errorf("message_start %+v", events[0])
+	late, cancelLate := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelLate()
+	if f := live.bridgeFailure(late, &bridge.Error{Code: bridge.StreamFailed, Err: cause}); f.code != CodeUpstreamTimeout {
+		t.Errorf("timeout: %s", f.code)
 	}
 }
 
