@@ -6,6 +6,12 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `/metrics` carries `lux_provider_health`, a gauge with one series per
+  Provider and state, `1` on the state the replica acts on and `0` on
+  the other three, so `lux_provider_health{state="Unreachable"}` names
+  the Providers whose targets are out of selection and the shipped
+  `LuxProviderUnreachable` alert fires on them. A Provider deleted from
+  the catalogue leaves the metric at the health job's next tick.
 - A whole answer's spend is settled before its body reaches the caller,
   so the request a caller sends the moment it has the answer meets the
   Budget and spend the answer moved; before, a fast caller could slip
