@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `docs/configuration.md` is the operator reference for every `LUX_*`
+  variable `luxd` reads: its meaning, default, and when it is required,
+  grouped by area, with the meanings the repository scaffold spec owns. A
+  root `.env.example` carries the same set as a file to copy, its required
+  variables uncommented with a placeholder and its optional ones commented
+  with their default; `LUX_SECRETS_KEK` says how to generate a key rather
+  than shipping one. Both are generated from `internal/config` and held
+  current by a test that fails if either omits a variable the binary reads
+  or names one it does not, so they cannot drift from the code.
 - `/metrics` carries `lux_tunnel_sessions`, the number of tunnel
   sessions the scraped replica holds, on every installation: the gauge
   moves with a session opening and closing where the tunnel is on, and
