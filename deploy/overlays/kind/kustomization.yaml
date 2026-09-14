@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# A laptop cluster (spec 017): one replica, the memory store, and the
+# public port on a NodePort, applied in one command,
+#
+#	kubectl apply -k deploy/overlays/kind
+#
+# after luxd.env names your issuer and deploy/bootstrap's Secret is
+# applied into the namespace. The image is the base's `luxd`; a release's
+# deploy archive pins it to the tag by digest in the base, and
+# docs/install.md points a cluster built from a checkout at its own image.
+# Nothing here names a stub: the test image is never part of an
+# installation.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: lux
+resources:
+  - namespace.yaml
+  - ../../base
+replicas:
+  - name: luxd
+    count: 1
+patches:
+  - path: service-nodeport.yaml
+    target:
+      kind: Service
+      name: luxd
+configMapGenerator:
+  - name: luxd
+    envs:
+      - luxd.env

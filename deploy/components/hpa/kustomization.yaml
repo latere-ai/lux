@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# A kustomize component an overlay adds with `components: [../../components/hpa]`.
+# It is not in the base, because each replica opens LUX_DB_MAX_CONNS
+# connections to the store, so the replica count is a decision against the
+# cluster's connection ceiling rather than a dial (spec 017). An overlay
+# that adds it drops its own `replicas` entry and sets the bounds below to
+# what its store admits.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - hpa.yaml

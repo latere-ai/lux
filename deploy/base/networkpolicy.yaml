@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# What the gateway may talk to, which is exactly what its configuration
+# names: DNS; the providers, the issuers, the authorizer, the event sink,
+# and the request log archive over TLS; the store on the Postgres port;
+# and the other replicas on the internal port for the tunnel forward
+# route. Inbound, the public port is open to the cluster so an ingress
+# controller in any namespace can reach it, and the internal port to the
+# other replicas alone. An installation narrows the first ingress rule
+# to its controller's namespace with a `from` entry, adds the port of a
+# plaintext endpoint inside its own network to the last egress rule, and
+# adds its monitoring namespace to the internal port's rule for the
+# scrape. A cluster whose network plugin does not enforce policies, as a
+# laptop's kind cluster does not, applies this object and ignores it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: luxd
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: luxd
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - port: public
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: luxd
+      ports:
+        - port: internal
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: luxd
+      ports:
+        - port: internal
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 5432
+          protocol: TCP

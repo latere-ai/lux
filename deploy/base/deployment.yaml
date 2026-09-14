@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The gateway: two replicas rolled one at a time with none surging, since
+# each replica opens LUX_DB_MAX_CONNS connections to the store and a
+# surge would ask the cluster for a third replica's worth at the worst
+# moment (spec 017). The security context is the hardening table of the
+# threat model (spec 016): non-root, a read-only root file system, no
+# capabilities, no privilege escalation, the runtime's seccomp profile,
+# and no service account token. The grace period is the drain of spec
+# 002: readiness fails at once, three seconds for the load balancer,
+# sixty for in-flight streams.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: luxd
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: luxd
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: luxd
+    spec:
+      serviceAccountName: luxd
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: luxd
+          image: luxd
+          args: ["serve"]
+          ports:
+            - name: public
+              containerPort: 8080
+              protocol: TCP
+            - name: internal
+              containerPort: 8081
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: luxd
+            - secretRef:
+                name: luxd-secrets
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: internal
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: internal
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
