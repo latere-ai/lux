@@ -1,6 +1,6 @@
 ---
 title: "State: desired and observed, the store contract, memory, Postgres, the file mode"
-status: dispatched
+status: in-progress
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -115,7 +115,9 @@ type Store interface {
 	Leases() Leases
 	Journal() Journal
 	Tunnels() Tunnels // the tunnel registry of 013: Register, Heartbeat, Get, Unregister
-	Usage() Usage
+	// Usage, the aggregate side of 009, joins the interface with that
+	// spec: its parameters are metering's types, which do not exist
+	// before 009 lands, and a name is defined by one spec alone.
 	// Transact runs fn against a Store whose writes commit together or
 	// not at all. An apply is one Transact: the object, its journal
 	// row, and a Key's hash or a Provider's credential (011, 012); a
@@ -136,28 +138,45 @@ type Store interface {
 // status.version and as the ETag (003, 011).
 type Objects interface {
 	// Put writes metadata, spec, and the control plane's status
-	// members, in the table below; ifVersion 0 creates. A create over
-	// a live row of the same kind and name is ErrNameTaken, except a
-	// declared Model over a discovered one, which is replaced in place:
-	// the id kept, source declared, owner the actor's, version advanced,
-	// so a declared Model shadows a discovered one without a delete
-	// (005). Put never touches the observed members.
+	// members, in the table below; ifVersion 0 creates. The object
+	// carries its id, owner, warnings, and the kind's control members;
+	// Put writes back into it the row's id, version, createdAt, and
+	// updatedAt, so the caller renders what was stored without a second
+	// read. createdAt is the caller's on a create when set and the clock
+	// otherwise, and the row's on an update; updatedAt is the caller's
+	// when set and the clock otherwise; a Model with an empty source is
+	// stored as declared. A create over a live row of the same kind and
+	// name is ErrNameTaken, except a declared Model over a discovered
+	// one, which is replaced in place: the id kept, source declared,
+	// owner the actor's, version advanced, so a declared Model shadows a
+	// discovered one without a delete (005). A create over an id already
+	// used, live or deleted, is ErrVersionConflict; an update of an id
+	// with no live row is ErrNotFound. Put never touches the observed
+	// members.
 	Put(ctx context.Context, obj v1.Object, ifVersion int64) (version int64, err error)
 	// Get and ByName return the object with both halves of status
 	// merged and its version; a deleted row is ErrNotFound.
 	Get(ctx context.Context, kind, id string) (v1.Object, int64, error)
 	ByName(ctx context.Context, kind, name string) (v1.Object, int64, error)
 	// List returns live objects of one kind ordered by name ascending;
-	// next is the cursor of the last row returned, or "" at the end.
+	// next is the cursor of the last row returned while rows remain, or
+	// "" at the end; a Limit of 0 or less is every row.
 	List(ctx context.Context, kind string, f Filter, p Page) (objs []v1.Object, next string, err error)
 	// Delete marks the row deleted, so its name is free at once and its
 	// id never is; the row is removed by Prune once its events are
-	// acknowledged, so ByObject can still name it while they deliver.
+	// acknowledged, so ByObject can still name it while they deliver. A
+	// row that is not live is ErrNotFound, here and in Keys.Delete and
+	// Credentials.Delete.
 	Delete(ctx context.Context, kind, id string) error
 	// PutStatus writes the observed members of status, in the table
-	// below, and nothing else. It takes no version and never conflicts:
-	// every observed member has one writer, the lease holder of its
-	// job, and Put never writes one.
+	// below, and nothing else. observed is the kind's struct,
+	// ProviderObserved, ModelObserved, KeyObserved, or BudgetObserved,
+	// by value or pointer, each member a pointer, a string, or a time;
+	// a zero member leaves the stored member as it was, so the health
+	// and discovery jobs write their own members without reading each
+	// other's, and a non-nil empty Targets clears the list. It takes no
+	// version and never conflicts: every observed member has one writer,
+	// the lease holder of its job, and Put never writes one.
 	PutStatus(ctx context.Context, kind, id string, observed any) error
 	// Prune removes deleted rows older than before whose journal rows
 	// are all acknowledged or dropped.
@@ -171,8 +190,8 @@ type Objects interface {
 type Filter struct {
 	Owner    string
 	Labels   map[string]string
-	Source   string   // declared | discovered
-	Provider string   // a prv_ id one of a Model's targets names
+	Source   string   // declared | discovered; selects Models alone
+	Provider string   // a prv_ id: a target names it, or names by name the live Provider that has it
 	IDs      []string
 }
 
@@ -180,7 +199,10 @@ type Filter struct {
 // here. The cursor is opaque to a caller and is checked by the store:
 // base64url of "<kind>|<8 hex of SHA-256 over the filter's canonical
 // JSON>|<last name>"; a cursor whose kind or filter differs from the
-// request's is ErrInvalidCursor.
+// request's is ErrInvalidCursor. EncodeCursor and DecodeCursor in
+// internal/store are the one encoding; Journal.ByObject uses it too,
+// under the kind "journal", a Filter whose IDs name the object, and the
+// last Seq as the last value.
 type Page struct {
 	Limit  int
 	Cursor string
@@ -193,6 +215,8 @@ type Page struct {
 // that already has a hash replaces it, which is a rotation; a hash
 // registered to another key id is ErrHashTaken, and the API calls Put
 // inside the Transact that writes the Key, so a create is atomic (007).
+// A hash of another shape than 64 lower-case hex characters is a plain
+// error, a caller's mistake and never a row.
 type Keys interface {
 	Put(ctx context.Context, keyID, hash string) error
 	ByHash(ctx context.Context, hash string) (keyID string, err error) // ErrNotFound
@@ -231,8 +255,10 @@ type Credentials interface {
 // Counters is the spend arithmetic of 009: one key names one window of
 // one object. Add is atomic and returns the new total, so a flush is
 // one round trip that both writes a delta and refreshes the replica's
-// view. A zero expiresAt is a window that never resets (window none)
-// and is never pruned.
+// view. expiresAt is written by the Add that creates the key and left
+// alone after, as ON CONFLICT DO UPDATE leaves it; a zero expiresAt is
+// a window that never resets (window none) and is never pruned. Read
+// answers the keys that have a row and leaves the others out.
 type Counters interface {
 	Add(ctx context.Context, key string, delta int64, expiresAt time.Time) (total int64, err error)
 	Read(ctx context.Context, keys []string) (map[string]int64, error)
@@ -242,6 +268,7 @@ type Counters interface {
 // Leases name the jobs that must run on one replica at a time. Acquire
 // by the holder that already holds the lease renews it and answers
 // true; by another holder it answers true only once the row lapsed.
+// Release by a holder that does not hold the lease changes nothing.
 type Leases interface {
 	Acquire(ctx context.Context, name, holder string, ttl time.Duration) (held bool, err error)
 	Release(ctx context.Context, name, holder string) error
@@ -265,26 +292,43 @@ type Event struct {
 
 // Journal is the durable side of the events of 012.
 type Journal interface {
+	// Append fills GSeq and Seq, At from the clock when zero, and
+	// NextAttemptAt from At when zero; an event with no id or object id,
+	// or an id already journalled, is a plain error.
 	Append(ctx context.Context, e Event) (seq int64, err error) // seq is per object, monotonic
-	Pending(ctx context.Context, limit int) ([]Event, error)    // unacknowledged, due, at most one per object, oldest seq first
+	// Pending is the unacknowledged rows that are due, at most one per
+	// object, each the oldest of its object, oldest first; an object
+	// whose oldest row is not yet due holds its later rows back.
+	Pending(ctx context.Context, limit int) ([]Event, error)
+	// Acknowledge, Defer, and Drop act on one row; a row not in the
+	// journal is ErrNotFound. Drop removes the row, which is what lets
+	// Prune count it as settled.
 	Acknowledge(ctx context.Context, id string) error
 	Defer(ctx context.Context, id string, attempts int, next time.Time) error
 	Drop(ctx context.Context, id string) error
-	ByObject(ctx context.Context, objectID string, p Page) ([]Event, string, error)
+	ByObject(ctx context.Context, objectID string, p Page) ([]Event, string, error) // by Seq ascending
 	// Since reads the journal in global order, which is what a replica
 	// tails to invalidate its Key cache before the cache window lapses
 	// (007) and what the discovery lease holder tails for a Provider
 	// change (005). Event.GSeq is the store-wide sequence; Event.Seq is
 	// the per-object one delivery orders by.
 	Since(ctx context.Context, afterGSeq int64, limit int) ([]Event, error)
-	Prune(ctx context.Context, before time.Time) (n int, err error)
+	Prune(ctx context.Context, before time.Time) (n int, err error) // acknowledged rows whose At is at or before before
 }
 
-// Usage is the aggregate side of 009. Records are not rows in any
-// mode: the durable record set is the archive of 012, and AppendRecord
-// feeds the process's own bounded ring, metering.RecordsPerKey per
-// key, which Records answers and GET /v1/requests serves with source
-// memory when no archive is configured, on Postgres as on memory.
+// Tunnels is 013's registry, declared there and implemented here. Its
+// rules as the store holds them: Register replaces whatever row the
+// Provider had and fills ConnectedAt from the clock when zero;
+// Heartbeat answers false for a row another session holds and for no
+// row at all; Get is ErrNotFound for a row that lapsed; Unregister by
+// a session that does not hold the row changes nothing.
+
+// Usage is the aggregate side of 009, and joins the interface with
+// it. Records are not rows in any mode: the durable record set is the
+// archive of 012, and AppendRecord feeds the process's own bounded
+// ring, metering.RecordsPerKey per key, which Records answers and GET
+// /v1/requests serves with source memory when no archive is
+// configured, on Postgres as on memory.
 type Usage interface {
 	AddRows(ctx context.Context, rows []metering.Row) error
 	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
