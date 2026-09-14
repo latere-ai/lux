@@ -68,14 +68,22 @@ subject. The baseline has no proxy process, so its RSS is `n/a`.
 
 | Parameter | Value |
 |---|---|
+| Trials (measurement windows) | 10 per condition |
 | Concurrency | 50 in-flight requests |
-| Measured requests (non-streaming) | 20000 per subject |
-| Measured requests (streaming) | 10000 per subject |
-| Warmup (discarded) | 2000 per subject |
+| Measured requests (non-streaming) | 20000 per subject per trial |
+| Measured requests (streaming) | 10000 per subject per trial |
+| Warmup (discarded) | 2000 per subject per trial |
 | RSS sample interval | 50 ms |
 
+The matrix runs `TRIALS` times against one steady-state bring-up: each trial
+is an independent measurement window with its own warmup and its own peak-RSS
+sample. A single run is a point; repeated trials give a distribution, which is
+what lets the results carry a confidence interval rather than a lone number.
+
 Override any of them with the environment variables named at the top of
-`run.sh` (`CONCURRENCY`, `REQUESTS`, `STREAM_REQUESTS`, `WARMUP`).
+`run.sh` (`TRIALS`, `CONCURRENCY`, `REQUESTS`, `STREAM_REQUESTS`, `WARMUP`).
+The published `RESULTS.md` used 10 trials at 4000/2000 requests after a 1000
+warmup, to keep the wall-clock of ten LiteLLM passes bounded.
 
 ## Versions and environment
 
@@ -102,12 +110,54 @@ benchmarks/compare/run.sh
    luxd's per-request limit arithmetic without the shared $10 `dev` Budget
    exhausting mid-run.
 3. Starts LiteLLM against the same stubs and confirms it proxies a request.
-4. Drives the three subjects across both shapes and both modes, prints the
-   table, and tears everything down (`make run-down` and a LiteLLM kill run
-   from an EXIT trap).
+4. Drives the three subjects across both shapes and both modes, once per
+   trial, prints the table, writes the tidy per-trial CSV, optionally renders
+   the charts (see below), and tears everything down (`make run-down` and a
+   LiteLLM kill run from an EXIT trap).
 
-Raw per-run JSON lines land in `out/bench/results.jsonl` and the rendered
-table in `out/bench/table.md` (both under the gitignored `out/`).
+Raw per-trial JSON lines land in `out/bench/results.jsonl`, the tidy
+per-trial table in `out/bench/results.csv`, and the rendered Markdown table
+in `out/bench/table.md` (all under the gitignored `out/`).
+
+## Charts
+
+`render.py` turns the tidy per-trial data into two figures under `figures/`:
+
+- `latency-percentiles.png` — p50..p99 as lines on a log y-axis (LiteLLM is
+  ~100x, so a linear axis would flatten luxd against zero), one line per
+  subject with a 95% CI band, faceted by shape and mode.
+- `throughput.png` — requests per second as bars on a log y-axis (the
+  subjects differ by ~200x) with 95% CI error bars, faceted the same way.
+
+It reads `results.csv`, aggregates each condition and metric to a **median**
+and a seeded bootstrap **95% confidence interval** across trials, writes that
+aggregate to `results-aggregate.csv`, and saves the PNGs. Output is
+deterministic — fixed figure size and dpi, a seeded bootstrap, stripped PNG
+metadata — so a re-render of the same data is byte-stable.
+
+It needs `seaborn`, `pandas`, and `matplotlib` in a Python venv, kept outside
+the repository like the LiteLLM one:
+
+```sh
+uv venv --python 3.13 "${TMPDIR:-/tmp}/lux-render-venv"
+uv pip install --python "${TMPDIR:-/tmp}/lux-render-venv/bin/python" seaborn pandas matplotlib numpy
+"${TMPDIR:-/tmp}/lux-render-venv/bin/python" benchmarks/compare/render.py
+```
+
+The venv is never committed; a venv created inside the tree (`.venv/`,
+`render-venv/`, `bench-venv/`) is gitignored.
+
+**Where `results.csv` comes from.** It is the data behind the committed
+figures, refreshed from a real run — not hand-typed. The load driver emits it:
+`driver csv -in results.jsonl -out results.csv` folds a run's JSON lines into
+the tidy `trial,shape,mode,subject,metric,value` form, and `run.sh` does this
+automatically, writing `out/bench/results.csv`. To refresh the committed data
+after a run, copy that file over `benchmarks/compare/results.csv` and re-run
+`render.py`.
+
+`run.sh` also renders the charts for you at the end **if** a render venv
+exists: point `RENDER_VENV_DIR` at it (default `$TMPDIR/lux-render-venv`).
+A missing venv only skips the charts; it never fails the run.
 
 ### LiteLLM configuration
 
@@ -146,9 +196,13 @@ telemetry. LiteLLM runs with `--num_workers 1`.
 
 | File | What it is |
 |---|---|
-| `driver.go` | the closed-loop load driver and the report renderer (`//go:build ignore`) |
+| `driver.go` | the closed-loop load driver, the report renderer, and the tidy-CSV writer (`//go:build ignore`) |
 | `litellm.config.yaml` | the LiteLLM proxy config (third-party schema) |
 | `model-xlate-openai-anthropic.yaml` | luxd Model for the translated shape |
 | `budget-bench.yaml`, `key-bench.yaml` | high-headroom Budget and Key for the run |
-| `run.sh` | brings everything up, runs the matrix, prints the table, tears down |
+| `run.sh` | brings everything up, runs the trial matrix, writes the CSV, renders the charts, tears down |
+| `render.py` | reads `results.csv`, aggregates to median + 95% CI, writes `figures/` and `results-aggregate.csv` |
+| `results.csv` | the tidy per-trial data behind the committed figures |
+| `results-aggregate.csv` | per-condition median and 95% CI, derived from `results.csv` |
+| `figures/` | the rendered PNGs the results document embeds |
 | `RESULTS.md` | the real numbers from a run on the reference machine |
