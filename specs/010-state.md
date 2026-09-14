@@ -1,6 +1,6 @@
 ---
 title: "State: desired and observed, the store contract, memory, Postgres, the file mode"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -790,3 +790,84 @@ cost, and the aggregate columns' meaning
 | Discovered Models appear in file mode, are read-only, and are owned by `file|manifest-dir` | `TestFileModeDiscovery` | the store half passing (`TestFileModeDiscovery`); the discovery job is [[005-providers]]'s |
 | Two file-mode replicas observing one outage each emit one `provider.unreachable`, and the start-up log says so when a sink is set | `TestFileModeEventsArePerReplica` | the store half passing (`TestFileModeEventsArePerReplica`); the events are [[012-request-log-and-events]]'s |
 | `LUX_DB_MAX_CONNS` bounds the pool, its default is 8, and a start holds at most that many plus the migrator's one | `TestPoolDefaults` for the default and the bounds without a database; `TestPostgresPoolIsBounded`, a pool of three under forty callers sampled from outside the pool, the migrator's connection gone after `Connect` | passing |
+
+## Outcome
+
+2026-09-14. Built in the two phases the build order names, both merged:
+`internal/store` holds the contract, its errors, the cursor, and
+`Instrument`; `internal/store/memory` the memory store;
+`internal/store/filemode` the directory loader over it with `Reload`;
+`internal/store/storetest` the suite every mode is held to;
+`internal/store/postgres` the Postgres store over
+`github.com/jackc/pgx/v5`, with its two migrations embedded under
+`migrations/` and `pgtest` handing each tagged test a database of its
+own; `internal/config` the three rows; and `cmd/luxd` the selection by
+mode, the join of `Ready` to readiness, the `SIGHUP` re-read, `luxd
+check`'s `store`, `migrations`, and `db conns` rows, and `luxd rewrap`
+over the store's rows.
+
+Every acceptance row above passes. The untagged rows run in the gate's
+own `go test ./...`; the Postgres rows run under `-tags=postgres`
+against a container, as `TestPostgresStoreConformance` and the rows
+beside it in `internal/store/postgres`, `TestPostgresServeSelectsTheStore`
+and `TestPostgresRewrapRole` in `cmd/luxd`, `TestPostgresCheckRows` in
+`internal/check`, and `TestPostgresTwoReplicas` and
+`TestPostgresCheckReadsTheCluster` at the process in the tier of
+[[015-test-stubs-and-tiers]]. The gate passes whole, with
+`internal/store/postgres` and its `pgtest` the two `cover.exempt` rows
+of `.lateregate.yaml`, measured at 93% under the tag instead.
+
+What was built differs from the design as dispatched in these points,
+each already written into the Design above beside the rule it settles
+and carried as a row of its table of departures:
+
+- `journal.payload` is `bytea` rather than `jsonb`, because a delivery
+  is signed over the exact bytes of the payload and `jsonb` re-spells a
+  document; `TestJournalTail` reads the bytes back byte for byte.
+- `journal.gseq` is a `bigint` taken as the table's maximum plus one
+  under `pg_advisory_xact_lock` rather than a `bigserial`, because a
+  sequence hands out values that commit out of order and a replica
+  tailing `Since` past the later one would never see the earlier.
+- The clock is the process's, passed into every expiry comparison and
+  stamped on every row the caller left unset, rather than the
+  database's: the contract's callers hand in Go times, and a container
+  fifty minutes from the host turned a mixed reading into leases that
+  never lapsed.
+- The `depcheck` rows are six on `./cmd/luxd` alone rather than rows on
+  the role packages, which have no allow list of their own: `pgx`,
+  `puddle`, `pgpassfile`, `pgservicefile`, `pgerrcode`, and
+  `golang-migrate/migrate`.
+- There are two migrations, `1000001_init` and `1000002_usage`, rather
+  than one, because the aggregates of [[009-usage-and-metering]] joined
+  the store after this spec was drafted and a second file makes the
+  migration from the previous schema a path the tier walks.
+- `objects.observed` is keyed by the status members' own JSON names, so
+  a read is `status || observed` and `PutStatus` is `observed ||
+  $incoming` with the zero members left out: one statement each, no
+  read-modify-write, and one merge rule for every kind.
+- `Usage().AppendRecord` and `Records` are the memory store's ring, held
+  by the Postgres store, because one implementation of a bounded ring is
+  enough. `AddRows` takes `[]metering.Aggregate`, the element type
+  [[009-usage-and-metering]] settled on.
+- The tests split by what they need: the pure halves keep their names
+  untagged, and everything that needs a database is a `TestPostgres...`
+  behind the tag, as the tier's rule of [[015-test-stubs-and-tiers]]
+  requires, each against a database `pgtest` creates for it.
+- `TestPostgresQueriesUseIndexes` reads `pg_stat_user_indexes` after
+  every operation has run once with sequential scans off, rather than
+  `EXPLAIN` over copies of the queries, so it measures the queries the
+  store runs and proves no index is dead weight.
+- `internal/store/postgres` and `pgtest` are exempt from the 90% cover
+  gate with the reason in `.lateregate.yaml`, because the gate starts no
+  database; the tier measures them instead.
+- `luxd check` over a database whose schema is not applied yet, the
+  state before a first `luxd serve`, reads `store` and `migrations` `ok`
+  and every row over the objects `warn: not checked; the schema is not
+  applied yet`, which the design did not say; check applies nothing, and
+  that is the state the install document runs it against.
+
+What the neighbouring specs own from here. [[009-usage-and-metering]]'s
+Postgres half of `Usage()` is this store's and is built.
+[[013-tunnelled-runtimes]]'s registry runs on Postgres through the
+suite's tunnel group. [[017-release-and-installation]]'s `luxd check`
+reads the three database rows against a real cluster.
