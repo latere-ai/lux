@@ -163,7 +163,7 @@ func (p *plane) do(method, path, value, body string, headers map[string]string) 
 func (p *plane) records(t *testing.T) []metering.Record {
 	t.Helper()
 	now := p.h.clock()
-	recs, _, err := p.h.st.Usage().Records(t.Context(), metering.RecordQuery{Query: metering.Query{From: now.Add(-24 * time.Hour), To: now.Add(24 * time.Hour)}}, store.Page{})
+	recs, _, err := p.h.st.Usage().Records(t.Context(), metering.RecordQuery{From: now.Add(-24 * time.Hour), To: now.Add(24 * time.Hour)}, store.Page{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -904,7 +904,7 @@ func TestRecorderRunFlushesAtStop(t *testing.T) {
 	if err != nil || len(rows) != 1 || rows[0].Requests != 2 || rows[0].Refused != 1 || rows[0].UnpricedRequests != 2 {
 		t.Fatalf("after stop: %+v, %v", rows, err)
 	}
-	recs, _, _ := h.st.Usage().Records(t.Context(), metering.RecordQuery{Query: metering.Query{From: at.Add(-time.Hour), To: at.Add(time.Hour)}}, store.Page{})
+	recs, _, _ := h.st.Usage().Records(t.Context(), metering.RecordQuery{From: at.Add(-time.Hour), To: at.Add(time.Hour)}, store.Page{})
 	if len(recs) != 2 || recs[0].Cost.Priced || recs[0].Loss == nil || recs[0].Attempts == nil || recs[0].Labels == nil || recs[0].RequestLabels == nil {
 		t.Fatalf("records = %+v", recs)
 	}
@@ -955,7 +955,7 @@ func TestRecorderToleratesTheStore(t *testing.T) {
 	if len(h.logged()) != before {
 		t.Fatalf("an unknown Model was logged: %s", h.logged()[before:])
 	}
-	if recs, _, _ := h.st.Usage().Records(ctx, metering.RecordQuery{Query: metering.Query{From: at.Add(-time.Hour), To: at.Add(time.Hour)}}, store.Page{}); len(recs) != 1 || recs[0].Cost.Priced {
+	if recs, _, _ := h.st.Usage().Records(ctx, metering.RecordQuery{From: at.Add(-time.Hour), To: at.Add(time.Hour)}, store.Page{}); len(recs) != 1 || recs[0].Cost.Priced {
 		t.Fatalf("records = %+v", recs)
 	}
 	// A refused flush keeps the row; a second record of the same hour

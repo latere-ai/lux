@@ -227,7 +227,6 @@ func (r *Recorder) Flush(ctx context.Context) error {
 					have.Add(a.Sums)
 					continue
 				}
-				a := a
 				r.rows[a.Key()] = &a
 			}
 			r.mu.Unlock()

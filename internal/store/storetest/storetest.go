@@ -225,8 +225,7 @@ func declaredReplacesDiscovered(t *testing.T, s store.Store) {
 	equal(t, blank.Status.Source, v1.SourceDeclared, "the default source is written back")
 }
 
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }
+func ptr[T any](v T) *T { return &v }
 
 // statusHalvesAreSeparate is table-driven over every member of spec
 // 010's table: the observed member is not written by Put and is by
