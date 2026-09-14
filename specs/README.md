@@ -56,7 +56,7 @@ later.
 | [006](006-identity.md) | Identity: OIDC issuers, subjects, the authorizer webhook, the owner policy | medium | complete | 001, 002, 003 |
 | [007](007-keys-and-limits.md) | Keys and limits: the value, verification, the cache, states, rate windows, spend windows, budgets | medium | complete | 003, 004, 006, 010 |
 | [008](008-routing-and-models.md) | Routing and models: targets, weights, priorities, fallback, retries, the circuit per target | medium | complete | 003, 005 |
-| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | dispatched | 003, 007, 008, 010 |
+| [009](009-usage-and-metering.md) | Usage and metering: the record, cost, windows, the usage API, the multi-replica rule | medium | in-progress | 003, 007, 008, 010 |
 | [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | testing | 003 |
 | [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | dispatched | 003, 004, 006, 007, 010 |
 | [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | validated | 006, 009, 010 |
