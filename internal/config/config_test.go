@@ -80,6 +80,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
+		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -118,6 +119,15 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		"LUX_MAX_BODY_BYTES":                      "8Mi",
 		"LUX_UPSTREAM_TIMEOUT":                    "2m",
 		"LUX_METERING_FLUSH":                      "500ms",
+		"LUX_EVENTS_URL":                          "https://sink.example.com/events",
+		"LUX_EVENTS_SECRET":                       " whsec-9f8e7d ",
+		"LUX_REQUESTLOG_EXPORTER":                 "s3",
+		"LUX_S3_ENDPOINT":                         "https://s3.eu-central-1.amazonaws.com",
+		"LUX_S3_REGION":                           "eu-central-1",
+		"LUX_S3_BUCKET":                           "lux-archive",
+		"LUX_S3_ACCESS_KEY":                       "AKIDEXAMPLE",
+		"LUX_S3_SECRET_KEY":                       "wJalrXUtnFEMI",
+		"LUX_S3_PREFIX":                           "gateways/a/",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +156,15 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		MaxBodyBytes:                     8 << 20,
 		UpstreamTimeout:                  2 * time.Minute,
 		MeteringFlush:                    500 * time.Millisecond,
+		EventsURL:                        "https://sink.example.com/events",
+		EventsSecret:                     "whsec-9f8e7d",
+		RequestLogExporter:               ExporterS3,
+		S3Endpoint:                       "https://s3.eu-central-1.amazonaws.com",
+		S3Region:                         "eu-central-1",
+		S3Bucket:                         "lux-archive",
+		S3AccessKey:                      "AKIDEXAMPLE",
+		S3SecretKey:                      "wJalrXUtnFEMI",
+		S3Prefix:                         "gateways/a/",
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -166,6 +185,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
+		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)

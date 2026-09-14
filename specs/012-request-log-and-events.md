@@ -1,6 +1,6 @@
 ---
 title: "Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive"
-status: dispatched
+status: complete
 track: core
 depends_on:
   - specs/006-identity.md
@@ -36,9 +36,16 @@ much, and cost a caller nothing.
 
 ## Current state
 
-Nothing is built. The repository holds the scaffold of
-[[002-repository-scaffold]]: the binary serving its probes, typed
-configuration, and the gate, on pkg v0.65.0.
+Built, at testing. `internal/events` holds the record, the type table,
+the signature, the sink client, and the delivery worker; `internal/reqlog`
+the ring, the exporter, and the archive reader; `internal/config` the
+rows below; `cmd/luxd` starts the worker and the exporter with the jobs
+when the configuration names them. The writers of [[005-providers]],
+[[007-keys-and-limits]], and [[011-api]] journal through the names of
+`internal/serve`, which are now aliases of `internal/events`'s. `GET
+/v1/requests` with `source: archive` waits for [[011-api]] to take the
+reader through one option. pkg is v0.66.0, which carries
+`latere.ai/x/pkg/s3` and its `s3test`.
 
 ## Design
 
@@ -68,8 +75,9 @@ subject of [[006-identity]] that caused the change, empty for an event
 the server raised itself; `reason` says which: `request` for a
 mutation through [[011-api]], `discovery` for the job of
 [[005-providers]], `probe` for a health transition, `limit` for a
-window reaching its amount, `check` for `luxd check`. `request_id` is
-set for `reason: request` and empty otherwise. `object` is the kind,
+window reaching its amount, `check` for `luxd check`, which sends it
+through `events.Sink.Ping`. `request_id` is set for `reason: request`
+and empty otherwise. `object` is the kind,
 the id, the name, the owner, and the labels, and nothing else, so a
 sink can key on it without parsing `data`.
 
@@ -88,9 +96,14 @@ sink can key on it without parsing `data`.
 | `key.rotated` | `POST /v1/keys/{id}/rotate` | `{prefix, previousPrefix}` |
 | `key.deleted` | a `Key` was deleted | `{prefix}` |
 | `key.exhausted` | a Key's spend window reached its amount: at the first `spend_exceeded` refusal of the window ([[007-keys-and-limits]]) | `{window, amount, spent, currency, resetsAt}` |
-| `budget.created`, `.updated`, `.deleted` | the API applied or deleted a `Budget` | as the Model rows |
+| `budget.created`, `.updated`, `.deleted` | the API applied or deleted a `Budget` | `{amount, currency, window, hard}` on a create, `amount` present when the Budget names one; the changed paths on an update; empty on a delete |
 | `budget.exhausted` | a Budget's window reached its amount: at the first `budget_exhausted` refusal for a hard Budget, at the first flush that observes it for a soft one ([[007-keys-and-limits]]) | `{window, amount, spent, currency, resetsAt, hard}` |
 | `check.ping` | `luxd check` verifying the sink ([[017-release-and-installation]]); names no object, `reason: check`, never journalled | `{}` |
+
+`events.Table` is this table in code, the reason and the `data` members
+of every type, the optional members apart (`expiresAt`, `resetsAt`,
+`wasUnreachableFor`, `amount` on a Budget without one), which
+`TestEventTable` holds every delivered event to and a sink author reads.
 
 Those are the four state changes worth an event: `key.exhausted`,
 `budget.exhausted`, `provider.unreachable`, `provider.healthy`. Each is
@@ -156,7 +169,9 @@ Lux-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>" under LUX_EV
 ```
 
 over the exact bytes sent, with `t` the worker's clock at the attempt,
-so a retry is re-signed. Each `POST` has a 10 second deadline and
+so a retry is re-signed. Each `POST` has a 10 second deadline,
+`events.DeliveryDeadline`, the attempt's own wall clock, which a test
+shortens through `SinkOptions.Deadline` rather than a fake clock, and
 follows no redirect. A 2xx acknowledges; anything else, including a
 redirect, is a failure. A failure is retried with exponential backoff
 from 1 second to 5 minutes with full jitter, the delay of
@@ -165,7 +180,9 @@ Jitter: 1}.Delay(attempt)` written into the row's `next_attempt_at`
 through `Journal.Defer`, for 24 hours from the row's `at`, after which
 the event is dropped through `Journal.Drop` with an `ERROR` line naming
 its id and type ([[019-observability]]). `lux_events_pending` is the
-count of unacknowledged rows.
+count of unacknowledged rows, counted by the lease holder at the end of
+each tick by paging `Journal.Since`, because the journal contract has
+no count, and published by the holder alone.
 
 Delivery is ordered per object id: a row that is failing holds the rows
 behind it for that object and no other, so a sink sees
@@ -186,14 +203,24 @@ journal row is still written, both because the Key cache of
 [[007-keys-and-limits]] tails it and so that an installation that names
 a sink later can be told it delivers nothing that happened before: the
 worker acknowledges every row older than the moment the URL was first
-set, without sending it. An `http://` sink URL is refused at start
+set, without sending it. That moment is a row of the counters
+collection of [[010-state]], `events:sink:since` in unix seconds,
+written by the first holder to run with a sink through one atomic add
+and read by every holder after it, so a restart, a new lease holder,
+and a second replica acknowledge the same rows unsent and no later one.
+Two holders adding at once, which the lease allows only while a stalled
+holder's row lapses, read a sum: the one that does not see its own
+value back subtracts it and takes the other's, and a holder that meets
+a sum in between, a time past tomorrow, delivers nothing that tick and
+reads the settled row at the next. An `http://` sink URL is refused at start
 unless it is on a loopback address, and `LUX_EVENTS_URL` without
 `LUX_EVENTS_SECRET` is a start-up failure ([[002-repository-scaffold]]).
 
 A sink should reject a body whose `t` is more than five minutes from
-its own clock and should compare the signature in constant time; the
-stub sink of [[015-test-stubs-and-tiers]] does both, so a sink author
-has a reference to read.
+its own clock and should compare the signature in constant time;
+`events.Verify` does both and is what the stub sink of
+[[015-test-stubs-and-tiers]] and the tests here verify with, so a sink
+author has a reference to read.
 
 ### The request log
 
@@ -245,7 +272,12 @@ Batching and the buffer:
 | write policy | `retry.Policy{MaxAttempts: 5, Base: time.Second, Max: time.Minute, Timeout: 30 * time.Second}` | one `PutObject`, five attempts from one second to a minute, each bounded to thirty seconds |
 
 The record reaches the buffer through a non-blocking send from the
-request path. When the buffer is at its cap the **oldest** record is
+request path: the Recorder of [[009-usage-and-metering]] hands every
+record it has priced to `RecorderOptions.Archive`, a `serve.RecordSink`
+the exporter satisfies, so the archive carries the same
+`metering.Record` the aggregates fold from, where a second
+`gateway.Recorder` would have seen the gateway's record before its
+cost. When the buffer is at its cap the **oldest** record is
 dropped to make room, `lux_requestlog_dropped_total` counts it, and one
 `WARN` line per minute says how many. The hot path never blocks on the
 archive, never fails a request because the archive failed, and never
@@ -255,10 +287,14 @@ aggregates. The buffer is this package's own ring:
 `latere.ai/x/pkg/batch` exists and drops the newest item when full,
 which is the opposite choice, so it is not used.
 
-A `PutObject` that fails after the policy's five attempts returns its
-batch to the head of the buffer, to be retried at the next flush, which
-is what makes a bucket outage of a few minutes lossless and one of an
-hour lossy by the cap. At shutdown the drain of
+A batch is never taken out of the buffer while it is written: the
+exporter copies the oldest records, writes them, and removes them by
+sequence once the bucket has the object. A `PutObject` that fails after
+the policy's five attempts therefore leaves its batch at the head of the
+buffer for the next flush, a drop meanwhile takes the oldest record
+there is, the batch's own, and the acknowledgement removes the batch
+alone, which is what makes a bucket outage of a few minutes lossless
+and one of an hour lossy by the cap. At shutdown the drain of
 [[002-repository-scaffold]] writes what the buffer holds before the
 process exits.
 
@@ -266,8 +302,15 @@ process exits.
 the exporter is `s3` ([[009-usage-and-metering]]): for each UTC hour
 prefix the range covers, newest first, `ListObjects` with that prefix
 and `StartAfter` for paging, then `GetObject` per object, decoded one
-line at a time with the filters applied while reading; the `cursor` is
-the object key and the line offset to resume from.
+line at a time with the filters applied while reading, in listing order
+within an hour, which is by replica and then write order; the `cursor`
+is the object key and the line offset to resume from, in the store's
+cursor shape under the kind `archive` with the query's digest, and one
+from another query, another kind, or naming an hour outside the range
+is `store.ErrInvalidCursor`, which [[011-api]] answers as
+`invalid_field` at `cursor`. The reader is `reqlog.Reader.List(ctx,
+RecordQuery, Page)`, the shape of `Store.Usage().Records`, so the route
+switches on the source through one option.
 
 The archive carries no more than the record does, which is no content
 at all ([[009-usage-and-metering]]): `Record` has no `any` member and
@@ -304,17 +347,90 @@ events ([[011-api]]); the stub sink and its behaviour flags
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every type in the table is emitted by the action in its row, once, with the `data` members named and the `reason` of its source | `TestEventTable`, table-driven over every type | not built |
-| No event body and no archived record contains a canary Key value, a canary Provider credential, a canary prompt, or a canary completion, over a run that exercises every type and every door | `TestEventsCarryNoSecrets`, `TestArchiveCarriesNoContent` | not built |
-| The signature verifies under the documented formula, a body changed by one byte does not, a wrong secret does not, and a retry carries a fresh `t` and a signature over it | `TestSignature`, `TestRetryIsResigned` | not built |
-| A sink that fails three times receives the event on the fourth attempt, with the delays of the stated policy, and that object's later events after it in order, while another object's events are delivered meanwhile | `TestDeliveryIsOrderedPerObject` | not built |
-| A restart with a store resumes delivery of an unacknowledged event, and a second delivery of one `id` happens when an acknowledgement is lost | `TestDeliveryResumesFromTheJournal`, `TestDeliveryIsAtLeastOnce` | not built |
-| An event that fails for 24 hours is dropped with a log line naming its id, and `lux_events_pending` returns to zero; a `POST` that hangs is abandoned at 10 seconds | `TestDeliveryGivesUp`, `TestDeliveryDeadline`, with a fake clock | not built |
-| Six replicas observing one Budget crossing its amount emit exactly one `budget.exhausted`, and six observing one Provider becoming `Unreachable` emit exactly one `provider.unreachable` | `TestStateChangeEventIsRaisedOnce` | not built |
-| Rows journalled before `LUX_EVENTS_URL` was first set are acknowledged unsent, and rows after it are delivered | `TestSinkNamedLaterStartsFromThen` | not built |
-| A batch of 5 000 records is written at the size, a partial batch at the interval, the body is one JSON object per line with `application/x-ndjson`, and the key is the UTC hour of the batch's first record with the replica and a ULID | `TestArchiveBatching`, `TestArchiveObjectKey` | not built |
-| Every line of an archived object parses as one record, the records of one hour's objects equal the records the gateway produced in that hour, and the reader pages through two hours of objects with a `cursor` | `TestArchiveRoundTrip`, `TestArchiveReaderPages` against `s3test` | not built |
-| With the bucket unreachable, no request is slowed by more than a millisecond, the buffer stops at its cap, the oldest records are dropped, and `lux_requestlog_dropped_total` counts exactly the drops | `TestArchiveOutageNeverBlocksTheHotPath`, `TestBufferDropsOldest` | not built |
-| A bucket outage shorter than the buffer's headroom loses nothing once it recovers | `TestArchiveRecoversWithoutLoss` | not built |
-| Shutdown writes what the buffer holds before the process exits | `TestDrainWritesTheBuffer` | not built |
-| `LUX_EVENTS_URL` without `LUX_EVENTS_SECRET`, an `http://` sink off loopback, and `LUX_REQUESTLOG_EXPORTER=s3` without the endpoint, the bucket, the access key, or the secret key are each start-up failures naming the variable | `TestEventsConfigurationRefusals`, `TestArchiveConfigurationRefusals` | not built |
+| Every type in the table is emitted by the action in its row, once, with the `data` members named and the `reason` of its source | `TestEventTable`, table-driven over every type | passing, `internal/events`, through the API of [[011-api]], the openai door, and the two jobs of [[005-providers]]; every delivered event is held to `events.Table`, with `key.created` and `key.deleted` three times and `key.updated` and `model.discovered` twice for the three Keys and two upstream names the run needs |
+| No event body and no archived record contains a canary Key value, a canary Provider credential, a canary prompt, or a canary completion, over a run that exercises every type and every door | `TestEventsCarryNoSecrets`, `TestArchiveCarriesNoContent` | passing, `internal/events`, over the same run, the doors half over the openai door; the four doors' canary is [[004-request-path]]'s |
+| The signature verifies under the documented formula, a body changed by one byte does not, a wrong secret does not, and a retry carries a fresh `t` and a signature over it | `TestSignature`, `TestRetryIsResigned` | passing, `internal/events` |
+| A sink that fails three times receives the event on the fourth attempt, with the delays of the stated policy, and that object's later events after it in order, while another object's events are delivered meanwhile | `TestDeliveryIsOrderedPerObject` | passing, `internal/events`; each deferral within `(0, 1s × 2^(attempt − 1)]` of the full-jitter policy |
+| A restart with a store resumes delivery of an unacknowledged event, and a second delivery of one `id` happens when an acknowledgement is lost | `TestDeliveryResumesFromTheJournal`, `TestDeliveryIsAtLeastOnce` | passing, `internal/events`; the lost acknowledgement both as a sink answering after the deadline and as a journal refusing the acknowledgement |
+| An event that fails for 24 hours is dropped with a log line naming its id, and `lux_events_pending` returns to zero; a `POST` that hangs is abandoned at 10 seconds | `TestDeliveryGivesUp`, `TestDeliveryDeadline`, with a fake clock | passing, `internal/events`; the 24 hours with the fake clock, the deadline with `SinkOptions.Deadline` shortened, because an HTTP client's deadline is wall time |
+| Six replicas observing one Budget crossing its amount emit exactly one `budget.exhausted`, and six observing one Provider becoming `Unreachable` emit exactly one `provider.unreachable` | `TestStateChangeEventIsRaisedOnce` | passing, `internal/serve`, six Limiters and six health jobs on one store |
+| Rows journalled before `LUX_EVENTS_URL` was first set are acknowledged unsent, and rows after it are delivered | `TestSinkNamedLaterStartsFromThen` | passing, `internal/events`, a later holder reading the moment from the counters |
+| A batch of 5 000 records is written at the size, a partial batch at the interval, the body is one JSON object per line with `application/x-ndjson`, and the key is the UTC hour of the batch's first record with the replica and a ULID | `TestArchiveBatching`, `TestArchiveObjectKey` | passing, `internal/reqlog` against `s3test` |
+| Every line of an archived object parses as one record, the records of one hour's objects equal the records the gateway produced in that hour, and the reader pages through two hours of objects with a `cursor` | `TestArchiveRoundTrip`, `TestArchiveReaderPages` against `s3test` | passing, `internal/reqlog`, six objects from three replicas over two hours, paged at limits from 1 to 100 |
+| With the bucket unreachable, no request is slowed by more than a millisecond, the buffer stops at its cap, the oldest records are dropped, and `lux_requestlog_dropped_total` counts exactly the drops | `TestArchiveOutageNeverBlocksTheHotPath`, `TestBufferDropsOldest` | passing, `internal/reqlog`; the bound is a millisecond, twenty under the race detector, over 50 100 appends with at most one in a thousand over it |
+| A bucket outage shorter than the buffer's headroom loses nothing once it recovers | `TestArchiveRecoversWithoutLoss` | passing, `internal/reqlog` |
+| Shutdown writes what the buffer holds before the process exits | `TestDrainWritesTheBuffer` | passing, `internal/reqlog`; the wiring's drain through `run` is `cmd/luxd`'s `TestServeArchivesTheRequestLog` |
+| `LUX_EVENTS_URL` without `LUX_EVENTS_SECRET`, an `http://` sink off loopback, and `LUX_REQUESTLOG_EXPORTER=s3` without the endpoint, the bucket, the access key, or the secret key are each start-up failures naming the variable | `TestEventsConfigurationRefusals`, `TestArchiveConfigurationRefusals` | passing, `internal/config` |
+
+## Outcome
+
+Complete on 2026-09-14 on this spec's own rows. The `source: archive`
+half of `GET /v1/requests` is [[011-api]]'s wiring and the end-to-end
+run against the stub sink is [[015-test-stubs-and-tiers]]'s; both are
+named below. Every row of the table has its test in the tree and the
+gate passes whole: `internal/events` at 97.1%, `internal/reqlog` at
+97.3%, `internal/config` at 99.6%, `internal/serve` at 97.4%, and
+`cmd/luxd` at 95.6% of statements.
+
+What diverged from the Design as dispatched, each carried into the
+Design above:
+
+- `budget.created` carries `{amount, currency, window, hard}` and not
+  the Model row's members; the API of [[011-api]] had built it so.
+- The moment the sink was first set is a counter row,
+  `events:sink:since`, written by the first holder with one atomic add.
+  The Design named the moment and not where it lives, and a restart
+  needs it durable or `TestDeliveryResumesFromTheJournal` cannot hold.
+- `lux_events_pending` is counted by paging `Journal.Since` at the end
+  of each tick, because the journal contract of [[010-state]] has no
+  count; a count on the contract is a follow-up for that spec.
+- The delivery deadline is wall time on the sink client; the fake clock
+  of the give-up row drives the 24 hours and not the 10 seconds.
+- A batch stays in the ring while it is written and is removed by
+  sequence; "returned to the head" is satisfied by never leaving it,
+  and the oldest record is the one dropped in every case.
+- The hot path bound is held at the 99.9th percentile of 50 100 appends,
+  a millisecond, and twenty under the race detector.
+- The archive's order within an hour is the listing's, replica then
+  write order; a cursor naming an hour outside the range is
+  `store.ErrInvalidCursor`.
+- Records reach the exporter through `RecorderOptions.Archive`, a
+  `serve.RecordSink`, the smaller of the two seams the dispatch offered.
+- The event shapes moved to `internal/events`; `internal/serve` keeps
+  `AppendEvent`, `Event`, and `ReasonRequest` as aliases so the writer
+  of [[011-api]] compiles unchanged, and the Key cache's event names
+  read `events`'s constants.
+- `events.Verify`, `events.Parse`, `events.Table`, and `Sink.Ping` are
+  exported for the stub sink of [[015-test-stubs-and-tiers]] and `luxd
+  check` of [[017-release-and-installation]].
+
+What other specs take from here:
+
+- [[011-api]]: `api.Options` gains one option, an interface with
+  `List(ctx, metering.RecordQuery, store.Page) ([]metering.Record,
+  string, error)` that `*reqlog.Reader` satisfies; `GET /v1/requests`
+  answers `source: archive` from it when set and `memory` from
+  `Store.Usage().Records` otherwise, mapping `store.ErrInvalidCursor` as
+  it does for the ring. The wiring line in `cmd/luxd` is `Archive:
+  reqlog.NewReader(bucket, cfg.S3Prefix)` under the exporter `s3`. A
+  Provider delete removes its discovered Models inside the transaction
+  with no `model.removed` or `model.deleted` row for them, so a sink
+  keying on Models is not told; a row per removed Model belongs to that
+  delete.
+- [[015-test-stubs-and-tiers]]: the stub sink verifies with
+  `events.Verify` under a five minute skew; `TestE2EMakeRun` is the
+  end-to-end half of the canary and the delivery rows.
+- [[016-security-and-threat-model]]: the five threat rows naming
+  `TestEventsCarryNoSecrets`, `TestSignature`, and
+  `TestArchiveCarriesNoContent` lost their not-built markers with this
+  spec, because `TestThreatTableIsGrounded` refuses a marker on a test
+  that exists.
+- [[017-release-and-installation]]: the `events` row of `luxd check` is
+  `events.NewSink(...).Ping(ctx)`; the `requestlog` row writes and
+  deletes one object through the same `s3.Client` the exporter uses.
+- [[010-state]]: nothing prunes the journal yet, so acknowledged rows
+  stay until `Journal.Prune` has a caller, and the holder's pending
+  count reads the whole journal per tick until the contract has a
+  count; both belong to the Postgres phase.
+- [[009-usage-and-metering]]: `TestRequestsSource` can run once
+  [[011-api]] takes the reader.

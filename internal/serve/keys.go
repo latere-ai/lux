@@ -13,6 +13,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 
+	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -36,11 +37,11 @@ const (
 // or deletion, and a Budget's update or deletion, as spec 012's table
 // names them and spec 011's routes raise them.
 const (
-	eventKeyUpdated    = "key.updated"
-	eventKeyRotated    = "key.rotated"
-	eventKeyDeleted    = "key.deleted"
-	eventBudgetUpdated = "budget.updated"
-	eventBudgetDeleted = "budget.deleted"
+	eventKeyUpdated    = events.KeyUpdated
+	eventKeyRotated    = events.KeyRotated
+	eventKeyDeleted    = events.KeyDeleted
+	eventBudgetUpdated = events.BudgetUpdated
+	eventBudgetDeleted = events.BudgetDeleted
 )
 
 // KeyCacheOptions is what the cache runs under.
