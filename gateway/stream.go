@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"latere.ai/x/pkg/llmdialect/ir"
+	"latere.ai/x/pkg/llmdialect/bridge"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -28,8 +28,8 @@ func (e *writeError) Error() string { return "writing to the caller: " + e.err.E
 func (e *writeError) Unwrap() error { return e.err }
 
 // relayChunks copies src to dst in chunks of at most relayChunk, flushing
-// each, and feeds every chunk to the sniffer when there is one.
-func relayChunks(dst *responseWriter, src io.Reader, sn sniffer) error {
+// each, and feeds every chunk to the usage scanner when there is one.
+func relayChunks(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner) error {
 	buf := make([]byte, relayChunk)
 	for {
 		n, err := src.Read(buf)
@@ -55,14 +55,14 @@ func relayChunks(dst *responseWriter, src io.Reader, sn sniffer) error {
 // member of each frame's data to name, flushing per frame. It is the
 // relay of a passthrough stream whose Model's name and upstream name
 // differ, the one case where the bytes cannot be relayed as read.
-func relayFrames(dst *responseWriter, src io.Reader, sn sniffer, name string) error {
+func relayFrames(dst *responseWriter, src io.Reader, sn *bridge.UsageScanner, name string) error {
 	br := bufio.NewReaderSize(src, relayChunk)
 	var frame []byte
 	flush := func() error {
 		if len(frame) == 0 {
 			return nil
 		}
-		out := rewriteFrame(frame, name)
+		out := bridge.SetModelInFrame(frame, name)
 		frame = frame[:0]
 		if _, err := dst.Write(out); err != nil {
 			return &writeError{err}
@@ -90,28 +90,6 @@ func relayFrames(dst *responseWriter, src io.Reader, sn sniffer, name string) er
 	}
 }
 
-// rewriteFrame rewrites the model member of every data line of one SSE
-// frame and leaves every other byte as it was.
-func rewriteFrame(frame []byte, name string) []byte {
-	var out []byte
-	for i, line := range bytes.SplitAfter(frame, []byte("\n")) {
-		if i > 0 && len(line) == 0 {
-			break
-		}
-		body := bytes.TrimRight(line, "\r\n")
-		if rest, ok := bytes.CutPrefix(body, []byte("data:")); ok {
-			data := bytes.TrimPrefix(rest, []byte(" "))
-			rewritten := rewriteModel(data, name)
-			out = append(out, "data: "...)
-			out = append(out, rewritten...)
-			out = append(out, line[len(body):]...)
-			continue
-		}
-		out = append(out, line...)
-	}
-	return out
-}
-
 // streamPassthrough relays a streamed upstream response as it arrives:
 // headers flushed first, the upstream's Content-Type kept, the bytes as
 // read, frame by frame with the Model's name written back when the names
@@ -120,12 +98,11 @@ func rewriteFrame(frame []byte, name string) []byte {
 func (c *call) streamPassthrough(ctx context.Context, t Target, resp *http.Response) *failure {
 	td := t.Provider.Spec.Dialect
 	sse := isSSE(resp.Header.Get("Content-Type"))
-	var sn sniffer
+	framing := bridge.FramingJSON
 	if sse {
-		sn = newSSESniffer(td)
-	} else {
-		sn = newJSONSniffer(td)
+		framing = bridge.FramingSSE
 	}
+	sn := bridge.NewUsageScanner(wireOf(td), framing)
 	c.w.WriteHeader(resp.StatusCode)
 	c.w.Flush()
 	var err error
@@ -142,14 +119,14 @@ func (c *call) streamPassthrough(ctx context.Context, t Target, resp *http.Respo
 	return nil
 }
 
-// streamTokens is the sniffer's answer, or the estimate when the stream
+// streamTokens is the scanner's answer, or the estimate when the stream
 // carried no usage member; a count records zero tokens.
-func (c *call) streamTokens(sn sniffer) Tokens {
+func (c *call) streamTokens(sn *bridge.UsageScanner) Tokens {
 	if c.route.count() {
 		return Tokens{}
 	}
-	if tokens, ok := sn.Tokens(); ok {
-		return tokens
+	if u, ok := sn.Usage(); ok {
+		return tokensOf(u)
 	}
 	return c.estimatedTokens()
 }
@@ -167,61 +144,45 @@ func (c *call) endStream(f *failure) *failure {
 	return f
 }
 
-// streamTranslated relays a stream through the codecs: each upstream
-// event decoded with the target's EventDecoder and encoded with the
-// door's EventEncoder, flushed per event, the Model's name written on
-// message_start and the usage read from every event that carries it. A
-// target that answered a stream request with one JSON body is decoded
-// whole and re-emitted as the door's event sequence.
+// streamTranslated relays a stream through the bridge: each upstream
+// event decoded with the target's codec and encoded with the door's,
+// flushed per event, the Model's name written on message_start and the
+// usage read from every event that carries it. A target that answered a
+// stream request with one JSON body is decoded whole and re-emitted as
+// the door's event sequence. The status and the headers are written
+// when the first event arrives. A stream that fails past its first
+// event ends with the door's one error frame, which endStream writes,
+// so the bridge is given no Fail of its own: one writer of the frame,
+// never two.
 func (c *call) streamTranslated(ctx context.Context, t Target, resp *http.Response) *failure {
-	cs := c.codecsFor(t)
-	var next func() (ir.Event, error)
+	b, f := c.bridgeFor(ctx, t)
+	if f != nil {
+		return f
+	}
+	c.w.Header().Set("Content-Type", "text/event-stream")
+	opts := bridge.StreamOptions{
+		Model: c.model.Metadata.Name,
+		FirstByte: func() error {
+			c.w.WriteHeader(http.StatusOK)
+			c.w.Flush()
+			return nil
+		},
+		Flush: c.w.Flush,
+	}
+	var usage bridge.Usage
+	var err error
 	if isSSE(resp.Header.Get("Content-Type")) {
-		dec := cs.backend.NewEventDecoder(resp.Body)
-		next = dec.Next
+		usage, err = b.Stream(c.w, resp.Body, opts)
 	} else {
 		body, f := c.readWhole(ctx, resp)
 		if f != nil {
 			return f
 		}
-		irResp, err := cs.backend.DecodeResponse(body)
-		if err != nil {
-			return fail(CodeUpstreamError, "decoding the upstream response: "+err.Error())
-		}
-		events := responseEvents(irResp)
-		next = func() (ir.Event, error) {
-			if len(events) == 0 {
-				return ir.Event{}, io.EOF
-			}
-			ev := events[0]
-			events = events[1:]
-			return ev, nil
-		}
+		usage, err = b.StreamResponse(c.w, body, opts)
 	}
-	c.w.Header().Set("Content-Type", "text/event-stream")
-	c.w.WriteHeader(http.StatusOK)
-	c.w.Flush()
-	enc := cs.frontend.NewEventEncoder(c.w)
-	var parts usageParts
-	for {
-		ev, err := next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			c.tokens, _ = parts.tokens()
-			return c.endStream(c.streamFailure(ctx, err))
-		}
-		if ev.Type == ir.EventMessageStart {
-			ev.Model = c.model.Metadata.Name
-		}
-		parts.fromIR(ev.Usage)
-		if err := enc.Encode(ev); err != nil {
-			c.tokens, _ = parts.tokens()
-			return c.endStream(c.streamFailure(ctx, &writeError{err}))
-		}
-		c.w.Flush()
+	c.tokens = tokensOf(usage)
+	if err != nil {
+		return c.endStream(c.bridgeFailure(ctx, err))
 	}
-	c.tokens, _ = parts.tokens()
 	return nil
 }

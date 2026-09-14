@@ -1,11 +1,11 @@
 ---
 title: "Translation through llmdialect: the codec glue leaves the gateway for an importable bridge"
-status: dispatched
+status: testing
 track: core
 depends_on:
   - specs/004-request-path.md
   - specs/018-conformance-suite.md
-affects: [gateway/, test/conformance/]
+affects: [gateway/, internal/arch/, .github/workflows/]
 effort: medium
 created: 2026-09-14
 updated: 2026-09-14
@@ -42,8 +42,17 @@ byte-equality proof attached.
 
 ## Current state
 
-`gateway` is [[004-request-path]]'s handler, complete and at 96%
-statement coverage. The six files that hold the layer:
+Built on 2026-09-14, in the six commits the swap below numbers, on the
+pseudo-version of the pkg commit named at the end of this section:
+`gateway` calls the bridge for every leg, shape, count, usage reading,
+and member edit, and holds what the design says it still decides in
+`translate.go`, `doorDialect`, `targetDialect`, `bridgeFor`, and
+`bridgeFailure`. The six files fell from 1438 lines to 618 in three,
+`models.go`, `usage.go`, and `probe.go` are gone, and `gateway` imports
+`llmdialect/bridge` and `llmdialect/ir` from the llmdialect tree and
+nothing else of it. Before the move, `gateway` was
+[[004-request-path]]'s handler, complete and at 96% statement
+coverage, and the six files that held the layer were:
 
 | File | Non-test lines | What it holds |
 |---|---|---|
@@ -59,10 +68,12 @@ this layer: `llmdialect`, `llmdialect/ir`, `llmdialect/anthropic`,
 `llmdialect/openaichat`, `llmdialect/openairesp`, `llmdialect/lux`,
 `llmdialect/tokencount`, and `httpjson`.
 
-The bridge is drafted but not released. This spec waits for a tagged
-`latere.ai/x/pkg/llmdialect/bridge` whose surface is the one below; it
-is not dispatchable before that tag exists, and that dependency is not
-in `depends_on`, which names specs of this repository only.
+The bridge is built and pushed in `latere.ai/x/pkg` at commit
+`2e4ba0359ec37bdf30a753b029c914e35a5bb3fe` and not tagged yet. This
+spec pins that commit, the pseudo-version `go get` writes for it, and
+the tag follows: moving the pin to the tag is one `go get` with no
+other change. That dependency is not in `depends_on`, which names
+specs of this repository only.
 
 ## Design
 
@@ -109,7 +120,7 @@ gateway maps onto its own table below.
 | `frontendFor`, `backendFor`, `codecs`, `codecsFor` | one `bridge.Open(door wire, target wire, options)` per attempt; the option values stay the gateway's, computed as the codec options table of [[004-request-path]] says |
 | `outbound`'s translate arm: `DecodeRequest`, the name, `EncodeRequest` | `b.Request(body, RequestOptions{Model: t.Model, Loss: droppedHeaders})`; the returned `loss` is the `Lux-Loss` header and the record's |
 | `respondWhole`'s translate arm: `DecodeResponse`, the name, `EncodeResponse` | `b.Response(body, ResponseOptions{Model: c.model.Metadata.Name})`; the returned `usage` is the record's tokens |
-| `streamTranslated`'s event loop | `b.Stream(c.w, resp.Body, ...)` with `FirstByte` writing the `text/event-stream` header and the status, `Flush` the response controller's flush, and `Fail` the gateway's failure mapped to a `bridge.Failure` |
+| `streamTranslated`'s event loop | `b.Stream(c.w, resp.Body, ...)` with `FirstByte` writing the status once the first event has arrived, the `text/event-stream` header set before the call so a stream that fails on its first event still answers with it, `Flush` the response controller's flush, and no `Fail`: `endStream` writes the door's frame as before, so there is one writer of the frame and never two |
 | `responseEvents` | `b.StreamResponse(c.w, body, ...)` for a target that answers a stream request with one JSON body |
 | `envelope`, `openaiError`, `anthropicError`, `geminiError`, `googleStatus` | `bridge.Envelope(wire, Failure{Code, Message, Detail, RequestID, Status, Domain: "lux"})` |
 | `streamErrorFrame` | `bridge.ErrorFrame(wire, Failure{...})`, still written by `endStream`, which decides whether there is anyone left to write to |
@@ -151,13 +162,18 @@ conversion is five lines in `record.go`.
   when `CountTokens` returns `estimated`. The names are this
   repository's; the values are the bridge's.
 - **Every code, status, and sentence.** The bridge's seven failure
-  codes are mapped here, and nowhere else: `decode_request` is
-  `invalid_request` with the bridge's detail, whatever the scope, as
-  stage 8 says; `decode_response` and `encode_response` are
-  `upstream_error`; `write_failed` is `client_closed`; `stream_failed`
-  is `upstream_error` unless the caller's context is already done;
-  `unsupported` cannot reach a caller, because `bridgeable` refuses
-  first, and is a bug if it does.
+  codes are mapped here, in `bridgeFailure`, and nowhere else:
+  `decode_request` is `invalid_request` with the bridge's detail,
+  whatever the scope, as stage 8 says, and so is `encode_request`,
+  because the same encode fails on every target of the dialect;
+  `decode_response` and `encode_response` are `upstream_error`;
+  `write_failed` is `client_closed`; `stream_failed` is classified as
+  any other cut after the first byte, `client_closed` when the caller's
+  context is done, `upstream_timeout` when the Provider's timeout
+  passed, `upstream_error` otherwise; `unsupported` cannot reach a
+  caller, because `bridgeable` refuses first, and is answered
+  `dialect_unsupported` so that a bug in the route rule is still a
+  fixed code rather than a panic.
 - **`stream_options.include_usage`.** The rule stays a gateway rule;
   only the splice moves. The edit is made on the `/openai` door's
   `POST /v1/chat/completions` with `stream` true toward an `openai`
@@ -180,20 +196,34 @@ conversion is five lines in `record.go`.
 
 ### Decodes per request
 
-Unchanged. Today a translated request is decoded twice, once in
-`decode` for the reservation's estimate and once per attempt in
-`outbound`, so the loss report is that target's alone. After the swap,
-`bridge.CountTokens` decodes for the estimate and `b.Request` decodes
-per attempt: the same two, and `call.irReq` and `call.decodeErr`
-disappear with the `ir` import.
+Unchanged in count. Before the swap a translated request was decoded
+twice, once in `decode` for the reservation's estimate and once per
+attempt in `outbound`, so the loss report is that target's alone.
+After it, `bridge.CountTokens` decodes for the estimate, once per
+request and reused by a record whose upstream reported no usage, and
+`b.Request` decodes per attempt: the same two, and `call.irReq` and
+`call.decodeErr` are gone. The `ir` import stays: `bridge.Open` takes
+`ir.Dialect` names, and `doorDialect` and `targetDialect` are the
+gateway's choice of codec per route and per target. One estimate
+differs: `CountTokens` reads a body through the wire's one frontend,
+Chat Completions for `WireOpenAI`, so a `/openai/v1/responses` body
+toward another dialect, which `decode` read with the Responses codec,
+now falls to the byte heuristic in the reservation and in a record
+whose upstream reported nothing; no byte on the wire changes, and a
+`CountTokens` that takes the door's `ir.Dialect` is the bridge's fix,
+reported to `latere.ai/x/pkg`.
 
 ### The swap, commit by commit
 
-1. Bump `latere.ai/x/pkg` to the tag that carries the bridge.
+1. Bump `latere.ai/x/pkg` to the commit that carries the bridge,
+   `go get latere.ai/x/pkg@2e4ba0359ec37bdf30a753b029c914e35a5bb3fe &&
+   go mod tidy`, which pins a pseudo-version until the tag exists.
 2. `models.go` and its shapes deleted; `listModels` and `readModel`
    call `bridge.ModelList` and `bridge.ModelEntry`.
 3. `usage.go` deleted; the sniffers become `bridge.UsageScanner` and
-   `bodyUsage` becomes `bridge.UsageOf`.
+   `bodyUsage` becomes `bridge.UsageOf`; `fromIR`, which the two
+   translate arms read until step 6, moves beside them for three
+   commits and goes with them.
 4. `probe.go` deleted; the probe and the four edits become the bridge's.
 5. `errors.go` loses the shapes and the frame; `envelope` and
    `streamErrorFrame` become one call each.
@@ -203,8 +233,12 @@ disappear with the `ir` import.
 7. The unit tests that tested the moved internals directly
    (`usage_test.go`, `probe_test.go`, and the shape half of
    `errors_test.go` and `translate_test.go`) are deleted in the commit
-   that deletes the code they test; their goldens go to the bridge's
-   `testdata` in the same batch. The door-level tests are not touched.
+   that deletes the code they test; their goldens are the bridge's
+   `testdata`. The door-level tests are not touched: the four decode
+   shapes `handler_test.go` reads a body back through move to
+   `shapes_test.go`, a test helper, and `TestCodecOptionsFollowTheModel`
+   holds the Model's `maxOutputTokens` to the codec's `max_tokens`
+   through the handler in place of the unit test over the pair.
 
 Each commit leaves the tree green. Nothing is kept behind a flag and no
 forwarding function is left at an old name: the deleted code is deleted
@@ -225,11 +259,11 @@ one byte moves.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The six behaviours the move is most likely to break are byte-identical after it: same-dialect passthrough, the loss report, the stream's last-value usage, the stream error frame per door, the model list shapes, and the count emulation, with the test sources and goldens unedited | `TestSameDialectSameBytes`, `TestTranslationReportsLoss`, `TestStreamUsageIsTheLastValue`, `TestStreamErrorFramePerDoor`, `TestModelsListShapes`, `TestCountTokensEmulation`, each passing unchanged | not built |
-| Every other acceptance row of [[004-request-path]] still passes, the error envelope, the streaming, the model rewrite, and the refusal order among them | `gateway`'s suite, unedited but for the deletions of step 7 | not built |
-| The conformance suite's `doors` group is green against a `luxd` built from the commit before the swap and from the commit after it, against the same stubs and the same fixtures | [[018-conformance-suite]]'s `doors` group, run twice in the migration's CI job | not built |
-| `gateway`'s non-test line count across the six files falls by at least 700, and `models.go`, `usage.go`, and `probe.go` are gone | `TestGatewayCarriesNoCodecGlue`, which fails if any of the three files exists | not built |
-| `gateway`'s import list loses `llmdialect`, `llmdialect/ir`, the four codec packages, `llmdialect/tokencount`, and `httpjson`, and gains `llmdialect/bridge` alone | `TestGatewayImports`, an explicit list compared against `go list -deps` for the package itself | not built |
-| The allow list for `gateway` in [[001-architecture]]'s dependency test gains nothing: the bridge dials nothing and reaches no package that does | `TestRootPackagesDialNothing`, unchanged | not built |
-| `gateway`'s statement coverage stays at or above the 90% floor after the deletions | the coverage gate | not built |
-| The bridge's seven failure codes each map to the code [[004-request-path]]'s table names, and a decode refusal is `invalid_request` whatever its `RefusalScope` | `TestBridgeFailuresMapToCodes`, table-driven over the seven | not built |
+| The six behaviours the move is most likely to break are byte-identical after it: same-dialect passthrough, the loss report, the stream's last-value usage, the stream error frame per door, the model list shapes, and the count emulation, with the test sources and goldens unedited | `TestSameDialectSameBytes`, `TestTranslationReportsLoss`, `TestStreamUsageIsTheLastValue`, `TestStreamErrorFramePerDoor`, `TestModelsListShapes`, `TestCountTokensEmulation`, each passing unchanged | passing, unedited |
+| Every other acceptance row of [[004-request-path]] still passes, the error envelope, the streaming, the model rewrite, and the refusal order among them | `gateway`'s suite, unedited but for the deletions of step 7 | passing; `TestCodecOptionsFollowTheModel` and `TestDialectsPerRouteAndTarget` added beside them |
+| The conformance suite's `doors` group is green against a `luxd` built from the commit before the swap and from the commit after it, against the same stubs and the same fixtures | [[018-conformance-suite]]'s `doors` group, run twice in the migration's CI job | passing: `TestE2EConformance` green before the swap, at `cc7ef7e`, and after it, with an identical list of passing and skipped cases; the `conformance-twice` job of `verify.yml` runs it against the base commit and the head |
+| `gateway`'s non-test line count across the six files falls by at least 700, and `models.go`, `usage.go`, and `probe.go` are gone | `TestGatewayCarriesNoCodecGlue`, which fails if any of the three files exists or the other three exceed 738 lines, in `internal/arch` | passing: the three are gone and the six fell from 1438 lines to 618 |
+| `gateway`'s import list loses `llmdialect`, the four codec packages, `llmdialect/tokencount`, and `httpjson`, gains `llmdialect/bridge`, and keeps `llmdialect/ir`, whose `Dialect` names `Open` takes | `TestGatewayImports`, an explicit list compared against `go list -f '{{.Imports}}'` for the package itself, in `internal/arch` | passing |
+| The allow list for `gateway` in [[001-architecture]]'s dependency test gains nothing: the bridge dials nothing and reaches no package that does | `TestRootPackagesDialNothing`, unchanged in its rule; the `gateway` row's comment names the bridge and loses the `llmjson` entry nothing ever reached | passing |
+| `gateway`'s statement coverage stays at or above the 90% floor after the deletions | the coverage gate | passing |
+| The bridge's seven failure codes each map to the code [[004-request-path]]'s table names, and a decode refusal is `invalid_request` whatever its `RefusalScope` | `TestBridgeFailuresMapToCodes`, table-driven over the seven, in `gateway` | passing |

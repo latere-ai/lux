@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"latere.ai/x/pkg/llmdialect"
+	"latere.ai/x/pkg/llmdialect/bridge"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -93,9 +93,10 @@ func (c *call) outboundHeaders(m mode) (http.Header, []string) {
 // outbound builds the request toward one target, without the credential,
 // which is injected last by attempt. On passthrough the body the probe
 // read is forwarded undecoded but for the two member edits; on
-// translation it is decoded with the door's codec, given the upstream
-// name, and encoded with the target's. The loss report is returned for
-// the Lux-Loss header and the record.
+// translation the bridge decodes it with the door's codec, writes the
+// upstream name, and encodes it with the target's. The loss report is
+// returned for the Lux-Loss header and the record, nil when nothing was
+// lost.
 func (c *call) outbound(ctx context.Context, t Target, m mode) (*http.Request, []string, *failure) {
 	p := t.Provider
 	base, err := url.Parse(p.Spec.BaseURL)
@@ -110,30 +111,29 @@ func (c *call) outbound(ctx context.Context, t Target, m mode) (*http.Request, [
 	case modePassthrough:
 		body, path = c.body, c.passthroughTarget(t)
 		if t.Model != c.model.Metadata.Name && c.door != v1.DialectGemini {
-			body = rewriteModel(body, t.Model)
+			body = bridge.SetModel(body, t.Model)
 		}
-		if c.route.op == opChatCompletions && c.probe.stream && p.Spec.Dialect == v1.DialectOpenAI {
-			body = setIncludeUsage(body)
+		if c.route.op == opChatCompletions && c.probe.Stream && p.Spec.Dialect == v1.DialectOpenAI {
+			body = bridge.SetIncludeUsage(body)
 		}
 	case modeTranslate:
-		req, err := frontendFor(c.route.op).DecodeRequest(c.body)
-		if err != nil {
-			return nil, nil, fail(CodeInvalidRequest, err.Error())
+		b, f := c.bridgeFor(ctx, t)
+		if f != nil {
+			return nil, nil, f
 		}
+		var entries []string
 		for _, name := range dropped {
-			req.Loss.Add(lossHeader(name))
+			entries = append(entries, lossHeader(name))
 		}
-		req.Model = t.Model
-		be, responses := backendFor(p.Spec.Dialect, c.model, t.Model)
-		body, err = be.EncodeRequest(req)
+		out, l, err := b.Request(c.body, bridge.RequestOptions{Model: t.Model, Loss: entries})
 		if err != nil {
-			return nil, nil, fail(CodeInvalidRequest, err.Error())
+			return nil, nil, c.bridgeFailure(ctx, err)
 		}
+		body, loss = out, l
 		if c.route.count() {
-			body = removeMember(removeMember(body, "max_tokens"), "stream")
+			body = bridge.RemoveMember(bridge.RemoveMember(body, "max_tokens"), "stream")
 		}
-		path = upstreamPath(p.Spec.Dialect, c.route.op, responses)
-		loss = req.Loss.Strings()
+		path = upstreamPath(p.Spec.Dialect, c.route.op, p.Spec.Dialect == v1.DialectOpenAI && OpenAIReasoningFamily(t.Model))
 		hdr.Set("Content-Type", "application/json")
 		if p.Spec.Dialect == v1.DialectAnthropic && !hasHeader(p.Spec.Headers, "anthropic-version") {
 			hdr.Set("anthropic-version", AnthropicVersion)
@@ -262,7 +262,7 @@ func (c *call) forward(ctx context.Context) *failure {
 		}
 		m := c.modeFor(t)
 		if m == modeEstimate {
-			return c.estimate()
+			return c.estimate(ctx)
 		}
 		if !c.h.o.Router.Allow(t) {
 			continue
@@ -451,8 +451,9 @@ func (c *call) readFailure(ctx context.Context, err error) *failure {
 }
 
 // respondWhole writes a non-streaming response: on passthrough the body
-// with the Model's name written back, on translation the body decoded
-// with the target's codec and encoded with the door's.
+// with the Model's name written back, on translation the body the bridge
+// decoded with the target's codec, gave the Model's name, and encoded
+// with the door's, its usage the record's tokens.
 func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Response) *failure {
 	body, f := c.readWhole(ctx, resp)
 	if f != nil {
@@ -464,28 +465,24 @@ func (c *call) respondWhole(ctx context.Context, t Target, m mode, resp *http.Re
 		c.tokens = Tokens{}
 	case m == modePassthrough:
 		if t.Model != c.model.Metadata.Name && c.door != v1.DialectGemini {
-			body = rewriteModel(body, c.model.Metadata.Name)
+			body = bridge.SetModel(body, c.model.Metadata.Name)
 		}
-		if tokens, ok := bodyUsage(td, body); ok {
-			c.tokens = tokens
+		if u, ok := bridge.UsageOf(wireOf(td), body); ok {
+			c.tokens = tokensOf(u)
 		} else {
 			c.tokens = c.estimatedTokens()
 		}
 	case m == modeTranslate:
-		be, _ := backendFor(td, c.model, t.Model)
-		irResp, err := be.DecodeResponse(body)
-		if err != nil {
-			return fail(CodeUpstreamError, "decoding the upstream response: "+err.Error())
+		b, f := c.bridgeFor(ctx, t)
+		if f != nil {
+			return f
 		}
-		irResp.Model = c.model.Metadata.Name
-		out, err := frontendFor(c.route.op).EncodeResponse(irResp)
+		out, _, usage, err := b.Response(body, bridge.ResponseOptions{Model: c.model.Metadata.Name})
 		if err != nil {
-			return fail(CodeUpstreamError, "encoding the response for the door: "+err.Error())
+			return c.bridgeFailure(ctx, err)
 		}
 		body = out
-		var parts usageParts
-		parts.fromIR(&irResp.Usage)
-		c.tokens, _ = parts.tokens()
+		c.tokens = tokensOf(usage)
 		c.w.Header().Set("Content-Type", "application/json")
 	case m == modeEstimate:
 	}
@@ -623,15 +620,4 @@ func (c *call) streamFailure(ctx context.Context, err error) *failure {
 		return fail(CodeUpstreamTimeout, "the stream did not finish within the Provider's timeout")
 	}
 	return fail(CodeUpstreamError, "the upstream stream failed: "+err.Error())
-}
-
-// codecs is the pair a translated request runs through.
-type codecs struct {
-	frontend llmdialect.Frontend
-	backend  llmdialect.Backend
-}
-
-func (c *call) codecsFor(t Target) codecs {
-	be, _ := backendFor(t.Provider.Spec.Dialect, c.model, t.Model)
-	return codecs{frontend: frontendFor(c.route.op), backend: be}
 }

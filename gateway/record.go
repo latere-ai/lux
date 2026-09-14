@@ -6,6 +6,8 @@ package gateway
 import (
 	"time"
 
+	"latere.ai/x/pkg/llmdialect/bridge"
+
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
@@ -31,6 +33,13 @@ type Tokens struct {
 	CacheWrite  int64
 	Reasoning   int64
 	Estimated   bool
+}
+
+// tokensOf is the record's block for a usage the bridge read off an
+// upstream: the same five counts, with Estimated false because the
+// upstream reported them.
+func tokensOf(u bridge.Usage) Tokens {
+	return Tokens{Input: u.Input, Output: u.Output, CachedInput: u.CachedInput, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning}
 }
 
 // Attempt is one target tried, in order.

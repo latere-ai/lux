@@ -4,13 +4,12 @@
 package gateway
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"latere.ai/x/pkg/httpjson"
+	"latere.ai/x/pkg/llmdialect/bridge"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -164,63 +163,19 @@ func detailHeader(detail string) string {
 	return b.String()
 }
 
-// googleStatus is the google.rpc.Code name a Gemini error carries beside
-// the HTTP status, because that member is an enum a client may switch on.
-func googleStatus(status int) string {
-	switch status {
-	case http.StatusBadRequest, http.StatusRequestEntityTooLarge:
-		return "INVALID_ARGUMENT"
-	case http.StatusUnauthorized:
-		return "UNAUTHENTICATED"
-	case http.StatusForbidden:
-		return "PERMISSION_DENIED"
-	case http.StatusNotFound:
-		return "NOT_FOUND"
-	case http.StatusTooManyRequests:
-		return "RESOURCE_EXHAUSTED"
-	case http.StatusBadGateway, http.StatusServiceUnavailable:
-		return "UNAVAILABLE"
-	case http.StatusGatewayTimeout:
-		return "DEADLINE_EXCEEDED"
-	default:
-		return "INTERNAL"
+// failureOf is the failure in the bridge's vocabulary: the code as the
+// machine-readable member of every shape, the code's fixed sentence, the
+// developer detail, which only the lux shape carries in its body, the
+// request id, the status, and the domain of the Google ErrorInfo.
+func failureOf(id string, f *failure) bridge.Failure {
+	return bridge.Failure{
+		Code:      string(f.code),
+		Message:   f.code.Message(),
+		Detail:    f.detail,
+		RequestID: id,
+		Status:    f.code.Status(),
+		Domain:    "lux",
 	}
-}
-
-// openaiError is the OpenAI error shape, as a body and as a stream frame.
-type openaiError struct {
-	Error struct {
-		Message string  `json:"message"`
-		Type    string  `json:"type"`
-		Code    string  `json:"code"`
-		Param   *string `json:"param"`
-	} `json:"error"`
-}
-
-// anthropicError is the Anthropic error shape, as a body and as the data
-// of an event: error frame on the /anthropic and /lux doors.
-type anthropicError struct {
-	Type  string `json:"type"`
-	Error struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error"`
-	RequestID string `json:"request_id"`
-}
-
-// geminiError is Google's error shape with the lux code in
-// details[0].reason as Google's own ErrorInfo carries one.
-type geminiError struct {
-	Error struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Status  string `json:"status"`
-		Details []struct {
-			Type   string `json:"@type"`
-			Reason string `json:"reason"`
-			Domain string `json:"domain"`
-		} `json:"details"`
-	} `json:"error"`
 }
 
 // envelope renders the failure in the door's own error shape. The lux
@@ -229,44 +184,7 @@ type geminiError struct {
 // never in message. An empty door, a path under no door, renders the lux
 // shape.
 func envelope(door v1.Dialect, id string, f *failure) []byte {
-	code, message := f.code, f.code.Message()
-	var body any
-	switch door {
-	case v1.DialectOpenAI:
-		var e openaiError
-		e.Error.Message, e.Error.Type, e.Error.Code = message, string(code), string(code)
-		body = e
-	case v1.DialectAnthropic:
-		var e anthropicError
-		e.Type, e.Error.Type, e.Error.Message, e.RequestID = "error", string(code), message, id
-		body = e
-	case v1.DialectGemini:
-		var e geminiError
-		e.Error.Code, e.Error.Message, e.Error.Status = code.Status(), message, googleStatus(code.Status())
-		e.Error.Details = make([]struct {
-			Type   string `json:"@type"`
-			Reason string `json:"reason"`
-			Domain string `json:"domain"`
-		}, 1)
-		e.Error.Details[0].Type = "type.googleapis.com/google.rpc.ErrorInfo"
-		e.Error.Details[0].Reason = string(code)
-		e.Error.Details[0].Domain = "lux"
-		body = e
-	case v1.DialectLux, "":
-		details := map[string]any{"request_id": id}
-		if f.detail != "" {
-			details["detail"] = f.detail
-		}
-		body = httpjson.ErrorEnvelope{Error: httpjson.Error{Code: string(code), Message: message, Details: details}}
-	}
-	out, err := json.Marshal(body)
-	if err != nil {
-		// Every shape above is a struct of strings and integers, which
-		// always marshals; the branch is unreachable and kept for the
-		// signature.
-		return []byte(`{"error":{"code":"` + string(code) + `"}}`)
-	}
-	return append(out, '\n')
+	return bridge.Envelope(wireOf(door), failureOf(id, f))
 }
 
 // writeFailure answers the caller with the failure in the door's shape:
@@ -307,15 +225,5 @@ func WriteRefusal(w http.ResponseWriter, path, id string, code Code, detail stri
 // on /anthropic and /lux, and nothing on /gemini, which the gateway
 // never decodes and so never writes into.
 func streamErrorFrame(door v1.Dialect, id string, f *failure) []byte {
-	switch door {
-	case v1.DialectOpenAI:
-		body := envelope(door, id, f)
-		return append(append([]byte("data: "), strings.TrimSuffix(string(body), "\n")...), "\n\n"...)
-	case v1.DialectAnthropic, v1.DialectLux:
-		body := envelope(door, id, f)
-		return append(append([]byte("event: error\ndata: "), strings.TrimSuffix(string(body), "\n")...), "\n\n"...)
-	case v1.DialectGemini, "":
-		return nil
-	}
-	return nil
+	return bridge.ErrorFrame(wireOf(door), failureOf(id, f))
 }

@@ -4,15 +4,13 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"strconv"
 	"strings"
 
-	"latere.ai/x/pkg/llmdialect"
-	"latere.ai/x/pkg/llmdialect/anthropic"
+	"latere.ai/x/pkg/llmdialect/bridge"
 	"latere.ai/x/pkg/llmdialect/ir"
-	"latere.ai/x/pkg/llmdialect/lux"
-	"latere.ai/x/pkg/llmdialect/openaichat"
-	"latere.ai/x/pkg/llmdialect/openairesp"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -49,50 +47,123 @@ func OpenAIReasoningFamily(name string) bool {
 	return err == nil && n >= 5
 }
 
-// frontendFor is the door's codec for a translated route: the caller
-// side of the translation.
-func frontendFor(op operation) llmdialect.Frontend {
-	switch op {
-	case opChatCompletions:
-		return openaichat.NewFrontend()
-	case opResponses:
-		return openairesp.NewFrontend()
-	case opMessages, opAnthropicCount:
-		return anthropic.NewFrontend()
-	case opGenerate, opLuxCount:
-		return lux.NewFrontend()
-	case opEmbeddings, opGeminiGenerate, opGeminiStream, opGeminiCount, opGeminiEmbed, opModelsList, opModelsRead, opOpaque, opNone:
-		return nil
+// wireOf is the bridge wire of a door or a target dialect: the API
+// family whose shapes the bridge writes and reads for it. A path under
+// no door renders the lux shapes, as spec 004 says of the envelope.
+func wireOf(d v1.Dialect) bridge.Wire {
+	switch d {
+	case v1.DialectOpenAI:
+		return bridge.WireOpenAI
+	case v1.DialectAnthropic:
+		return bridge.WireAnthropic
+	case v1.DialectGemini:
+		return bridge.WireGoogle
+	case v1.DialectLux, "":
+		return bridge.WireLux
 	}
-	return nil
+	return bridge.WireLux
 }
 
-// backendFor is the target's codec for a translated route, with the
-// options spec 004's table sets: DefaultMaxTokens is the Model's
-// maxOutputTokens when set and the codec's 4096 otherwise; DropSampling
-// is false, because the gateway carries no table of which models refuse
-// a sampling parameter; UseMaxCompletionTokens follows the reasoning
-// family predicate. responses reports that an openai target is reached
-// on /responses rather than /chat/completions.
-func backendFor(target v1.Dialect, m *v1.Model, upstream string) (backend llmdialect.Backend, responses bool) {
-	switch target {
+// doorDialect is the codec dialect of the door's translated route, the
+// caller side of a translation; the two count routes read their body
+// with the same codec. A route with no codec has none.
+func doorDialect(op operation) ir.Dialect {
+	switch op {
+	case opChatCompletions:
+		return ir.DialectOpenAIChat
+	case opResponses:
+		return ir.DialectOpenAIResponses
+	case opMessages, opAnthropicCount:
+		return ir.DialectAnthropicMessages
+	case opGenerate, opLuxCount:
+		return ir.DialectLux
+	case opEmbeddings, opGeminiGenerate, opGeminiStream, opGeminiCount, opGeminiEmbed, opModelsList, opModelsRead, opOpaque, opNone:
+		return ""
+	}
+	return ""
+}
+
+// targetDialect is the codec dialect of a target, the upstream side of
+// a translation. An openai target serves two: a name in the reasoning
+// family is served on /responses, every other name on /chat/completions
+// (spec 008). A gemini target has none.
+func targetDialect(d v1.Dialect, upstream string) ir.Dialect {
+	switch d {
 	case v1.DialectOpenAI:
 		if OpenAIReasoningFamily(upstream) {
-			return openairesp.NewBackend(), true
+			return ir.DialectOpenAIResponses
 		}
-		return openaichat.NewBackend(openaichat.BackendOptions{}), false
+		return ir.DialectOpenAIChat
 	case v1.DialectAnthropic:
-		var maxTokens int64
-		if m != nil {
-			maxTokens = int64(m.Spec.MaxOutputTokens)
-		}
-		return anthropic.NewBackend(anthropic.BackendOptions{DefaultMaxTokens: maxTokens}), false
+		return ir.DialectAnthropicMessages
 	case v1.DialectLux:
-		return lux.NewBackend(), false
-	case v1.DialectGemini:
-		return nil, false
+		return ir.DialectLux
+	case v1.DialectGemini, "":
+		return ""
 	}
-	return nil, false
+	return ""
+}
+
+// bridgeFor opens the codec pair one translated attempt runs through,
+// with the options spec 004's table sets: DefaultMaxTokens is the
+// Model's maxOutputTokens when set and the codec's 4096 otherwise;
+// DropSampling is false, because the gateway carries no table of which
+// models refuse a sampling parameter; UseMaxCompletionTokens follows the
+// reasoning family predicate. A pair the bridge cannot open is a bug,
+// because bridgeable refused the target first; it is answered through
+// bridgeFailure rather than a panic.
+func (c *call) bridgeFor(ctx context.Context, t Target) (*bridge.Bridge, *failure) {
+	var maxTokens int64
+	if c.model != nil {
+		maxTokens = int64(c.model.Spec.MaxOutputTokens)
+	}
+	b, err := bridge.Open(doorDialect(c.route.op), targetDialect(t.Provider.Spec.Dialect, t.Model), bridge.Options{
+		DefaultMaxTokens:       maxTokens,
+		UseMaxCompletionTokens: OpenAIReasoningFamily(t.Model),
+	})
+	if err != nil {
+		return nil, c.bridgeFailure(ctx, err)
+	}
+	return b, nil
+}
+
+// bridgeFailure maps the bridge's seven codes onto spec 004's table, here
+// and nowhere else. A request the door's codec cannot decode, whatever
+// its refusal scope, or the target's cannot encode is invalid_request
+// with the codec's words as the developer detail, because on this path
+// the body is only ever sent translated. An upstream body the codecs
+// cannot read or write back is upstream_error. A stream that failed is
+// classified as any other cut after the first byte: client_closed when
+// the caller is gone, upstream_timeout when the Provider's timeout
+// passed, upstream_error otherwise. A write to the caller that failed is
+// client_closed, because there is nobody left to answer. Unsupported
+// cannot reach a caller, because bridgeable refuses first, and is
+// dialect_unsupported so that a bug in the route rule is still a fixed
+// code. An error that is not the bridge's is upstream_error.
+func (c *call) bridgeFailure(ctx context.Context, err error) *failure {
+	var e *bridge.Error
+	if !errors.As(err, &e) {
+		return fail(CodeUpstreamError, err.Error())
+	}
+	switch e.Code {
+	case bridge.DecodeRequest, bridge.EncodeRequest:
+		return fail(CodeInvalidRequest, e.Detail)
+	case bridge.DecodeResponse:
+		return fail(CodeUpstreamError, "decoding the upstream response: "+e.Detail)
+	case bridge.EncodeResponse:
+		return fail(CodeUpstreamError, "encoding the response for the door: "+e.Detail)
+	case bridge.StreamFailed:
+		cause := e.Unwrap()
+		if cause == nil {
+			cause = e
+		}
+		return c.streamFailure(ctx, cause)
+	case bridge.WriteFailed:
+		return fail(ClientClosed, "")
+	case bridge.Unsupported:
+		return fail(CodeDialectUnsupported, e.Detail)
+	}
+	return fail(CodeUpstreamError, e.Error())
 }
 
 // translatedRoute reports whether the route has a codec, so a door and a
@@ -124,45 +195,7 @@ var dialectHeaders = []string{
 }
 
 // lossHeader is the loss entry for a dialect header dropped on
-// translation.
-func lossHeader(name string) ir.LossField {
-	return ir.LossField("header." + strings.ToLower(name))
-}
-
-// responseEvents re-emits a whole response as the event sequence a
-// stream would have carried, for a target that answered a stream request
-// with one JSON body: message_start, one block with its deltas per
-// block, message_delta with the usage, message_stop.
-func responseEvents(resp *ir.Response) []ir.Event {
-	events := []ir.Event{{Type: ir.EventMessageStart, ID: resp.ID, Model: resp.Model}}
-	for i, b := range resp.Blocks {
-		header := ir.Block{Type: b.Type}
-		if b.ToolUse != nil {
-			header.ToolUse = &ir.ToolUse{ID: b.ToolUse.ID, Name: b.ToolUse.Name}
-		}
-		events = append(events, ir.Event{Type: ir.EventBlockStart, Index: i, Block: &header})
-		switch b.Type {
-		case ir.BlockText:
-			events = append(events, ir.Event{Type: ir.EventTextDelta, Index: i, Delta: b.Text, LogProbs: resp.LogProbs})
-		case ir.BlockThinking:
-			events = append(events, ir.Event{Type: ir.EventThinkingDelta, Index: i, Delta: b.Text})
-			if b.Signature != "" {
-				events = append(events, ir.Event{Type: ir.EventSignatureDelta, Index: i, Delta: b.Signature})
-			}
-		case ir.BlockToolUse:
-			if len(b.ToolUse.Args) > 0 {
-				events = append(events, ir.Event{Type: ir.EventArgsDelta, Index: i, Delta: string(b.ToolUse.Args)})
-			}
-		case ir.BlockImage, ir.BlockToolResult, ir.BlockRedactedThinking:
-			// Not an output block any dialect streams; the header alone
-			// is emitted so the block count stays the response's.
-		}
-		events = append(events, ir.Event{Type: ir.EventBlockStop, Index: i})
-	}
-	usage := resp.Usage
-	events = append(events,
-		ir.Event{Type: ir.EventMessageDelta, StopReason: resp.StopReason, StopSequence: resp.StopSequence, Usage: &usage},
-		ir.Event{Type: ir.EventMessageStop},
-	)
-	return events
+// translation, a field path the bridge adds to the codecs' report.
+func lossHeader(name string) string {
+	return "header." + strings.ToLower(name)
 }
