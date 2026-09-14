@@ -5,10 +5,12 @@
 # the published stub image, wired the way `make run` wires the two
 # binaries. `docker compose up`, then the curls in docs/quickstart.md.
 #
-# The images are published by the release pipeline of spec 017. Until the
-# first tag is cut they do not exist in the registry yet; build them from
-# a checkout first, as docs/quickstart.md shows, and this file runs them
-# unchanged.
+# The images are published by the release pipeline of spec 017, under the
+# repository owner's namespace (a fork publishes under the fork's), so the
+# reference derives from ${LUX_OWNER}, defaulting to the maintainer's.
+# Until the first tag is cut they do not exist in the registry yet; build
+# them from a checkout first, as docs/quickstart.md shows, and this file
+# runs them unchanged.
 
 services:
   # Every stub of spec 015 from one image: a provider per dialect, the
@@ -23,7 +25,7 @@ services:
   # fetches that issuer's keys, so the two must be one string that resolves
   # from inside the luxd container: this service's compose name.
   lux-stubs:
-    image: ghcr.io/latere-ai/lux-stubs:${LUX_VERSION:-latest}
+    image: ghcr.io/${LUX_OWNER:-latere-ai}/lux-stubs:${LUX_VERSION:-latest}
     command:
       - -openai-addr=0.0.0.0:9101
       - -anthropic-addr=0.0.0.0:9102
@@ -39,7 +41,7 @@ services:
       - "9105:9105"
 
   luxd:
-    image: ghcr.io/latere-ai/luxd:${LUX_VERSION:-latest}
+    image: ghcr.io/${LUX_OWNER:-latere-ai}/luxd:${LUX_VERSION:-latest}
     command: ["serve"]
     depends_on:
       - lux-stubs

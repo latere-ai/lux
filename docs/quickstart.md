@@ -16,14 +16,15 @@ exist in the registry**, so build them from a checkout first;
 
 ```sh
 tools/release/build.sh v0.0.0-local dist
-docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.release -t ghcr.io/latere-ai/luxd:latest .
-docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.stubs -t ghcr.io/latere-ai/lux-stubs:latest .
+docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.release -t "ghcr.io/${LUX_OWNER:-latere-ai}/luxd:${LUX_VERSION:-latest}" .
+docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.stubs -t "ghcr.io/${LUX_OWNER:-latere-ai}/lux-stubs:${LUX_VERSION:-latest}" .
 ```
 
 `build.sh` writes the Linux binaries under `dist/`, the same bytes the
 release archives carry, and each `docker build` copies one into the
 distroless runtime stage. Once a release is cut, skip this step and set
-`LUX_VERSION` to the tag you want (`latest` by default).
+`LUX_VERSION` to the tag you want (`latest` by default); `LUX_OWNER`
+selects the namespace, the maintainer's unless a fork published its own.
 
 ## Run it
 
