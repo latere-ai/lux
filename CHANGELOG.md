@@ -6,6 +6,35 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Keys and limits: a Key's value is `lux_` and forty characters from a
+  secure source, shown once and stored as a hash, and a platform may
+  supply its own value of 32 to 4096 bytes instead, which opens the
+  doors by its exact bytes and is shown as `sup_` and eight hex
+  characters of its hash. Each replica caches a Key lookup for
+  `LUX_KEY_CACHE` (default `10s`), positive or negative, at most 100 000
+  entries, drops an entry the moment the journal reports the Key updated,
+  rotated, or deleted, and empties the cache after a file-mode `SIGHUP`;
+  every lookup counts in `lux_key_cache_hits_total{result}`. A Key's
+  `requestsPerMinute` and `tokensPerMinute` are token buckets per
+  replica, so an installation with `n` replicas admits at most `n` times
+  the configured rate; the token bucket is charged the request's
+  estimate before it runs and settled to the measured count after, and a
+  request refused later gives its whole reservation back. A spend limit
+  and a Budget count in fixed windows in the store, and a replica refuses
+  on its own view plus the store's last flushed total, so with `R`
+  replicas, a flush of `F` seconds, `T` requests a second per replica,
+  and a largest request cost `C`, a hard limit is exceeded by at most
+  `(R − 1) × F × T × C + C`. An unpriced model or an opaque route is
+  refused `model_unpriced` under any spend limit or Budget unless the Key
+  sets `allowUnpriced`; a soft Budget never refuses; an exhausted window
+  raises `key.exhausted` or `budget.exhausted` exactly once, across
+  every replica. `status.state`, `status.usage`, and a Budget's `status`
+  render from the counters at read time; `status.lastUsedAt` is written at
+  most once a minute per Key. `LUX_DEFAULT_REQUESTS_PER_MINUTE` and
+  `LUX_DEFAULT_TOKENS_PER_MINUTE` (default `0`, no limit) are the rates a
+  Key gets when it names none. The `metering` package holds the window
+  arithmetic, the counter key scheme, and a replica's deltas over the
+  store; the doors that read all of this mount with the API.
 - The request path: the `gateway` package is the data plane as one
   `http.Handler` for the four doors, `/openai`, `/anthropic`, `/gemini`,
   and `/lux`, each serving its dialect's own API under its prefix. A
