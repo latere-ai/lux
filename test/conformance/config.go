@@ -6,7 +6,6 @@ package conformance
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"latere.ai/x/pkg/authkit/jwt"
 	"latere.ai/x/pkg/authz"
 )
 
@@ -88,24 +88,16 @@ type tokenClaims struct {
 	aud      []string
 }
 
-// payloadOf decodes a JWS payload without verifying it; the suite holds
-// no key and the server is the verifier. A token that is not a JWS
-// yields empty claims.
+// payloadOf reads a token's claims through the shared reader without
+// verifying it; the suite holds no key and the server is the verifier.
+// A token that is not a JWS yields empty claims.
 func payloadOf(token string) tokenClaims {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return tokenClaims{}
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return tokenClaims{}
-	}
 	var p struct {
 		Iss string `json:"iss"`
 		Sub string `json:"sub"`
 		Aud any    `json:"aud"`
 	}
-	if json.Unmarshal(raw, &p) != nil {
+	if jwt.DecodePayload(token, &p) != nil {
 		return tokenClaims{}
 	}
 	c := tokenClaims{iss: p.Iss, sub: p.Sub}
