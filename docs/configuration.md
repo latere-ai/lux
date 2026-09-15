@@ -7,18 +7,17 @@ lands is not refused. A start-up with anything missing or malformed fails with
 one message that lists every problem, sorted by variable name, so an operator
 fixes a deployment in one round.
 
-The meanings are the [repository scaffold spec](../specs/002-repository-scaffold.md)'s,
-which owns them. This page and the `.env.example` at the repository
-root are generated from `internal/config` and held current by
-`TestConfigurationReferenceIsCurrent`; `.env.example` is this
-same set as a file to copy.
+This page and the `.env.example` at the repository root are
+generated from `internal/config` and held current by
+`TestConfigurationReferenceIsCurrent`, so they never drift from the
+code; `.env.example` is this same set as a file to copy.
 
 Variables that are not luxd's live elsewhere: the `lux` command's own
 in [`cli.md`](cli.md), the install script's `LUX_INSTALL_*` in
 [`install.md`](install.md), the conformance suite's `LUX_TEST_*`
 in the [conformance spec](../specs/018-conformance-suite.md), and the
 OpenTelemetry exporter's `OTEL_*`, read by `latere.ai/x/pkg/otel`,
-in the [observability spec](../specs/019-observability.md). In file mode a
+in [`observability.md`](observability.md). In file mode a
 manifest may name the operator's own variables, outside the `LUX_`
 namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 

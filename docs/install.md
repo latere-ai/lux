@@ -213,21 +213,22 @@ never the content.
 
 - Set `LUX_DB_URL` in the Secret and apply `deploy/overlays/generic`
   for two replicas over Postgres; the gateway applies its schema at
-  start, and the [state spec](../specs/010-state.md) says what it holds
-  and what `luxd check`'s `store`, `migrations`, and `db conns` rows
-  read from the cluster. That
+  start, and `luxd check`'s `store`, `migrations`, and `db conns` rows
+  verify it against the cluster ([`configuration.md`](configuration.md)
+  has the `LUX_DB_*` knobs). That
   overlay keeps the alert rules, a `PrometheusRule` the Prometheus
   Operator reads; a cluster without the operator drops it the way the
   kind overlay does.
 - Point `LUX_AUTHORIZER_URL` at an endpoint you write, so permission is
-  your decision rather than the built-in owner policy; the
-  [identity spec](../specs/006-identity.md) is the contract.
+  your decision rather than the built-in owner policy; [`security.md`](security.md) is how to write
+  it and lock it down.
 - Set `LUX_EVENTS_URL` and `LUX_EVENTS_SECRET` to receive one signed
   event per mutation, and `LUX_REQUESTLOG_EXPORTER=s3` to archive every
-  request record; the [events spec](../specs/012-request-log-and-events.md)
-  has both shapes.
+  request record; [`configuration.md`](configuration.md) has the knobs
+  and [`observability.md`](observability.md) the metrics for the sink and
+  the archive.
 - Every `LUX_*` variable is in the table of the
-  [configuration reference](../specs/002-repository-scaffold.md), and
+  [configuration reference](configuration.md), and
   every alert to start with is in
   [`deploy/base/prometheusrule.yaml`](../deploy/base/prometheusrule.yaml).
 - Upgrading is applying the next release's archive: any release upgrades
