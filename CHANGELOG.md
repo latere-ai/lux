@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `docs/api.md`, `docs/security.md`, and `docs/observability.md` are the
+  operator pages for the API, security, and observability, and the docs hub
+  routes to them instead of to the specs. `api.md` orients a caller in the
+  `/v1` control plane, the dialect doors, authentication, and the error
+  shape, then points at the OpenAPI document (`api/openapi.yaml`, served at
+  `GET /v1/openapi.json`) as the authoritative reference. `security.md` is
+  what the gateway protects and what you must do to run it safely: the KEK,
+  TLS, `LUX_TRUSTED_PROXIES`, the authorizer, key rotation, and verifying
+  releases. `observability.md` is the `/metrics` names and labels, the
+  health probes, the log fields, traces, and the shipped alerts. The specs
+  stay named as the contributor design record.
 - A hard spend or Budget limit refuses the request that follows a settled
   answer even while that answer's spend is being flushed to the store: the
   metering counters keep a flushed delta in a replica's own total for the
