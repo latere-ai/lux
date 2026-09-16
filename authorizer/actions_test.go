@@ -254,3 +254,57 @@ func TestActionsAndKinds(t *testing.T) {
 		t.Error("Actions() hands out its own backing array")
 	}
 }
+
+// TestVocabularyIsTheTable: Vocabulary carries the twenty-four rows in
+// the table's order, each action with the kind it acts on, and the three
+// older reads are that value read three ways rather than a second table.
+func TestVocabularyIsTheTable(t *testing.T) {
+	v := Vocabulary()
+	if v.Core != "lux" {
+		t.Errorf("Core = %q, want lux", v.Core)
+	}
+	if len(v.Actions) != 24 {
+		t.Fatalf("the vocabulary has %d rows, want the table's twenty-four", len(v.Actions))
+	}
+	names := make([]string, 0, len(v.Actions))
+	for _, a := range v.Actions {
+		names = append(names, a.Name)
+		kind, ok := v.Kind(a.Name)
+		if !ok || kind != a.Kind || kind != Kind(a.Name) || !Known(a.Name) {
+			t.Errorf("%s: the row says %q, Kind says %q, Known %v", a.Name, a.Kind, Kind(a.Name), Known(a.Name))
+		}
+	}
+	if !slices.Equal(names, Actions()) {
+		t.Errorf("Actions() = %v, and the vocabulary names %v", Actions(), names)
+	}
+	if got, want := v.Kinds(), []string{v1.KindProvider, v1.KindModel, v1.KindKey, v1.KindBudget, KindUsage}; !slices.Equal(got, want) {
+		t.Errorf("Kinds() = %v, want %v", got, want)
+	}
+	for _, a := range []string{"", "key", "key.rotate", "usage.write", "Provider.read"} {
+		if kind, ok := v.Kind(a); ok || kind != "" || v.Known(a) {
+			t.Errorf("the vocabulary answers %q with %q, %v; want none", a, kind, ok)
+		}
+	}
+	v.Actions[0] = authz.Action{Name: "changed", Kind: "Changed"}
+	if Vocabulary().Actions[0].Name == "changed" || Actions()[0] == "changed" {
+		t.Error("Vocabulary() hands out the package's own table")
+	}
+}
+
+// TestVocabularyConstructs: the table above is one NewVocabulary
+// accepts, so importing the package cannot panic; must refuses one it
+// does not, which is the programming error it stands for.
+func TestVocabularyConstructs(t *testing.T) {
+	if _, err := authz.NewVocabulary(vocabulary.Core, vocabulary.Actions...); err != nil {
+		t.Fatalf("the declared table does not construct: %v", err)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("must accepted a table NewVocabulary refused")
+		}
+	}()
+	must(authz.NewVocabulary("lux",
+		authz.Action{Name: ActionKeyRead, Kind: v1.KindKey},
+		authz.Action{Name: ActionKeyRead, Kind: v1.KindKey},
+	))
+}

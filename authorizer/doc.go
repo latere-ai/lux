@@ -16,6 +16,23 @@
 // all. Nothing here dials: the package builds values and decodes them,
 // and the client is the caller's.
 //
+// Vocabulary is that table in one value, of the shared contract's own
+// type: the twenty-four actions in the spec's order, each paired with
+// the kind it acts on. It is what an endpoint validates a request
+// against and what latere.ai/x/pkg/authz/conformance drives its cases
+// from, and Actions, Kind, and Known read the same value, so a consumer
+// holds one declaration and never a copy of it:
+//
+//	http.Handle("POST /authorize", server.New(server.Options{
+//		Bearer:     os.Getenv("AUTHORIZER_TOKEN"),
+//		Vocabulary: authorizer.Vocabulary(),
+//		Decider:    policy{},
+//	}))
+//
+// Lux's four list actions answer a decision like every other action,
+// narrowed by the answer's filter rather than returning a page of their
+// own, so an endpoint for Lux names no page action.
+//
 // One resource shape goes with each action. The builders render exactly
 // the fields luxd sends, one per action: a create carries the manifest's
 // own fields and no id, since the object does not exist yet; a read,

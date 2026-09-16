@@ -49,19 +49,66 @@ const (
 // kind: the resource names the Keys and owners a query asks about.
 const KindUsage = "Usage"
 
-// actions is the table in its order.
-var actions = []string{
-	ActionProviderCreate, ActionProviderRead, ActionProviderUpdate, ActionProviderDelete, ActionProviderTunnel, ActionProviderList,
-	ActionModelCreate, ActionModelRead, ActionModelUpdate, ActionModelDelete, ActionModelList, ActionModelUse,
-	ActionKeyCreate, ActionKeyRead, ActionKeyUpdate, ActionKeyDelete, ActionKeyList,
-	ActionBudgetCreate, ActionBudgetRead, ActionBudgetUpdate, ActionBudgetDelete, ActionBudgetList, ActionBudgetDraw,
-	ActionUsageRead,
+// vocabulary is spec 006's table as data, in the spec's order: every
+// action luxd asks, each paired with the resource kind it acts on. It is
+// the package's one declaration of that table, and Vocabulary, Actions,
+// Kind, and Known are four readings of the same value.
+var vocabulary = must(authz.NewVocabulary("lux",
+	authz.Action{Name: ActionProviderCreate, Kind: v1.KindProvider},
+	authz.Action{Name: ActionProviderRead, Kind: v1.KindProvider},
+	authz.Action{Name: ActionProviderUpdate, Kind: v1.KindProvider},
+	authz.Action{Name: ActionProviderDelete, Kind: v1.KindProvider},
+	authz.Action{Name: ActionProviderTunnel, Kind: v1.KindProvider},
+	authz.Action{Name: ActionProviderList, Kind: v1.KindProvider},
+	authz.Action{Name: ActionModelCreate, Kind: v1.KindModel},
+	authz.Action{Name: ActionModelRead, Kind: v1.KindModel},
+	authz.Action{Name: ActionModelUpdate, Kind: v1.KindModel},
+	authz.Action{Name: ActionModelDelete, Kind: v1.KindModel},
+	authz.Action{Name: ActionModelList, Kind: v1.KindModel},
+	authz.Action{Name: ActionModelUse, Kind: v1.KindModel},
+	authz.Action{Name: ActionKeyCreate, Kind: v1.KindKey},
+	authz.Action{Name: ActionKeyRead, Kind: v1.KindKey},
+	authz.Action{Name: ActionKeyUpdate, Kind: v1.KindKey},
+	authz.Action{Name: ActionKeyDelete, Kind: v1.KindKey},
+	authz.Action{Name: ActionKeyList, Kind: v1.KindKey},
+	authz.Action{Name: ActionBudgetCreate, Kind: v1.KindBudget},
+	authz.Action{Name: ActionBudgetRead, Kind: v1.KindBudget},
+	authz.Action{Name: ActionBudgetUpdate, Kind: v1.KindBudget},
+	authz.Action{Name: ActionBudgetDelete, Kind: v1.KindBudget},
+	authz.Action{Name: ActionBudgetList, Kind: v1.KindBudget},
+	authz.Action{Name: ActionBudgetDraw, Kind: v1.KindBudget},
+	authz.Action{Name: ActionUsageRead, Kind: KindUsage},
+))
+
+// must is the constructor's error, which is a mistake in the table above
+// and in no caller: an entry with no name or no kind, or an action named
+// twice. A table that cannot be read as a map from action to kind is a
+// programming error, so the package refuses to load rather than letting
+// half a table answer a question.
+func must(v authz.Vocabulary, err error) authz.Vocabulary {
+	if err != nil {
+		panic("authorizer: " + err.Error())
+	}
+	return v
+}
+
+// Vocabulary is the whole table as the shared contract's own type, which
+// is the form a consumer reads it in: a control plane deciding for Lux
+// validates an action and a resource kind against it, a conformance
+// suite drives a case per row of it, and luxd's own client refuses an
+// action outside it before the wire. Import it rather than pairing
+// Actions with Kind by hand. The value is fresh on every call, so a
+// caller may sort or trim what it gets.
+func Vocabulary() authz.Vocabulary {
+	return authz.Vocabulary{Core: vocabulary.Core, Actions: slices.Clone(vocabulary.Actions)}
 }
 
 // Actions lists every action of the vocabulary, in the table's order.
 func Actions() []string {
-	out := make([]string, len(actions))
-	copy(out, actions)
+	out := make([]string, 0, len(vocabulary.Actions))
+	for _, a := range vocabulary.Actions {
+		out = append(out, a.Name)
+	}
 	return out
 }
 
@@ -69,26 +116,12 @@ func Actions() []string {
 // prefix names, Usage for usage.read, and "" for a string outside the
 // vocabulary.
 func Kind(action string) string {
-	prefix, _, ok := strings.Cut(action, ".")
-	if !ok || !Known(action) {
-		return ""
-	}
-	switch prefix {
-	case "provider":
-		return v1.KindProvider
-	case "model":
-		return v1.KindModel
-	case "key":
-		return v1.KindKey
-	case "budget":
-		return v1.KindBudget
-	default:
-		return KindUsage
-	}
+	kind, _ := vocabulary.Kind(action)
+	return kind
 }
 
 // Known reports whether action is one of the vocabulary.
-func Known(action string) bool { return slices.Contains(actions, action) }
+func Known(action string) bool { return vocabulary.Known(action) }
 
 // verb is the part of an action after the kind: create, read, list, use.
 func verb(action string) string {
