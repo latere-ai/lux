@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.2.0 - 2026-09-16
+
 - `latere.ai/x/lux/authorizer` exports the action table itself.
   `authorizer.Vocabulary()` is the twenty-four actions `luxd` asks as
   one `authz.Vocabulary`, each paired with the resource kind it acts on,
