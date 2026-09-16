@@ -10,7 +10,7 @@ depends_on:
 affects: [gateway/, metering/, internal/serve/, internal/config/, cmd/luxd/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -171,6 +171,31 @@ gateway's own audience; a platform's developer credential carries the
 platform's audience and so never reaches desired state, and a minted
 value is not a JWS and never does. Neither plane consults the other's
 table.
+
+### A value supplied by its hash
+
+A `PUT` that creates a Key may carry `spec.valueSHA256` instead of
+`spec.value`: the SHA-256 of a value the caller holds only as a hash.
+It exists for one composition: an importer moving credentials out of a
+store that kept hashes alone, so every credential its holders already
+present keeps opening the doors after the move, without a re-issue.
+The field is [[003-manifest-contract]]'s: 64 lower-case hex characters,
+write-once, encoder-skipped as `spec.value` is.
+
+The rules are the supplied value's, with the hash standing in for the
+value at every step. The store keeps it as the hash a supplied value
+would have produced, so the hash index, its uniqueness (`ErrHashTaken`,
+`invalid_field` at `spec.valueSHA256` naming no Key), the door's lookup,
+the cache, revocation, and `LUX_KEY_CACHE` are one path for the three
+forms of a value. `status.prefix` is `sup_` and the hash's first eight
+characters. The create response carries no `status.value`, and the hash
+is returned by no read, list, event, record, or log line, because a
+hash of a low-entropy value is a guessing target. A rotate mints a
+`lux_` value and replaces the hash. The gateway cannot check the
+hash's bounds on the value it stands for, so the importer answers for
+them: a value under 32 bytes registered this way is the importer's
+choice, and the version promise of [[017-release-and-installation]]
+does not extend to it.
 
 ### Verification and the cache
 
@@ -570,6 +595,7 @@ the checks sit in the pipeline and the codes' HTTP statuses
 | A Key created with a 32-byte `spec.value` authenticates by that exact value on every door and credential form, the create response carries no `status.value`, `status.prefix` is `sup_` and the first eight hex characters of the value's SHA-256, and the supplied value is refused at rotate while the minted one is accepted | `TestSuppliedKeyValue` | passing at the store and the cache, `internal/serve`; the door half is [[004-request-path]]'s `TestSuppliedValueOpensTheDoor`; the response half passes in [[011-api]]'s `TestSuppliedValueIsNotEchoed`, which reads the `sup_` prefix and neither value |
 | A supplied value of 31 bytes and one of 4097 bytes are each `invalid_field` at `spec.value`; one with leading whitespace authenticates only with that whitespace; a value that is a well-formed JWT with a past `exp` and a bad signature authenticates, because the gateway parses nothing | [[003-manifest-contract]]'s `TestSuppliedValueSchema`, `TestSuppliedValueIsOpaqueBytes` | passing: the bounds as [[003-manifest-contract]]'s `TestSuppliedValueSchema`, the bytes in `internal/serve` |
 | A second create with a value already registered, to a live or a disabled Key, is `invalid_field` at `spec.value` whose detail names no Key; two concurrent creates of one value yield one 201 and one `invalid_field` | `TestSuppliedValueMustBeUnique` | passing at the store, `internal/serve`: `ErrHashTaken` inside the transaction, the refused Key stored nowhere, one Key from a concurrent pair; the `invalid_field` mapping is [[011-api]]'s |
+| A Key created with `spec.valueSHA256` equal to the SHA-256 of a string authenticates by that string on every door, `status.prefix` is `sup_` and the hash's first eight characters, the create response carries neither the hash nor a value, a second create with the same hash or with a `spec.value` of that string is `invalid_field` naming no Key, and a rotate mints a `lux_` value after which the string is `unauthenticated` | `TestHashSuppliedKeyOpensTheDoor` | not built |
 | An update carrying `spec.value`, equal to the stored one or not, is `immutable_field` at `spec.value`; `spec.value` with `spec.valueFrom` is `exclusive_fields`; `spec.value` in file mode is `invalid_field` | [[003-manifest-contract]]'s `TestSuppliedValueSchema` and `TestImmutableFields` with [[010-state]]'s `TestFileModeRefusesServerOnlyFields` | passing as [[003-manifest-contract]]'s `TestSuppliedValueSchema` and `TestImmutableFields`, and [[010-state]]'s `TestFileModeRefusesServerOnlyFields` for the file mode |
 | A supplied value that is a token for a listed issuer with another audience is a Key on a door and `unauthenticated` on `/v1`; a minted value is `unauthenticated` on `/v1`; an issuer token no Key was created with is `unauthenticated` on a door | `TestPlaneBoundaryHoldsByVerification` with [[006-identity]]'s `TestPlanesRefuseEachOthersCredential` and [[004-request-path]]'s `TestDoorsTakeKeysOnly` | not built; the door half passes as [[004-request-path]]'s `TestDoorsTakeKeysOnly`, the `/v1` half waits for [[011-api]] |
 | A Key looked up once is served from the cache for the window with one store call; a negative entry holds an unknown value to one store call per window; the cache evicts at 100 000 entries; every lookup increments `lux_key_cache_hits_total` with the matching `result` | `TestKeyCache`, `TestNegativeCache`, `TestCacheBound` | passing, `internal/serve` |

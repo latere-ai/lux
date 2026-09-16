@@ -7,7 +7,7 @@ depends_on:
 affects: [manifest/, manifest/v1/, internal/api/, internal/store/, docs/]
 effort: large
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -306,6 +306,7 @@ the discovered one.
 | `disabled` | bool | `false` | yes | refuses every request with `key_disabled` while true; the value is kept |
 | `value` | string | none | no | server mode only: a value the caller supplies instead of one the gateway mints, the composition [[007-keys-and-limits]] owns; 32 to 4096 bytes; write-only, decoded into the encoder-skipped field the credential rule below describes, so it is returned by no response, event, record, or log line and the resolved manifest carries the field absent; present on an update, whatever its value, is `immutable_field`; `exclusive_fields` with `valueFrom.env`; `invalid_field` in file mode, because a credential in a file is what `valueFrom` exists to avoid; `status.prefix` is then `sup_` and the first eight lower-case hex characters of `SHA-256(value)`, computed by the surface that stores the hash, since a supplied value has no `lux_` prefix to show; a rotate mints a `lux_` value and the supplied one stops working |
 | `valueFrom.env` | string | none | no | file mode only ([[010-state]]): a POSIX variable name whose value is the Key's, matching `^lux_[A-Za-z0-9_-]{40}$` ([[007-keys-and-limits]]); `invalid_field` in server mode, where the server mints the value or the caller supplies one |
+| `valueSHA256` | string | none | no | server mode only: the SHA-256 of a value the caller holds only as a hash, 64 lower-case hex characters (`invalid_field` otherwise), the composition [[007-keys-and-limits]] owns for an importer whose source kept hashes alone; write-only exactly as `value` is, decoded into an encoder-skipped member, returned by no response, event, record, or log line, absent from the resolved manifest; stored as the hash a supplied value would have produced, so the Key authenticates by any value whose SHA-256 it is; present on an update is `immutable_field`; `exclusive_fields` with `value` and with `valueFrom.env`; `invalid_field` in file mode; `status.prefix` is `sup_` and the hash's first eight characters; a rotate mints a `lux_` value and the hash stops matching |
 
 `Budget.spec`:
 
@@ -566,12 +567,12 @@ there.
 | `unsupported_kind` | `kind` is not one of the four |
 | `unknown_field` | a field the schema does not have |
 | `missing_field` | a required field is absent |
-| `invalid_field` | a value fails its syntax, enum, range, name, money, window, glob, or host rule; the YAML limits; a `valueFrom` in server mode; a `Key.spec.value` in file mode |
+| `invalid_field` | a value fails its syntax, enum, range, name, money, window, glob, or host rule; the YAML limits; a `valueFrom` in server mode; a `Key.spec.value` or `Key.spec.valueSHA256` in file mode |
 | `reserved_prefix` | a label or annotation under `lux.latere.ai/`; a reserved header in `headers`; a name beginning with an id prefix |
-| `exclusive_fields` | `ttl` with `expiresAt`; `credential.value` with `credential.valueFrom`; `Key.spec.value` with `Key.spec.valueFrom`; `tunnel: true` with `baseURL` or any `credential` |
+| `exclusive_fields` | `ttl` with `expiresAt`; `credential.value` with `credential.valueFrom`; `Key.spec.value`, `Key.spec.valueSHA256`, and `Key.spec.valueFrom` with one another; `tunnel: true` with `baseURL` or any `credential` |
 | `duplicate_target` | two targets with one `(provider, model)` pair |
 | `not_found` | a named `Provider`, `Budget`, or selector the actor cannot see or use |
-| `immutable_field` | an update changes a field the table marks `no`, or carries a `Key.spec.value` |
+| `immutable_field` | an update changes a field the table marks `no`, or carries a `Key.spec.value` or `Key.spec.valueSHA256` |
 | `ceiling_exceeded` | a resolved value exceeds an authorizer limit |
 | `authorizer_unavailable` | `Lookup` could not decide a reference |
 
@@ -703,6 +704,7 @@ where `Defaults` come from ([[002-repository-scaffold]]) and `Limits`
 | The upstream host rule: an IP literal is accepted; a single label, a loopback, link-local, and private address, `.local`, `.internal`, `http://`, userinfo, query, and fragment are `invalid_field`; with `AllowPrivateUpstreams` the private forms resolve with a warning; the `PublicURL` host is refused in both modes | `TestUpstreamHostRule` | passing |
 | `credential.value` is absent from the JSON and YAML encodings of a decoded Provider and present through the accessor; `valueFrom` is `invalid_field` in server mode and accepted in file mode | `TestCredentialValueNeverEncodes`, `TestValueFromIsFileModeOnly` | passing |
 | `Key.spec.value` of 32 bytes resolves and of 31 or 4097 is `invalid_field`; it is absent from the JSON and YAML encodings of the decoded Key and present through the accessor; with `valueFrom.env` it is `exclusive_fields`; in file mode it is `invalid_field`; on an update, equal to the stored value or not, it is `immutable_field` at `spec.value` | `TestSuppliedValueSchema`, table-driven | passing |
+| `Key.spec.valueSHA256` of 64 lower-case hex characters resolves; 63 or 65 characters, an upper-case digit, or a non-hex character is `invalid_field`; it is absent from the JSON and YAML encodings of the decoded Key and present through the accessor; with `value` or with `valueFrom.env` it is `exclusive_fields`; in file mode it is `invalid_field`; on an update it is `immutable_field` at `spec.valueSHA256` | `TestHashSuppliedValueSchema`, table-driven | not built |
 | `Lookup` returning not-found and refused both surface as `not_found` with the field's path; unavailable surfaces as `authorizer_unavailable`; any other `Lookup` error passes through as a plain error and never as a refusal; a selector matching nothing is a warning and the resolved Key records every selector's matches | `TestLookupErrors`, `TestLookupFailurePassesThrough`, `TestSelectorsRecordTheirMatches` | passing |
 | Every immutable field changed on update is named in one `immutable_field` error; a Provider update without a value keeps the stored one and with a value bumps the version | `TestImmutableFields`, `TestCredentialUpdate` | passing |
 | Limits refuse with the field and the limit; a zero limit is no limit | `TestLimits` | passing |
