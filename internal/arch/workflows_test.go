@@ -286,3 +286,66 @@ func TestRunBlocksRunsTheFencedBlocksInOrder(t *testing.T) {
 		}
 	}
 }
+
+// gatewayImageRef matches a registry reference to the gateway image under
+// the binary's name: the published image is `ghcr.io/<owner>/lux`, and
+// `luxd` is the binary inside it and the Deployment's name, never the
+// repository a release pushes to.
+var gatewayImageRef = regexp.MustCompile(`(ghcr\.io|REGISTRY[ }]*)/[^/]+/luxd(?:[@:"'\s)]|$)`)
+
+// TestGatewayImageIsLux is spec 017's artifact table as a test: every
+// reference to the published gateway image names the repository `lux`,
+// in the release workflow, the deploy manifests, compose.yaml, the
+// documents, and the specs.
+func TestGatewayImageIsLux(t *testing.T) {
+	dir := root(t)
+	var hits []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] && path != dir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Dir(path) == filepath.Join(dir, "internal", "arch") && strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.IndexByte(data, 0) >= 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		for i, line := range strings.Split(string(data), "\n") {
+			if gatewayImageRef.MatchString(line) {
+				hits = append(hits, filepath.ToSlash(rel)+":"+strconv.Itoa(i+1)+": "+strings.TrimSpace(line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range hits {
+		t.Errorf("the gateway image is published as lux, not luxd: %s", h)
+	}
+	release, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(release), `/lux:${GITHUB_REF_NAME}`) {
+		t.Error("release.yml does not tag the gateway image as <owner>/lux:<tag>")
+	}
+	compose, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(compose), "/lux:${LUX_VERSION:-latest}") {
+		t.Error("compose.yaml does not run the gateway image as <owner>/lux")
+	}
+}

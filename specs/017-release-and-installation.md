@@ -59,8 +59,8 @@ and `rules` jobs on a push. `SECURITY.md` says the first tag is
 
 | Artifact | Name | Notes |
 |---|---|---|
-| gateway image | `ghcr.io/<owner>/luxd:<tag>` | `linux/amd64` and `linux/arm64` as one multi-arch image, built by `Dockerfile.release` from the binaries the pipeline already built |
-| stub image | `ghcr.io/<owner>/lux-stubs:<tag>` | the stub providers, issuer, authorizer, and sink of [[015-test-stubs-and-tiers]] in one image, published beside `luxd` under the same tag, so the conformance job and an operator's first installation run a released, signed stub rather than a checkout |
+| gateway image | `ghcr.io/<owner>/lux:<tag>` | `linux/amd64` and `linux/arm64` as one multi-arch image, built by `Dockerfile.release` from the binaries the pipeline already built |
+| stub image | `ghcr.io/<owner>/lux-stubs:<tag>` | the stub providers, issuer, authorizer, and sink of [[015-test-stubs-and-tiers]] in one image, published beside the gateway image under the same tag, so the conformance job and an operator's first installation run a released, signed stub rather than a checkout |
 | gateway binaries | `luxd_<tag>_<os>_<arch>.tar.gz` | `linux` and `darwin`, `amd64` and `arm64` |
 | client binaries | `lux_<tag>_<os>_<arch>.tar.gz` | the same four pairs; the client runs where agents run rather than in a cluster, so it takes an archive and no image ([[014-agent-client]]) |
 | checksums | `checksums.txt` | one SHA-256 line per `*.tar.gz` the release carries, the eight binary archives and the deploy and fixture archives; signed as a blob, below |
@@ -319,7 +319,7 @@ the family and this is its table.
 
 | Variable | Default | Means |
 |---|---|---|
-| `LUX_INSTALL_IMAGE` | none, required | the `luxd` image the Deployment runs, `ghcr.io/<owner>/luxd:<tag>` from a release, or a lab's own reference |
+| `LUX_INSTALL_IMAGE` | none, required | the gateway image the Deployment runs, `ghcr.io/<owner>/lux:<tag>` from a release, or a lab's own reference |
 | `LUX_INSTALL_MANIFESTS` | `deploy` | where the deploy archive is unpacked, a path relative to the working directory, since kustomize refuses an absolute one |
 | `LUX_INSTALL_ISSUER` | none, required | the OpenID Connect issuer whose tokens the gateway accepts; a plain `http://` one is listed as insecure too, which is a lab's |
 | `LUX_INSTALL_TOKEN` | none, required | a token from that issuer with the audience `lux`, which the `lux` command speaks with |

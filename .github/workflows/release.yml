@@ -105,11 +105,13 @@ jobs:
           OWNER: ${{ steps.owner.outputs.owner }}
         run: |
           mkdir -p out
+          # The gateway image is published as <owner>/lux; luxd is the
+          # binary inside it, and the name the digest output keeps.
           for image in luxd lux-stubs; do
-            file=Dockerfile.release
-            [ "$image" = lux-stubs ] && file=Dockerfile.stubs
+            file=Dockerfile.release; repo=lux
+            [ "$image" = lux-stubs ] && file=Dockerfile.stubs && repo=lux-stubs
             docker buildx build --platform linux/amd64,linux/arm64 -f "$file" \
-              --output "type=image,name=${REGISTRY}/${OWNER}/${image},push-by-digest=true,name-canonical=true,push=true" \
+              --output "type=image,name=${REGISTRY}/${OWNER}/${repo},push-by-digest=true,name-canonical=true,push=true" \
               --metadata-file "out/${image}.json" .
             digest=$(jq -r '."containerimage.digest"' "out/${image}.json")
             echo "${image}: ${digest}"
@@ -125,7 +127,7 @@ jobs:
         run: |
           mkdir -p out/images
           for arch in amd64 arm64; do
-            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/luxd@${LUXD}")
+            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux@${LUXD}")
             docker cp "$id:/usr/local/bin/luxd" "out/images/luxd_linux_${arch}"
             docker rm "$id" >/dev/null
             id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux-stubs@${STUBS}")
@@ -138,7 +140,7 @@ jobs:
         env:
           OWNER: ${{ steps.owner.outputs.owner }}
         run: |
-          cosign sign --yes "${REGISTRY}/${OWNER}/luxd@${{ steps.images.outputs.luxd_digest }}"
+          cosign sign --yes "${REGISTRY}/${OWNER}/lux@${{ steps.images.outputs.luxd_digest }}"
           cosign sign --yes "${REGISTRY}/${OWNER}/lux-stubs@${{ steps.images.outputs.stubs_digest }}"
       - name: The bill of materials of the module graph
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
@@ -151,7 +153,7 @@ jobs:
       - name: The bill of materials of the luxd image
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          image: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd@${{ steps.images.outputs.luxd_digest }}
+          image: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux@${{ steps.images.outputs.luxd_digest }}
           format: spdx-json
           output-file: dist/sbom-luxd.spdx.json
           upload-artifact: false
@@ -167,7 +169,7 @@ jobs:
       - name: Attest the luxd image's bill of materials
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux
           subject-digest: ${{ steps.images.outputs.luxd_digest }}
           sbom-path: dist/sbom-luxd.spdx.json
           push-to-registry: true
@@ -181,7 +183,7 @@ jobs:
       - name: Attest the luxd image's provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/luxd
+          subject-name: ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/lux
           subject-digest: ${{ steps.images.outputs.luxd_digest }}
           push-to-registry: true
       - name: Attest the lux-stubs image's provenance
@@ -198,9 +200,9 @@ jobs:
           OWNER: ${{ steps.owner.outputs.owner }}
         run: |
           rm -f dist/luxd dist/lux
-          printf 'images:\n  - name: luxd\n    newName: %s/%s/luxd\n    digest: %s\n' \
+          printf 'images:\n  - name: luxd\n    newName: %s/%s/lux\n    digest: %s\n' \
             "${REGISTRY}" "${OWNER}" "${{ steps.images.outputs.luxd_digest }}" >> deploy/base/kustomization.yaml
-          kubectl kustomize deploy/overlays/kind | grep -q "image: ${REGISTRY}/${OWNER}/luxd@${{ steps.images.outputs.luxd_digest }}"
+          kubectl kustomize deploy/overlays/kind | grep -q "image: ${REGISTRY}/${OWNER}/lux@${{ steps.images.outputs.luxd_digest }}"
           tar -czf "dist/deploy-${GITHUB_REF_NAME}.tar.gz" deploy
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -249,11 +251,11 @@ jobs:
             -e LUX_AUTHORIZER_URL=http://127.0.0.1:9105 -e LUX_AUTHORIZER_TOKEN=stub-authorizer-token \
             -e LUX_EVENTS_URL=http://127.0.0.1:9107 -e LUX_EVENTS_SECRET=stub-sink-secret \
             -e LUX_UPSTREAM_ALLOW_PRIVATE=1 -e LUX_HEALTH_INTERVAL=5s \
-            "${REGISTRY}/${OWNER}/luxd@${LUXD}" serve
+            "${REGISTRY}/${OWNER}/lux@${LUXD}" serve
           for _ in $(seq 1 100); do curl -fsS -o /dev/null http://127.0.0.1:8081/readyz && break; sleep 0.2; done
           curl -fsS http://127.0.0.1:8081/readyz
           docker run -d --name luxd-check --network host --env-file <(docker inspect luxd --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^LUX_') \
-            "${REGISTRY}/${OWNER}/luxd@${LUXD}" check
+            "${REGISTRY}/${OWNER}/lux@${LUXD}" check
           docker wait luxd-check | grep -qx 0 || { docker logs luxd-check; exit 1; }
           docker logs luxd-check
       # The stubs document the suite reads at LUX_TEST_STUBS_URL, served
@@ -373,7 +375,7 @@ jobs:
           password: ${{ github.token }}
       - name: Tag both digests
         run: |
-          docker buildx imagetools create -t "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/luxd@${{ needs.build.outputs.luxd_digest }}"
+          docker buildx imagetools create -t "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux@${{ needs.build.outputs.luxd_digest }}"
           docker buildx imagetools create -t "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs@${{ needs.build.outputs.stubs_digest }}"
       - name: Create the release
         env:
@@ -434,7 +436,7 @@ jobs:
       - name: The images carry the archives' binaries
         run: |
           for arch in amd64 arm64; do
-            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}")
+            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}")
             docker cp "$id:/usr/local/bin/luxd" "luxd_image_${arch}"
             docker rm "$id" >/dev/null
             tar -xzOf "assets/luxd_${GITHUB_REF_NAME}_linux_${arch}.tar.gz" luxd > "luxd_archive_${arch}"
@@ -482,16 +484,16 @@ jobs:
           gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" -p "deploy-${GITHUB_REF_NAME}.tar.gz" -p "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz"
           tar -xzf "deploy-${GITHUB_REF_NAME}.tar.gz"
           tar -xzf "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/bin"
-          docker pull "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}"
+          docker pull "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}"
           docker pull "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
       - name: The cluster and the stubs
         run: |
           cd work
           ../tools/docs/stubs-in-cluster.sh "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}" \
-            "${REGISTRY}/${OWNER}/luxd:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
+            "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
       - name: Walk the document
         env:
-          LUX_INSTALL_IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.owner }}/luxd:${{ github.ref_name }}
+          LUX_INSTALL_IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.owner }}/lux:${{ github.ref_name }}
           LUX_INSTALL_MANIFESTS: deploy
         run: |
           cd work

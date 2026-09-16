@@ -41,7 +41,7 @@ services:
       - "9105:9105"
 
   luxd:
-    image: ghcr.io/${LUX_OWNER:-latere-ai}/luxd:${LUX_VERSION:-latest}
+    image: ghcr.io/${LUX_OWNER:-latere-ai}/lux:${LUX_VERSION:-latest}
     command: ["serve"]
     depends_on:
       - lux-stubs

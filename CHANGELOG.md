@@ -6,6 +6,13 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The gateway image is published as `ghcr.io/<owner>/lux:<tag>`; `luxd`
+  is the binary inside it and the Deployment's name, not the repository
+  a release pushes to. The stub image stays `ghcr.io/<owner>/lux-stubs`.
+  `compose.yaml`, the quick start, `docs/install.md`, and the deploy
+  archive's pinned reference name the new repository, and
+  `TestGatewayImageIsLux` refuses any reference to the old one.
+
 - `docs/api.md`, `docs/security.md`, and `docs/observability.md` are the
   operator pages for the API, security, and observability, and the docs hub
   routes to them instead of to the specs. `api.md` orients a caller in the

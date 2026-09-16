@@ -5,8 +5,9 @@
 # hardening of the threat model, its Service, a ServiceAccount with no
 # token, the network policy, the disruption budget, and the alert rules.
 # It names no namespace, so an overlay names one, and no image registry:
-# the container image is `luxd`, which an overlay or the release pipeline
-# points at a real reference with an `images` entry. The deploy archive of
+# the container image is the placeholder `luxd`, which an overlay or the
+# release pipeline points at the published `ghcr.io/<owner>/lux` with an
+# `images` entry. The deploy archive of
 # a release carries this file with that entry appended, the image pinned
 # to the tag by digest. The configuration comes from a ConfigMap named
 # luxd, which the overlay generates from its luxd.env, and the four

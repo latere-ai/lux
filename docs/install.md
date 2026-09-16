@@ -21,7 +21,7 @@ the release page of the version you are installing: the `lux` command
 for your platform, `lux_<tag>_<os>_<arch>.tar.gz`, unpacked onto your
 `PATH`; the deploy archive, `deploy-<tag>.tar.gz`, unpacked into the
 directory you work in, which gives you `deploy/`; and the image
-reference, `ghcr.io/<owner>/luxd:<tag>`, where `<owner>` is the account
+reference, `ghcr.io/<owner>/lux:<tag>`, where `<owner>` is the account
 the release was published under. Every release is signed, and
 [`SECURITY.md`](../SECURITY.md) says how to verify one before you run it.
 
@@ -38,7 +38,7 @@ ones without a default before you start.
 ```sh
 # The release you are installing: its image, and where you unpacked its
 # deploy archive, a path relative to this directory.
-export LUX_INSTALL_IMAGE="${LUX_INSTALL_IMAGE:?set LUX_INSTALL_IMAGE to the release's image, ghcr.io/<owner>/luxd:<tag>}"
+export LUX_INSTALL_IMAGE="${LUX_INSTALL_IMAGE:?set LUX_INSTALL_IMAGE to the release's image, ghcr.io/<owner>/lux:<tag>}"
 export LUX_INSTALL_MANIFESTS="${LUX_INSTALL_MANIFESTS:-deploy}"
 # Your issuer, a token from it, and the subject that token renders to,
 # <issuer>|<sub>, which the gateway lets declare Providers and Models.
