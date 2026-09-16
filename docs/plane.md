@@ -63,7 +63,7 @@ the tree so it stays that way.
 | funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person; the gateway never sees a cookie | reads the platform's own API |
 | unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's own prefix | the platform's own service identity in `Options.Actor` |
-| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches; the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
+| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches; the gateway matches it by hash and decodes nothing; a platform whose credential store kept only hashes supplies `spec.valueSHA256` instead and re-issues nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals | the platform's own `Recorder` |
 | audit | the signed event sink at `LUX_EVENTS_URL` | the platform's own sink |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
@@ -392,6 +392,20 @@ they are three:
   first eight hex characters of the value's hash, and not the value's
   own first characters, because a token's first characters are the same
   for every token.
+
+A platform moving off a credential store that kept only hashes does not
+need the values at all. A Key applied through `/v1` may carry
+`spec.valueSHA256`, the SHA-256 of the value as 64 lower-case hex
+characters, in place of `spec.value`, and it then authenticates any
+value whose SHA-256 that is, so every credential a developer already
+holds keeps opening the doors and nothing is re-issued. The hash is
+write-only exactly as a value is: no read, list, event, record, or log
+line returns it, and the create response carries no value, because the
+gateway never had one to show. `status.prefix` is the same `sup_` and
+the hash's first eight characters, and a rotate mints a `lux_` value,
+after which the hash stops matching. The gateway never sees what the
+hash stands for, so whether it is long enough to be a credential is the
+platform's to answer for.
 
 A design with token exchange would have to make one of these hops carry
 a credential minted for another, which means one plane signing for the
