@@ -6,7 +6,7 @@ refused before it is pushed.
 
 ## Unreleased
 
-## v0.1.0 - 2026-09-16
+## Unreleased
 
 - A Key can be created from the SHA-256 of its value.
   `Key.spec.valueSHA256` takes the hash as 64 lower-case hex characters
