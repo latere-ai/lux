@@ -37,12 +37,15 @@ func (k Key) MarshalJSON() ([]byte, error) {
 	}{envelope{APIVersion, KindKey}, plain(k)})
 }
 
-// KeySpec is the desired state of a Key. The value a caller supplies
-// instead of a minted one is write-only, an unexported member the
-// encoders skip, reached through Value.
+// KeySpec is the desired state of a Key. The two forms of a value a
+// caller supplies instead of a minted one, the value itself and the
+// SHA-256 of a value the caller holds only as a hash, are write-only,
+// unexported members the encoders skip, reached through Value and
+// ValueSHA256.
 type KeySpec struct {
 	Models        []string   `json:"models,omitempty"`
 	value         writeOnly  `writeonly:"value"`
+	valueSHA256   writeOnly  `writeonly:"valueSHA256"`
 	ValueFrom     *ValueFrom `json:"valueFrom,omitempty"`
 	Limits        KeyLimits  `json:"limits,omitzero"`
 	Budget        string     `json:"budget,omitempty"`
@@ -62,6 +65,19 @@ func (s *KeySpec) SetValue(v string) { s.value.put(v) }
 
 // ClearValue drops the value, which the API does after hashing it.
 func (s *KeySpec) ClearValue() { s.value.clear() }
+
+// ValueSHA256 returns the hash of a value the manifest carried in place
+// of the value and whether it carried one. It is the hash a supplied
+// value would have produced, so the API stores it as that hash and
+// takes it out.
+func (s *KeySpec) ValueSHA256() (string, bool) { return s.valueSHA256.get() }
+
+// SetValueSHA256 records a hash the decoder read, or one an importer
+// supplies.
+func (s *KeySpec) SetValueSHA256(v string) { s.valueSHA256.put(v) }
+
+// ClearValueSHA256 drops the hash, which the API does after storing it.
+func (s *KeySpec) ClearValueSHA256() { s.valueSHA256.clear() }
 
 // KeyLimits are the Key's own limits. The two rates are pointers because an
 // explicit 0, no limit, differs from an absent rate, which takes the

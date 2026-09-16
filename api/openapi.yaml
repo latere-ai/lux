@@ -1399,6 +1399,10 @@ components:
           type: string
           writeOnly: true
           description: "Write-only: decoded into a member no encoding carries, so no response, event, or log line returns it."
+        valueSHA256:
+          type: string
+          writeOnly: true
+          description: "Write-only: decoded into a member no encoding carries, so no response, event, or log line returns it."
         valueFrom:
           $ref: "#/components/schemas/ValueFrom"
         limits:

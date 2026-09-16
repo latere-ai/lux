@@ -412,13 +412,78 @@ func TestSuppliedValueSchema(t *testing.T) {
 	}
 }
 
+// TestHashSuppliedValueSchema: spec.valueSHA256 is 64 lower-case hex
+// characters, exclusive with the other two forms of a Key's value,
+// server mode's alone, immutable on an update, and carried by no
+// encoding of the resolved Key.
+func TestHashSuppliedValueSchema(t *testing.T) {
+	o := corpusOptions(t)
+	key := func(hash string, extra string) string {
+		return head(v1.KindKey, "k") + "spec:\n  models: [gpt-5]\n  valueSHA256: \"" + hash + "\"\n" + extra
+	}
+	// SHA-256 of "a value the importer never held", in the shape the
+	// hash index keeps.
+	const h64 = "9f2b7c1e4a6d8035bfce17204d9a53e8c6b0f4712a8de93c50176badf2e4c891"
+	cases := []struct {
+		name  string
+		body  string
+		opts  func(Options) Options
+		code  Code
+		paths []string
+	}{
+		{"64 hex characters resolves", key(h64, ""), nil, "", nil},
+		{"63 characters", key(h64[:63], ""), nil, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"65 characters", key(h64+"0", ""), nil, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"an upper-case digit", key("9F"+h64[2:], ""), nil, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"a non-hex character", key("9g"+h64[2:], ""), nil, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"empty", key("", ""), nil, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"with value", key(h64, "  value: "+strings.Repeat("v", 32)+"\n"), nil, CodeExclusiveFields, []string{"spec.value", "spec.valueSHA256"}},
+		{"with valueFrom", key(h64, "  valueFrom: {env: X}\n"), func(o Options) Options { o.FileMode = true; return o }, CodeExclusiveFields, []string{"spec.valueSHA256", "spec.valueFrom.env"}},
+		{"in file mode", key(h64, ""), func(o Options) Options { o.FileMode = true; return o }, CodeInvalidField, []string{"spec.valueSHA256"}},
+		{"on an update, the same hash", key(h64, ""), withExisting(t, o, key(h64, "")), CodeImmutableField, []string{"spec.valueSHA256"}},
+		{"on an update, a malformed hash", key("nope", ""), withExisting(t, o, key(h64, "")), CodeImmutableField, []string{"spec.valueSHA256"}},
+		{"an update without a hash", head(v1.KindKey, "k") + minKey, withExisting(t, o, key(h64, "")), "", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			o2 := o
+			if c.opts != nil {
+				o2 = c.opts(o2)
+			}
+			if c.code != "" {
+				wantErr(t, resolveErr(t, c.body, o2), c.code, c.paths...)
+				return
+			}
+			k := mustResolve(t, c.body, o2).Object.(*v1.Key)
+			j, err := json.Marshal(k)
+			if err != nil {
+				t.Fatal(err)
+			}
+			y, err := yaml.Marshal(k)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(j), h64) || strings.Contains(string(y), h64) || strings.Contains(string(j), "valueSHA256") {
+				t.Errorf("an encoding carries the hash:\n%s\n%s", j, y)
+			}
+			update := c.body == head(v1.KindKey, "k")+minKey
+			if v, ok := k.Spec.ValueSHA256(); ok == update || (!update && v != h64) {
+				t.Errorf("ValueSHA256() = %q %v", v, ok)
+			}
+		})
+	}
+}
+
 // withExisting resolves body under o and returns an option setter that
 // makes the result the existing object, as a store would hold it.
 func withExisting(t *testing.T, o Options, body string) func(Options) Options {
 	t.Helper()
 	existing := mustResolve(t, body, o).Object
 	if k, ok := existing.(*v1.Key); ok {
-		k.Spec.ClearValue() // the store keeps a hash, never the value
+		// The store keeps a hash, never the value or the hash a caller
+		// supplied in its place.
+		k.Spec.ClearValue()
+		k.Spec.ClearValueSHA256()
 	}
 	return func(o Options) Options {
 		o.Existing = existing

@@ -24,6 +24,7 @@ var (
 	dnsSubdomain = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 	headerToken  = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 	posixName    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	valueHash    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	currencyCode = regexp.MustCompile(`^[A-Z]{3}$`)
 	ulidBody     = `[0-9A-Z]{26}`
 	providerRef  = regexp.MustCompile(`^` + v1.PrefixProvider + ulidBody + `$`)
@@ -157,6 +158,17 @@ var reservedHeaders = map[string]bool{
 func checkEnvName(s string) error {
 	if !posixName.MatchString(s) {
 		return errString("a POSIX variable name is [A-Za-z_][A-Za-z0-9_]*")
+	}
+	return nil
+}
+
+// checkValueHash holds a spec.valueSHA256 to the shape the hash index
+// keeps, the SHA-256 as 64 lower-case hex characters, so a hash the
+// caller supplies and one the gateway computes from a value are the
+// same string and open the same row.
+func checkValueHash(s string) error {
+	if !valueHash.MatchString(s) {
+		return errString("a value hash is the SHA-256 as 64 lower-case hex characters")
 	}
 	return nil
 }

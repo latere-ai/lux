@@ -244,6 +244,9 @@ func resolveKey(ctx context.Context, in *v1.Key, o Options, now time.Time) (*v1.
 	if v, ok := in.Spec.Value(); ok {
 		k.Spec.SetValue(v)
 	}
+	if v, ok := in.Spec.ValueSHA256(); ok {
+		k.Spec.SetValueSHA256(v)
+	}
 	if err := defaultName(&k.Metadata, o); err != nil {
 		return nil, nil, err
 	}
@@ -303,6 +306,8 @@ func resolveKey(ctx context.Context, in *v1.Key, o Options, now time.Time) (*v1.
 		paths = appendIf(paths, envOf(old.Spec.ValueFrom) != envOf(k.Spec.ValueFrom), "spec.valueFrom.env")
 		_, set := k.Spec.Value()
 		paths = appendIf(paths, set, "spec.value")
+		_, hashed := k.Spec.ValueSHA256()
+		paths = appendIf(paths, hashed, "spec.valueSHA256")
 		if err := immutable(paths); err != nil {
 			return nil, nil, err
 		}

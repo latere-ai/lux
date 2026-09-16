@@ -287,8 +287,18 @@ func checkKey(k *v1.Key, o Options, now time.Time) error {
 		seen[sel] = true
 	}
 	value, set := s.Value()
+	hash, hashed := s.ValueSHA256()
+	// A Key's value arrives in one of three forms and never two, so the
+	// pairs are refused before either form's own rules, and a body with
+	// two forms reads as exclusive_fields whatever else is wrong.
+	if set && hashed {
+		return refuse(CodeExclusiveFields, "a Key's value is supplied as the value or as its hash, not both", "spec.value", "spec.valueSHA256")
+	}
 	if set && s.ValueFrom != nil {
 		return refuse(CodeExclusiveFields, "a Key's value is supplied or read from a variable, not both", "spec.value", "spec.valueFrom.env")
+	}
+	if hashed && s.ValueFrom != nil {
+		return refuse(CodeExclusiveFields, "a Key's value is supplied by its hash or read from a variable, not both", "spec.valueSHA256", "spec.valueFrom.env")
 	}
 	if set {
 		if o.FileMode {
@@ -298,6 +308,18 @@ func checkKey(k *v1.Key, o Options, now time.Time) error {
 		// the value.
 		if o.Existing == nil && (len(value) < minSuppliedValue || len(value) > maxSuppliedValue) {
 			return refuse(CodeInvalidField, "a supplied value is 32 to 4096 bytes; this one is "+strconv.Itoa(len(value)), "spec.value")
+		}
+	}
+	if hashed {
+		if o.FileMode {
+			return refuse(CodeInvalidField, "a value supplied by its hash is server mode's; the file mode reads a Key's value from valueFrom.env", "spec.valueSHA256")
+		}
+		// As with the value, an update is refused for the presence alone
+		// at stage 5, whatever the hash.
+		if o.Existing == nil {
+			if err := checkValueHash(hash); err != nil {
+				return refuse(CodeInvalidField, err.Error(), "spec.valueSHA256")
+			}
 		}
 	}
 	if s.ValueFrom != nil {

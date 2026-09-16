@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: k
+spec:
+  models: [gpt-5]
+  valueSHA256: 9F2B7C1E4A6D8035BFCE17204D9A53E8C6B0F4712A8DE93C50176BADF2E4C891

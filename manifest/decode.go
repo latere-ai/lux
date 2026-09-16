@@ -193,7 +193,7 @@ func metaOf(obj v1.Object) *v1.ObjectMeta {
 }
 
 // setWriteOnly hands the values the schema walk took out of the tree to
-// the accessors of the two fields that carry them.
+// the accessors of the three fields that carry them.
 func setWriteOnly(obj v1.Object, values map[string]string) {
 	switch o := obj.(type) {
 	case *v1.Provider:
@@ -206,6 +206,9 @@ func setWriteOnly(obj v1.Object, values map[string]string) {
 	case *v1.Key:
 		if v, ok := values["spec.value"]; ok {
 			o.Spec.SetValue(v)
+		}
+		if v, ok := values["spec.valueSHA256"]; ok {
+			o.Spec.SetValueSHA256(v)
 		}
 	}
 }

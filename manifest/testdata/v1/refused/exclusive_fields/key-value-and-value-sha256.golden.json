@@ -1,0 +1,7 @@
+{
+  "code": "exclusive_fields",
+  "paths": [
+    "spec.value",
+    "spec.valueSHA256"
+  ]
+}

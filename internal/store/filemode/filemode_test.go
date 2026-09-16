@@ -57,6 +57,9 @@ spec:
     env: RUN_KEY
 `
 	keyValue = "lux_0123456789abcdefghijklmnopqrstuvwxyzABCD"
+	// keyValueHash is a well-formed spec.valueSHA256, which the file
+	// mode refuses for the same reason it refuses spec.value.
+	keyValueHash = "9f2b7c1e4a6d8035bfce17204d9a53e8c6b0f4712a8de93c50176badf2e4c891"
 )
 
 // full is the four kinds in a deliberately wrong path order: the Key
@@ -263,9 +266,10 @@ func TestFileModeValuesFromEnvironment(t *testing.T) {
 
 func TestFileModeRefusesServerOnlyFields(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
-		"Key.spec.value": {head + "kind: Key\nmetadata:\n  name: run-42\nspec:\n  models: [gpt-5]\n  value: " + keyValue + "\n", "k.yaml: invalid_field at spec.value"},
-		"tunnel":         {head + "kind: Provider\nmetadata:\n  name: laptop\nspec:\n  dialect: openai\n  tunnel: true\n", "k.yaml: invalid_field at spec.tunnel"},
-		"no name":        {head + "kind: Budget\nspec:\n  amount: \"10\"\n", "k.yaml: missing_field at metadata.name"},
+		"Key.spec.value":       {head + "kind: Key\nmetadata:\n  name: run-42\nspec:\n  models: [gpt-5]\n  value: " + keyValue + "\n", "k.yaml: invalid_field at spec.value"},
+		"Key.spec.valueSHA256": {head + "kind: Key\nmetadata:\n  name: run-42\nspec:\n  models: [gpt-5]\n  valueSHA256: " + keyValueHash + "\n", "k.yaml: invalid_field at spec.valueSHA256"},
+		"tunnel":               {head + "kind: Provider\nmetadata:\n  name: laptop\nspec:\n  dialect: openai\n  tunnel: true\n", "k.yaml: invalid_field at spec.tunnel"},
+		"no name":              {head + "kind: Budget\nspec:\n  amount: \"10\"\n", "k.yaml: missing_field at metadata.name"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := loadErr(t, map[string]string{"p.yaml": providerYAML, "m.yaml": modelYAML, "k.yaml": tc.body}, env)

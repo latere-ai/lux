@@ -99,7 +99,9 @@ func TestWriteOnlyValuesNeverEncode(t *testing.T) {
 	p.Spec.Credential.SetValue("sk-canary-0001")
 	k := &Key{}
 	k.Spec.SetValue("kv-canary-0002-kv-canary-0002-kv-canary")
-	for _, o := range []any{p, *p, k, *k} {
+	h := &Key{}
+	h.Spec.SetValueSHA256("canary0003" + strings.Repeat("0", 54))
+	for _, o := range []any{p, *p, k, *k, h, *h} {
 		out, err := json.Marshal(o)
 		if err != nil {
 			t.Fatal(err)
@@ -114,8 +116,21 @@ func TestWriteOnlyValuesNeverEncode(t *testing.T) {
 	if v, ok := k.Spec.Value(); !ok || v != "kv-canary-0002-kv-canary-0002-kv-canary" {
 		t.Errorf("Value() = %q, %v", v, ok)
 	}
+	if v, ok := h.Spec.ValueSHA256(); !ok || v != "canary0003"+strings.Repeat("0", 54) {
+		t.Errorf("ValueSHA256() = %q, %v", v, ok)
+	}
+	if _, ok := h.Spec.Value(); ok {
+		t.Error("a hash-supplied Key reports a value")
+	}
+	if _, ok := k.Spec.ValueSHA256(); ok {
+		t.Error("a value-supplied Key reports a hash")
+	}
 	p.Spec.Credential.ClearValue()
 	k.Spec.ClearValue()
+	h.Spec.ClearValueSHA256()
+	if _, ok := h.Spec.ValueSHA256(); ok {
+		t.Error("ClearValueSHA256 left the hash")
+	}
 	if _, ok := p.Spec.Credential.Value(); ok {
 		t.Error("ClearValue left the credential value")
 	}
