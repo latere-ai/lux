@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -260,4 +261,48 @@ func TestAuthorizerObservesEveryCall(t *testing.T) {
 		t.Errorf("results %v", results)
 	}
 	var _ authz.Authorizer = a.Client
+}
+
+// TestAnUnknownActionCostsNoRoundTrip: the client Startup builds carries
+// the vocabulary, so an action outside spec 006's table is refused in
+// the gateway and never reaches the authorizer. A string the gateway
+// never declared is a mistake in luxd, not a question an endpoint is
+// asked to answer.
+func TestAnUnknownActionCostsNoRoundTrip(t *testing.T) {
+	const rotate = "key.rotate"
+	iss := newIssuer(t)
+	s := stub.New(t)
+	a, err := Startup(t.Context(), load(t, map[string]string{
+		"LUX_OIDC_ISSUERS": iss.URL(), "LUX_AUTHORIZER_URL": s.URL(), "LUX_AUTHORIZER_TOKEN": s.Token(),
+	}), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller := Caller{Subject: fixtureSubject, Issuer: fixtureIssuer, Sub: "alice"}
+	res := authorizer.KeyObject(fixtureKey())
+
+	var unknown *authz.UnknownAction
+	if _, err := a.Client.Authorize(t.Context(), Request(caller, rotate, res, info)); !errors.As(err, &unknown) {
+		t.Fatalf("Authorize(%s) = %v, want an *authz.UnknownAction", rotate, err)
+	}
+	if unknown.Core != "lux" || unknown.Action != rotate {
+		t.Errorf("the refusal names %s's %q", unknown.Core, unknown.Action)
+	}
+	if authz.Retryable(unknown) {
+		t.Error("an unknown action reads as retryable; it is no outage at the endpoint")
+	}
+	if _, err := a.Authorizer(nil).Decide(t.Context(), caller, rotate, res, info); err == nil {
+		t.Errorf("the gateway's seam answered %s with an allow", rotate)
+	}
+	if n := len(s.Requests()); n != 0 {
+		t.Fatalf("%d request(s) reached the authorizer; an unknown action costs no round trip", n)
+	}
+
+	// Every action of the table still travels.
+	if _, err := a.Authorizer(nil).Decide(t.Context(), caller, authorizer.ActionKeyRead, res, info); err != nil {
+		t.Fatalf("%s: %v", authorizer.ActionKeyRead, err)
+	}
+	if n := len(s.Requests()); n != 1 {
+		t.Errorf("%d request(s) after one action of the table, want one", n)
+	}
 }

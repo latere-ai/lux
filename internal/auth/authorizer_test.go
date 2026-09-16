@@ -514,13 +514,13 @@ func TestProbeIdIsAlwaysDenied(t *testing.T) {
 		t.Error("Check against a closed authorizer answered nothing wrong")
 	}
 
+	// The suite drives a case per row of the declared table rather than
+	// from a list written out here, so it covers the whole vocabulary and
+	// holds an action outside it to the one answer, a 400. Lux names no
+	// page action: every list answers a decision the filter narrows.
 	t.Run("the stub conforms under the vocabulary", func(t *testing.T) {
-		s := stub.New(t)
-		actions := make([]conformance.Action, 0, len(authorizer.Actions()))
-		for _, a := range authorizer.Actions() {
-			actions = append(actions, conformance.Action{Name: a, Kind: authorizer.Kind(a)})
-		}
-		conformance.Run(t, s.URL(), s.Token(), conformance.WithActions(actions...),
+		s := stub.New(t, stub.WithVocabulary(authorizer.Vocabulary()))
+		conformance.Run(t, s.URL(), s.Token(), conformance.WithVocabulary(authorizer.Vocabulary()),
 			conformance.WithSubjects(fixtureSubject, fixtureIssuer+"|bob"), conformance.WithHTTPClient(&http.Client{}))
 	})
 }

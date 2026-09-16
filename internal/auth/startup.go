@@ -14,6 +14,7 @@ import (
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/otel"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/config"
 )
 
@@ -111,9 +112,13 @@ func New(ctx context.Context, o Options) (*Auth, error) {
 	if o.AuthorizerToken == "" {
 		return nil, errors.New("LUX_AUTHORIZER_TOKEN is unset while LUX_AUTHORIZER_URL is set, and the authorizer requires a bearer")
 	}
+	// The vocabulary is spec 006's table, so an action the gateway does
+	// not declare is refused here and never sent: a typo is a mistake in
+	// luxd, and the authorizer is not asked to name it.
 	c, err := authz.NewClient(authz.Options{
 		URL: o.AuthorizerURL, Token: o.AuthorizerToken, HTTP: client,
 		Timeout: o.AuthorizerTimeout, Now: o.Now, Observe: o.Observe,
+		Vocabulary: authorizer.Vocabulary(),
 	})
 	if err != nil {
 		return nil, err
