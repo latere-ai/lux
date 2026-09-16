@@ -9,7 +9,7 @@ depends_on:
 affects: [authorizer/, internal/auth/, internal/api/, internal/arch/, test/, docs/plane.md, examples/authorizer/, .gitignore]
 effort: small
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -294,3 +294,53 @@ one exception, [[011-api]]'s `SelfLimits`, is named in
 `TestVocabularyHasOneHome`. The stray root binary that would have
 blocked the package directory was removed and `.gitignore`'s
 stray-binary rule widened to every program the tree builds.
+
+## Amendment, 2026-09-16: the table itself is exported
+
+`latere.ai/x/pkg` v0.70.1 carries a vocabulary as a type. `authz.Action`
+is a row, `{Name, Kind}`; `authz.Vocabulary` is `{Core, Actions}` with
+`Known`, `Kind(action) (string, bool)` and `Kinds`; `authz.NewVocabulary`
+refuses a table with no core name, no action, a row with no name or no
+kind, or one action named twice. Four consumers read that type: the PEP
+client through `authz.Options.Vocabulary`, the PDP scaffold
+`latere.ai/x/pkg/authz/server` through `Options.Vocabulary`, the stub
+through `stub.WithVocabulary`, and the suite through
+`conformance.WithVocabulary`.
+
+This package therefore exported the pairing it had been asking every
+consumer to rebuild:
+
+```go
+func Vocabulary() authz.Vocabulary
+```
+
+It is [[006-identity]]'s table declared once at package level through
+`NewVocabulary` and cloned on every call. A table the constructor
+refuses is a mistake in `actions.go` and in no caller, so the package
+panics at load rather than answering a question with half a table.
+`Actions`, `Kind` and `Known` keep their signatures and become three
+readings of that one value; `Kind` still answers `""` outside the table,
+where the type answers `("", false)`.
+
+Lux declares no page action. `authz.IsList` is a naming helper on the
+vocabulary and not a routing rule: each of the four `.list` actions
+answers a decision whose `filter` narrows the gateway's own list, which
+is what [[006-identity]]'s resource table has always said, so no
+endpoint for Lux names `server.Options.PageActions` and none writes a
+`Lister`.
+
+| Change | Where | Held by |
+|---|---|---|
+| `Vocabulary()` is [[006-identity]]'s twenty-four rows, in the spec's order, each with its kind | `authorizer/actions.go` | `TestVocabularyIsSpec006sTable` in `internal/arch`, which reads the spec's own resource table; `TestVocabularyIsTheTable` for the wrappers' agreement |
+| The table is built once and a malformed one cannot load | `authorizer/actions.go` | `TestVocabularyConstructs`, which holds the declared table to `NewVocabulary` and proves `must` refuses one it rejects |
+| `luxd` refuses an action outside the table before the wire | `internal/auth/startup.go` | `TestAnUnknownActionCostsNoRoundTrip`, which reads the `*authz.UnknownAction` and holds the stub to zero requests |
+| The suite drives from the table rather than a hand-built list, so an action outside it answers 400 | `internal/auth/authorizer_test.go`, `examples/authorizer/main_test.go` | `conformance.Run` with `WithVocabulary`, against `pkg/authz/stub` and against the sample endpoint |
+| The sample endpoint validates against the table instead of writing the scaffold | `examples/authorizer/main.go`, `docs/plane.md` | `TestPlaneDocAuthorizerConforms`, `TestExampleAuthorizerUsesTheVocabulary`, `TestPlaneDocIsCurrent` |
+
+A control plane that decides for Lux imports the table instead of
+rebuilding it from `Actions()` and `Kind()` or keeping a copy of the
+twenty-four strings held to this repository's markdown. That was the
+one row the package was missing, and the package's promise covers it:
+`Vocabulary()` is additive within a module major, an action string never
+changes and never disappears, and a new action is a row in
+[[006-identity]] first and a row here second.

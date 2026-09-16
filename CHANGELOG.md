@@ -6,6 +6,34 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `latere.ai/x/lux/authorizer` exports the action table itself.
+  `authorizer.Vocabulary()` is the twenty-four actions `luxd` asks as
+  one `authz.Vocabulary`, each paired with the resource kind it acts on,
+  so a control plane that decides for Lux imports the table instead of
+  rebuilding it from `Actions()` and `Kind()` row by row or keeping a
+  copy of the strings. `Actions`, `Kind`, and `Known` keep their
+  signatures and are now three readings of that one value. An endpoint
+  written in Go with `latere.ai/x/pkg/authz/server` passes it as
+  `Options.Vocabulary` and declares no page action, because every Lux
+  list answers a decision whose `filter` narrows the gateway's own list.
+  The shared library is `latere.ai/x/pkg` v0.70.1.
+
+- `luxd` refuses an action it does not declare before the request leaves
+  the gateway. The authorizer client carries the vocabulary, so a string
+  outside the table costs no round trip and no authorizer is asked to
+  name it. Nothing changes for an installation: every action the gateway
+  sends is one of the table's.
+
+- The minimal authorizer of `docs/plane.md` is that scaffold and a
+  policy. The bearer, the body bound, the decode, the check that an
+  action and its `resource.kind` are the gateway's, the reserved probe
+  id, and the answer are `latere.ai/x/pkg/authz/server`'s; what the page
+  prints is the permission model and a listener. Two answers changed for
+  anyone running a copy of it: an action outside the table is now a 400
+  rather than a 200 deny, and the probe is denied by the scaffold before
+  the policy is reached. `luxd` reads either refusal as
+  `authorizer_unavailable` and fails closed, as it always has.
+
 ## v0.1.0 - 2026-09-16
 
 - A Key can be created from the SHA-256 of its value.
