@@ -6,6 +6,19 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The `/v1` client is an importable package, `latere.ai/x/lux/client`.
+  A program that applies Providers, Models, Keys, and Budgets to a core,
+  a plane that drives the core it runs or a tool that migrates objects
+  into one, constructs a `client.Client` with a base URL and a
+  `TokenSource` and calls `Apply`, `Get`, `List`, `Delete`, `Rotate`,
+  `Self`, `Usage`, `Requests`, `Models`, and `WellKnown` rather than
+  assembling requests of its own. Every method answers with the response
+  bytes as they arrived beside the status and the request id, a list
+  follows `next_cursor` to the end or to a count of items, and a refusal
+  decodes into a `*client.Error` carrying the code, the fixed sentence,
+  the paths, the developer detail, and the request id. The `lux`
+  command drives the same package.
+
 - The gateway image is published as `ghcr.io/<owner>/lux:<tag>`; `luxd`
   is the binary inside it and the Deployment's name, not the repository
   a release pushes to. The stub image stays `ghcr.io/<owner>/lux-stubs`.

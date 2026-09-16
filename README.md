@@ -173,7 +173,8 @@ install a release on a cluster, see [Install](docs/install.md).
   policy, and a signed event stream.
 - A reverse tunnel, so a model on your own machine is a `Provider` like
   any other.
-- The Go packages a platform imports: `manifest`, `gateway`, `metering`.
+- The Go packages a platform imports: `manifest`, `gateway`, `metering`,
+  and `client`, the typed client of the `/v1` API.
 - The `lux` command, and a skill file that teaches an agent to drive it.
 - Benchmarks that measure the gateway's own overhead per request, in
   process against a stub upstream, so what Lux adds on top of a provider

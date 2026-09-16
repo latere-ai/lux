@@ -5,10 +5,10 @@ track: core
 depends_on:
   - specs/003-manifest-contract.md
   - specs/011-api.md
-affects: [cmd/lux/, internal/luxcli/, internal/luxclient/, skills/lux/, docs/cli.md, .lateregate.yaml]
+affects: [cmd/lux/, internal/luxcli/, client/, skills/lux/, docs/cli.md, .lateregate.yaml]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -41,8 +41,8 @@ sends is [[003-manifest-contract]]'s; `lux serve`'s protocol is
 
 Built: `cmd/lux` is the wiring, `internal/luxcli` the command tree, the
 flag forms, the output renderers, the exit codes, the error rendering,
-and the `lux serve` loop, and `internal/luxclient` the `/v1` client
-with `next_cursor` paging and the token source. `skills/lux/SKILL.md`
+and the `lux serve` loop, and `client` the `/v1` client with
+`next_cursor` paging and the token source. `skills/lux/SKILL.md`
 and `docs/cli.md` are in the tree, the `depcheck` row for `./cmd/lux`
 is in `.lateregate.yaml`, and every acceptance row has its test.
 `lux serve` is one row of the command table over
@@ -347,34 +347,39 @@ which rule applies where.
 
 `internal/luxcli` is the command: flag parsing, the file walk, the
 output renderers, the exit codes, and, once [[013-tunnelled-runtimes]]
-lands its agent package, the `lux serve` loop. `internal/luxclient` is
-the client of the `/v1` API, one method per route of [[011-api]],
-returning the response bytes as they arrived beside the status and the
-request id so `-o json` can print what arrived; it decodes nothing but
-the error envelope and a list's members, the latter with each item's
-bytes kept so pages fold into one envelope unchanged.
+lands its agent package, the `lux serve` loop. `client` is the client
+of the `/v1` API, one method per route of [[011-api]], returning the
+response bytes as they arrived beside the status and the request id so
+`-o json` can print what arrived; it decodes nothing but the error
+envelope and a list's members, the latter with each item's bytes kept
+so pages fold into one envelope unchanged.
 
-`internal/luxclient` is not exported, for one reason that has a
-timeline attached. `latere.ai/x/pkg/luxsdk` is the data plane client a
-program already has: it `POST`s the lux dialect to `/lux/v1/generate`
-with a Key in `Authorization: Bearer`, which is exactly what a workload
-needs and is a door of [[004-request-path]], not a `/v1` route. The two
-clients therefore do not overlap: that one holds a Key and speaks one
-door, this one holds an issuer token and speaks the whole control
-plane, and neither can do the other's work, which is the plane boundary
-[[006-identity]] draws expressed as two packages. The control plane
-client has one consumer, this command, and [[011-api]] serves an
-OpenAPI document a platform generates its own client from. A package
-with one consumer inside the repository belongs in `internal/`
-([`CONTRIBUTING.md`]); it moves to the module root when a second
-consumer appears, which is the same rule every other package here
-follows. `luxsdk` is not in this command's build list: the one door
+`client` is a root package, `latere.ai/x/lux/client`, because the
+control plane client has consumers outside this command: a plane that
+applies Providers, Models, Keys, and Budgets to a core it runs, and a
+tool that migrates objects into one. A package with one consumer
+belongs in `internal/` and moves to the module root when a second
+appears ([`CONTRIBUTING.md`]), and the promise it carries there is
+[[001-architecture]]'s for a root tree: the Go API is additive within a
+module major, and the package owns no policy, decodes no kind, and
+dials one address, the base URL its caller hands it.
+
+It does not overlap `latere.ai/x/pkg/luxsdk`, the data plane client a
+program already has: that one `POST`s the lux dialect to
+`/lux/v1/generate` with a Key in `Authorization: Bearer`, which is what
+a workload needs and is a door of [[004-request-path]], not a `/v1`
+route. That one holds a Key and speaks one door, this one holds an
+issuer token and speaks the whole control plane, and neither can do the
+other's work, which is the plane boundary [[006-identity]] draws
+expressed as two packages. [[011-api]] serves an OpenAPI document as
+the third path, for a consumer that would rather generate a client than
+import one. `luxsdk` is not in this command's build list: the one door
 command, `lux models`, is a `GET` this client already makes.
 
 The build list of `./cmd/lux` is the standard library,
 `latere.ai/x/pkg/httpjson` for the error envelope, and this module's
-own `manifest` and `manifest/v1`, which reach the standard library and
-the one YAML decoder [[003-manifest-contract]] names.
+own `client`, `manifest`, and `manifest/v1`, which reach the standard
+library and the one YAML decoder [[003-manifest-contract]] names.
 [[001-architecture]]'s dependency paragraph says the same; the schema
 packages are this module's own and pull in that decoder alone, so the
 binary carries one first-party module, `latere.ai/x/pkg`, and one
@@ -461,12 +466,12 @@ this command speaks to ([[018-conformance-suite]]).
 | `skills/lux/SKILL.md` parses with frontmatter of exactly `name` and `description`, and every command and flag it names is in the table above | `TestSkillFrontmatter`, `TestSkillNamesOnlyRealCommands` | passing, `internal/luxcli`; every `lux` line in the skill's shell blocks and prose resolves to a command and its flags, and every code it names is in 011's table |
 | An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | passing, `internal/luxcli`, against the gateway assembled in process with an `httptest` stub provider; the same run against the stub binaries is owned by [[015-test-stubs-and-tiers]] |
 | `docs/cli.md` equals the binary's `-help` output for every command in the table, and `lux -help` and `lux -version` each exit 0 | `TestCLIDocIsCurrent`, `TestHelpAndVersionExitZero` | passing, `internal/luxcli` |
-| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, this module's `manifest`, `manifest/v1`, `internal/tunnel/wire`, and `internal/tunnel/agent`, and the YAML decoder they use ([[003-manifest-contract]]), `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | passing: the row admits `latere.ai/x/pkg/httpjson`, `github.com/google/uuid` through it, and `github.com/goccy/go-yaml` through `manifest`, and the two tunnel packages add no third-party module of their own |
+| `./cmd/lux`'s build list is the standard library, `latere.ai/x/pkg/httpjson`, this module's `client`, `manifest`, `manifest/v1`, `internal/tunnel/wire`, and `internal/tunnel/agent`, and the YAML decoder they use ([[003-manifest-contract]]), `lux serve` included | the `depcheck` gate over the `./cmd/lux` row of `.lateregate.yaml` | passing: the row admits `latere.ai/x/pkg/httpjson`, `github.com/google/uuid` through it, and `github.com/goccy/go-yaml` through `manifest`, and the two tunnel packages add no third-party module of their own |
 
 ## Outcome
 
 2026-09-14. Built as `internal/luxcli` behind `cmd/lux`, with
-`internal/luxclient` for the `/v1` routes, `skills/lux/SKILL.md`,
+`client` for the `/v1` routes, `skills/lux/SKILL.md`,
 `docs/cli.md`, and the `./cmd/lux` row of `.lateregate.yaml`. The last
 command the table lacked, `lux serve`, is `internal/luxcli/serve.go`
 over [[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: it applies
@@ -481,6 +486,12 @@ against stub binaries rather than an in-process gateway, names
 What was built differs from the first writing in these points, each
 carried in the Design above:
 
+- The `/v1` client is the root package `client`, importable as
+  `latere.ai/x/lux/client`, where the first writing kept it in
+  `internal/`. The trigger is the one that writing named: a second
+  consumer. A plane applies Providers, Models, Keys, and Budgets to
+  the core it runs through `/v1`, and a migration tool applies the
+  objects it exports to one, and neither is this command.
 - A close reason a retry cannot fix earns a sentence of its own, so
   the command builds four more sentences than the two the exit-code
   section first allowed. The reason itself is the code, which keeps

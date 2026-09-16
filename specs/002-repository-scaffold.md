@@ -7,7 +7,7 @@ depends_on:
 affects: [cmd/luxd/, internal/config/, internal/version/, Makefile, .lateregate.yaml, Dockerfile, .github/workflows/, .githooks/, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -54,6 +54,7 @@ manifest/               decoding, validation, defaulting, resolve, for every kin
 manifest/v1/            the Provider, Model, Key, and Budget types (003, 005, 007, 008)
 gateway/                the dialect doors, routing to a target, translation, streaming, credential injection (004, 008)
 metering/               the usage record, costing from a Model's prices, the per-key and per-target aggregates (009)
+client/                 the typed client of the /v1 API a plane, a migration tool, or the lux command drives (014)
 internal/config/        typed configuration from the environment; every problem in one message
 internal/version/       build identity set by -ldflags
 internal/auth/          the verifier over the issuers, the authorizer client, the owner policy (006)
@@ -67,7 +68,6 @@ internal/check/         the check role of luxd (017)
 internal/rewrap/        the rewrap role of luxd (005)
 internal/tunnel/        the reverse tunnel a local runtime connects out over, and the registry of serving nodes (013)
 internal/luxcli/        the lux command: flags, defaults, exit codes (014)
-internal/luxclient/     the client of the /v1 API the command speaks (014)
 test/e2e/               luxd as a process against the stubs (integration build tag) (015)
 test/conformance/       the contract as an importable test package (018)
 test/stubs/             the stub providers, issuer, authorizer, and sink (015)
