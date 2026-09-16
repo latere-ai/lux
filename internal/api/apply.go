@@ -184,8 +184,11 @@ func (c *call) prepareWrite(obj, existing v1.Object, refs *references) (write, *
 }
 
 // prepareKey is the Key's half: status.budget from the Lookup, the
-// prefix kept on an update, and on a create the hash of the minted or
-// supplied value registered in the same transaction.
+// prefix kept on an update, and on a create one hash registered in the
+// same transaction, whether the caller supplied the value, supplied the
+// hash of a value it holds alone, or left the gateway to mint one. A
+// hash the caller supplied is the hash its value would have produced,
+// so the three forms write one row and the door has one lookup.
 func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
 	if k.Spec.Budget != "" && refs.budget != nil {
@@ -194,10 +197,13 @@ func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (writ
 	if old, ok := existing.(*v1.Key); ok {
 		k.Status.Prefix = old.Status.Prefix
 		k.Spec.ClearValue()
+		k.Spec.ClearValueSHA256()
 		return w, nil
 	}
 	value, supplied := k.Spec.Value()
-	if !supplied {
+	hash, hashed := k.Spec.ValueSHA256()
+	k.Spec.ClearValueSHA256()
+	if !supplied && !hashed {
 		mint := c.h.o.MintKeyValue
 		if mint == nil {
 			mint = serve.MintKeyValue
@@ -208,10 +214,22 @@ func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (writ
 		}
 	}
 	k.Spec.ClearValue()
-	hash := serve.HashKeyValue(value)
-	k.Status.Prefix = serve.KeyPrefix(value, supplied)
-	w.write = func(ctx context.Context, tx store.Store) error { return tx.Keys().Put(ctx, k.Status.ID, hash) }
-	if !supplied {
+	// The field the value arrived in, which the refusal of a hash
+	// another Key already holds names.
+	path := "spec.value"
+	if hashed {
+		// Resolve held the hash to the index's shape, so it is the row a
+		// value of the caller's would have written.
+		path = "spec.valueSHA256"
+		k.Status.Prefix = serve.SuppliedKeyPrefix(hash)
+	} else {
+		hash = serve.HashKeyValue(value)
+		k.Status.Prefix = serve.KeyPrefix(value, supplied)
+	}
+	w.write = func(ctx context.Context, tx store.Store) error {
+		return hashTakenAt(tx.Keys().Put(ctx, k.Status.ID, hash), path)
+	}
+	if !supplied && !hashed {
 		w.after = func(obj v1.Object) {
 			if key, ok := obj.(*v1.Key); ok {
 				key.Status.Value = value

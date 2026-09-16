@@ -362,14 +362,20 @@ func hashValue(value string) string {
 }
 
 // keyPrefix is the handle: the first twelve characters of a minted
-// value, and sup_ with eight hex characters of the hash of a supplied
-// one, whose own first characters may be the same for every value the
-// platform issues.
+// value, and suppliedKeyPrefix of the hash of a supplied one.
 func keyPrefix(value string, supplied bool) string {
 	if supplied {
-		return suppliedPrefix + hashValue(value)[:prefixLength-len(suppliedPrefix)]
+		return suppliedKeyPrefix(hashValue(value))
 	}
 	return value[:prefixLength]
+}
+
+// suppliedKeyPrefix is the handle of a Key whose value the caller
+// supplied, as the value or as its hash alone: sup_ and eight
+// characters of the hash, because the value's own first characters may
+// be the same for every value the platform issues.
+func suppliedKeyPrefix(hash string) string {
+	return suppliedPrefix + hash[:prefixLength-len(suppliedPrefix)]
 }
 
 // cursor encodes a page's resume point: the kind and the name to

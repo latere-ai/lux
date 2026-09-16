@@ -771,8 +771,11 @@ func (c *call) fillStatus(obj, existing v1.Object, refs *lookup) (string, *apiEr
 }
 
 // fillKey registers a Key's value on the create: the caller's own when
-// the manifest supplied one, a minted one otherwise. The value leaves
-// the object here and returns on the create response alone.
+// the manifest supplied one, the hash alone when the manifest supplied
+// that instead, and a minted value otherwise. A supplied hash is the
+// hash the value behind it would have produced, so the three forms
+// write one row. The value leaves the object here and returns on the
+// create response alone.
 func (c *call) fillKey(k *v1.Key, existing v1.Object, refs *lookup) (string, *apiError) {
 	if k.Spec.Budget != "" && refs.budget != nil {
 		k.Status.Budget = &v1.BudgetRef{Name: refs.budget.Metadata.Name, ID: refs.budget.Status.ID}
@@ -780,10 +783,13 @@ func (c *call) fillKey(k *v1.Key, existing v1.Object, refs *lookup) (string, *ap
 	if old, ok := existing.(*v1.Key); ok {
 		k.Status.Prefix = old.Status.Prefix
 		k.Spec.ClearValue()
+		k.Spec.ClearValueSHA256()
 		return "", nil
 	}
 	value, supplied := k.Spec.Value()
-	if !supplied {
+	hash, hashed := k.Spec.ValueSHA256()
+	k.Spec.ClearValueSHA256()
+	if !supplied && !hashed {
 		minted, err := mintKeyValue()
 		if err != nil {
 			return "", refuse(codeInternal, "")
@@ -791,11 +797,23 @@ func (c *call) fillKey(k *v1.Key, existing v1.Object, refs *lookup) (string, *ap
 		value = minted
 	}
 	k.Spec.ClearValue()
-	k.Status.Prefix = keyPrefix(value, supplied)
-	if err := c.p.store.putHash(k.Status.ID, hashValue(value)); err != nil {
+	// The field the value arrived in, which a hash another Key already
+	// holds is refused at.
+	path := "spec.value"
+	if hashed {
+		path = "spec.valueSHA256"
+		k.Status.Prefix = suppliedKeyPrefix(hash)
+	} else {
+		hash = hashValue(value)
+		k.Status.Prefix = keyPrefix(value, supplied)
+	}
+	if err := c.p.store.putHash(k.Status.ID, hash); err != nil {
+		if errors.Is(err, errValueTaken) {
+			return "", refuse(codeInvalidField, "a Key with this value already exists", path)
+		}
 		return "", mapErr(err)
 	}
-	if supplied {
+	if supplied || hashed {
 		return "", nil
 	}
 	return value, nil

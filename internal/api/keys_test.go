@@ -264,6 +264,79 @@ func TestSuppliedValueIsNotEchoed(t *testing.T) {
 	}
 }
 
+// TestHashSuppliedKeyOpensTheDoor: a create with spec.valueSHA256 writes
+// the row a door's lookup of the string behind the hash reads, so that
+// string opens the Key; status.prefix is sup_ and the hash's first eight
+// characters; the answer, the journal, and the log carry neither the
+// hash nor a value; a second create with the same hash and one with
+// spec.value of that string are each invalid_field naming no Key; an
+// update carrying the hash is immutable_field; and a rotate mints a lux_
+// value after which the string opens nothing.
+func TestHashSuppliedKeyOpensTheDoor(t *testing.T) {
+	h := newHarness(t, nil)
+	h.seed()
+	// The value the importer's source never kept, and the hash it did.
+	value := "imported-credential-" + canary
+	hash := serve.HashKeyValue(value)
+	bodyJSON := `{"spec": {"models": ["gpt-5"], "valueSHA256": "` + hash + `"}}`
+	rec := h.request(http.MethodPut, "/v1/keys/run-42", bodyJSON)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	s := status(t, rec)
+	if s["prefix"] != serve.SuppliedPrefix+hash[:8] || s["value"] != nil || strings.Contains(rec.Body.String(), hash) || strings.Contains(rec.Body.String(), value) {
+		t.Errorf("status %v, body %s", s, rec.Body.String())
+	}
+	id := s["id"].(string)
+	// A door hashes the credential it was handed and reads that row, so
+	// the row the hash wrote is the row the string opens.
+	if got, err := h.st.Keys().ByHash(bg(), serve.HashKeyValue(value)); err != nil || got != id {
+		t.Errorf("the value behind the hash opens %q, %v", got, err)
+	}
+	rec = h.request(http.MethodPut, "/v1/keys/run-43", bodyJSON)
+	d := wantCode(t, rec, CodeInvalidField)
+	if !reflect.DeepEqual(paths(d), []string{"spec.valueSHA256"}) || d["detail"] != hashTakenDetail || strings.Contains(rec.Body.String(), id) {
+		t.Errorf("a second create with the same hash: %v", d)
+	}
+	rec = h.request(http.MethodPut, "/v1/keys/run-44", `{"spec": {"models": ["gpt-5"], "value": "`+value+`"}}`)
+	d = wantCode(t, rec, CodeInvalidField)
+	if !reflect.DeepEqual(paths(d), []string{"spec.value"}) || d["detail"] != hashTakenDetail || strings.Contains(rec.Body.String(), id) {
+		t.Errorf("a create with the value behind the registered hash: %v", d)
+	}
+	for _, name := range []string{"run-43", "run-44"} {
+		if _, _, err := h.st.Objects().ByName(bg(), v1.KindKey, name); err == nil {
+			t.Errorf("the refused Key %s was stored", name)
+		}
+	}
+	if d := wantCode(t, h.request(http.MethodPut, "/v1/keys/run-42", bodyJSON), CodeImmutableField); !reflect.DeepEqual(paths(d), []string{"spec.valueSHA256"}) {
+		t.Errorf("an update carrying the hash: %v", d)
+	}
+	rows, err := h.st.Journal().Since(bg(), 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if strings.Contains(string(r.Payload), hash) || strings.Contains(string(r.Payload), value) {
+			t.Errorf("event %s carries the hash or its value", r.Type)
+		}
+	}
+	if strings.Contains(h.log.String(), hash) || strings.Contains(h.log.String(), value) {
+		t.Error("a log line carries the hash or its value")
+	}
+	// A rotate mints a lux_ value and replaces the hash, so the string
+	// the importer's holders present stops opening the Key.
+	fresh := keyValue(t, h.request(http.MethodPost, "/v1/keys/run-42/rotate", ""))
+	if !strings.HasPrefix(fresh, serve.MintedPrefix) {
+		t.Errorf("the rotated value is %q", fresh)
+	}
+	if _, err := h.st.Keys().ByHash(bg(), hash); err == nil {
+		t.Error("the string still opens the Key after a rotate")
+	}
+	if got, _ := h.st.Keys().ByHash(bg(), serve.HashKeyValue(fresh)); got != id {
+		t.Error("the minted value does not open the Key")
+	}
+}
+
 // TestMaxKeysCeiling: max_keys from the authorizer caps the subject's
 // live Keys at key.create, inside the transaction, and the create over
 // it is ceiling_exceeded; another subject's Keys do not count; the

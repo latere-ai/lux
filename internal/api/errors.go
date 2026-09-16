@@ -5,6 +5,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -194,6 +195,23 @@ func refuse(code Code, detail string, paths ...string) *Error {
 	return &Error{Code: code, Paths: paths, Detail: detail}
 }
 
+// hashTakenDetail is the one developer sentence for a value another Key
+// already holds. It names no Key, because the caller asking may see
+// neither the Key nor its owner.
+const hashTakenDetail = "a Key with this value already exists"
+
+// hashTakenAt returns err as the refusal naming the field a create
+// carried the Key's value in, spec.value or spec.valueSHA256, and any
+// other error unchanged. The store's own error stays in the chain, so
+// the transaction is still classified as a conflict rather than as a
+// failure.
+func hashTakenAt(err error, path string) error {
+	if !errors.Is(err, store.ErrHashTaken) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", err, refuse(CodeInvalidField, hashTakenDetail, path))
+}
+
 // mapError turns any error a handler meets into the Error it answers
 // with: an Error as it is; a manifest.Error as its code, paths, and
 // detail; an auth.Error as its code and detail; a store error by name,
@@ -219,7 +237,7 @@ func mapError(err error) *Error {
 	case errors.Is(err, store.ErrNameTaken):
 		return refuse(CodeAlreadyExists, err.Error())
 	case errors.Is(err, store.ErrHashTaken):
-		return refuse(CodeInvalidField, "a Key with this value already exists", "spec.value")
+		return refuse(CodeInvalidField, hashTakenDetail, "spec.value")
 	case errors.Is(err, store.ErrInvalidCursor):
 		return refuse(CodeInvalidField, err.Error(), "cursor")
 	case errors.Is(err, store.ErrReadOnly):

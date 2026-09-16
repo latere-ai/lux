@@ -62,14 +62,21 @@ func HashKeyValue(value string) string {
 }
 
 // KeyPrefix is status.prefix for a value: the first twelve characters
-// of a minted value, and sup_ with the first eight hex characters of
-// the hash of a supplied one, because a supplied value's first bytes
-// may be the same for every value of its kind and must not be shown.
-// Both are twelve characters, name one Key, and disclose nothing of the
-// value.
+// of a minted value, and SuppliedKeyPrefix of the hash of a supplied
+// one. Both are twelve characters, name one Key, and disclose nothing
+// of the value.
 func KeyPrefix(value string, supplied bool) string {
 	if supplied {
-		return SuppliedPrefix + HashKeyValue(value)[:KeyPrefixLength-len(SuppliedPrefix)]
+		return SuppliedKeyPrefix(HashKeyValue(value))
 	}
 	return value[:KeyPrefixLength]
+}
+
+// SuppliedKeyPrefix is status.prefix for a Key whose value the caller
+// supplied, as the value or as its hash alone: sup_ and the hash's
+// first eight characters, because a supplied value's own first bytes
+// may be the same for every value of its kind and must not be shown.
+// The hash is the index's, 64 lower-case hex characters.
+func SuppliedKeyPrefix(hash string) string {
+	return SuppliedPrefix + hash[:KeyPrefixLength-len(SuppliedPrefix)]
 }
