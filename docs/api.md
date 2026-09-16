@@ -45,7 +45,7 @@ door, so an existing SDK points at it unchanged.
 Two credentials, one per surface, and neither works on the other.
 
 - A door takes a **Key** as its bearer, or in the dialect's own API-key
-  header (`x-api-key`, `x-goog-api-key`). A Key value begins with `lux_`.
+  header (`x-api-key`, `x-goog-api-key`). A minted Key value begins with `lux_`; a value the platform supplied, as itself or as its hash, is whatever the platform chose, and its prefix on the Key is `sup_`.
 - `/v1` takes an **issuer token**: a bearer a listed issuer signed,
   carrying the audience `LUX_OIDC_AUDIENCE` (`lux` by default). Set
   `LUX_OIDC_ISSUERS` (see [`configuration.md`](configuration.md#identity)).

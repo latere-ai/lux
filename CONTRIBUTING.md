@@ -62,7 +62,7 @@ variable does.
 
 Three places, by who imports it:
 
-- The module root (`manifest/`, `gateway/`, `metering/`) holds the
+- The module root (`manifest/`, `gateway/`, `metering/`, `client/`, `authorizer/`) holds the
   packages a platform built on Lux imports. A change there keeps existing
   call sites compiling or names the break in the CHANGELOG.
 - `internal/` holds what only `luxd` needs: the HTTP API, identity,

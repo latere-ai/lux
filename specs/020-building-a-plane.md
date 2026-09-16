@@ -10,7 +10,7 @@ depends_on:
 affects: [docs/plane.md, manifest/, gateway/, metering/, examples/plane/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -67,7 +67,7 @@ rewriting: the packages are what `luxd` is made of.
 | funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person ([[006-identity]]); the gateway never sees a cookie | reads the platform's own API |
 | unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's own prefix | the platform's own service identity in `Options.Actor` |
-| one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
+| one developer credential | a Key created with `spec.value` set to the platform's own credential, or with `spec.valueSHA256` where the platform's store kept the hash alone, under the Models and the Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` |
 | audit | the signed event sink at `LUX_EVENTS_URL` ([[012-request-log-and-events]]) | the platform's own sink |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
