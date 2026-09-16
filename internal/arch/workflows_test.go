@@ -385,3 +385,20 @@ func TestWorkflowOutputsAreWritten(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseExtractsEachPlatformByItsOwnDigest: a released image is a
+// multi-arch index, and `docker create --platform` on the index reference
+// stores each platform under the index digest and refuses the second, so
+// the workflows resolve a platform's manifest digest and create by that.
+func TestReleaseExtractsEachPlatformByItsOwnDigest(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(root(t), ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "docker create --platform") {
+		t.Error("release.yml creates a container from the index reference with --platform")
+	}
+	if !strings.Contains(string(data), "imagetools inspect --raw") {
+		t.Error("release.yml does not resolve a platform's manifest digest from the index")
+	}
+}

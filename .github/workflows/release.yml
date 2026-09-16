@@ -125,12 +125,20 @@ jobs:
           LUXD: ${{ steps.images.outputs.luxd_digest }}
           STUBS: ${{ steps.images.outputs.stubs_digest }}
         run: |
+          # The reference is a multi-arch index. Creating with --platform
+          # on it stores each platform under the index digest and refuses
+          # the second ("cannot overwrite digest"), so each platform's own
+          # manifest digest is resolved from the index and created by that.
           mkdir -p out/images
+          platform() {
+            docker buildx imagetools inspect --raw "$1" | jq -r --arg a "$2" \
+              '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest'
+          }
           for arch in amd64 arm64; do
-            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux@${LUXD}")
+            id=$(docker create "${REGISTRY}/${OWNER}/lux@$(platform "${REGISTRY}/${OWNER}/lux@${LUXD}" "$arch")")
             docker cp "$id:/usr/local/bin/luxd" "out/images/luxd_linux_${arch}"
             docker rm "$id" >/dev/null
-            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux-stubs@${STUBS}")
+            id=$(docker create "${REGISTRY}/${OWNER}/lux-stubs@$(platform "${REGISTRY}/${OWNER}/lux-stubs@${STUBS}" "$arch")")
             docker cp "$id:/usr/local/bin/lux-stubs" "out/images/lux-stubs_linux_${arch}"
             docker rm "$id" >/dev/null
           done
@@ -435,8 +443,13 @@ jobs:
           done
       - name: The images carry the archives' binaries
         run: |
+          # Each platform by its own manifest digest, as the build job does.
+          platform() {
+            docker buildx imagetools inspect --raw "$1" | jq -r --arg a "$2" \
+              '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest'
+          }
           for arch in amd64 arm64; do
-            id=$(docker create --platform "linux/${arch}" "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}")
+            id=$(docker create "${REGISTRY}/${OWNER}/lux@$(platform "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}" "$arch")")
             docker cp "$id:/usr/local/bin/luxd" "luxd_image_${arch}"
             docker rm "$id" >/dev/null
             tar -xzOf "assets/luxd_${GITHUB_REF_NAME}_linux_${arch}.tar.gz" luxd > "luxd_archive_${arch}"
