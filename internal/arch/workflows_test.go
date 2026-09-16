@@ -402,3 +402,78 @@ func TestReleaseExtractsEachPlatformByItsOwnDigest(t *testing.T) {
 		t.Error("release.yml does not resolve a platform's manifest digest from the index")
 	}
 }
+
+// The two image repositories a release publishes to. `luxd` and
+// `lux-stubs` are the binaries; the gateway's binary rides in the `lux`
+// repository, and only the stubs' names coincide.
+var publishedRepositories = map[string]bool{"lux": true, "lux-stubs": true}
+
+// imageSegment captures the repository segment of a registry reference
+// in a workflow, whether the file names it or a shell variable holds it.
+var imageSegment = regexp.MustCompile(`(?:ghcr\.io|REGISTRY[ }]*)/[^/\s]+/(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|[A-Za-z0-9._-]+)`)
+
+// plainWord is a word of a for list that names a thing rather than
+// expanding to one, so a list holding a glob or a variable resolves to
+// what it names and the rest is left to the reader.
+var plainWord = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// shellValues is every value a workflow's shell gives one variable: what
+// an assignment writes, anywhere on a line, and what a for list iterates.
+func shellValues(text, name string) []string {
+	var values []string
+	assigned := regexp.MustCompile(`(^|[\s;&|(])` + regexp.QuoteMeta(name) + `=([A-Za-z0-9._-]+)`)
+	for _, m := range assigned.FindAllStringSubmatch(text, -1) {
+		values = append(values, m[2])
+	}
+	loops := regexp.MustCompile(`(?m)^\s*for\s+` + regexp.QuoteMeta(name) + `\s+in\s+([^;\n]+)`)
+	for _, m := range loops.FindAllStringSubmatch(text, -1) {
+		for word := range strings.FieldsSeq(m[1]) {
+			if plainWord.MatchString(word) {
+				values = append(values, word)
+			}
+		}
+	}
+	slices.Sort(values)
+	return slices.Compact(values)
+}
+
+// TestEveryImageReferenceNamesAPublishedRepository is the reading of
+// spec 017's artifact table that a literal cannot give: a reference
+// assembled from a shell variable asks the registry for whatever the
+// variable holds, so the values are resolved and every one of them must
+// be a repository this release pushes to. A step that iterates the
+// binaries `luxd lux-stubs` and hands the name straight to the registry
+// asks for `<owner>/luxd`, which is another repository's image and
+// answers DENIED.
+func TestEveryImageReferenceNamesAPublishedRepository(t *testing.T) {
+	for _, name := range []string{"release.yml", "verify.yml"} {
+		data, err := os.ReadFile(filepath.Join(root(t), ".github", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for i, line := range strings.Split(text, "\n") {
+			for _, m := range imageSegment.FindAllStringSubmatch(line, -1) {
+				where := name + ":" + strconv.Itoa(i+1)
+				segment := m[1]
+				if !strings.HasPrefix(segment, "$") {
+					if !publishedRepositories[segment] {
+						t.Errorf("%s: %s names %q, which no release publishes", where, m[0], segment)
+					}
+					continue
+				}
+				variable := strings.Trim(strings.TrimPrefix(segment, "$"), "{}")
+				values := shellValues(text, variable)
+				if len(values) == 0 {
+					t.Errorf("%s: %s reads %s, which nothing in the file assigns", where, m[0], segment)
+					continue
+				}
+				for _, v := range values {
+					if !publishedRepositories[v] {
+						t.Errorf("%s: %s reads %s, which holds %v; %q is no repository a release publishes to", where, m[0], segment, values, v)
+					}
+				}
+			}
+		}
+	}
+}

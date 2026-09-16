@@ -439,9 +439,14 @@ jobs:
           [ "$(grep -c . checksums.txt)" -eq 10 ] || { echo "checksums.txt lists $(grep -c . checksums.txt) archives, want 10" >&2; exit 1; }
       - name: Both images verify and their attestations answer
         run: |
+          # The repository the build pushed to, by the build's own
+          # mapping: the luxd binary rides in the <owner>/lux image, and
+          # <owner>/luxd is another repository's image entirely.
           for image in luxd lux-stubs; do
-            cosign verify --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" "${REGISTRY}/${OWNER}/${image}:${GITHUB_REF_NAME}" > /dev/null
-            gh attestation verify "oci://${REGISTRY}/${OWNER}/${image}:${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}"
+            repo=lux
+            [ "$image" = lux-stubs ] && repo=lux-stubs
+            cosign verify --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" "${REGISTRY}/${OWNER}/${repo}:${GITHUB_REF_NAME}" > /dev/null
+            gh attestation verify "oci://${REGISTRY}/${OWNER}/${repo}:${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}"
           done
       - name: The images carry the archives' binaries
         run: |

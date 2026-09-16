@@ -6,6 +6,16 @@ refused before it is pushed.
 
 ## Unreleased
 
+- The release pipeline verifies the images it published. The clean-runner
+  job iterated the binary names and asked `ghcr.io` for `<owner>/luxd`,
+  a repository no release of Lux pushes to, so `v0.1.0` and `v0.2.0` both
+  ended in `DENIED` there with every artifact already published, signed,
+  and attested. The job now maps the binary to its repository the way the
+  build job does, `lux` for `luxd` and `lux-stubs` for the stubs. Nothing
+  changes in what a release carries. `TestEveryImageReferenceNamesAPublishedRepository`
+  resolves the values a shell variable holds before reading a reference,
+  which the guard over literal names could not see.
+
 ## v0.2.0 - 2026-09-16
 
 - `latere.ai/x/lux/authorizer` exports the action table itself.
