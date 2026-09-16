@@ -34,12 +34,20 @@ const reasonRequest = "request"
 // storeKey writes k with its value's hash and the key.created row.
 func (h *harness) storeKey(t *testing.T, k *v1.Key, value string, supplied bool) *v1.Key {
 	t.Helper()
+	return h.storeKeyByHash(t, k, HashKeyValue(value), KeyPrefix(value, supplied))
+}
+
+// storeKeyByHash writes k under a hash and a prefix the caller settled,
+// which is how a Key created from spec.valueSHA256 is stored: the row
+// is written from the hash alone and no value ever reaches the store.
+func (h *harness) storeKeyByHash(t *testing.T, k *v1.Key, hash, prefix string) *v1.Key {
+	t.Helper()
 	ctx := t.Context()
 	if k.Status.ID == "" {
 		k.Status.ID = v1.NewID(v1.PrefixKey, h.clock(), nil)
 	}
 	k.Status.Owner = subject
-	k.Status.Prefix = KeyPrefix(value, supplied)
+	k.Status.Prefix = prefix
 	if k.Status.Warnings == nil {
 		k.Status.Warnings = []string{}
 	}
@@ -47,7 +55,7 @@ func (h *harness) storeKey(t *testing.T, k *v1.Key, value string, supplied bool)
 		if _, err := tx.Objects().Put(ctx, k, 0); err != nil {
 			return err
 		}
-		if err := tx.Keys().Put(ctx, k.Status.ID, HashKeyValue(value)); err != nil {
+		if err := tx.Keys().Put(ctx, k.Status.ID, hash); err != nil {
 			return err
 		}
 		return appendEvent(ctx, tx.Journal(), "key.created", reasonRequest, k, map[string]any{"prefix": k.Status.Prefix}, h.clock(), newEventID(h.clock))
@@ -521,6 +529,50 @@ func TestSuppliedKeyValue(t *testing.T) {
 	}
 	if v, set := got.Spec.Value(); set || v != "" {
 		t.Fatal("the stored Key carries the supplied value")
+	}
+}
+
+// TestHashSuppliedKeyOpensTheDoor: a Key whose row was written from the
+// SHA-256 of a value the caller holds alone is the same row and the
+// same handle as the Key the value itself would have made, so the door
+// path is one for the two forms: the string a door presents opens the
+// Key through the cache, a second lookup within the window costs no
+// store call, a value that differs by one byte opens nothing, and the
+// stored Key carries neither the value nor the hash.
+func TestHashSuppliedKeyOpensTheDoor(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	// The value the importer's holders present, whose source kept only
+	// the hash below.
+	value := "imported-platform-credential-042"
+	hash := HashKeyValue(value)
+	if SuppliedKeyPrefix(hash) != KeyPrefix(value, true) {
+		t.Fatalf("the two forms disagree on the handle: %q, %q", SuppliedKeyPrefix(hash), KeyPrefix(value, true))
+	}
+	k := h.storeKeyByHash(t, &v1.Key{Metadata: v1.ObjectMeta{Name: "imported"}, Spec: v1.KeySpec{Models: []string{"*"}}}, hash, SuppliedKeyPrefix(hash))
+	st, reg := h.instrumented()
+	c := h.cache(st, reg, DefaultKeyCache)
+	got, err := c.ByHash(ctx, HashKeyValue(value))
+	if err != nil || got == nil || got.Status.ID != k.Status.ID {
+		t.Fatalf("the value behind the hash does not open the Key: %v, %v", got, err)
+	}
+	if got.Status.Prefix != SuppliedPrefix+hash[:8] || len(got.Status.Prefix) != KeyPrefixLength || got.Status.Value != "" {
+		t.Fatalf("status = prefix %q value %q", got.Status.Prefix, got.Status.Value)
+	}
+	if v, set := got.Spec.Value(); set || v != "" {
+		t.Fatal("the stored Key carries a value")
+	}
+	if v, set := got.Spec.ValueSHA256(); set || v != "" {
+		t.Fatal("the stored Key carries the hash")
+	}
+	if _, err := c.ByHash(ctx, HashKeyValue(value)); err != nil {
+		t.Fatalf("the second lookup: %v", err)
+	}
+	if n := ops(reg, "Keys.ByHash"); n != 1 {
+		t.Errorf("Keys.ByHash was called %d times for two lookups in one window", n)
+	}
+	if other, _ := c.ByHash(ctx, HashKeyValue(value+"x")); other != nil {
+		t.Error("a value that differs by one byte opens the Key")
 	}
 }
 

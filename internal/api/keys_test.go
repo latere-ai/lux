@@ -264,15 +264,15 @@ func TestSuppliedValueIsNotEchoed(t *testing.T) {
 	}
 }
 
-// TestHashSuppliedKeyOpensTheDoor: a create with spec.valueSHA256 writes
-// the row a door's lookup of the string behind the hash reads, so that
-// string opens the Key; status.prefix is sup_ and the hash's first eight
-// characters; the answer, the journal, and the log carry neither the
-// hash nor a value; a second create with the same hash and one with
-// spec.value of that string are each invalid_field naming no Key; an
-// update carrying the hash is immutable_field; and a rotate mints a lux_
-// value after which the string opens nothing.
-func TestHashSuppliedKeyOpensTheDoor(t *testing.T) {
+// TestHashSuppliedValueIsNotEchoed: a create with spec.valueSHA256
+// writes the row a door's lookup of the string behind the hash reads,
+// so that string opens the Key; status.prefix is sup_ and the hash's
+// first eight characters; the answer, the journal, and the log carry
+// neither the hash nor a value; a second create with the same hash and
+// one with spec.value of that string are each invalid_field naming no
+// Key; an update carrying the hash is immutable_field; and a rotate
+// mints a lux_ value after which the string opens nothing.
+func TestHashSuppliedValueIsNotEchoed(t *testing.T) {
 	h := newHarness(t, nil)
 	h.seed()
 	// The value the importer's source never kept, and the hash it did.
