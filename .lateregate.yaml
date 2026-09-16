@@ -159,3 +159,5 @@ identity:
   # The default audience a deployment verifies unless it configures its
   # own.
   reached_by: self-hosted
+  # Access is by role: the roles rule runs, and it is one way once set.
+  roles_only: true
