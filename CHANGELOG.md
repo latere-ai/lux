@@ -6,6 +6,23 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A Key can be created from the SHA-256 of its value.
+  `Key.spec.valueSHA256` takes the hash as 64 lower-case hex characters
+  and stands in for `spec.value` on a create, for an importer whose
+  source kept hashes alone: the credentials its holders already present
+  keep opening the doors after the move, with no re-issue. The gateway
+  stores the hash as the one a supplied value would have produced, so
+  the value behind it authenticates on every door and `status.prefix`
+  is `sup_` and the hash's first eight characters. The field is
+  write-only, as `spec.value` is: no response, event, record, or log
+  line returns it and a resolved manifest carries it absent. It is
+  refused beside `spec.value` or `spec.valueFrom`, on an update, and in
+  file mode; a hash another Key already holds is `invalid_field` at
+  `spec.valueSHA256`. A rotate mints a `lux_` value and the hash stops
+  matching. The gateway cannot check the bounds of a value it never
+  sees, so a value shorter than the 32 bytes `spec.value` requires is
+  the importer's own decision.
+
 - The `/v1` client is an importable package, `latere.ai/x/lux/client`.
   A program that applies Providers, Models, Keys, and Budgets to a core,
   a plane that drives the core it runs or a tool that migrates objects
