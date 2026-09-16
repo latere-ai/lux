@@ -36,7 +36,7 @@ and nothing else in the tree makes that claim.
 ## Current state
 
 Built: `test/conformance` is the package below, with `Run`, `Config`,
-`TestContract`, fifty-seven cases in seven groups and the Key mint before the doors, the OpenAPI validation of
+`TestContract`, fifty-eight cases in seven groups and the Key mint before the doors, the OpenAPI validation of
 every `/v1` answer, the previous-release fixture group, and the
 mutation check over eight shims in `internal/serve`. Its own tests
 assemble `luxd`'s serve role in process from the packages `cmd/luxd`
@@ -197,7 +197,7 @@ The cases, by group:
 | `manifest` | `case003AcceptedCorpus`, `case003DefaultsAreVisible`, `case003RefusedCorpus`, `case003UnknownField`, `case003AcceptedCorpusDeletes` |
 | `api` | `case011WellKnown`, `case011NoCORS`, `case011ListReads`, `case011Self`, `case011Envelope`, `case011RequestIdOnEveryResponse`, `case011ReadOnlyInFileMode`, `case011GrammarPerKind`, `case011ApplyWithoutTheEnvelope`, `case011BodiesAndTypes`, `case011ApplyIsCreateThenUpdate`, `case011Preconditions`, `case011AddressByIdOrName`, `case011ModelNamesWithSlashes`, `case011Rotate`, `case011BudgetInUse`, `case011Pagination`, `case011RateLimitHeaders`, `case011SecretsNeverInResponses`, `case011OpenAPIValidatesEveryResponse` |
 | `doors` | `case007SuiteMintsItsKey`, `case004RouteTable`, `case004ErrorEnvelopePerDialect`, `case004ModelsListIsTheKeysView`, `case004DialectBridging`, `case004CredentialForms`, `case004CountTokens`, `case004SameDialectSameBytes`, `case004CallerCredentialsNeverForwarded`, `case004TranslationLoss`, `case004Streaming`, `case004ModelNameRewrite`, `case004UpstreamError`, `case004UpstreamTimeout`, `case008Fallback`, `case004OpaqueRoute` |
-| `keys` | `case007RotateInvalidatesTheOldValue`, `case007KeyStates`, `case007RateLimited`, `case007UnpricedUnderABudget`, `case007SuppliedValue`, `case007SpendWindow`, `case007BudgetExhausted` |
+| `keys` | `case007RotateInvalidatesTheOldValue`, `case007KeyStates`, `case007RateLimited`, `case007UnpricedUnderABudget`, `case007SuppliedValue`, `case007HashSuppliedValue`, `case007SpendWindow`, `case007BudgetExhausted` |
 | `identity` | `case006UnauthenticatedControlPlane`, `case006KeyOnControlPlaneIsUnauthenticated`, `case006TokenOnDoorIsUnauthenticated`, `case006OwnerIsTheTokensSubject`, `case006AuthorizerUnavailable` |
 | `usage` | `case009RefusedRequestHasARecord`, `case009RecordHasTheStubsTokens`, `case009UsageAggregates` |
 | `fixture` | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` |

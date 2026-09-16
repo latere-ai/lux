@@ -5,6 +5,7 @@ package conformance
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"maps"
 	"net/http"
@@ -20,14 +21,16 @@ import (
 // The keys group is spec 007 at the doors: a rotate invalidates the old
 // value, each Key state refuses with its code, a rate refusal carries
 // Retry-After, a spend refusal and a hard Budget refusal carry theirs, an
-// unpriced Model under a Budget is model_unpriced, and a supplied value
-// opens a door by its exact bytes.
+// unpriced Model under a Budget is model_unpriced, a supplied value
+// opens a door by its exact bytes, and a value supplied as its SHA-256
+// opens a door by the string the hash is of.
 var keysCases = []testCase{
 	{group: "keys", name: "case007RotateInvalidatesTheOldValue", spec: 7, bearer: true, key: true, fn: case007RotateInvalidatesTheOldValue},
 	{group: "keys", name: "case007KeyStates", spec: 7, bearer: true, key: true, fn: case007KeyStates},
 	{group: "keys", name: "case007RateLimited", spec: 7, bearer: true, key: true, fn: case007RateLimited},
 	{group: "keys", name: "case007UnpricedUnderABudget", spec: 7, bearer: true, key: true, fn: case007UnpricedUnderABudget},
 	{group: "keys", name: "case007SuppliedValue", spec: 7, bearer: true, key: true, fn: case007SuppliedValue},
+	{group: "keys", name: "case007HashSuppliedValue", spec: 7, bearer: true, key: true, fn: case007HashSuppliedValue},
 	{group: "keys", name: "case007SpendWindow", spec: 7, bearer: true, key: true, stubs: true, fn: case007SpendWindow},
 	{group: "keys", name: "case007BudgetExhausted", spec: 7, bearer: true, key: true, stubs: true, fn: case007BudgetExhausted},
 }
@@ -188,6 +191,66 @@ func case007SuppliedValue(t testing.TB, c *client) {
 		t.Errorf("the supplied value as the key parameter: %d %s", resp.Status, excerpt(resp.Body))
 	}
 	c.expectDoor(t, d, c.door(t, d, http.MethodGet, modelsPath(d)+"?key="+url.QueryEscape(value+" "), nil, ""), "unauthenticated")
+}
+
+// case007HashSuppliedValue: a Key created with spec.valueSHA256 opens a
+// door by the string the hash is of, its create answer carries neither
+// the hash nor a value, its prefix is sup_ and the hash's first eight
+// characters, a second create with the same hash and one with that
+// string as spec.value are each invalid_field naming no Key, and after
+// a rotate the string is unauthenticated.
+func case007HashSuppliedValue(t testing.TB, c *client) {
+	raw := make([]byte, 20)
+	if _, err := rand.Read(raw); err != nil {
+		t.Fatal(err)
+	}
+	// The value an importer's holders present and its source kept only
+	// as this hash.
+	value := "conf-hash-supplied-" + hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(value))
+	hash := hex.EncodeToString(sum[:])
+	k := c.object(t, v1.KindKey, "hash-supplied", c.keySpec(map[string]any{"valueSHA256": hash}))
+	id := str(k, "status.id")
+	defer c.mustDelete(t, v1.KindKey, id)
+	if body := canonical(t, k); str(k, "status.value") != "" || strings.Contains(body, hash) || strings.Contains(body, value) {
+		t.Errorf("the create answer carries the hash or its value: %s", body)
+	}
+	if prefix, want := str(k, "status.prefix"), "sup_"+hash[:8]; prefix != want {
+		t.Errorf("status.prefix %q, want %q", prefix, want)
+	}
+	if code := c.doorStatus(t, value); code != "" {
+		t.Errorf("the value behind the hash is %s on a door", code)
+	}
+	// The hash is taken, in whichever form a second create names it.
+	for suffix, spec := range map[string]map[string]any{
+		"hash-taken":  {"valueSHA256": hash},
+		"value-taken": {"value": value},
+	} {
+		name := c.name(suffix)
+		resp := c.apply(t, v1.KindKey, name, map[string]any{"metadata": c.meta(name), "spec": c.keySpec(spec)})
+		if resp.Status == http.StatusCreated {
+			c.mustDelete(t, v1.KindKey, name)
+			t.Errorf("a second create as %s was accepted", suffix)
+			continue
+		}
+		if e := c.expect(t, resp, "invalid_field"); strings.Contains(e.detail, id) {
+			t.Errorf("the refusal names the Key holding the value: %s", e.detail)
+		}
+	}
+	// A rotate mints a value of the gateway's and the string stops
+	// opening the Key within the cache window.
+	resp := c.v1(t, http.MethodPost, "/keys/"+id+"/rotate", nil)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("rotate: %d %s", resp.Status, excerpt(resp.Body))
+	}
+	fresh := str(resp.json(t), "status.value")
+	c.eventually(t, revocationTimeout, "the string behind the hash is refused", func() (bool, string) {
+		code := c.doorStatus(t, value)
+		return code == "unauthenticated", "the string answers " + strconv.Quote(code)
+	})
+	if code := c.doorStatus(t, fresh); code != "" {
+		t.Errorf("the minted value is %s on a door", code)
+	}
 }
 
 // spendWindow is a Key spend limit of amount USD over an hour.

@@ -30,6 +30,7 @@ var covered = map[string]string{
 	"TestFieldSyntax":                   "case003RefusedCorpus",
 	"TestGlob":                          "case003RefusedCorpus",
 	"TestGoldenCorpus":                  "case003AcceptedCorpus",
+	"TestHashSuppliedValueSchema":       "case003RefusedCorpus",
 	"TestHintDisagreementIsRefused":     "case011ApplyWithoutTheEnvelope",
 	"TestHintFillsTheEnvelope":          "case011ApplyWithoutTheEnvelope",
 	"TestImmutableFields":               "case011ApplyIsCreateThenUpdate",
