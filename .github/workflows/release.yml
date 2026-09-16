@@ -108,14 +108,14 @@ jobs:
           # The gateway image is published as <owner>/lux; luxd is the
           # binary inside it, and the name the digest output keeps.
           for image in luxd lux-stubs; do
-            file=Dockerfile.release; repo=lux
-            [ "$image" = lux-stubs ] && file=Dockerfile.stubs && repo=lux-stubs
+            file=Dockerfile.release; repo=lux; out=luxd_digest
+            [ "$image" = lux-stubs ] && file=Dockerfile.stubs && repo=lux-stubs && out=stubs_digest
             docker buildx build --platform linux/amd64,linux/arm64 -f "$file" \
               --output "type=image,name=${REGISTRY}/${OWNER}/${repo},push-by-digest=true,name-canonical=true,push=true" \
               --metadata-file "out/${image}.json" .
             digest=$(jq -r '."containerimage.digest"' "out/${image}.json")
             echo "${image}: ${digest}"
-            echo "$(printf '%s' "$image" | tr '-' '_')_digest=${digest}" >> "$GITHUB_OUTPUT"
+            echo "${out}=${digest}" >> "$GITHUB_OUTPUT"
           done
       # Each image's two layers carry the bytes the archives do: the
       # binary is pulled back out of every platform and compared.

@@ -349,3 +349,39 @@ func TestGatewayImageIsLux(t *testing.T) {
 		t.Error("compose.yaml does not run the gateway image as <owner>/lux")
 	}
 }
+
+// TestWorkflowOutputsAreWritten holds every output a workflow reads to a
+// write of that name in the same file: a step output `steps.<id>.outputs.X`
+// needs a `X=` appended to GITHUB_OUTPUT or a variable assigned `=X` that
+// is, and a job output `needs.<job>.outputs.X` needs an `X:` entry under
+// a job's `outputs:`. A name computed at run time or misspelled on one
+// side reads as an empty string and fails only at the first tag; the test
+// fails here instead.
+func TestWorkflowOutputsAreWritten(t *testing.T) {
+	dir := root(t)
+	stepReads := regexp.MustCompile(`steps\.[a-z_]+\.outputs\.([a-z_]+)`)
+	jobReads := regexp.MustCompile(`needs\.[a-z_]+\.outputs\.([a-z_]+)`)
+	for _, name := range []string{"release.yml", "verify.yml"} {
+		data, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, m := range stepReads.FindAllStringSubmatch(text, -1) {
+			out := m[1]
+			if !strings.Contains(text, out+"=") && !strings.Contains(text, "="+out) {
+				t.Errorf("%s reads a step output %s that no step writes", name, out)
+			}
+		}
+		declared := regexp.MustCompile(`(?m)^\s+([a-z_]+): \$\{\{ steps\.`)
+		keys := map[string]bool{}
+		for _, m := range declared.FindAllStringSubmatch(text, -1) {
+			keys[m[1]] = true
+		}
+		for _, m := range jobReads.FindAllStringSubmatch(text, -1) {
+			if !keys[m[1]] {
+				t.Errorf("%s reads a job output %s that no job declares", name, m[1])
+			}
+		}
+	}
+}
