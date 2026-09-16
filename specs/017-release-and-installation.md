@@ -9,7 +9,7 @@ depends_on:
 affects: [.github/workflows/release.yml, .github/workflows/verify.yml, Dockerfile.release, Dockerfile.stubs, deploy/base/, deploy/components/, deploy/overlays/, deploy/bootstrap/, tools/release/, tools/docs/, internal/check/, cmd/luxd/, test/conformance/testdata/previous/, docs/install.md, docs/upgrades/, CHANGELOG.md]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-16
 author: changkun
 ---
 
@@ -65,7 +65,7 @@ and `rules` jobs on a push. `SECURITY.md` says the first tag is
 | client binaries | `lux_<tag>_<os>_<arch>.tar.gz` | the same four pairs; the client runs where agents run rather than in a cluster, so it takes an archive and no image ([[014-agent-client]]) |
 | checksums | `checksums.txt` | one SHA-256 line per `*.tar.gz` the release carries, the eight binary archives and the deploy and fixture archives; signed as a blob, below |
 | bills of materials | `sbom-module.spdx.json`, `sbom-luxd.spdx.json`, `sbom-lux-stubs.spdx.json` | SPDX for the module graph and one per image |
-| signatures | `cosign sign` keyless over both images by digest, and `cosign sign-blob` over `checksums.txt` producing `checksums.txt.sig` and `checksums.txt.pem` | the workflow's OIDC identity; verified by `cosign verify` on the images and `cosign verify-blob` on the file, each with the certificate identity and the OIDC issuer given |
+| signatures | `cosign sign` keyless over both images by digest, and `cosign sign-blob` over `checksums.txt` producing the Sigstore bundle `checksums.txt.sigstore.json`, which carries the signature and the certificate | the workflow's OIDC identity; verified by `cosign verify` on the images and `cosign verify-blob` on the file, each with the certificate identity and the OIDC issuer given |
 | attestations | an SBOM attestation and a build provenance attestation per image | this repository is public, so `gh attestation verify` answers for the image about to run |
 | deploy archive | `deploy-<tag>.tar.gz` | `deploy/base`, `deploy/components`, `deploy/overlays`, `deploy/bootstrap`, and the example manifests of [[015-test-stubs-and-tiers]], with the `luxd` image reference pinned to the tag by digest |
 | contract fixture | `fixture-<tag>.tar.gz` | the resolved manifests and archived records the conformance run produced, for the next release's fixture group, below |
@@ -169,8 +169,8 @@ flowchart LR
    release notes link.
 6. `release-verify`: from a clean runner with no checkout on the path,
    `gh release download <tag>` of every asset, `cosign verify` on both
-   images and `cosign verify-blob --signature checksums.txt.sig
-   --certificate checksums.txt.pem` on the file, each with
+   images and `cosign verify-blob --bundle checksums.txt.sigstore.json`
+   on the file, each with
    `--certificate-identity` naming this workflow and
    `--certificate-oidc-issuer` naming GitHub's, then `sha256sum -c
    checksums.txt` over everything downloaded, `gh attestation verify

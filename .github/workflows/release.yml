@@ -375,7 +375,9 @@ jobs:
           cp dist/*.tar.gz dist/*.spdx.json release/
           tar -czf "release/fixture-${GITHUB_REF_NAME}.tar.gz" -C out/fixture .
           (cd release && sha256sum ./*.tar.gz > checksums.txt && cat checksums.txt)
-          cosign sign-blob --yes --output-signature release/checksums.txt.sig --output-certificate release/checksums.txt.pem release/checksums.txt
+          # One Sigstore bundle carries the signature and the certificate;
+          # cosign 3 writes nothing to the separate output flags.
+          cosign sign-blob --yes --bundle release/checksums.txt.sigstore.json release/checksums.txt
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -425,13 +427,13 @@ jobs:
                       deploy-${GITHUB_REF_NAME} fixture-${GITHUB_REF_NAME}; do
             test -f "${name}.tar.gz" || { echo "the release lacks ${name}.tar.gz" >&2; exit 1; }
           done
-          for name in checksums.txt checksums.txt.sig checksums.txt.pem sbom-module.spdx.json sbom-luxd.spdx.json sbom-lux-stubs.spdx.json; do
+          for name in checksums.txt checksums.txt.sigstore.json sbom-module.spdx.json sbom-luxd.spdx.json sbom-lux-stubs.spdx.json; do
             test -f "$name" || { echo "the release lacks ${name}" >&2; exit 1; }
           done
       - name: The checksums verify and their signature names this workflow
         run: |
           cd assets
-          cosign verify-blob --signature checksums.txt.sig --certificate checksums.txt.pem \
+          cosign verify-blob --bundle checksums.txt.sigstore.json \
             --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" checksums.txt
           sha256sum -c checksums.txt
           [ "$(grep -c . checksums.txt)" -eq 10 ] || { echo "checksums.txt lists $(grep -c . checksums.txt) archives, want 10" >&2; exit 1; }
