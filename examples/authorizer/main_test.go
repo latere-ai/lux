@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,64 +28,76 @@ import (
 // token is the bearer this endpoint requires in the tests.
 const token = "the-platform-authorizer-token"
 
-// vocabulary is the action table this endpoint is held to, read from
-// the package the program decides by rather than copied: every action
-// luxd asks, each with the kind it acts on.
-func vocabulary() []conformance.Action {
-	var out []conformance.Action
-	for _, a := range authorizer.Actions() {
-		out = append(out, conformance.Action{Name: a, Kind: authorizer.Kind(a)})
-	}
-	return out
-}
-
 // TestPlaneDocAuthorizerConforms runs the conformance suite every
-// authorizer passes against the endpoint docs/plane.md prints, under
-// the gateway's twenty-four actions and two subjects: the probe is
-// denied for every subject and action, a wrong bearer and no bearer are
-// refused, and every well-formed request is answered with a decision of
-// the contract's shape.
+// authorizer passes against the endpoint docs/plane.md prints, driven
+// from the declared table rather than from a list written out here: the
+// probe is denied for every subject and action, a wrong bearer and no
+// bearer are refused, an action outside the table is a 400, and every
+// well-formed request is answered with a decision of the contract's
+// shape.
 func TestPlaneDocAuthorizerConforms(t *testing.T) {
 	server := httptest.NewServer(handler(token))
 	t.Cleanup(server.Close)
 	conformance.Run(t, server.URL, token,
-		conformance.WithActions(vocabulary()...),
+		conformance.WithVocabulary(authorizer.Vocabulary()),
 		conformance.WithSubjects("https://login.example.com|alice", "https://login.example.com|bob"),
 	)
 }
 
+// ask is one envelope for the decider: the subject, the plan its issuer
+// stamped, the action, and the resource.
+func ask(subject, plan, action string, res authz.Resource) authz.Request {
+	claims := map[string]any{}
+	if plan != "" {
+		claims["plan"] = plan
+	}
+	return authz.Request{Subject: subject, Claims: claims, Action: action, Resource: res}
+}
+
 // TestTheMinimalAuthorizerDecides is the policy itself, row by row: the
-// probe first, the catalogue readable by everyone and declared by an
-// administrator, an object to its owner alone, and a ceiling and a
-// filter on everything else.
+// catalogue readable by everyone and declared by an administrator, an
+// object to its owner alone, and a ceiling and a filter on everything
+// else. The probe and an action outside the vocabulary are not rows
+// here: the scaffold answers both before the policy is called, and
+// TestTheEndpointReadsItsBearerAndItsBody holds it to that.
 func TestTheMinimalAuthorizerDecides(t *testing.T) {
 	const alice, bob = "https://login.example.com|alice", "https://login.example.com|bob"
+	provider := func(owner string) authz.Resource {
+		return authz.NewResource("Provider", "prv_1", map[string]any{"owner": owner})
+	}
+	key := func(owner string) authz.Resource {
+		return authz.NewResource("Key", "key_1", map[string]any{"owner": owner})
+	}
+	create := func(kind, name string) authz.Resource {
+		return authz.NewResource(kind, "", map[string]any{"name": name})
+	}
 	for _, tc := range []struct {
 		name    string
-		in      req
+		in      authz.Request
 		allow   bool
 		reason  string
 		limits  bool
 		filters bool
 	}{
-		{"the probe, whatever the plan", req{Subject: alice, Claims: map[string]any{"plan": "admin"}, Action: "key.read", Resource: map[string]any{"id": probeID}}, false, "the probe id is reserved", false, false},
-		{"the probe, anonymous", req{Action: "model.use", Resource: map[string]any{"id": probeID}}, false, "the probe id is reserved", false, false},
-		{"the catalogue is read by everyone", req{Subject: alice, Action: "provider.read", Resource: map[string]any{"id": "prv_1", "owner": bob}}, true, "", false, false},
-		{"a Model is used by everyone", req{Subject: alice, Action: "model.use", Resource: map[string]any{"selector": "*"}}, true, "", false, false},
-		{"the catalogue is declared by an administrator", req{Subject: alice, Claims: map[string]any{"plan": "admin"}, Action: "provider.create", Resource: map[string]any{"name": "openai"}}, true, "", false, false},
-		{"and by nobody else", req{Subject: alice, Claims: map[string]any{"plan": "team"}, Action: "model.create", Resource: map[string]any{"name": "gpt-5"}}, false, "the catalogue is declared by the platform", false, false},
-		{"another subject's Key", req{Subject: alice, Claims: map[string]any{"plan": "team"}, Action: "key.delete", Resource: map[string]any{"id": "key_1", "owner": bob}}, false, "not yours", false, false},
-		{"a subject's own Key", req{Subject: alice, Claims: map[string]any{"plan": "team"}, Action: "key.delete", Resource: map[string]any{"id": "key_1", "owner": alice}}, true, "", true, true},
-		{"a create under a plan's ceiling", req{Subject: alice, Claims: map[string]any{"plan": "free"}, Action: "key.create", Resource: map[string]any{"name": "run-42"}}, true, "", true, true},
-		{"an administrator is under no ceiling", req{Subject: alice, Claims: map[string]any{"plan": "admin"}, Action: "key.create", Resource: map[string]any{"name": "run-42"}}, true, "", false, true},
+		{"the catalogue is read by everyone", ask(alice, "", authorizer.ActionProviderRead, provider(bob)), true, "", false, false},
+		{"a Model is used by everyone", ask(alice, "", authorizer.ActionModelUse, authz.NewResource("Model", "", map[string]any{"selector": "*"})), true, "", false, false},
+		{"the catalogue is declared by an administrator", ask(alice, "admin", authorizer.ActionProviderCreate, create("Provider", "openai")), true, "", false, false},
+		{"and by nobody else", ask(alice, "team", authorizer.ActionModelCreate, create("Model", "gpt-5")), false, "the catalogue is declared by the platform", false, false},
+		{"another subject's Key", ask(alice, "team", authorizer.ActionKeyDelete, key(bob)), false, "not yours", false, false},
+		{"a subject's own Key", ask(alice, "team", authorizer.ActionKeyDelete, key(alice)), true, "", true, true},
+		{"a create under a plan's ceiling", ask(alice, "free", authorizer.ActionKeyCreate, create("Key", "run-42")), true, "", true, true},
+		{"an administrator is under no ceiling", ask(alice, "admin", authorizer.ActionKeyCreate, create("Key", "run-42")), true, "", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := decide(tc.in)
+			got, err := policy{}.Decide(t.Context(), tc.in)
+			if err != nil {
+				t.Fatalf("the decider failed: %v", err)
+			}
 			if got.Allow != tc.allow || got.Reason != tc.reason {
 				t.Errorf("allow %v reason %q, want %v %q", got.Allow, got.Reason, tc.allow, tc.reason)
 			}
 			if (got.Limits != nil) != tc.limits {
-				t.Errorf("limits %v", got.Limits)
+				t.Errorf("limits %s", got.Limits)
 			}
 			if (got.Filter != nil) != tc.filters {
 				t.Errorf("filter %v", got.Filter)
@@ -92,19 +105,35 @@ func TestTheMinimalAuthorizerDecides(t *testing.T) {
 			if !got.Allow && got.Reason == "" {
 				t.Error("a deny with no reason; the reason is the developer detail of the gateway's 403")
 			}
+			if got.Allow && tc.filters && (len(got.Filter.Owners) != 1 || got.Filter.Owners[0] != alice) {
+				t.Errorf("the filter reads as %v; a list returns the subject's own", got.Filter)
+			}
 		})
 	}
 	// The plan's ceiling is the one a Key may ask for, and it grows with
-	// the plan.
-	free := decide(req{Subject: alice, Claims: map[string]any{"plan": "free"}, Action: "key.create", Resource: map[string]any{}})
-	team := decide(req{Subject: alice, Claims: map[string]any{"plan": "team"}, Action: "key.create", Resource: map[string]any{}})
-	if free.Limits["max_key_spend"] != "5" || team.Limits["max_key_spend"] != "50" {
-		t.Errorf("the ceilings are %v and %v", free.Limits, team.Limits)
+	// the plan. It reads back through the package luxd decodes it with.
+	spend := func(plan string) string {
+		t.Helper()
+		d, err := policy{}.Decide(t.Context(), ask(alice, plan, authorizer.ActionKeyCreate, create("Key", "run-42")))
+		if err != nil {
+			t.Fatalf("the %s ceiling: %v", plan, err)
+		}
+		limits, err := authorizer.DecodeLimits(d)
+		if err != nil {
+			t.Fatalf("the %s ceiling does not decode: %v", plan, err)
+		}
+		return limits.Key.MaxSpend.String()
+	}
+	if free, team := spend("free"), spend("team"); free != "5" || team != "50" {
+		t.Errorf("the ceilings are %s and %s, want 5 and 50", free, team)
 	}
 }
 
-// TestTheEndpointReadsItsBearerAndItsBody: the handler answers a
-// decision to a POST under its bearer and nothing else.
+// TestTheEndpointReadsItsBearerAndItsBody: the scaffold around the
+// policy answers a decision to a POST under its bearer and nothing else,
+// refuses an action outside the vocabulary as a malformed request rather
+// than deciding it, and denies the reserved probe id before the policy
+// is reached.
 func TestTheEndpointReadsItsBearerAndItsBody(t *testing.T) {
 	server := httptest.NewServer(handler(token))
 	t.Cleanup(server.Close)
@@ -132,6 +161,26 @@ func TestTheEndpointReadsItsBearerAndItsBody(t *testing.T) {
 	}
 	if resp := post(t, "", `{}`); resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("no bearer = %d", resp.StatusCode)
+	}
+	if resp := post(t, token, `{"subject":"a","action":"key.rotate","resource":{"kind":"Key"}}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("an action outside the vocabulary = %d, want a 400 and no verdict", resp.StatusCode)
+	}
+	if resp := post(t, token, `{"subject":"a","action":"key.read","resource":{"kind":"Provider","id":"prv_1"}}`); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a resource of another kind = %d, want a 400", resp.StatusCode)
+	}
+	probe := post(t, token, `{"action":"key.read","resource":{"kind":"Key","id":"`+authz.ProbeID+`"}}`)
+	if probe.StatusCode != http.StatusOK {
+		t.Fatalf("the probe = %d, want a 200 carrying a deny", probe.StatusCode)
+	}
+	var answer struct {
+		Allow  bool   `json:"allow"`
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(probe.Body).Decode(&answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Allow || answer.Reason != authz.ReasonProbe {
+		t.Errorf("the probe answered %+v; it is denied for every subject and action", answer)
 	}
 	get, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
 	if err != nil {

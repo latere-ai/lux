@@ -3,24 +3,26 @@
 
 // Command authorizer is the minimal authorization endpoint of
 // docs/plane.md: one POST, one decision, answered from the bearer and
-// this process's own state alone. The actions it decides on are named
-// through latere.ai/x/lux/authorizer, the package that carries the
-// vocabulary luxd asks in, so a copy of this program runs
-// go get latere.ai/x/lux first. Run it beside the gateway,
+// this process's own state alone. The endpoint around the decision is
+// latere.ai/x/pkg/authz/server, the contract's own scaffold: it reads
+// the bearer, bounds and decodes the body, refuses an action outside
+// the vocabulary, denies the reserved probe id, and writes the answer.
+// The vocabulary it validates against is latere.ai/x/lux/authorizer's,
+// the package that carries the actions luxd asks in, so a copy of this
+// program runs go get latere.ai/x/lux first. Run it beside the gateway,
 //
 //	go run ./examples/authorizer -addr 127.0.0.1:8081 -token "$LUX_AUTHORIZER_TOKEN"
 //
 // and point the gateway at it with LUX_AUTHORIZER_URL and
 // LUX_AUTHORIZER_TOKEN. Everything a platform decides, who declares the
 // catalogue, what a plan may put on one Key, and whose objects a list
-// returns, is in decide below. docs/plane.md carries this file and
+// returns, is in policy.Decide below. docs/plane.md carries this file and
 // TestPlaneDocAuthorizerConforms holds the two equal and runs the
 // contract's own conformance suite against it.
 package main
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -35,35 +37,10 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/authz/server"
 
 	"latere.ai/x/lux/authorizer"
 )
-
-// req is the envelope the gateway POSTs, of which this endpoint reads
-// four fields. A Go authorizer may decode it into authz.Request from
-// latere.ai/x/pkg/authz instead; one in any language reads the JSON
-// names below.
-type req struct {
-	Subject  string         `json:"subject"`
-	Claims   map[string]any `json:"claims"`
-	Action   string         `json:"action"`
-	Resource map[string]any `json:"resource"`
-}
-
-// resp is one decision: the verdict, the reason a deny carries into the
-// gateway's developer detail, the ceilings a Key this subject applies is
-// held to, and the filter a list and a usage query are narrowed by.
-type resp struct {
-	Allow  bool           `json:"allow"`
-	Reason string         `json:"reason,omitempty"`
-	Limits map[string]any `json:"limits,omitempty"`
-	Filter map[string]any `json:"filter,omitempty"`
-}
-
-// probeID is the reserved id every authorizer denies, so luxd check can
-// tell an endpoint that reads the request from one that does not. It is
-// the contract's own value rather than a copy of it.
-const probeID = authz.ProbeID
 
 // spendCap is the ceiling one Key may ask for, by the plan the
 // platform's issuer stamps into the token. An administrator is under no
@@ -71,60 +48,65 @@ const probeID = authz.ProbeID
 // catalogue and the installation's own Keys are declared without one.
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
-// decide is the whole policy: the probe first, an action outside the
-// vocabulary, the catalogue declared by an administrator and readable by
-// everyone, an object to its owner alone, and a ceiling and a filter on
-// everything else. The kind an action acts on is authorizer.Kind's
-// answer, so the catalogue's two kinds are named once and a new action
-// arrives here as a kind this policy already decides.
-func decide(r req) resp {
-	plan, _ := r.Claims["plan"].(string)
-	switch kind := authorizer.Kind(r.Action); {
-	case r.Resource["id"] == probeID:
-		return resp{Allow: false, Reason: "the probe id is reserved"}
-	case kind == "":
-		return resp{Reason: "no action of the gateway's vocabulary"}
+// policy is the half of the contract a platform writes. By the time
+// Decide is called the scaffold has read the bearer, bounded and decoded
+// the body, held the action and the resource kind to the vocabulary, and
+// denied the probe, so what is left is the policy and nothing else. It
+// answers every action: none of Lux's lists returns a page, so the
+// endpoint names no page action and needs no Lister.
+//
+// Everything a platform decides, who declares the catalogue, what a plan
+// may put on one Key, and whose objects a list returns, is here.
+type policy struct{}
+
+// Decide is the whole policy: the catalogue declared by an administrator
+// and readable by everyone, an object to its owner alone, and a ceiling
+// and a filter on everything else. The kind an action acts on is
+// authorizer.Kind's answer, so the catalogue's two kinds are named once
+// and a new action arrives here as a kind this policy already decides.
+//
+// An error is never an allow. server.Unavailable is the 503 a gateway
+// reads as authorizer_unavailable, which a platform raises when it
+// cannot see the state an answer needs; this one raises it only when it
+// cannot render its own ceiling.
+func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, error) {
+	plan, _ := req.Claims["plan"].(string)
+	mine := &authz.Filter{Owners: []string{req.Subject}}
+	owner := req.Resource.String("owner")
+	switch kind := authorizer.Kind(req.Action); {
 	case kind == "Provider", kind == "Model":
 		switch {
-		case r.Action == authorizer.ActionModelUse || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
-			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
+		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):
+			return authz.Decision{Allow: true}, nil // the catalogue is the platform's and is offered to every user
 		case plan == "admin":
-			return resp{Allow: true}
+			return authz.Decision{Allow: true}, nil
 		}
-		return resp{Reason: "the catalogue is declared by the platform"}
-	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
-		return resp{Allow: false, Reason: "not yours"}
+		return authz.Decision{Reason: "the catalogue is declared by the platform"}, nil
+	case owner != "" && owner != req.Subject:
+		return authz.Decision{Reason: "not yours"}, nil
 	case plan == "admin":
-		return resp{Allow: true, Filter: map[string]any{"owners": []string{r.Subject}}}
+		return authz.Decision{Allow: true, Filter: mine}, nil
 	default:
-		return resp{Allow: true,
-			Limits: map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100},
-			Filter: map[string]any{"owners": []string{r.Subject}}}
+		// The ceilings a Key this subject applies is held to, by the wire
+		// names luxd decodes; authorizer.WireLimits is the Go type of the
+		// same six members, for a platform that renders them from a struct.
+		limits, err := json.Marshal(map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100})
+		if err != nil {
+			return authz.Decision{}, server.Unavailable("the " + plan + " plan's ceiling cannot be rendered")
+		}
+		return authz.Decision{Allow: true, Limits: limits, Filter: mine}, nil
 	}
 }
 
-// handler answers one decision per POST. Everything it needs is the
-// bearer and the body: it holds no session, and it calls neither the
-// gateway nor the issuer while deciding, because the gateway is waiting
-// inside the very request this answers.
+// handler is the endpoint: the contract's scaffold over this policy and
+// the gateway's vocabulary. It holds no session, and it calls neither
+// the gateway nor the issuer while deciding, because the gateway is
+// waiting inside the very request this answers.
 func handler(token string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "post one decision request", http.StatusMethodNotAllowed)
-			return
-		}
-		bearer, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) != 1 {
-			http.Error(w, "the bearer is not this endpoint's", http.StatusUnauthorized)
-			return
-		}
-		var in req
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
-			http.Error(w, "the body is no decision request", http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(decide(in))
+	return server.New(server.Options{
+		Bearer:     token,
+		Vocabulary: authorizer.Vocabulary(),
+		Decider:    policy{},
 	})
 }
 
@@ -154,16 +136,16 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintf(stderr, "authorizer: deciding at %s\n", ln.Addr())
-	server := &http.Server{Handler: handler(*token), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: handler(*token), ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdown)
+		_ = srv.Shutdown(shutdown)
 	}()
-	err = server.Serve(ln)
+	err = srv.Serve(ln)
 	<-done
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		_, _ = fmt.Fprintln(stderr, "authorizer:", err)

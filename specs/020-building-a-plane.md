@@ -84,64 +84,67 @@ what it applied and administrators declare the catalogue, which is what
 the built-in owner policy does ([[006-identity]]) and what a platform
 replaces first. An administrator is under no ceiling, because a ceiling
 refuses a Key that names no limit at all and the catalogue's own Keys
-are declared without one. The payload is 006's exactly; a Go authorizer may
-decode it into `authz.Request` from `latere.ai/x/pkg/authz`, and one in
-any language reads the fields below. The program names the vocabulary
-it decides by through `latere.ai/x/lux/authorizer` rather than through a
-string literal, so a reader who copies it runs `go get latere.ai/x/lux`
-first ([[022-authorizer-vocabulary-package]]). The endpoint answers from its
+are declared without one. The payload is 006's exactly, read as
+`authz.Request` and answered as `authz.Decision` from
+`latere.ai/x/pkg/authz`, and one in any language reads the JSON names.
+Everything around the policy — the bearer and its successor, the body
+bound, the decode, the check that an action and its `resource.kind` are
+the gateway's, the reserved probe id, the failure mapping, and the
+answer — is `latere.ai/x/pkg/authz/server`, so the program mounts that
+scaffold and writes a `Decider` and nothing else. The table it validates
+against is `latere.ai/x/lux/authorizer`'s, named through the package
+rather than through a string literal, so a reader who copies it runs
+`go get latere.ai/x/lux` first ([[022-authorizer-vocabulary-package]]);
+no Lux list answers a page, so the endpoint declares no page action and
+writes no `Lister`. The endpoint answers from its
 bearer and its own state alone: it needs no session and calls neither
 the gateway nor the issuer while deciding ([[006-identity]]).
 
 ```go
-// POST from luxd; the request and response shapes are 006's.
-type req struct {
-	Subject  string         `json:"subject"`
-	Claims   map[string]any `json:"claims"`
-	Action   string         `json:"action"`
-	Resource map[string]any `json:"resource"`
-}
-type resp struct {
-	Allow  bool           `json:"allow"`
-	Reason string         `json:"reason,omitempty"`
-	Limits map[string]any `json:"limits,omitempty"`
-	Filter map[string]any `json:"filter,omitempty"`
-}
-
-// probeID is the reserved id every authorizer denies, so luxd check can
-// tell an endpoint that reads the request from one that does not. It is
-// the contract's own value rather than a copy of it.
-const probeID = authz.ProbeID
-
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
+// The scaffold has read the bearer, bounded and decoded the body, held
+// the action and its resource kind to the vocabulary, and denied the
+// probe by the time Decide is called; what is left is the policy. An
+// error is never an allow: server.Unavailable is the 503 a gateway
+// reads as authorizer_unavailable.
+type policy struct{}
+
 // The kind an action acts on is authorizer.Kind's answer, so the
-// catalogue's two kinds are named once and an action outside the
-// vocabulary is refused before any rule reads it.
-func decide(r req) resp {
-	plan, _ := r.Claims["plan"].(string)
-	switch kind := authorizer.Kind(r.Action); {
-	case r.Resource["id"] == probeID:
-		return resp{Allow: false, Reason: "the probe id is reserved"}
-	case kind == "":
-		return resp{Reason: "no action of the gateway's vocabulary"}
+// catalogue's two kinds are named once and a new action arrives here as
+// a kind this policy already decides.
+func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, error) {
+	plan, _ := req.Claims["plan"].(string)
+	mine := &authz.Filter{Owners: []string{req.Subject}}
+	owner := req.Resource.String("owner")
+	switch kind := authorizer.Kind(req.Action); {
 	case kind == "Provider", kind == "Model":
 		switch {
-		case r.Action == authorizer.ActionModelUse || strings.HasSuffix(r.Action, ".read") || strings.HasSuffix(r.Action, ".list"):
-			return resp{Allow: true} // the catalogue is the platform's and is offered to every user
+		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):
+			return authz.Decision{Allow: true}, nil // the catalogue is the platform's and is offered to every user
 		case plan == "admin":
-			return resp{Allow: true}
+			return authz.Decision{Allow: true}, nil
 		}
-		return resp{Reason: "the catalogue is declared by the platform"}
-	case r.Resource["owner"] != nil && r.Resource["owner"] != r.Subject:
-		return resp{Allow: false, Reason: "not yours"}
+		return authz.Decision{Reason: "the catalogue is declared by the platform"}, nil
+	case owner != "" && owner != req.Subject:
+		return authz.Decision{Reason: "not yours"}, nil
 	case plan == "admin":
-		return resp{Allow: true, Filter: map[string]any{"owners": []string{r.Subject}}}
+		return authz.Decision{Allow: true, Filter: mine}, nil
 	default:
-		return resp{Allow: true,
-			Limits: map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100},
-			Filter: map[string]any{"owners": []string{r.Subject}}}
+		limits, err := json.Marshal(map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100})
+		if err != nil {
+			return authz.Decision{}, server.Unavailable("the " + plan + " plan's ceiling cannot be rendered")
+		}
+		return authz.Decision{Allow: true, Limits: limits, Filter: mine}, nil
 	}
+}
+
+func handler(token string) http.Handler {
+	return server.New(server.Options{
+		Bearer:     token,
+		Vocabulary: authorizer.Vocabulary(),
+		Decider:    policy{},
+	})
 }
 ```
 
@@ -152,8 +155,11 @@ probe for objects another tenant owns ([[006-identity]]); the endpoint
 answers or does not, and anything that is not a parseable decision is
 `authorizer_unavailable` and never an allow; `limits` is a cap on
 what a Key may ask for rather than a grant, so raising a plan raises
-the ceiling and changes no existing object; and the probe id is denied
-before any other rule, whatever the subject. A platform whose
+the ceiling and changes no existing object; the probe id is denied
+before any other rule, whatever the subject, by the scaffold rather
+than by the policy; and an action outside the vocabulary is a 400 and
+never a deny, which `luxd` reads as `authorizer_unavailable` and fails
+closed on. A platform whose
 authorizer and `/v1` caller are one process keeps the two paths off
 each other's locks: the gateway waits on the authorizer inside the very
 request the platform is waiting on, and a lock shared between them is
@@ -354,3 +360,12 @@ one-credential-kind-per-hop, and run-ledger cases in the e2e tier, the
 last proven across replicas by [[010-state]]'s postgres tier. The
 authorizer reaches the vocabulary through `latere.ai/x/lux/authorizer`
 ([[022-authorizer-vocabulary-package]]).
+
+Amended 2026-09-16: the endpoint the document prints now mounts
+`latere.ai/x/pkg/authz/server` and writes a `Decider` alone, and the
+table that scaffold validates against is `authorizer.Vocabulary()`
+([[022-authorizer-vocabulary-package]]). The design section above and
+the document carry the program as it stands. Two answers changed with
+the scaffold: an action outside the vocabulary is a 400 rather than a
+200 deny, and the probe is denied before the policy is called rather
+than by the policy's first rule.
