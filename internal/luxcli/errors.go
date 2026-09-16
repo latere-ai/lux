@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"latere.ai/x/lux/internal/luxclient"
+	"latere.ai/x/lux/client"
 )
 
 // The sentences of the two failures the client raises itself, one code
@@ -31,9 +31,9 @@ const (
 // No header and no body reach stderr, so no token and no value does.
 func (a *app) renderFailure(err error) {
 	var (
-		refusal     *luxclient.Error
-		transport   *luxclient.TransportError
-		unreadable  *luxclient.UnreadableError
+		refusal     *client.Error
+		transport   *client.TransportError
+		unreadable  *client.UnreadableError
 		code, msg   string
 		paths       []string
 		detail, rid string
@@ -72,7 +72,7 @@ func (a *app) renderFailure(err error) {
 
 // extraLine is the one line more than the sentence that four codes get,
 // because their next step is not in the sentence.
-func (a *app) extraLine(e *luxclient.Error) {
+func (a *app) extraLine(e *client.Error) {
 	switch e.Code {
 	case "rate_limited", "spend_exceeded", "budget_exhausted":
 		if e.RetryAfter > 0 {
@@ -118,7 +118,7 @@ func tokenFileError(err error) (error, bool) {
 	if _, ok := errors.AsType[*os.PathError](err); ok {
 		return &usageError{msg: EnvTokenFile + " names a file that cannot be read."}, true
 	}
-	if errors.Is(err, luxclient.ErrEmptyToken) {
+	if errors.Is(err, client.ErrEmptyToken) {
 		return &usageError{msg: EnvTokenFile + " names an empty file."}, true
 	}
 	return err, false
@@ -132,9 +132,9 @@ func classify(err error) error {
 		return nil
 	}
 	var (
-		refusal    *luxclient.Error
-		transport  *luxclient.TransportError
-		unreadable *luxclient.UnreadableError
+		refusal    *client.Error
+		transport  *client.TransportError
+		unreadable *client.UnreadableError
 	)
 	if errors.As(err, &refusal) || errors.As(err, &transport) || errors.As(err, &unreadable) {
 		return err

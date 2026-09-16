@@ -6,7 +6,7 @@ package luxcli
 import (
 	"strings"
 
-	"latere.ai/x/lux/internal/luxclient"
+	"latere.ai/x/lux/client"
 )
 
 // plane is which credential a command carries: an issuer token to /v1,
@@ -28,7 +28,7 @@ const (
 // answer would be about the server and not about the mistake.
 // refreshable reports a token file, whose bytes a long lux serve reads
 // again for every request and every heartbeat.
-func (a *app) bearerSource() (source luxclient.TokenSource, refreshable bool, err error) {
+func (a *app) bearerSource() (source client.TokenSource, refreshable bool, err error) {
 	token, tokenFile := a.token, a.tokenFile
 	if token == "" && tokenFile == "" {
 		token, tokenFile = a.o.Getenv(EnvToken), a.o.Getenv(EnvTokenFile)
@@ -41,14 +41,14 @@ func (a *app) bearerSource() (source luxclient.TokenSource, refreshable bool, er
 	case token == "" && tokenFile == "":
 		return nil, false, &usageError{msg: "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
 	case tokenFile != "":
-		return luxclient.FileToken(tokenFile), true, nil
+		return client.FileToken(tokenFile), true, nil
 	}
-	return luxclient.StaticToken(token), false, nil
+	return client.StaticToken(token), false, nil
 }
 
 // controlClient is the client of a /v1 command: LUX_URL and the bearer
 // of bearerSource.
-func (a *app) controlClient() (*luxclient.Client, error) {
+func (a *app) controlClient() (*client.Client, error) {
 	url := first(a.url, a.o.Getenv(EnvURL))
 	if url == "" {
 		return nil, &usageError{msg: "Set " + EnvURL + " to the gateway's URL."}
@@ -65,7 +65,7 @@ func (a *app) controlClient() (*luxclient.Client, error) {
 // doorClient is the client of a door command: LUX_URL then LUX_BASE_URL,
 // and a Key from LUX_KEY then LUX_API_KEY. A token alone is the mirror
 // of controlClient's usage error.
-func (a *app) doorClient() (*luxclient.Client, error) {
+func (a *app) doorClient() (*client.Client, error) {
 	url := first(a.url, a.o.Getenv(EnvURL), a.o.Getenv(EnvSDKURL))
 	if url == "" {
 		return nil, &usageError{msg: "Set " + EnvURL + " to the gateway's URL."}
@@ -78,15 +78,15 @@ func (a *app) doorClient() (*luxclient.Client, error) {
 		return nil, &usageError{msg: "Set " + EnvKey + " to a Key value."}
 	}
 	c := a.client(url)
-	c.Token = luxclient.StaticToken(key)
+	c.Token = client.StaticToken(key)
 	return c, nil
 }
 
 // bareClient reaches the documents no bearer guards.
-func (a *app) bareClient(url string) *luxclient.Client { return a.client(url) }
+func (a *app) bareClient(url string) *client.Client { return a.client(url) }
 
-func (a *app) client(url string) *luxclient.Client {
-	return &luxclient.Client{BaseURL: strings.TrimRight(url, "/"), HTTP: a.o.HTTP, UserAgent: "lux/" + a.o.Version}
+func (a *app) client(url string) *client.Client {
+	return &client.Client{BaseURL: strings.TrimRight(url, "/"), HTTP: a.o.HTTP, UserAgent: "lux/" + a.o.Version}
 }
 
 // first is the first non-empty string.

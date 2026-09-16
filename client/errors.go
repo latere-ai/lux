@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package luxclient
+package client
 
 import (
 	"encoding/json"
@@ -11,9 +11,9 @@ import (
 	"latere.ai/x/pkg/httpjson"
 )
 
-// Error is a refusal the server answered: the envelope of spec 011
-// decoded into its parts, each kept apart so the command prints the
-// sentence to a person and the rest under -v. RetryAfter is the header's
+// Error is a refusal the server answered: the API's error envelope
+// decoded into its parts, each kept apart so a caller shows the fixed
+// sentence to a person and logs the rest. RetryAfter is the header's
 // value in seconds, 0 when the response carried none.
 type Error struct {
 	Status     int

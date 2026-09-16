@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"latere.ai/x/lux/internal/luxclient"
+	"latere.ai/x/lux/client"
 )
 
 // Options is what Run needs from the process: the arguments after the
@@ -33,7 +33,7 @@ type Options struct {
 	// time.Now.
 	Now func() time.Time
 	// HTTP is the client every request goes through; nil is
-	// luxclient.NewHTTPClient().
+	// client.NewHTTPClient().
 	HTTP *http.Client
 }
 
@@ -87,7 +87,7 @@ func Run(ctx context.Context, o Options) int {
 		o.Now = time.Now
 	}
 	if o.HTTP == nil {
-		o.HTTP = luxclient.NewHTTPClient()
+		o.HTTP = client.NewHTTPClient()
 	}
 	a := &app{o: o, ctx: ctx, output: "json"}
 	return a.exit(a.run())

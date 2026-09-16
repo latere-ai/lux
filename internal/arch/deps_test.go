@@ -61,15 +61,15 @@ func goList(t *testing.T, dir string, args ...string) []string {
 }
 
 // The directories a package may live under. Everything at the module
-// root that is not one of the four exported trees is a role, a tool,
+// root that is not one of the five exported trees is a role, a tool,
 // or an example under one of these. examples holds the two programs
 // docs/plane.md prints, which are built and tested like any package
 // and are imported by nothing (spec 020).
-var rootDirs = []string{"cmd", "internal", "test", "tools", "examples", "manifest", "gateway", "metering", "authorizer"}
+var rootDirs = []string{"cmd", "internal", "test", "tools", "examples", "manifest", "gateway", "metering", "authorizer", "client"}
 
 // TestRootPackagesAreTheThree is the first half of spec 001's package
-// rule: every package of the module is manifest, gateway, metering, or
-// authorizer, or sits under cmd, internal, test, or tools.
+// rule: every package of the module is manifest, gateway, metering,
+// authorizer, or client, or sits under cmd, internal, test, or tools.
 func TestRootPackagesAreTheThree(t *testing.T) {
 	dir := root(t)
 	for _, pkg := range goList(t, dir, "./...") {
@@ -77,7 +77,7 @@ func TestRootPackagesAreTheThree(t *testing.T) {
 		rel = strings.TrimPrefix(rel, "/")
 		first, _, _ := strings.Cut(rel, "/")
 		if rel == "" || !slices.Contains(rootDirs, first) {
-			t.Errorf("package %s sits at the module root outside manifest, gateway, metering, authorizer, cmd, internal, test, and tools", pkg)
+			t.Errorf("package %s sits at the module root outside manifest, gateway, metering, authorizer, client, cmd, internal, test, and tools", pkg)
 		}
 	}
 }
@@ -167,6 +167,21 @@ var rootAllow = map[string]allow{
 		},
 		noStd: []string{"database/sql", "os/exec"},
 	},
+	// client is the typed client of the /v1 control plane, the one root
+	// package whose purpose is to dial, and it dials one thing: the
+	// address its caller hands it (spec 014). It decodes the error
+	// envelope of latere.ai/x/pkg/httpjson, which reaches
+	// github.com/google/uuid for its path helpers, and nothing else; the
+	// kinds it carries are bytes, so it reaches no manifest package
+	// either.
+	"client": {
+		module: []string{module + "/client"},
+		external: []string{
+			"latere.ai/x/pkg/httpjson",
+			"github.com/google/uuid",
+		},
+		noStd: []string{"database/sql", "os/exec"},
+	},
 }
 
 // Prefixes no root package may reach, whatever its row says: the
@@ -210,7 +225,7 @@ func hasPrefix(s string, prefixes []string) bool {
 // each lands.
 func TestRootPackagesDialNothing(t *testing.T) {
 	dir := root(t)
-	for _, name := range []string{"manifest", "metering", "gateway", "authorizer"} {
+	for _, name := range []string{"manifest", "metering", "gateway", "authorizer", "client"} {
 		rule := rootAllow[name]
 		t.Run(name, func(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {

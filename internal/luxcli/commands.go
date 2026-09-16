@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"latere.ai/x/lux/internal/luxclient"
+	"latere.ai/x/lux/client"
 )
 
 // multi is a repeatable string flag.
@@ -43,7 +43,7 @@ func want(cmd string, args []string, n int, names string) error {
 }
 
 // answer prints a response in the mode asked and maps the error.
-func (a *app) answer(resp *luxclient.Response, err error) error {
+func (a *app) answer(resp *client.Response, err error) error {
 	if err != nil {
 		return classify(err)
 	}

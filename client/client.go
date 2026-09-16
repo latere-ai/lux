@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package luxclient
+package client
 
 import (
 	"bytes"
@@ -14,7 +14,8 @@ import (
 )
 
 // HeaderRequestID is the response header every answer of the API
-// carries, spec 011's, read here and never sent.
+// carries, read here and never sent: the server mints the id and
+// replaces a caller's.
 const HeaderRequestID = "Lux-Request-Id"
 
 // FirstByteTimeout is the deadline to the first response byte. There is
@@ -36,7 +37,7 @@ type Client struct {
 	UserAgent string
 }
 
-// NewHTTPClient is the transport policy of spec 014: the process's
+// NewHTTPClient is this package's transport policy: the process's
 // HTTP_PROXY, HTTPS_PROXY, and NO_PROXY honoured, FirstByteTimeout to the
 // response headers, no deadline on the body, and no retry anywhere.
 func NewHTTPClient() *http.Client {
@@ -127,7 +128,7 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 }
 
 // ObjectPath is /v1/{plural}/{name}. A Model's name may carry slashes,
-// which stay slashes, since spec 011's model routes match any number of
+// which stay slashes, since the model routes match any number of
 // segments; every other character a segment cannot carry is escaped.
 func ObjectPath(plural, name string) string {
 	segs := strings.Split(name, "/")

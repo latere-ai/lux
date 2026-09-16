@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"latere.ai/x/lux/internal/luxclient"
+	"latere.ai/x/lux/client"
 	"latere.ai/x/lux/internal/tunnel/agent"
 	"latere.ai/x/lux/internal/tunnel/wire"
 	"latere.ai/x/lux/manifest"
@@ -120,7 +120,7 @@ func runServe(a *app, o *serveOptions, args []string) error {
 // labels, through the same route lux apply uses. It carries no base
 // URL and no credential, because a tunnelled runtime is reached over
 // the session and holds its own.
-func (a *app) applyTunnelled(c *luxclient.Client, o *serveOptions, labels map[string]string) error {
+func (a *app) applyTunnelled(c *client.Client, o *serveOptions, labels map[string]string) error {
 	p := &v1.Provider{
 		Metadata: v1.ObjectMeta{Name: o.as, Labels: labels},
 		Spec: v1.ProviderSpec{
@@ -227,14 +227,14 @@ func closeFailure(reason, detail string) error {
 	if !ok {
 		message = messageClosed
 	}
-	return &luxclient.Error{Code: reason, Message: message, Detail: detail}
+	return &client.Error{Code: reason, Message: message, Detail: detail}
 }
 
 // refusedFailure renders a connect the gateway refused: the API's own
 // code and sentence when the body was the envelope, and this command's
 // unreadable_response when it was not.
 func refusedFailure(e *agent.RefusedError) error {
-	out := &luxclient.Error{Status: e.Status, Code: e.Code, Message: e.Message, Detail: e.Detail}
+	out := &client.Error{Status: e.Status, Code: e.Code, Message: e.Message, Detail: e.Detail}
 	if out.Code == "" {
 		out.Code, out.Message = codeUnreadable, messageUnreadable
 	}
