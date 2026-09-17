@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A discovery document fetched for one issuer is refused when its own
+  `issuer` field names a different one. The shared library is
+  `latere.ai/x/pkg` v0.74.0, whose OIDC discovery, `authkit/jwt`, now
+  checks the document against the URL it answered rather than trusting
+  whatever it claims, `ErrBadDiscovery` with reason `issuer`. A fetch
+  that fails outright, with no cached key set behind it, now reads
+  `ReasonIssuerUnavailable` (`issuer_unavailable`) instead of no reason
+  at all. Nothing changes for an issuer whose document names itself.
+
 - A bearer naming a key `luxd` does not hold is refused as an unknown
   key rather than as a bad signature. The shared library is
   `latere.ai/x/pkg` v0.73.0, whose verifier picks the one key the
