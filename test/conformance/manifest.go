@@ -119,7 +119,14 @@ func parseYAML(data []byte) (map[string]any, bool) {
 // target whose upstream name is the Model's own name follows the name,
 // because that equality is what the case says.
 func (c *client) rename(tree map[string]any, kind string) {
-	prefix := "conf-" + c.run + "-"
+	c.renameUnder(tree, kind, "conf-"+c.run+"-")
+}
+
+// renameUnder is rename under a prefix the caller narrows, which the
+// fixture group does per release so one release's names meet neither
+// another's nor the door fixtures the run already applied. The label is
+// the run's either way, so teardown still collects what it created.
+func (c *client) renameUnder(tree map[string]any, kind, prefix string) {
 	meta, _ := tree["metadata"].(map[string]any)
 	if meta == nil {
 		meta = map[string]any{}

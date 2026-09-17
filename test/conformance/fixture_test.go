@@ -5,10 +5,12 @@ package conformance
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
 )
 
@@ -88,5 +90,41 @@ func TestFixtureGroupReadsAPreviousRelease(t *testing.T) {
 	c.fixtures = fstest.MapFS{}
 	if f := drive(t, "fixture/manifests", manifests); !f.Failed() {
 		t.Error("a tree without the fixtures directory passed")
+	}
+}
+
+// TestFixtureGroupNamesEachReleaseApart: a release seeds the names the
+// suite's own door fixtures carry, anthropic and openai among them, so a
+// release applied under the run's prefix alone would PUT over the doors
+// group's Provider, be answered 200 where the case demands a create, and
+// delete another group's object at the end; two releases would meet in
+// one name the same way. The group names each release apart, so the case
+// passes with the run's fixtures standing and with two releases that
+// carry one set of names, and the doors group's Provider is left at the
+// version the fixtures wrote.
+func TestFixtureGroupNamesEachReleaseApart(t *testing.T) {
+	s := startServer(t, serverOptions{})
+	c := newClient(t, s.config("alice"))
+	t.Cleanup(func() { c.teardown(t) })
+	c.applyFixtures(t)
+	release := fstest.MapFS{}
+	for _, version := range []string{"v0.9.0", "v0.10.0"} {
+		dir := "testdata/previous/" + version + "/"
+		release[dir+"provider.json"] = &fstest.MapFile{Data: corpusFile(t, "accepted/provider/anthropic.golden.json")}
+		release[dir+"budget.json"] = &fstest.MapFile{Data: corpusFile(t, "accepted/budget/team-research.golden.json")}
+		release[dir+"model.json"] = &fstest.MapFile{Data: corpusFile(t, "accepted/model/claude-sonnet-4.golden.json")}
+		release[dir+"key.json"] = &fstest.MapFile{Data: corpusFile(t, "accepted/key/run-42.golden.json")}
+	}
+	c.fixtures = release
+	manifests := func(t testing.TB) { case003PreviousReleaseManifests(t, c) }
+	if f := drive(t, "fixture/case003PreviousReleaseManifests", manifests); f.Failed() || f.Skipped() {
+		t.Errorf("the releases did not apply beside the run's own fixtures:\n%s", f.output())
+	}
+	back := c.read(t, v1.KindProvider, c.name("anthropic"))
+	if back.Status != http.StatusOK {
+		t.Fatalf("the doors group's Provider reads %d: %s", back.Status, excerpt(back.Body))
+	}
+	if v := num(back.json(t), "status.version"); v != 1 {
+		t.Errorf("the doors group's Provider is at version %v, so a release wrote over it", v)
 	}
 }

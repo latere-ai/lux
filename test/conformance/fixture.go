@@ -59,15 +59,32 @@ func (c *client) releases(t testing.TB) []string {
 	return out
 }
 
+// releasePrefix names one release's objects apart from the rest of the
+// run. A release seeds the names the suite's own door fixtures use,
+// openai among them, so under the run prefix alone the apply would
+// update another group's object rather than create its own, and two
+// releases would meet in one name. The version becomes a DNS-1123
+// label: every character that is not [a-z0-9] is a dash.
+func (c *client) releasePrefix(version string) string {
+	slug := []rune(strings.ToLower(version))
+	for i, r := range slug {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			slug[i] = '-'
+		}
+	}
+	return "conf-" + c.run + "-" + strings.Trim(string(slug), "-") + "-"
+}
+
 // case003PreviousReleaseManifests applies each release's resolved
-// manifests under the run's prefix and holds the read-back's spec to
-// the fixture's.
+// manifests under a prefix of that release's own and holds the
+// read-back's spec to the fixture's.
 func case003PreviousReleaseManifests(t testing.TB, c *client) {
 	versions := c.releases(t)
 	if len(versions) == 0 {
 		c.skip(t, noPreviousRelease)
 	}
 	for _, version := range versions {
+		prefix := c.releasePrefix(version)
 		var applied []applied
 		for _, kind := range kindOrder {
 			data, err := fs.ReadFile(c.fixtures, "testdata/previous/"+version+"/"+strings.ToLower(kind)+".json")
@@ -80,8 +97,8 @@ func case003PreviousReleaseManifests(t testing.TB, c *client) {
 				t.Fatalf("%s/%s.json: %v", version, kind, err)
 			}
 			golden := map[string]any{"metadata": deepCopy(t, tree["metadata"]), "spec": deepCopy(t, tree["spec"])}
-			c.rename(tree, kind)
-			c.rename(golden, kind)
+			c.renameUnder(tree, kind, prefix)
+			c.renameUnder(golden, kind, prefix)
 			name := str(tree, "metadata.name")
 			resp := c.apply(t, kind, name, tree)
 			if resp.Status != http.StatusCreated {
