@@ -22,7 +22,9 @@ import (
 
 // Caller is a verified control plane caller: the rendered subject, its
 // two halves apart, and every claim of the token verbatim, which the
-// authorizer reads and this package does not.
+// authorizer reads and this package interprets not at all. The one claim
+// read anywhere here is the grant list a personal access token carries,
+// and it is read where the owner policy decides, never at the door.
 type Caller struct {
 	// Subject is authz.Subject(Issuer, Sub), the string every owner field
 	// and every authorizer request carries.

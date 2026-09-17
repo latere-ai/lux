@@ -73,10 +73,11 @@ func (p *OwnerPolicy) Authorize(ctx context.Context, req authz.Request) (authz.D
 	return restrict(req, d), nil
 }
 
-// core qualifies a bare action the way the claim writes it, lux:key.read
-// for key.read. It is the published vocabulary's own name, read once,
-// because a comparison that forgets to qualify denies everything.
-var core = authorizer.Vocabulary().Core
+// grantCore qualifies a bare action the way a grant writes it,
+// lux:key.read for key.read. It is the published vocabulary's own name,
+// read once, because a comparison that forgets to qualify denies
+// everything.
+var grantCore = authorizer.Vocabulary().Core
 
 // restrict is spec 006's conjunction at the site that decides: a
 // personal access token carries the grants its holder chose, and an
@@ -96,7 +97,7 @@ func restrict(req authz.Request, d authz.Decision) authz.Decision {
 	if err != nil {
 		return authz.Decision{Reason: authz.ReasonGrant}
 	}
-	return authz.Restrict(core, d, req, grants)
+	return authz.Restrict(grantCore, d, req, grants)
 }
 
 // decide is the policy's own answer, the rows of the comment above.
