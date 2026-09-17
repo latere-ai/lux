@@ -16,8 +16,10 @@ executed rather than asserted: a field that changed type, a default
 that changed, or a member that was removed fails here and nowhere else.
 
 The release pipeline writes the next directory: after a tag's release
-exists, its `fixture` job opens a pull request titled
-`conformance: fixture <tag>` adding `<tag>/` here, and attaches the
-same bytes to the release as `fixture-<tag>.tar.gz`. Nothing is written
-by hand, old directories are kept, and until the first tag the group
-skips saying this directory holds no version.
+exists, its `fixture` job pushes the branch `conformance/fixture-<tag>`
+adding `<tag>/` here, and attaches the same bytes to the release as
+`fixture-<tag>.tar.gz`. The job opens no pull request, because the
+GitHub organisation forbids an Action from creating one; the maintainer
+merges the branch. Nothing is written by hand, old directories are
+kept, and until the first tag the group skips saying this directory
+holds no version.

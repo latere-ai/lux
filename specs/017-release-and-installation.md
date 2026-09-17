@@ -9,7 +9,7 @@ depends_on:
 affects: [.github/workflows/release.yml, .github/workflows/verify.yml, Dockerfile.release, Dockerfile.stubs, deploy/base/, deploy/components/, deploy/overlays/, deploy/bootstrap/, tools/release/, tools/docs/, internal/check/, cmd/luxd/, test/conformance/testdata/previous/, docs/install.md, docs/upgrades/, CHANGELOG.md]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-09-17
 author: changkun
 ---
 
@@ -396,19 +396,20 @@ the archive the run wrote, and uploads them as a workflow artifact. The
 exists, unpacks that artifact into
 `test/conformance/testdata/previous/<tag>/`, attaches the same bytes to
 the release as `fixture-<tag>.tar.gz` for anyone reading a release
-rather than the tree, and opens a pull request titled `conformance:
-fixture <tag>` against `main` rather than pushing to it. A tag's
-workflow that could write to the default branch could write anything to
-it, and the one thing this job produces is a directory a reviewer can
-read in a minute.
+rather than the tree, and pushes the branch `conformance/fixture-<tag>`
+rather than pushing to `main`. A tag's workflow that could write to the
+default branch could write anything to it, and the one thing this job
+produces is a directory a reviewer can read in a minute. The job stops
+at the push and opens no pull request; the maintainer merges the branch
+by hand (the amendment of 2026-09-17).
 
 The set therefore grows by one directory per release and old ones are
 kept, which is what turns the schema evolution promise of
 [[003-manifest-contract]] and the record additivity promise of
 [[009-usage-and-metering]] into a test that runs on every push rather
-than a rule in a document. Merging the pull request triggers the
-ordinary `verify` run on `main` and no second release, because the
-commit carries no tag.
+than a rule in a document. Merging the branch triggers the ordinary
+`verify` run on `main` and no second release, because the commit
+carries no tag.
 
 ### What the build changed
 
@@ -426,7 +427,7 @@ Outcome at `complete` records nothing the tree does not.
 | `conformance` | the fixture's records drained from the archive | the job applies `deploy/examples` after the suite, reads them back, and drains `GET /v1/requests` | the job runs no bucket; the memory ring holds the same `metering.Record` |
 | `conformance` | `lux-stubs` serves the stubs document | the job writes the JSON and serves it from a file on `127.0.0.1:9110` | the binary of [[015-test-stubs-and-tiers]] gives every stub a listener and serves no document; that spec owns the finding |
 | `publish` | `crane tag` | `docker buildx imagetools create -t` | the runner has it without another action to pin |
-| `release-verify`, `install-release` | `contents: read` | `packages: read` beside it; `fixture` takes `pull-requests: write` beside `contents: write` | pulling the images and opening the pull request need them |
+| `release-verify`, `install-release` | `contents: read` | `packages: read` beside it; `fixture` takes `contents: write` alone | pulling the images needs `packages: read`, and `fixture` pushes a branch and opens no pull request (the amendment of 2026-09-17) |
 | `install-release` | no checkout on the path | the checkout for the document and its runner, and the published artifacts for everything the document consumes | the document and the runner are in no archive; `release-verify` is the job with no checkout |
 | `install`, `install-release` | the published stub image applied as a Pod from the job | `tools/docs/stubs.yaml` applied by `tools/docs/stubs-in-cluster.sh`, which also creates the cluster the document would and loads the images into it | a document that creates a cluster cannot have an image loaded into it first, so the jobs create it and the document's step skips an existing one |
 | `docs/install.md` | two inputs | the eight of the table above, and the block runner writes a named `yaml` block to its file | an installation from nothing needs an issuer, a token, a subject, and an upstream, none of which a document can carry |
@@ -469,5 +470,34 @@ specs own.
 | `luxd check` against a serving installation changes no object and leaves no archive object behind | `TestCheckIsReadOnly` | passing, `cmd/luxd`: the objects unchanged, one `check.ping` at the sink, the archive as it was, one probe at the authorizer |
 | The blocks of `docs/install.md` run green against a kind cluster from the checkout on every push, and against the published artifacts with no checkout on the path after a tag | the `install` and `install-release` jobs | jobs built; the runner is proven by `TestRunBlocksRunsTheFencedBlocksInOrder` in `internal/arch`, and the document walked green end to end on the author's machine against a kind cluster with the checkout's image and the stubs Pod through the same runner, which found and fixed three defects of the manifests; the `install` job runs on the first push of this branch and `install-release` at the first tag |
 | The conformance suite passes against the two image digests before either carries the `:<tag>` reference, so a failed run leaves no pullable tag and no release | the `conformance` job, [[018-conformance-suite]]'s `TestContract`, driven against a deliberately non-conformant candidate | job built, proven at the first tag; not yet driven against a non-conformant candidate |
-| A tag attaches `fixture-<tag>.tar.gz` to the release and opens one pull request adding `test/conformance/testdata/previous/<tag>/` with one resolved manifest per kind and the run's archived records; no job in `release.yml` pushes to `main` | the `fixture` job, with [[018-conformance-suite]]'s `fixture` group reading it on the next release; `TestReleaseWorkflowNeverPushesToTheDefaultBranch` | `TestReleaseWorkflowNeverPushesToTheDefaultBranch` passing, `internal/arch`; the `fixture` job is built and its pull request is proven at the first tag |
+| A tag attaches `fixture-<tag>.tar.gz` to the release and pushes one branch `conformance/fixture-<tag>` adding `test/conformance/testdata/previous/<tag>/` with one resolved manifest per kind and the run's archived records; no job in `release.yml` pushes to `main` and none opens a pull request (the amendment of 2026-09-17) | the `fixture` job, with [[018-conformance-suite]]'s `fixture` group reading it on the next release; `TestReleaseWorkflowNeverPushesToTheDefaultBranch` | `TestReleaseWorkflowNeverPushesToTheDefaultBranch` passing, `internal/arch`, over the branch push and the absence of `pull-requests: write`; the `fixture` job is built and its branch is proven at the first tag |
 | Every row of the version promise table is checked against the tag being cut: `TestVersionPromise` diffs the committed `api/openapi.yaml`, the `LUX_*` table, the error code table, the event type table, and `manifest/testdata/v1`'s golden outputs against the previous tag's, classifies each difference as patch, minor, or major by the table, and fails when the tag's own bump is smaller than the largest class it found | `TestVersionPromise`, driven with a synthetic removal of a variable, a code, a record field, and a golden change | passing, `tools/release`; the `build` job runs `go run ./tools/release promise` against the previous tag at every release |
+
+## Amendment, 2026-09-17: the fixture is a branch, not a pull request
+
+The `fixture` job pushes `conformance/fixture-<tag>` and stops. It opens
+no pull request.
+
+The design above had the job push the branch and then run `gh pr create`
+against it. The GitHub organisation this repository lives in forbids
+Actions from creating pull requests, so that call was refused on every
+release. The branch was already pushed by then, so each release ended
+with the fixture directory on the remote and a red job beside a green
+one. The maintainer merges the branch by hand and uses no pull requests,
+which is what the pipeline now describes.
+
+What the job carries changed with it: `pull-requests: write` is gone
+from its permissions and `contents: write` is what remains, which is
+what the branch push needs and nothing more.
+
+Nothing else about the fixture changes. The same artifact is unpacked
+into `test/conformance/testdata/previous/<tag>/`, the same bytes are
+attached to the release as `fixture-<tag>.tar.gz`, the branch carries
+the same commit message, no job of `release.yml` pushes to the default
+branch, and merging the branch still triggers the ordinary `verify` run
+on `main` and no second release.
+
+`TestReleaseWorkflowNeverPushesToTheDefaultBranch` in `internal/arch`
+carries the rule: the `fixture` job pushes `conformance/fixture-<tag>`,
+runs no `gh pr create`, declares `contents: write` alone, and no job of
+the file declares a `pull-requests` permission.
