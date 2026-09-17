@@ -118,10 +118,10 @@ var pinned = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$`
 // TestReleaseWorkflowNeverPushesToTheDefaultBranch is spec 017's row for
 // the fixture and the pipeline's shape: no step of release.yml pushes
 // to the default branch, the fixture job pushes its own branch and
-// opens a pull request, permissions are declared per job with contents
+// opens no pull request, permissions are declared per job with contents
 // read as the workflow's default and contents write on publish and
-// fixture alone, the jobs run in the spec's order, and every third-party
-// action is pinned by commit.
+// fixture alone and no other scope on fixture, the jobs run in the
+// spec's order, and every third-party action is pinned by commit.
 func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	w, text := readWorkflow(t, "release.yml")
 	if w.Permissions["contents"] != "read" || len(w.Permissions) != 1 {
@@ -177,17 +177,26 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 			}
 		}
 	}
+	// The organisation refuses a pull request an Action opens, so the
+	// job pushes conformance/fixture-<tag> and stops; the maintainer
+	// merges the branch by hand.
 	fixture := w.Jobs["fixture"]
 	var opensPR, pushesBranch bool
 	for _, step := range fixture.Steps {
 		opensPR = opensPR || strings.Contains(step.Run, "gh pr create")
 		pushesBranch = pushesBranch || strings.Contains(step.Run, "HEAD:refs/heads/conformance/fixture-")
 	}
-	if !opensPR || !pushesBranch {
-		t.Error("the fixture job pushes a branch and opens a pull request titled conformance: fixture <tag>")
+	if !pushesBranch {
+		t.Error("the fixture job pushes no conformance/fixture-<tag> branch")
 	}
-	if !strings.Contains(text, `--title "conformance: fixture ${GITHUB_REF_NAME}"`) {
-		t.Error("the pull request is titled conformance: fixture <tag>")
+	if opensPR {
+		t.Error("the fixture job runs gh pr create; the organisation forbids an Action from opening a pull request, so the job pushes the branch and stops")
+	}
+	if len(fixture.Permissions) != 1 || fixture.Permissions["contents"] != "write" {
+		t.Errorf("fixture declares %v, want contents: write alone and no pull-requests scope", fixture.Permissions)
+	}
+	if strings.Contains(text, "pull-requests:") {
+		t.Error("release.yml declares a pull-requests permission; no job of it opens a pull request")
 	}
 	for _, uses := range regexp.MustCompile(`(?m)uses: (\S+)( # v[0-9][^\n]*)?`).FindAllStringSubmatch(text, -1) {
 		if uses[2] == "" && !strings.HasPrefix(uses[1], "./") {

@@ -9,7 +9,9 @@
 # GitHub release created with the CHANGELOG section as its body; and
 # after that the release is verified from a clean runner, the install
 # document is walked against the published artifacts, and the next
-# conformance fixture is opened as a pull request. Nothing here pushes
+# conformance fixture is pushed as the branch conformance/fixture-<tag>
+# for the maintainer to merge, because the organisation forbids an
+# Action from opening a pull request. Nothing here pushes
 # to the default branch, no job carries a permission another needs, and
 # the image namespace is the repository owner's, so a fork's tag
 # publishes under the fork's. Every third-party action is pinned by
@@ -522,17 +524,23 @@ jobs:
         if: failure()
         run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200
 
-  # 7. The next fixture directory, as a pull request against main and
-  # never a push to it: what the conformance run produced, attached to
-  # the release already as fixture-<tag>.tar.gz by publish.
+  # 7. The next fixture directory, as the branch conformance/fixture-<tag>
+  # and never a push to the default branch: what the conformance run
+  # produced, attached to the release already as fixture-<tag>.tar.gz by
+  # publish. The job pushes the branch and stops. It opens no pull
+  # request because the organisation forbids an Action from creating
+  # one, so the call failed on every release with the branch already
+  # pushed; the maintainer merges the branch by hand. A tag's workflow
+  # that could write to the default branch could write anything to it,
+  # and the one thing this job produces is a directory the maintainer can
+  # read in a minute.
   fixture:
-    name: open the fixture pull request
+    name: push the fixture branch
     needs: [publish]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -541,17 +549,11 @@ jobs:
         with:
           name: fixture
           path: test/conformance/testdata/previous
-      - name: Commit the directory on a branch and open the pull request
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit the directory on conformance/fixture-<tag> and push that branch
         run: |
-          branch="conformance/fixture-${GITHUB_REF_NAME}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
+          git checkout -b "conformance/fixture-${GITHUB_REF_NAME}"
           git add "test/conformance/testdata/previous/${GITHUB_REF_NAME}"
           git commit -m "conformance: fixture ${GITHUB_REF_NAME}" -m "The resolved manifests and the archived records the release's conformance run produced, for the fixture group of the next release."
           git push origin "HEAD:refs/heads/conformance/fixture-${GITHUB_REF_NAME}"
-          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" \
-            --title "conformance: fixture ${GITHUB_REF_NAME}" \
-            --body "The previous-release fixture of spec 017: one resolved manifest per kind and the records the conformance run of ${GITHUB_REF_NAME} produced, read by the fixture group on every push from here on. The same bytes are attached to the release as fixture-${GITHUB_REF_NAME}.tar.gz."
