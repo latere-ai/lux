@@ -22,11 +22,18 @@ before CI does.
 
 ## Sending a change
 
-Fork the repository, work on a branch, and open a pull request. Keep one
-logical change per commit, stage the files explicitly, and write the
-subject in the imperative, saying what changed for whoever reads the log.
-Maintainers push to `main` directly; the pipeline runs the gate on every
-push and pull request, and a `v*` tag cuts a release.
+Push to `main`. Keep one logical change per commit, stage the files
+explicitly, and write the subject in the imperative, saying what changed
+for whoever reads the log. Run the gate before you push (`make`, which is
+`go tool lateregate`); the pre-push hook then runs the linter over the
+packages the push changes, so a finding reaches you before CI does. Batch
+a series of commits and push once, because one push is one CI run.
+
+There are no pull requests here. The organisation does not let an Action
+open one, and a change lands on `main` rather than waiting on a review
+branch. A release is `go tool lateregate release vX.Y.Z`, cut from a
+green CI run of the commit being tagged: the command reads CI before it
+runs the quality bar and refuses while the repository is red.
 
 If you are planning something large, open an issue first. A design that
 lands without a spec is harder to review than one that arrives with the
@@ -70,7 +77,7 @@ Three places, by who imports it:
 - A generic package with a plausible second consumer outside Lux
   belongs in [`latere.ai/x/pkg`](https://github.com/latere-ai/pkg), the
   shared library Lux already depends on. If you are unsure, put it in
-  `internal/` and say so in the pull request.
+  `internal/` and say so in the commit message.
 
 ## Three registers
 
