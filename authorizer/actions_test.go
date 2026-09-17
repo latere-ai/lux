@@ -308,3 +308,33 @@ func TestVocabularyConstructs(t *testing.T) {
 		authz.Action{Name: ActionKeyRead, Kind: v1.KindKey},
 	))
 }
+
+// TestVocabularyLabelsEveryKind: each of the five resource kinds carries
+// the heading a person reads, so a grant picker groups the table by
+// function without anybody hard-coding the headings (spec 006's table).
+// The label travels with the copy Vocabulary() hands out, which is the
+// whole point of declaring it: a consumer reads the table and the
+// headings from one value.
+func TestVocabularyLabelsEveryKind(t *testing.T) {
+	want := map[string]string{
+		v1.KindProvider: "Providers",
+		v1.KindModel:    "Models",
+		v1.KindKey:      "Keys",
+		v1.KindBudget:   "Budgets",
+		KindUsage:       "Usage",
+	}
+	v := Vocabulary()
+	for _, kind := range v.Kinds() {
+		if got := v.Label(kind); got != want[kind] {
+			t.Errorf("Label(%q) = %q, want %q", kind, got, want[kind])
+		}
+	}
+	if len(v.Kinds()) != len(want) {
+		t.Errorf("the table names %v; a label is declared for %d kinds", v.Kinds(), len(want))
+	}
+	// A kind the table does not name reads as itself, which is the
+	// shared type's own answer and not this package's.
+	if got := v.Label("Sandbox"); got != "Sandbox" {
+		t.Errorf("Label of a kind outside the table = %q, want the kind", got)
+	}
+}

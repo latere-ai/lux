@@ -78,7 +78,20 @@ var vocabulary = must(authz.NewVocabulary("lux",
 	authz.Action{Name: ActionBudgetList, Kind: v1.KindBudget},
 	authz.Action{Name: ActionBudgetDraw, Kind: v1.KindBudget},
 	authz.Action{Name: ActionUsageRead, Kind: KindUsage},
-))
+)).WithLabels(kindLabels)
+
+// kindLabels is the name a person reads for each resource kind. A kind
+// is a type name and a heading is not: a picker groups a key's reach by
+// function, and the function is the kind (spec 006's table). The labels
+// are declared beside it, so a console reads the groups and their
+// headings from one value and hard codes neither.
+var kindLabels = map[string]string{
+	v1.KindProvider: "Providers",
+	v1.KindModel:    "Models",
+	v1.KindKey:      "Keys",
+	v1.KindBudget:   "Budgets",
+	KindUsage:       "Usage",
+}
 
 // must is the constructor's error, which is a mistake in the table above
 // and in no caller: an entry with no name or no kind, or an action named
@@ -98,9 +111,12 @@ func must(v authz.Vocabulary, err error) authz.Vocabulary {
 // suite drives a case per row of it, and luxd's own client refuses an
 // action outside it before the wire. Import it rather than pairing
 // Actions with Kind by hand. The value is fresh on every call, so a
-// caller may sort or trim what it gets.
+// caller may sort or trim what it gets, and it carries the kind labels,
+// so a picker reads the headings from the same value as the table.
 func Vocabulary() authz.Vocabulary {
-	return authz.Vocabulary{Core: vocabulary.Core, Actions: slices.Clone(vocabulary.Actions)}
+	v := vocabulary
+	v.Actions = slices.Clone(vocabulary.Actions)
+	return v
 }
 
 // Actions lists every action of the vocabulary, in the table's order.
