@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.3.0 - 2026-09-17
+
 - A personal access token can now be narrower than the person holding
   it, and `luxd` answers inside it. Such a token carries the grants its
   holder chose, RFC 9396's `authorization_details`, each naming actions
