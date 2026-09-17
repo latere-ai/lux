@@ -158,12 +158,26 @@ var rootAllow = map[string]allow{
 	// that package's decision cache and HTTP client, which it never
 	// constructs and never dials; it reaches manifest for the ceilings a
 	// limits object decodes to, and with it the one YAML library.
+	//
+	// The grants of infrastructure/identity id-13 put
+	// latere.ai/x/pkg/authkit behind authz too: authz.Grant is an alias
+	// of authkit.Grant, so the shape a token is verified against and the
+	// shape a decision applies cannot drift. That package carries the
+	// identity types and a development middleware, and the middleware is
+	// what reaches bearer, envutil, httpjson, and uuid. None of it is
+	// constructed here and none of it dials: this package still names an
+	// envelope and decides nothing.
 	"authorizer": {
 		module: []string{module + "/manifest", module + "/authorizer"},
 		external: []string{
 			"latere.ai/x/pkg/authz",
+			"latere.ai/x/pkg/authkit",
+			"latere.ai/x/pkg/bearer",
+			"latere.ai/x/pkg/envutil",
+			"latere.ai/x/pkg/httpjson",
 			"latere.ai/x/pkg/cache",
 			"github.com/goccy/go-yaml",
+			"github.com/google/uuid",
 		},
 		noStd: []string{"database/sql", "os/exec"},
 	},
@@ -189,14 +203,18 @@ var rootAllow = map[string]allow{
 // drivers. A prefix may name the one package it does not bind: the
 // shared authorizer contract is the envelope authorizer's whole purpose
 // is naming, and net/http comes with it as a type that package never
-// constructs (spec 022).
+// constructs (spec 022). latere.ai/x/pkg/authkit is named beside it for
+// the same package and the same reason: the grant types the envelope
+// carries are declared there, and the verifier that reads a token is
+// authkit/jwt, which the prefix still forbids.
 var rootForbid = map[string][]string{
-	module + "/internal/":        nil,
-	module + "/cmd/":             nil,
-	"latere.ai/x/pkg/authkit":    nil,
-	"latere.ai/x/pkg/authz":      {"authorizer"},
-	"github.com/jackc/":          nil,
-	"github.com/golang-migrate/": nil,
+	module + "/internal/":         nil,
+	module + "/cmd/":              nil,
+	"latere.ai/x/pkg/authkit":     {"authorizer"},
+	"latere.ai/x/pkg/authkit/jwt": nil,
+	"latere.ai/x/pkg/authz":       {"authorizer"},
+	"github.com/jackc/":           nil,
+	"github.com/golang-migrate/":  nil,
 }
 
 // outOfReach reports whether this root package may not reach the path,
