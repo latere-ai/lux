@@ -28,6 +28,10 @@ refused before it is pushed.
   as the person who holds it. The shared library is `latere.ai/x/pkg`
   v0.75.0.
 
+  The example front of `docs/plane.md` reads the claim and forwards it
+  the same way, so a platform built by copying it accepts a narrowed key
+  instead of refusing it at the door.
+
 - The first control plane request after a restart no longer waits for an
   issuer's key set. `luxd` already read every issuer's keys at start to
   refuse one it cannot verify against; the verifier now keeps that read,

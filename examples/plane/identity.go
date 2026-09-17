@@ -74,6 +74,17 @@ func newIdentity(ctx context.Context, client *http.Client, issuer, audience stri
 		audience: audience,
 		validator: jwt.New(jwt.Config{
 			JWKSURL: doc.JWKSURI, Issuer: doc.Issuer, Audiences: []string{audience}, HTTPClient: client,
+			// A personal access token carries the grants its holder chose,
+			// RFC 9396's authorization_details, and the shared verifier
+			// refuses such a token from a front that does not read the
+			// claim: a reader that applies nothing grants more than the
+			// person asked for. This front reads it and forwards it with
+			// every other claim, and the narrowing is applied where the
+			// decision is, at the authorizer. An endpoint on
+			// latere.ai/x/pkg/authz/server, which is the one this document
+			// prints, applies it with no code of its own; one written by
+			// hand calls authz.Restrict on its own answer.
+			ReadsGrants: true,
 		}),
 	}, nil
 }

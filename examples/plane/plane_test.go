@@ -384,3 +384,40 @@ func (s *syncBuffer) Reset() {
 	defer s.mu.Unlock()
 	s.b.Reset()
 }
+
+// TestPlaneAcceptsAScopedToken: a personal access token carries the
+// grants its holder chose, RFC 9396's authorization_details, and this
+// front reads the claim and hands it on. It decides nothing itself, so
+// the narrowing is applied where the decision is made: an endpoint on
+// latere.ai/x/pkg/authz/server, which is what the document prints,
+// applies it with no code of its own.
+//
+// Reading the claim is a promise, and the shared verifier refuses a
+// token carrying grants from a front that has not made it. This front
+// makes it, so the token is accepted and the claim reaches the
+// authorizer verbatim, which is the only way the authorizer could narrow
+// anything.
+func TestPlaneAcceptsAScopedToken(t *testing.T) {
+	h := start(t, "", "")
+	token := h.issuer.Mint(issuertest.Claims{Sub: "alice", Aud: issuertest.StringList{"lux"}, Extra: map[string]any{
+		"token_use": authz.TokenUsePAT,
+		"authorization_details": []any{map[string]any{
+			"type": authz.GrantType, "actions": []string{"lux:key.create"},
+			"datatypes": []string{"Key"},
+		}},
+	}})
+	h.authz.ClearRequests()
+	resp := h.do(t, http.MethodPut, "/v1/keys/scoped", token, `{"metadata":{"name":"scoped"},"spec":{"models":["*"]}}`)
+	if resp.status != http.StatusCreated {
+		t.Fatalf("PUT /v1/keys/scoped with a scoped token = %d %s", resp.status, resp.body)
+	}
+	reqs := h.authz.Requests()
+	if len(reqs) == 0 {
+		t.Fatal("the authorizer was asked nothing")
+	}
+	for _, req := range reqs {
+		if req.Claims["token_use"] != authz.TokenUsePAT || req.Claims["authorization_details"] == nil {
+			t.Errorf("%s reached the authorizer with claims %v; a front that decides nothing forwards the grants verbatim", req.Action, req.Claims)
+		}
+	}
+}
