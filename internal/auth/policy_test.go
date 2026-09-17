@@ -218,17 +218,16 @@ func TestOwnerPolicyIsAnAuthorizer(t *testing.T) {
 // scopedRequest is one envelope from a personal access token: the claims
 // a verified token carries, with the grants its holder chose.
 func scopedRequest(subject, action, kind, id string, grants ...authz.Grant) authz.Request {
-	claims := map[string]any{"iss": fixtureIssuer, "sub": "root", "token_use": authz.TokenUsePAT}
-	if grants != nil {
-		claims["authorization_details"] = grants
-	}
 	req := authz.Request{
 		Subject:  subject,
 		Action:   action,
 		Resource: authz.NewResource(kind, id, map[string]any{"owner": subject}),
-		Claims:   claims,
 	}
 	req.Issuer, req.Sub, _ = authz.SplitSubject(subject)
+	req.Claims = map[string]any{"iss": req.Issuer, "sub": req.Sub, "token_use": authz.TokenUsePAT}
+	if grants != nil {
+		req.Claims["authorization_details"] = grants
+	}
 	return req
 }
 
