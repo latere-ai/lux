@@ -458,9 +458,10 @@ sessions is a platform's; a plan that needs quotas is an authorizer's
 ### Design changes
 
 **2026-09-17.** A person's token may now say what their credential may
-do, and `luxd` reads it. This is inside the design above rather than
-beside it: the claims of a verified token already reach the decision
-point verbatim, and the decision point is already `latere.ai/x/pkg/authz`.
+do, and `luxd` reads it, on `latere.ai/x/pkg` v0.75.0. This is inside the
+design above rather than beside it: the claims of a verified token
+already reach the decision point verbatim, and the decision point is
+already `latere.ai/x/pkg/authz`.
 
 - **The claim.** A personal access token carries `token_use: pat` and
   RFC 9396's `authorization_details`: a set of grants, each naming
@@ -492,7 +493,10 @@ point verbatim, and the decision point is already `latere.ai/x/pkg/authz`.
   `latere.ai/x/pkg/authz/server` applies the same intersection with no
   code of its own, and [[020-building-a-plane]]'s example, which is on
   that scaffold, gets it by the version bump. An endpoint written by
-  hand applies `authz.Restrict` to its own answer.
+  hand applies `authz.Restrict` to its own answer. The front that
+  document prints reads the claim as `luxd` does and forwards it, so a
+  platform built by copying it accepts a narrowed key rather than
+  refusing it at the door.
 - **A heading per resource kind.** `authorizer.Vocabulary()` declares
   `Providers`, `Models`, `Keys`, `Budgets`, and `Usage` through
   `authz.Vocabulary.WithLabels`, so a console offering a person a
