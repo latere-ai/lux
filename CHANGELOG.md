@@ -6,6 +6,10 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A release now refuses to cut while the repository's CI is red. When a
+  run is red, `lateregate release` says who acts: `latere.ai/x/ci-gate`
+  v0.40.0.
+
 - A discovery document fetched for one issuer is refused when its own
   `issuer` field names a different one. The shared library is
   `latere.ai/x/pkg` v0.74.0, whose OIDC discovery, `authkit/jwt`, now

@@ -142,7 +142,7 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-latere.ai/x/ci-gate v0.35.0 h1:+77pIwTeuFYPJK0NOemP0mdgXLY+y16mFeyay65v/X0=
-latere.ai/x/ci-gate v0.35.0/go.mod h1:kg1CjxG++fy21VRkwTQSzW4JgGwjOFSeisERzZfarWo=
+latere.ai/x/ci-gate v0.40.0 h1:JUL6+pvNSHysyUOLabprZn+daHLYiYOz4TE9dmvx4hk=
+latere.ai/x/ci-gate v0.40.0/go.mod h1:kg1CjxG++fy21VRkwTQSzW4JgGwjOFSeisERzZfarWo=
 latere.ai/x/pkg v0.74.0 h1:gMrrbQevsQMQe3CB19rK3kxpkN9kMdSdtNw5stKiaHQ=
 latere.ai/x/pkg v0.74.0/go.mod h1:HF1vVVfYz0gjgO3eguVaUna1YtS1BfjcmSWNIoh1x/I=
