@@ -6,6 +6,39 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A personal access token can now be narrower than the person holding
+  it, and `luxd` answers inside it. Such a token carries the grants its
+  holder chose, RFC 9396's `authorization_details`, each naming actions
+  and either one object or every object of a kind. A key narrowed to
+  some Models or some Keys is refused everywhere else with reason
+  `grant`, 403, and a key granted nothing at all reaches nothing: an
+  absent grant list is not full access.
+
+  A grant never widens. The owner policy answers first and the grants
+  narrow that answer, so a grant on an object the person may not touch
+  still reaches nothing, and a token that is not a personal access token
+  is decided exactly as before.
+
+  With `LUX_AUTHORIZER_URL` set, the decision is the operator's and the
+  claim reaches it in `claims` with every other claim of the token, as
+  it always has. An endpoint written on `latere.ai/x/pkg/authz/server`
+  applies the same narrowing by taking the shared library's new version;
+  an endpoint written by hand applies `authz.Restrict` to its own
+  answer, and until it does, a narrowed key is as wide at that endpoint
+  as the person who holds it. The shared library is `latere.ai/x/pkg`
+  v0.75.0.
+
+- The first control plane request after a restart no longer waits for an
+  issuer's key set. `luxd` already read every issuer's keys at start to
+  refuse one it cannot verify against; the verifier now keeps that read,
+  so the fetch is paid for at start-up and not by whoever arrives first.
+
+- `latere.ai/x/lux/authorizer`'s vocabulary carries the heading a person
+  reads for each resource kind: Providers, Models, Keys, Budgets, Usage.
+  A console that offers a person a narrowed key groups the actions by
+  function and hard codes no heading of its own. The action table is
+  unchanged.
+
 - A release no longer ends with a failed job. The last step of the
   pipeline used to open a pull request for the next conformance
   fixture, which the GitHub organisation refuses to let an Action

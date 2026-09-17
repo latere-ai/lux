@@ -455,6 +455,62 @@ asks the authorizer about a data plane request. A dashboard that needs
 sessions is a platform's; a plan that needs quotas is an authorizer's
 `limits` and a Budget the platform applies.
 
+### Design changes
+
+**2026-09-17.** A person's token may now say what their credential may
+do, and `luxd` reads it. This is inside the design above rather than
+beside it: the claims of a verified token already reach the decision
+point verbatim, and the decision point is already `latere.ai/x/pkg/authz`.
+
+- **The claim.** A personal access token carries `token_use: pat` and
+  RFC 9396's `authorization_details`: a set of grants, each naming
+  actions of a published vocabulary qualified by their core,
+  `lux:model.read`, and either one resource id or every resource of the
+  kind. The gateway interprets none of it, the way it interprets no
+  other claim. `jwt.Config.ReadsGrants` is set on every issuer's
+  validator, and the claim reaches the authorizer in `claims` beside
+  every other claim.
+- **Why the flag is not optional.** The shared library refuses a token
+  carrying grants when the verifier has not promised to read them,
+  reason `grants_unread`, 401. The claim says what the credential may
+  *not* do, so a verifier that accepts the token and applies nothing
+  grants more than the holder asked for, silently: a refusal is visible,
+  an ignored restriction is not. Setting the flag is a promise, kept at
+  the site that decides.
+- **The owner policy intersects.** `OwnerPolicy.Authorize` applies
+  `authz.Restrict(core, decision, request, grants)` to its own answer.
+  An allow no grant covers becomes a deny with reason `grant`; a deny is
+  never turned into an allow, so the rows above stay the ceiling and a
+  grant is never authority. `TestOwnerPolicyRestrictsToTheTokensGrants`
+  is that case in process and `TestOwnerPolicyConforms` runs
+  `authz/conformance` under `WithVocabulary` against the policy behind
+  the shared scaffold, which drives the grant case with an admin
+  subject: every row is allowed there, so a grant qualified by the wrong
+  core denies the action its own grant names and the suite says so.
+- **An operator's authorizer.** The request envelope carries the claims
+  verbatim and always did, so an endpoint written on
+  `latere.ai/x/pkg/authz/server` applies the same intersection with no
+  code of its own, and [[020-building-a-plane]]'s example, which is on
+  that scaffold, gets it by the version bump. An endpoint written by
+  hand applies `authz.Restrict` to its own answer.
+- **A heading per resource kind.** `authorizer.Vocabulary()` declares
+  `Providers`, `Models`, `Keys`, `Budgets`, and `Usage` through
+  `authz.Vocabulary.WithLabels`, so a console offering a person a
+  narrowed key groups the table by function and hard codes no heading.
+  The action table itself is unchanged.
+- **The start-up fetch is paid once.** The start-up check read each
+  issuer's key set with its own client and left the validator holding
+  nothing, so the first request fetched the same set again.
+  `jwt.Validator.Warm` reads it into the validator inside the start-up
+  the gateway already pays for; a failure there is the unreachable
+  issuer the check already refuses.
+- **What the gateway still does not do.** It mints no such token, offers
+  no picker, and reads no claim for meaning. A token that is not a
+  personal access token is decided exactly as before, whatever its
+  claims say. A personal access token carrying no grant at all reaches
+  nothing: an absent claim is not full access, which is the shared
+  library's rule and not this gateway's.
+
 ## Not in this spec
 
 Key verification, the `lux_` value, its hash, its cache, and its
