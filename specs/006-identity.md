@@ -9,7 +9,7 @@ depends_on:
 affects: [internal/auth/, internal/api/, internal/config/, test/stubs/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-17
 author: changkun
 ---
 
@@ -49,6 +49,15 @@ Amended on 2026-09-13: the verifier, the authorizer envelope, its cache
 and retry rules, the subject string and the probe id are the shared
 contract of `latere.ai/x/pkg/authz`, so one authorizer can serve several
 open cores.
+
+Amended on 2026-09-17: on pkg v0.73.0 the key a token is verified
+against is the one its `kid` names and no second key is ever tried, so
+the two refusals are apart. A `kid` the issuer's set does not hold is
+`unknown_key`, decided before any signature is read, and a `kid` miss
+against a reachable issuer forces one key set refresh first; a
+signature made by a foreign key under a `kid` the set does hold is
+`invalid_signature`. Both are `unauthenticated` to the caller, with the
+finding in the developer detail as every other refusal is.
 
 ## Design
 
@@ -100,7 +109,10 @@ absent or `ES256`; a set with none is the refusal above. Per request,
 the bearer's payload is decoded unverified for its `iss`, which selects
 the issuer's validator, and a token whose `iss` is not listed or that
 carries no `exp` is refused before any signature is checked; the
-validator then verifies the signature, `exp`, `nbf`, `iss`, and `aud`.
+validator then resolves the one key the token's `kid` names, refusing a
+`kid` its set does not hold with reason `unknown_key` before any
+signature is read, and verifies the signature, `exp`, `nbf`, `iss`, and
+`aud` against that key alone.
 Every refusal is one code, `unauthenticated`, with the finding, no
 bearer, not a JWS, an unlisted issuer, or the validator's error, in the
 developer detail alone. `auth.Verifier` is the type; `Authenticate`

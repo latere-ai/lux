@@ -243,7 +243,11 @@ func TestBearerAcceptance(t *testing.T) {
 	es := newIssuer(t, issuertest.WithES256())
 	other := newIssuer(t)
 	// forger signs with its own key but claims to be rs, so its tokens
-	// carry a listed iss and a signature no listed key made.
+	// carry a listed iss and a signature no listed key made. Which
+	// refusal that earns is the header's kid: under forger's own kid
+	// rs's set holds no such key and the token is refused before any
+	// signature is read; under rs's kid the set holds the key the kid
+	// names and the signature is what fails.
 	forger := newIssuer(t, issuertest.WithIssuer(rs.URL()))
 	v := newVerifier(t, rs.URL(), es.URL())
 	now := time.Now()
@@ -279,7 +283,8 @@ func TestBearerAcceptance(t *testing.T) {
 		{"no exp", "Bearer " + rs.Mint(issuertest.Claims{Sub: "alice", Omit: []string{"exp"}}), "", "no exp claim"},
 		{"a future nbf", "Bearer " + rs.Mint(issuertest.Claims{Sub: "alice", Nbf: now.Add(time.Hour).Unix()}), "", jwt.ErrTokenNotValidYet.Error()},
 		{"a past nbf", "Bearer " + rs.Mint(issuertest.Claims{Sub: "alice", Nbf: now.Add(-time.Hour).Unix()}), rs.URL() + "|alice", ""},
-		{"a signature of another key", "Bearer " + forger.Mint(issuertest.Claims{Sub: "alice"}), "", jwt.ErrInvalidSignature.Error()},
+		{"a signature of another key", "Bearer " + forger.Mint(issuertest.Claims{Sub: "alice", Kid: rs.KID()}), "", jwt.ErrInvalidSignature.Error()},
+		{"a kid no listed key has", "Bearer " + forger.Mint(issuertest.Claims{Sub: "alice"}), "", jwt.ErrUnknownKey.Error()},
 		{"a tampered signature", "Bearer " + tampered, "", jwt.ErrInvalidSignature.Error()},
 		{"an unsupported algorithm", "Bearer " + rs.Mint(issuertest.Claims{Sub: "alice", Alg: "HS256"}), "", jwt.ErrUnsupportedAlg.Error()},
 		{"no sub", "Bearer " + rs.Mint(issuertest.Claims{Omit: []string{"sub"}}), "", jwt.ErrMalformedToken.Error()},
@@ -326,7 +331,10 @@ func TestPlanesRefuseEachOthersCredential(t *testing.T) {
 // issuer that goes away leaves the verifier accepting tokens signed by
 // the keys it holds and refusing one whose kid it never saw, so an
 // outage at the issuer degrades to refusing new keys and not every
-// request.
+// request. The kid the cached set does not hold is an unknown key, not
+// a bad signature: the refusal is decided by the kid, and the refresh
+// the miss forces cannot reach the closed issuer, so the cached set
+// survives the miss and the kid it does hold still verifies after it.
 func TestStaleKeySetServesUntilRefresh(t *testing.T) {
 	iss := newIssuer(t)
 	v := newVerifier(t, iss.URL())
@@ -340,7 +348,10 @@ func TestStaleKeySetServesUntilRefresh(t *testing.T) {
 	}
 	iss.Rotate()
 	_, err := v.Verify(iss.Mint(issuertest.Claims{Sub: "alice"}))
-	unauthenticated(t, err, jwt.ErrInvalidSignature.Error())
+	unauthenticated(t, err, jwt.ErrUnknownKey.Error())
+	if _, err := v.Verify(known); err != nil {
+		t.Fatalf("after the unknown kid forced a refresh that could not reach the issuer: %v", err)
+	}
 }
 
 // TestSubjectRendering: the subject is <iss>|<sub> with the issuer's

@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A bearer naming a key `luxd` does not hold is refused as an unknown
+  key rather than as a bad signature. The shared library is
+  `latere.ai/x/pkg` v0.73.0, whose verifier picks the one key the
+  token's `kid` names instead of trying every key of the issuer's set,
+  so a token whose `kid` is in no listed key set is refused before its
+  signature is read, after one key set refresh in case the issuer has
+  published a new key. A token carrying a `kid` the set does hold and a
+  signature some other key made is still a bad signature. Both stay
+  `unauthenticated`, 401, with the finding in the developer detail
+  alone, so nothing changes for a caller; the detail sentence changes
+  for whoever reads it.
+
 - The release pipeline verifies the images it published. The clean-runner
   job iterated the binary names and asked `ghcr.io` for `<owner>/luxd`,
   a repository no release of Lux pushes to, so `v0.1.0` and `v0.2.0` both
