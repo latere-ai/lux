@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A release no longer ends with a failed job. The last step of the
+  pipeline used to open a pull request for the next conformance
+  fixture, which the GitHub organisation refuses to let an Action
+  create, so every release finished red with the work already done. The
+  step now pushes the branch `conformance/fixture-<tag>` and stops: the
+  fixture directory is on that branch, ready to merge, and the release
+  run is green. The same bytes are still attached to the release as
+  `fixture-<tag>.tar.gz`, and no job of a release writes to `main`.
+
 - A release now refuses to cut while the repository's CI is red. When a
   run is red, `lateregate release` says who acts: `latere.ai/x/ci-gate`
   v0.40.0.
