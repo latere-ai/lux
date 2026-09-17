@@ -53,11 +53,12 @@ open cores.
 Amended on 2026-09-17: on pkg v0.73.0 the key a token is verified
 against is the one its `kid` names and no second key is ever tried, so
 the two refusals are apart. A `kid` the issuer's set does not hold is
-`unknown_key`, decided before any signature is read, and a `kid` miss
-against a reachable issuer forces one key set refresh first; a
+reason `unknown_key`, decided before any signature is read, and a `kid`
+miss against a reachable issuer forces one key set refresh first; a
 signature made by a foreign key under a `kid` the set does hold is
-`invalid_signature`. Both are `unauthenticated` to the caller, with the
-finding in the developer detail as every other refusal is.
+reason `signature`, as an unsupported algorithm is. Both are
+`unauthenticated` to the caller, with the finding in the developer
+detail as every other refusal is.
 
 ## Design
 
