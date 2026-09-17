@@ -338,18 +338,26 @@ tagged release produced: one resolved manifest per kind as
 `provider.json`, `budget.json`, `model.json`, and `key.json`, and a
 bucket of archived records as `records.ndjson`
 ([[012-request-log-and-events]]). The fixture group applies each
-manifest under the run's prefix and asserts the read-back's `spec`
-equals the fixture's, and decodes each record with the current
-`metering.Record` and asserts every member the fixture carries is still
-present with the same value after a round trip.
+manifest under a prefix of its release, `conf-<run>-<version>-`, and
+asserts the read-back's `spec` equals the fixture's, and decodes each
+record with the current `metering.Record` and asserts every member the
+fixture carries is still present with the same value after a round
+trip. The prefix carries the version because a release seeds the names
+the suite's own door fixtures carry, `openai` among them: under the run
+prefix alone the apply would be answered `200` as an update of another
+group's object rather than the create the case asserts, and two
+releases would meet in one name.
 
 This is the schema evolution promise of [[003-manifest-contract]] and
 the record additivity promise of [[009-usage-and-metering]] executed
 rather than asserted: a field that changed type, a default that
-changed, or a record member that was removed fails here and nowhere
-else. The release pipeline writes the next fixture directory at each
-tag, so the set grows by one per release and old ones are kept
-([[017-release-and-installation]]). Until the first tag the directory
+changed, or a record member that was removed fails here. It is the only
+place such a drift fails *across releases*: the corpus cases hold this
+build's resolver to this build's goldens, which a release older than
+the change cannot, so `mut_default` reddens both the corpus case and
+this one. The release pipeline writes the next fixture directory at
+each tag, so the set grows by one per release and old ones are kept
+([[017-release-and-installation]]). Before the first tag the directory
 holds a placeholder alone and the group skips saying so;
 `TestFixtureGroupReadsAPreviousRelease` drives it over a synthetic
 release built from the golden corpus and proves it passes a release
@@ -381,7 +389,7 @@ released binary.
 | Mutation | Tag | Must fail, and only |
 |---|---|---|
 | `If-Match` is ignored | `mut_ifmatch` | `case011Preconditions` |
-| one default is not in the answer: a Model's `fallback` | `mut_default` | `case003DefaultsAreVisible` |
+| one default is not in the answer: a Model's `fallback` | `mut_default` | `case003DefaultsAreVisible`, `case003PreviousReleaseManifests` |
 | the translation loss report is dropped | `mut_loss` | `case004TranslationLoss` |
 | an unknown manifest field is accepted | `mut_unknownfield` | `case003UnknownField` |
 | an unpriced Model is served under a hard Budget | `mut_unpriced` | `case007UnpricedUnderABudget` |
@@ -489,7 +497,7 @@ whose own scenario is [[014-agent-client]]'s.
 | Without `LUX_TEST_URL` the suite skips with one line and exits zero | `TestContractSkipsWithoutAURL` | passing |
 | Each mutation reddens exactly the cases its row names and no others | `TestSuiteCatchesADroppedCapability`, table-driven over the mutation table | passing, eight rows |
 | Every object the suite creates carries the run label and is gone after the run, and no object created before the run is touched | `TestSuiteCleansUpExactlyItsOwn` | passing |
-| The previous release's manifests read back with an equal `spec` and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over a synthetic release in `TestFixtureGroupReadsAPreviousRelease`; the two cases skip in a run until [[017-release-and-installation]] writes the first directory |
+| The previous release's manifests read back with an equal `spec` and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over the releases [[017-release-and-installation]]'s pipeline wrote, and over a synthetic one in `TestFixtureGroupReadsAPreviousRelease` and `TestFixtureGroupNamesEachReleaseApart` |
 | Every group but `fixture` is green against a server that is not `luxd` and holds none of this repository's state | `TestExamplePlaneConforms` ([[020-building-a-plane]]) | not built, [[020-building-a-plane]]'s |
 | The suite mints its own Key through `/v1` before the door cases, deletes it at teardown, and skips the `doors` and `keys` groups naming `read_only` against a `file` mode server | `case007SuiteMintsItsKey`, `TestFileModeSkipList` | passing |
 | Every response the suite receives validates against the server's own `GET /v1/openapi.json` | `case011OpenAPIValidatesEveryResponse` | passing as a check on every `/v1` answer; against `luxd` it finds the one drift the Outcome names, owed by [[011-api]] |

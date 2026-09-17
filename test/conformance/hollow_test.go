@@ -175,15 +175,18 @@ func TestSuiteIsRedAgainstAHollowServer(t *testing.T) {
 	// success are the ones whose every assertion is a success: the
 	// well-known document the hollow server copies from spec 011, a list
 	// that is an array, and the credential forms, which are each a 200.
+	// The previous release's records join them because that case reads
+	// the embedded releases and asks the server nothing, so no answer of
+	// the server's can redden it.
 	slices.Sort(passed)
 	slices.Sort(skipped)
-	if want := []string{"case004CredentialForms", "case011ListReads", "case011WellKnown"}; !slices.Equal(passed, want) {
+	if want := []string{"case004CredentialForms", "case009PreviousReleaseRecords", "case011ListReads", "case011WellKnown"}; !slices.Equal(passed, want) {
 		t.Errorf("passed against the hollow server: %v, want %v", passed, want)
 	}
 	if len(failed) < 40 {
 		t.Errorf("only %d cases failed: %v", len(failed), failed)
 	}
-	if want := []string{"case003PreviousReleaseManifests", "case009PreviousReleaseRecords", "case011ReadOnlyInFileMode"}; !slices.Equal(skipped, want) {
+	if want := []string{"case011ReadOnlyInFileMode"}; !slices.Equal(skipped, want) {
 		t.Errorf("skipped against the hollow server: %v, want %v", skipped, want)
 	}
 }

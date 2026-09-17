@@ -37,8 +37,9 @@ var knownDrift = map[string]string{
 var knownDriftCases []string
 
 // referenceSkips are the cases a server mode run with stubs skips: the
-// file mode's one case and the fixture group before the first release.
-var referenceSkips = []string{"case003PreviousReleaseManifests", "case009PreviousReleaseRecords", "case011ReadOnlyInFileMode"}
+// file mode's one case alone, since testdata/previous/ holds the
+// releases spec 017's pipeline wrote and the fixture group runs.
+var referenceSkips = []string{"case011ReadOnlyInFileMode"}
 
 // TestReferenceServerConforms runs the whole suite, stubs included,
 // against the reference server assembled in process: the proof that the
@@ -172,6 +173,10 @@ func TestFileModeSkipList(t *testing.T) {
 			wantRan = append(wantRan, tc.name)
 		}
 	}
+	// The records half of the fixture group reads the embedded releases
+	// and asks the server nothing, so it runs in file mode too; its
+	// manifests half is serverMode and skips with the api group's writes.
+	wantRan = append(wantRan, "case009PreviousReleaseRecords")
 	slices.Sort(wantRan)
 	if got := rep.ran(); !slices.Equal(got, wantRan) {
 		t.Errorf("ran %v, want %v", got, wantRan)
@@ -370,7 +375,11 @@ var mutations = []struct {
 	cases []string
 }{
 	{"mut_ifmatch", []string{"case011Preconditions"}},
-	{"mut_default", []string{"case003DefaultsAreVisible"}},
+	// A default that vanishes from a Model answer breaks the corpus
+	// goldens of this build and the last release's already resolved spec
+	// alike, which is the cross-release drift the fixture group exists to
+	// catch, so the row names both.
+	{"mut_default", []string{"case003DefaultsAreVisible", "case003PreviousReleaseManifests"}},
 	{"mut_loss", []string{"case004TranslationLoss"}},
 	{"mut_unknownfield", []string{"case003UnknownField"}},
 	{"mut_unpriced", []string{"case007UnpricedUnderABudget"}},
