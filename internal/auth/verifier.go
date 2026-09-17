@@ -100,6 +100,10 @@ func (k jwk) usable() bool {
 // issuer, or whose key set has no RS256 or ES256 key, so a gateway never
 // starts trusting an issuer it cannot verify against. The error names the
 // issuer and what was read.
+//
+// Each issuer's validator is left warm, holding the key set it will
+// verify against, so the fetch is paid for at start-up and not by the
+// first request.
 func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 	if len(o.Issuers) == 0 {
 		return nil, errors.New("LUX_OIDC_ISSUERS: no issuer to verify against")
@@ -122,7 +126,7 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 			return nil, err
 		}
 		v.issuers = append(v.issuers, iss)
-		v.validators[iss] = jwt.New(jwt.Config{
+		validator := jwt.New(jwt.Config{
 			JWKSURL:   doc.JWKSURI,
 			Issuer:    doc.Issuer,
 			Audiences: []string{o.Audience},
@@ -138,6 +142,16 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 			ReadsGrants: true,
 			HTTPClient:  client,
 		})
+		// The check above read this issuer's key set with its own client,
+		// which left the validator that verifies the tokens holding
+		// nothing: the first request of the day paid for the fetch a
+		// second time. Warm reads the set into the validator once. A
+		// failure here is the issuer this gateway was just told to trust
+		// answering nothing, which is the start-up refusal above.
+		if err := validator.Warm(ctx); err != nil {
+			return nil, fmt.Errorf("LUX_OIDC_ISSUERS: issuer %s: key set: %w", iss, err)
+		}
+		v.validators[iss] = validator
 	}
 	return v, nil
 }

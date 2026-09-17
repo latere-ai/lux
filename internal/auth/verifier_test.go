@@ -473,3 +473,37 @@ func TestVerifierReadsTheGrantsAPersonalTokenCarries(t *testing.T) {
 		t.Errorf("a validator that does not read grants answered %v; a token carrying a restriction it would ignore is refused with %s", err, jwt.ReasonGrantsUnread)
 	}
 }
+
+// TestVerifierWarmsEachIssuersKeySet: a gateway reads every issuer's
+// discovery document and key set at start already, because it refuses to
+// start trusting an issuer it cannot verify against. That read is the
+// start-up check's own, so the validator that verifies the tokens held
+// nothing afterwards and the first request of the day paid for the fetch
+// a second time. Each validator is warmed at start-up now, and the first
+// token verifies without reaching the issuer again.
+func TestVerifierWarmsEachIssuersKeySet(t *testing.T) {
+	iss := newIssuer(t)
+	v := newVerifier(t, iss.URL())
+	token := iss.Mint(issuertest.Claims{Sub: "alice"})
+	before := reads(iss.Requests(), "/jwks")
+	if before == 0 {
+		t.Fatal("the start-up check read no key set")
+	}
+	if _, err := v.Verify(token); err != nil {
+		t.Fatal(err)
+	}
+	if after := reads(iss.Requests(), "/jwks"); after != before {
+		t.Errorf("the first token read the key set %d more time(s); start-up leaves every validator warm", after-before)
+	}
+}
+
+// reads counts the requests the stub issuer served for one path.
+func reads(requests []string, path string) int {
+	n := 0
+	for _, r := range requests {
+		if strings.HasSuffix(r, " "+path) {
+			n++
+		}
+	}
+	return n
+}
