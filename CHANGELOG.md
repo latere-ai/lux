@@ -6,6 +6,11 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A release's clean-runner check no longer fails on the blank line
+  `lateregate release` writes under a version heading; the release body
+  and the CHANGELOG section are trimmed the same way before they are
+  compared.
+
 ## v0.3.0 - 2026-09-17
 
 - A personal access token can now be narrower than the person holding
