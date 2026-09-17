@@ -486,3 +486,88 @@ func TestEveryImageReferenceNamesAPublishedRepository(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseBodyCheckReadsBothSidesTheSameWay runs the release-verify
+// step that holds the release body against the CHANGELOG section, with
+// the two `gh` fetches replaced by fixtures. `lateregate release` writes
+// `## vX.Y.Z - date` followed by the blank line that stood under
+// `## Unreleased`, so the extracted section begins blank; `lateregate
+// release-notes`, which writes the body, trims it. A step that trims
+// only one side reads that blank line as a difference and fails a
+// release whose body is correct, as v0.3.0's run did. The step is the
+// file's own text, so a change to it is a change to what runs here.
+func TestReleaseBodyCheckReadsBothSidesTheSameWay(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash is not on PATH, so the step's script is not exercised here")
+	}
+	const stepName = "The body is the CHANGELOG section for the tag"
+	w, _ := readWorkflow(t, "release.yml")
+	var script string
+	for _, step := range w.Jobs["release-verify"].Steps {
+		if step.Name == stepName {
+			script = step.Run
+		}
+	}
+	if script == "" {
+		t.Fatalf("release-verify has no %q step", stepName)
+	}
+	// Only the two fetches go; the fixtures below stand in for what they
+	// download. Their count is asserted, so a reworded fetch fails here
+	// rather than leaving a script that reads no fixture and passes.
+	var kept []string
+	fetches := 0
+	for line := range strings.SplitSeq(script, "\n") {
+		if strings.Contains(line, "gh release view") || strings.Contains(line, "gh api ") {
+			fetches++
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if fetches != 2 {
+		t.Fatalf("%d fetching lines removed from the step, want the 2 `gh` calls; the script has changed shape", fetches)
+	}
+	fragment := strings.Join(kept, "\n")
+
+	const changelog = "# Changelog\n\n## Unreleased\n\n## v9.9.9 - 2026-09-17\n\n" +
+		"- The section under the heading opens with the blank line the\n  release cut leaves there.\n\n- A second note.\n\n" +
+		"## v9.8.0 - 2026-09-16\n\n- An older note, which is no part of the tag's section.\n"
+	const notes = "- The section under the heading opens with the blank line the\n  release cut leaves there.\n\n- A second note.\n"
+
+	for _, c := range []struct {
+		name  string
+		body  string
+		match bool
+	}{
+		{"the body as release-notes writes it", notes, true},
+		{"a body padded with blank lines of its own", "\n\n" + notes + "\n\n", true},
+		{"a body carrying carriage returns", strings.ReplaceAll(notes, "\n", "\r\n"), true},
+		{"a body that is not the section", "- Something else entirely.\n", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte(changelog), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "body.md"), []byte(c.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", fragment)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "GITHUB_REF_NAME=v9.9.9")
+			out, err := cmd.CombinedOutput()
+			if c.match && err != nil {
+				t.Errorf("the step read a correct body as a difference: %v\n%s", err, out)
+			}
+			if !c.match && err == nil {
+				t.Errorf("the step passed a body that is not the section:\n%s", out)
+			}
+			section, readErr := os.ReadFile(filepath.Join(dir, "section.md"))
+			if readErr != nil {
+				t.Fatalf("the step wrote no section.md: %v", readErr)
+			}
+			if string(section) != notes {
+				t.Errorf("section.md = %q, want the section trimmed on both ends: %q", section, notes)
+			}
+		})
+	}
+}
