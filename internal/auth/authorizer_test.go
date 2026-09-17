@@ -95,8 +95,18 @@ func wantCode(t *testing.T, err error, code Code) *Error {
 func TestAuthorizerRequestShapes(t *testing.T) {
 	iss := newIssuer(t)
 	v := newVerifier(t, iss.URL())
+	// The token carries what a personal access token carries beside an
+	// issuer's own claims: the credential class and the grants its holder
+	// chose. The gateway interprets neither; both travel to the decision
+	// point with every other claim, which is what lets an operator's
+	// endpoint narrow its answer by them.
 	token := iss.Mint(issuertest.Claims{Sub: "alice", Extra: map[string]any{
 		"email": "alice@example.com", "groups": []string{"research"}, "plan": map[string]any{"name": "team", "seats": 5},
+		"token_use": authz.TokenUsePAT,
+		"authorization_details": []any{map[string]any{
+			"type": authz.GrantType, "actions": []string{"lux:" + authorizer.ActionModelRead},
+			"datatypes": []string{v1.KindModel}, "identifier": "mdl_01J9TESTMODEL00000000000000",
+		}},
 	}})
 	caller, err := v.Verify(token)
 	if err != nil {
