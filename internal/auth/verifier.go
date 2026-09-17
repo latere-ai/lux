@@ -123,11 +123,20 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 		}
 		v.issuers = append(v.issuers, iss)
 		v.validators[iss] = jwt.New(jwt.Config{
-			JWKSURL:    doc.JWKSURI,
-			Issuer:     doc.Issuer,
-			Audiences:  []string{o.Audience},
-			CacheTTL:   o.CacheTTL,
-			HTTPClient: client,
+			JWKSURL:   doc.JWKSURI,
+			Issuer:    doc.Issuer,
+			Audiences: []string{o.Audience},
+			CacheTTL:  o.CacheTTL,
+			// A personal access token carries the grants its holder chose
+			// as RFC 9396's authorization_details (spec 006). This gateway
+			// reads them: the claim reaches the authorizer in
+			// Caller.Claims, the owner policy intersects its own answer
+			// with it, and an operator's endpoint gets it forwarded
+			// verbatim. The flag is that promise, and a validator that has
+			// not made it refuses such a token outright rather than
+			// granting more than the person asked for.
+			ReadsGrants: true,
+			HTTPClient:  client,
 		})
 	}
 	return v, nil

@@ -12,12 +12,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"latere.ai/x/pkg/authkit/issuertest"
 	"latere.ai/x/pkg/authkit/jwt"
+	"latere.ai/x/pkg/authz"
+
+	"latere.ai/x/lux/authorizer"
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // audience is the gateway's audience in every test.
@@ -420,5 +425,51 @@ func TestOwnerIsTheTokensSubject(t *testing.T) {
 	c, err = v.Verify(minted.ActorToken)
 	if err != nil || c.Subject != iss.URL()+"|alice" {
 		t.Fatalf("actor token: %v, %+v", err, c)
+	}
+}
+
+// TestVerifierReadsTheGrantsAPersonalTokenCarries is what
+// jwt.Config.ReadsGrants turns on. A personal access token carries the
+// grants its holder chose as RFC 9396's authorization_details (spec
+// 006), and the verifier accepts it and hands the claim on verbatim, so
+// the decision point can intersect its answer with it.
+//
+// The other half is why the flag exists. A validator that does not read
+// the claim refuses the token with reason grants_unread rather than
+// verifying it and applying nothing: the claim says what the credential
+// may not do, so a reader that ignores it grants more than the person
+// asked for, silently. Setting the flag is a promise this gateway keeps
+// at its owner policy and forwards to an operator's authorizer.
+func TestVerifierReadsTheGrantsAPersonalTokenCarries(t *testing.T) {
+	iss := newIssuer(t)
+	const model = "mdl_01J9TESTMODEL00000000000000"
+	token := iss.Mint(issuertest.Claims{Sub: "alice", Extra: map[string]any{
+		"token_use": authz.TokenUsePAT,
+		"authorization_details": []any{map[string]any{
+			"type":       authz.GrantType,
+			"actions":    []string{"lux:" + authorizer.ActionModelUse},
+			"datatypes":  []string{v1.KindModel},
+			"locations":  []string{"https://api.example.com"},
+			"identifier": model,
+		}},
+	}})
+
+	c, err := newVerifier(t, iss.URL()).Verify(token)
+	if err != nil {
+		t.Fatalf("a personal access token carrying grants was refused: %v", err)
+	}
+	grants, err := authz.ParseGrants(c.Claims)
+	if err != nil {
+		t.Fatalf("the verified caller's claims do not read as grants: %v", err)
+	}
+	if len(grants) != 1 || !slices.Contains(grants[0].Actions, "lux:"+authorizer.ActionModelUse) || grants[0].Identifier != model {
+		t.Errorf("the caller carries %+v; the claim the token was minted with names lux:%s on %s", grants, authorizer.ActionModelUse, model)
+	}
+
+	// The same token, the same key set, a validator that promises
+	// nothing: the shared library's closed answer.
+	unread := jwt.New(jwt.Config{JWKSURL: iss.JWKSURL(), Issuer: iss.URL(), Audiences: []string{audience}})
+	if _, err := unread.Validate(token); !errors.Is(err, jwt.ErrGrantsUnread) || jwt.ReasonOf(err) != jwt.ReasonGrantsUnread {
+		t.Errorf("a validator that does not read grants answered %v; a token carrying a restriction it would ignore is refused with %s", err, jwt.ReasonGrantsUnread)
 	}
 }
