@@ -6,11 +6,15 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/authz/conformance"
+	"latere.ai/x/pkg/authz/server"
 
 	"latere.ai/x/lux/authorizer"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -209,4 +213,154 @@ func TestOwnerPolicyIsAnAuthorizer(t *testing.T) {
 	if _, err := a.Authorize(context.Background(), authz.Probe(authorizer.ActionKeyRead, v1.KindKey)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// scopedRequest is one envelope from a personal access token: the claims
+// a verified token carries, with the grants its holder chose.
+func scopedRequest(subject, action, kind, id string, grants ...authz.Grant) authz.Request {
+	claims := map[string]any{"iss": fixtureIssuer, "sub": "root", "token_use": authz.TokenUsePAT}
+	if grants != nil {
+		claims["authorization_details"] = grants
+	}
+	req := authz.Request{
+		Subject:  subject,
+		Action:   action,
+		Resource: authz.NewResource(kind, id, map[string]any{"owner": subject}),
+		Claims:   claims,
+	}
+	req.Issuer, req.Sub, _ = authz.SplitSubject(subject)
+	return req
+}
+
+// grantOn is one RFC 9396 entry: the actions, qualified by the core, and
+// the one resource they name.
+func grantOn(id string, actions ...string) authz.Grant {
+	qualified := make([]string, 0, len(actions))
+	for _, a := range actions {
+		qualified = append(qualified, "lux:"+a)
+	}
+	return authz.Grant{
+		Type:       authz.GrantType,
+		Actions:    qualified,
+		Datatypes:  []string{authorizer.Kind(actions[0])},
+		Locations:  []string{"https://api.example.com"},
+		Identifier: id,
+	}
+}
+
+// TestOwnerPolicyRestrictsToTheTokensGrants is spec 006's grant case at
+// the site that decides: a personal access token granted one action on
+// one resource is refused every other action on that resource and that
+// action on every other resource, with reason grant, and is not refused
+// the one its grant names.
+//
+// The subject is an admin, so the owner policy allows every row of the
+// table and the grants alone move the answer. The rows after it are the
+// three properties the intersection has to keep: a grant is never
+// authority, a token of another class is decided by the policy alone,
+// and a personal token that carries no grant reaches nothing.
+func TestOwnerPolicyRestrictsToTheTokensGrants(t *testing.T) {
+	const here = "mdl_01J9TESTMODELHERE00000000"
+	const elsewhere = "mdl_01J9TESTMODELAWAY00000000"
+	p := &OwnerPolicy{Admins: []string{adminSubject}, Objects: objectsOf()}
+	read := grantOn(here, authorizer.ActionModelRead)
+
+	for _, tc := range []struct {
+		name string
+		req  authz.Request
+		want verdict
+	}{
+		{
+			"the action and the resource its own grant names",
+			scopedRequest(adminSubject, authorizer.ActionModelRead, v1.KindModel, here, read),
+			allow,
+		},
+		{
+			"another action on the granted resource",
+			scopedRequest(adminSubject, authorizer.ActionModelUpdate, v1.KindModel, here, read),
+			verdict{reason: authz.ReasonGrant},
+		},
+		{
+			"the granted action on a resource no grant names",
+			scopedRequest(adminSubject, authorizer.ActionModelRead, v1.KindModel, elsewhere, read),
+			verdict{reason: authz.ReasonGrant},
+		},
+		{
+			// A grant is a restriction and never authority: the policy
+			// answers first, and it denies another subject's object
+			// whatever the token says about it.
+			"a grant on an object the person may not touch",
+			scopedRequest(otherSubject, authorizer.ActionModelUpdate, v1.KindModel, here, grantOn(here, authorizer.ActionModelUpdate)),
+			admins,
+		},
+		{
+			// The claim is read on a personal access token alone.
+			"another credential class carrying the same claim",
+			func() authz.Request {
+				req := scopedRequest(adminSubject, authorizer.ActionModelUpdate, v1.KindModel, here, read)
+				req.Claims["token_use"] = "access"
+				return req
+			}(),
+			allow,
+		},
+		{
+			// An absent claim is not full access: a personal token
+			// nobody wrote a grant for reaches nothing.
+			"a personal token carrying no grant at all",
+			scopedRequest(adminSubject, authorizer.ActionModelRead, v1.KindModel, here),
+			verdict{reason: authz.ReasonGrant},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := p.Authorize(t.Context(), tc.req)
+			if err != nil {
+				t.Fatalf("%s on %s: %v", tc.req.Action, tc.req.Resource.ID, err)
+			}
+			if d.Allow != tc.want.allow || d.Reason != tc.want.reason {
+				t.Errorf("%s on %s = {allow:%v reason:%q}, want {allow:%v reason:%q}",
+					tc.req.Action, tc.req.Resource.ID, d.Allow, d.Reason, tc.want.allow, tc.want.reason)
+			}
+		})
+	}
+}
+
+// decider adapts an authz.Authorizer to the scaffold's Decider, which
+// names the same call: the owner policy answers a request from the
+// gateway's own state, and a deny is a decision and never an error.
+type decider struct{ a authz.Authorizer }
+
+func (d decider) Decide(ctx context.Context, req authz.Request) (authz.Decision, error) {
+	return d.a.Authorize(ctx, req)
+}
+
+// TestOwnerPolicyConforms holds the owner policy to the contract every
+// authorizer of the family passes, driven from the declared table rather
+// than from a list written out here: the probe is denied for every
+// subject and action, a wrong bearer and no bearer are refused, an
+// action outside the table is a 400, every well-formed request is
+// answered with a decision of the contract's shape, and a personal
+// access token is answered inside the grants it carries.
+//
+// The subject the grant case uses is an admin here, so the policy allows
+// every row and the intersection is the only thing that can move the
+// answer: a grant qualified by another core would deny the action its
+// own grant names, and the suite reads that as the endpoint refusing
+// what the credential was written for.
+//
+// The scaffold applies the intersection too, so this run proves the
+// endpoint and not the policy alone; TestOwnerPolicyRestrictsToTheTokensGrants
+// is the same case against the policy in process, where nothing else
+// could be answering.
+func TestOwnerPolicyConforms(t *testing.T) {
+	const bearer = "the-owner-policy-token"
+	srv := httptest.NewServer(server.New(server.Options{
+		Bearer:     bearer,
+		Vocabulary: authorizer.Vocabulary(),
+		Decider:    decider{&OwnerPolicy{Admins: []string{fixtureSubject}, Objects: objectsOf()}},
+	}))
+	t.Cleanup(srv.Close)
+	conformance.Run(t, srv.URL, bearer,
+		conformance.WithVocabulary(authorizer.Vocabulary()),
+		conformance.WithSubjects(fixtureSubject, otherSubject),
+		conformance.WithHTTPClient(&http.Client{}))
 }

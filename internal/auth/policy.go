@@ -50,6 +50,12 @@ const (
 // every other action on an object named by id is the frame's, the owner
 // allowed and everyone else not_owner whether or not the object exists.
 // No limits are granted.
+//
+// Every allow is then intersected with the grants the caller's token
+// carries, which is what luxd promises by reading them at the door
+// (spec 006). A person's key narrowed to some Models or some Keys is
+// answered grant everywhere else, and a grant on an object the person
+// may not touch still reaches nothing: the rows above answer first.
 type OwnerPolicy struct {
 	// Admins are the rendered subjects of LUX_ADMIN_SUBJECTS.
 	Admins []string
@@ -57,8 +63,44 @@ type OwnerPolicy struct {
 	Objects ObjectLookup
 }
 
-// Authorize implements authz.Authorizer.
+// Authorize implements authz.Authorizer: the rows above, intersected
+// with the grants the caller's token carries.
 func (p *OwnerPolicy) Authorize(ctx context.Context, req authz.Request) (authz.Decision, error) {
+	d, err := p.decide(ctx, req)
+	if err != nil {
+		return authz.Decision{}, err
+	}
+	return restrict(req, d), nil
+}
+
+// core qualifies a bare action the way the claim writes it, lux:key.read
+// for key.read. It is the published vocabulary's own name, read once,
+// because a comparison that forgets to qualify denies everything.
+var core = authorizer.Vocabulary().Core
+
+// restrict is spec 006's conjunction at the site that decides: a
+// personal access token carries the grants its holder chose, and an
+// allow the grants do not cover becomes a deny with reason grant. It
+// never turns a deny into an allow, so the policy above is the ceiling
+// and a grant is never authority.
+//
+// A claim that cannot be read as grants is a deny, the way the shared
+// scaffold answers one: the verifier at luxd's door refuses such a
+// token, so one that reached here arrived another way and the closed
+// answer is the only safe one.
+func restrict(req authz.Request, d authz.Decision) authz.Decision {
+	if !d.Allow {
+		return d
+	}
+	grants, err := authz.ParseGrants(req.Claims)
+	if err != nil {
+		return authz.Decision{Reason: authz.ReasonGrant}
+	}
+	return authz.Restrict(core, d, req, grants)
+}
+
+// decide is the policy's own answer, the rows of the comment above.
+func (p *OwnerPolicy) decide(ctx context.Context, req authz.Request) (authz.Decision, error) {
 	frame := authz.Policy{Admins: p.Admins}
 	switch {
 	case strings.EqualFold(req.Resource.ID, authz.ProbeID):
