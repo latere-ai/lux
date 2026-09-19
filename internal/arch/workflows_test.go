@@ -88,12 +88,15 @@ func TestReleasePublishesUnderTheOwnersNamespace(t *testing.T) {
 type workflow struct {
 	Permissions map[string]string `yaml:"permissions"`
 	Jobs        map[string]struct {
-		Permissions map[string]string `yaml:"permissions"`
-		Needs       any               `yaml:"needs"`
-		Steps       []struct {
-			Name string `yaml:"name"`
-			Uses string `yaml:"uses"`
-			Run  string `yaml:"run"`
+		If              string            `yaml:"if"`
+		ContinueOnError any               `yaml:"continue-on-error"`
+		Permissions     map[string]string `yaml:"permissions"`
+		Needs           any               `yaml:"needs"`
+		Steps           []struct {
+			ContinueOnError any    `yaml:"continue-on-error"`
+			Name            string `yaml:"name"`
+			Uses            string `yaml:"uses"`
+			Run             string `yaml:"run"`
 		} `yaml:"steps"`
 	} `yaml:"jobs"`
 }
