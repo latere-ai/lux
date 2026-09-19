@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.4.0 - 2026-09-19
+
 - `client/tunnel` exposes the existing HTTP/2 tunnel agent for platform CLIs.
   It serves one session with a refreshing token source, typed close/refusal
   errors, streaming and clean cancellation. The caller controls reconnects.
