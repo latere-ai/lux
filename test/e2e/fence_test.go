@@ -50,7 +50,19 @@ func TestE2EKeyFenceLifecycle(t *testing.T) {
 	if rotated.status != http.StatusConflict || !bytes.Contains(rotated.body, []byte("key_fenced")) {
 		t.Fatal(rotated.status, string(rotated.body))
 	}
-	disabled := applyWith(t, s, s.token, "key", "fenced", keySpec("fenced", "  models: [fence-model]\n  ttl: 1h\n  disabled: true\n"))
+	// Removal of a referenced model must not prevent exact credential cleanup.
+	removed := do(t, http.MethodDelete, s.gw.public+"/v1/models/fence-model", bearer(s.token), "")
+	if removed.status != http.StatusNoContent {
+		t.Fatal(removed.status, string(removed.body))
+	}
+	current := do(t, http.MethodGet, s.gw.public+"/v1/keys/fenced", bearer(s.token), "").json(t)
+	spec := current["spec"].(map[string]any)
+	spec["disabled"] = true
+	raw, err := json.Marshal(map[string]any{"metadata": current["metadata"], "spec": spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := do(t, http.MethodPut, s.gw.public+"/v1/keys/fenced", headers, string(raw))
 	if disabled.status != http.StatusOK {
 		t.Fatal(disabled.status, string(disabled.body))
 	}
@@ -66,6 +78,7 @@ func TestE2EKeyFenceLifecycle(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	s.model(t, "fence-model", "openai", "stub-openai", true)
 	enabled := applyWith(t, s, s.token, "key", "fenced", manifest)
 	if enabled.status != http.StatusConflict || !bytes.Contains(enabled.body, []byte("key_fenced")) {
 		t.Fatal(enabled.status, string(enabled.body))

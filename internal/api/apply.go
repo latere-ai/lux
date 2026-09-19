@@ -114,22 +114,25 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 	}
 	refs := &references{objects: c.h.o.Store.Objects()}
 	resolvedAt := c.h.o.Now()
-	resolved, rerr := manifest.Resolve(ctx, in, manifest.Options{
-		Actor:                 manifest.Actor{Subject: c.caller.Subject},
-		Lookup:                c.lookup(refs).ForMutation(k.name, proposed),
-		Defaults:              c.h.o.Defaults,
-		Limits:                decision.Limits.Key,
-		Existing:              existing,
-		AllowPrivateUpstreams: c.h.o.AllowPrivateUpstreams,
-		TunnelEnabled:         c.h.o.TunnelEnabled,
-		PublicURL:             c.h.o.PublicURL,
-		Now:                   func() time.Time { return resolvedAt },
-		NewName:               c.h.o.NewName,
-	})
-	if rerr != nil {
-		return 0, nil, 0, mapError(rerr)
+	obj := exactKeyDisable(in, existing)
+	if obj == nil {
+		resolved, rerr := manifest.Resolve(ctx, in, manifest.Options{
+			Actor:                 manifest.Actor{Subject: c.caller.Subject},
+			Lookup:                c.lookup(refs).ForMutation(k.name, proposed),
+			Defaults:              c.h.o.Defaults,
+			Limits:                decision.Limits.Key,
+			Existing:              existing,
+			AllowPrivateUpstreams: c.h.o.AllowPrivateUpstreams,
+			TunnelEnabled:         c.h.o.TunnelEnabled,
+			PublicURL:             c.h.o.PublicURL,
+			Now:                   func() time.Time { return resolvedAt },
+			NewName:               c.h.o.NewName,
+		})
+		if rerr != nil {
+			return 0, nil, 0, mapError(rerr)
+		}
+		obj = resolved.Object
 	}
-	obj := resolved.Object
 	w, err := c.prepareWrite(obj, existing, refs, owner, resolvedAt)
 	if err != nil {
 		return 0, nil, 0, err
@@ -346,4 +349,21 @@ func (c *call) requestedOwner(existing v1.Object) (string, *Error) {
 		return "", refuse(CodeInvalidField, "Lux-Owner must name a rendered issuer|subject", "Lux-Owner")
 	}
 	return requested, nil
+}
+
+// exactKeyDisable retains resolved identity while reducing authority. The normal
+// key.update decision and optimistic write still apply; reference access and
+// current issuance ceilings cannot prevent this exact cleanup operation.
+func exactKeyDisable(in, existing v1.Object) v1.Object {
+	next, ok := in.(*v1.Key)
+	old, had := existing.(*v1.Key)
+	if !ok || !had || next == nil || old == nil {
+		return nil
+	}
+	candidate := *next
+	candidate.Status = old.Status
+	if !store.DisableOnly(old, &candidate) {
+		return nil
+	}
+	return &candidate
 }

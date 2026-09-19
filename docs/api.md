@@ -149,3 +149,10 @@ registry can compare this fingerprint to admit only its registered credential.
 `absent` means create may mint a new value, while update retains its value;
 rotation is distinguished by `resource.operation`. Reference bindings and owner
 assignment carry the identical descriptor.
+
+An exact Key disable keeps every metadata and spec field unchanged except
+`disabled: true`. It still requires `key.update` permission and honors `If-Match`,
+but does not require model/budget reference access or satisfy new issuance
+ceilings. This lets a controller disable expired Keys or Keys whose references
+were removed. Read the current Key, keep its metadata and spec, set `disabled`,
+and PUT with that read's ETag. Stored budget identity and expiry remain unchanged.
