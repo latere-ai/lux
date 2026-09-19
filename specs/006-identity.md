@@ -197,6 +197,11 @@ peer's, or the forwarded one behind a proxy listed in
 | `budget.list` | `{"kind": "Budget"}`; `filter` applies |
 | `budget.draw` | the Budget as above; asked at Key resolve through `Lookup.Budget` |
 | `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
+| `owner.assign` | `{"kind": "Ownership", "target_kind", "name", "owner", "proposed"}`; additional permission to assign the owner of a new object ([[025-mutation-authorization]]) |
+
+Create and update decisions additionally carry `proposed`, the requested owner,
+metadata and sanitized spec. Existing update fields retain the stored state.
+Secrets and status are omitted as specified in [[025-mutation-authorization]].
 
 Every list and map field of a resource is present and never `null`, so
 an authorizer in any language reads `resource.labels` as an object and
@@ -296,8 +301,9 @@ Rules:
   `store_unavailable` for it ([[011-api]]).
 - An allow is cached per replica for the answer's `ttl`, `60s` when
   the answer names none, capped at `600s`; a deny for `5s`;
-  unavailability never; under the key of subject, action, and resource
-  id, with the `limits` and `filter` that came with them
+  unavailability never; keyed by the complete serialized decision input
+  except the correlation request id, including claims and proposed mutations,
+  with the `limits` and `filter` that came with them
   (`authz.Client`). An answer about a resource with no id is never
   cached, because nothing names a key to remember it by: `create`,
   `list`, `usage.read`, and `model.use`, whose resource is a selector

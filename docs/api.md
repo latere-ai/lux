@@ -25,6 +25,11 @@ There is no `PATCH` and no creating `POST`: the loop is `GET`, edit,
 `PUT`, and a `PUT` repeated with one body is `201` then `200` on the same
 object.
 
+An optional `Lux-Owner: issuer|subject` header assigns the immutable owner on
+create. Assigning another principal requires both the ordinary create permission
+and `owner.assign`. Updates may omit the header or repeat the stored owner.
+The authenticated writer remains the audit actor.
+
 ## The doors
 
 Inference does not go through `/v1`. Each provider dialect has its own

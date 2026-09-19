@@ -62,12 +62,33 @@ the tree so it stays that way.
 | per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup` answers `Models` for the tenant |
 | funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person; the gateway never sees a cookie | reads the platform's own API |
-| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's own prefix | the platform's own service identity in `Options.Actor` |
+| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the default `owner`; use the Lux-Owner header and an explicit `owner.assign` authorization to provision for another principal | the platform's own service identity in `Options.Actor` |
 | one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches; the gateway matches it by hash and decodes nothing; a platform whose credential store kept only hashes supplies `spec.valueSHA256` instead and re-issues nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals | the platform's own `Recorder` |
 | audit | the signed event sink at `LUX_EVENTS_URL` | the platform's own sink |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
 | a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` | the same |
+
+## Mutation admission and ownership
+
+Create and update decisions include `resource.proposed` with the requested
+`owner`, `metadata`, and `spec`. On updates, the existing top-level resource
+fields still describe the stored object. Enforce tenant labels, model selectors,
+limits and switches against the proposal before allowing the mutation. The
+proposal excludes status, Key values and hashes, Provider credential values,
+and Provider header values; `spec.headerNames` and `spec.credentialSupplied`
+report names and presence without secrets. Decision caching distinguishes the
+complete request input, including the proposal and claims.
+
+To provision for a principal with a service token, send `Lux-Owner: issuer|sub`
+on the create PUT. The core requires the ordinary create permission plus
+`owner.assign` on an `Ownership` resource carrying `target_kind`, `name`, `owner`,
+and `proposed`. The ordinary decision supplies all ceilings; Key quotas count
+the assigned owner. The service remains the authenticated writer and audit
+actor. Ownership cannot change on update, even for an administrator. An
+endpoint that does not recognize `owner.assign` refuses the operation; upgrade
+its vocabulary before enabling provisioning. The built-in policy reserves
+assignment to administrators.
 
 ## The minimal authorizer
 
@@ -97,7 +118,7 @@ does not write again. The table that scaffold validates against is
 `latere.ai/x/lux/authorizer`'s, the package that carries the vocabulary
 `luxd` asks in, so a reader who copies the block runs
 `go get latere.ai/x/lux` first and then reads one table instead of
-keeping a copy of the twenty-four strings. None of Lux's four list
+keeping a copy of the twenty-five strings. None of Lux's four list
 actions answers with a page of its own, so the endpoint names no page
 action and writes no `Lister`. It is `examples/authorizer/main.go`, and
 a test holds this block and that file equal, so what is printed here
@@ -177,6 +198,8 @@ func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, erro
 	mine := &authz.Filter{Owners: []string{req.Subject}}
 	owner := req.Resource.String("owner")
 	switch kind := authorizer.Kind(req.Action); {
+	case kind == authorizer.KindOwnership:
+		return authz.Decision{Allow: plan == "admin", Reason: "owner assignment requires an administrator"}, nil
 	case kind == "Provider", kind == "Model":
 		switch {
 		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):

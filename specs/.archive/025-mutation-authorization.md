@@ -1,6 +1,6 @@
 ---
 title: Authorize proposed mutations and explicit owner assignment
-status: in-progress
+status: complete
 track: core
 depends_on:
   - 006-identity.md
@@ -67,3 +67,19 @@ field and file-mode loading is unchanged. Key quotas count the assigned owner.
 ## Not in this spec
 
 Object transfers, tenant policy, identity impersonation, or deployment grants.
+
+## Outcome
+
+Implemented sanitized mutation proposals and explicit immutable owner assignment.
+The original writer remains the actor, ordinary action ceilings remain in force,
+and key quotas count the assigned owner. Shared client v0.77.1 fingerprints the
+complete decision input; the HTTP regression accepted a foreign tenant update
+before this dependency fix and refuses it afterward. Tunnel conversion is now
+refused by authorization before the existing immutable-field validation.
+
+HTTP tests cover ownership, audit, quotas across writers, immutable updates,
+missing permissions, malformed headers, legacy endpoints and warm-cache changes.
+Secret canaries verify proposals omit values, hashes, status and header values.
+The example, vocabulary table, API document and platform-composition guide match.
+Race coverage: authorizer 95.9%, identity 97.0%, API 94.2%. Full tests, vet,
+build and lint verified; no design deviations or deferred criteria.

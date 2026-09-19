@@ -107,6 +107,7 @@ func shapes(t *testing.T) map[string]map[string]any {
 		ActionBudgetList:   {"kind": "Budget"},
 		ActionBudgetDraw:   budget,
 		ActionUsageRead:    {"kind": "Usage", "keys": []any{"key_01J9TESTKEY0000000000000000"}, "owners": []any{fixtureSubject}},
+		ActionOwnerAssign:  {"kind": "Ownership", "target_kind": "Key", "name": "run-42", "owner": fixtureSubject, "proposed": map[string]any{"owner": fixtureSubject}},
 	}
 }
 
@@ -115,6 +116,8 @@ func shapes(t *testing.T) map[string]map[string]any {
 func resourceOf(t *testing.T, action string) authz.Resource {
 	t.Helper()
 	switch action {
+	case ActionOwnerAssign:
+		return OwnerAssignment("Key", "run-42", fixtureSubject, map[string]any{"owner": fixtureSubject})
 	case ActionModelUse:
 		return ModelUse("anthropic/*", fixtureMatched)
 	case ActionUsageRead:
@@ -230,16 +233,16 @@ func TestResourceForRefusesTheWrongKind(t *testing.T) {
 	}
 }
 
-// TestActionsAndKinds: the vocabulary is the table's twenty-four
+// TestActionsAndKinds: the vocabulary is the table's twenty-five
 // actions, each maps to its kind, and anything else maps to none.
 func TestActionsAndKinds(t *testing.T) {
 	all := Actions()
-	if len(all) != 24 || len(slices.Compact(slices.Sorted(slices.Values(all)))) != 24 {
+	if len(all) != 25 || len(slices.Compact(slices.Sorted(slices.Values(all)))) != 25 {
 		t.Fatalf("Actions() = %v", all)
 	}
 	for _, a := range all {
 		prefix, _, _ := strings.Cut(a, ".")
-		want := map[string]string{"provider": "Provider", "model": "Model", "key": "Key", "budget": "Budget", "usage": KindUsage}[prefix]
+		want := map[string]string{"provider": "Provider", "model": "Model", "key": "Key", "budget": "Budget", "usage": KindUsage, "owner": KindOwnership}[prefix]
 		if Kind(a) != want || !Known(a) {
 			t.Errorf("Kind(%s) = %q, Known %v; want %q", a, Kind(a), Known(a), want)
 		}
@@ -255,7 +258,7 @@ func TestActionsAndKinds(t *testing.T) {
 	}
 }
 
-// TestVocabularyIsTheTable: Vocabulary carries the twenty-four rows in
+// TestVocabularyIsTheTable: Vocabulary carries the twenty-five rows in
 // the table's order, each action with the kind it acts on, and the three
 // older reads are that value read three ways rather than a second table.
 func TestVocabularyIsTheTable(t *testing.T) {
@@ -263,8 +266,8 @@ func TestVocabularyIsTheTable(t *testing.T) {
 	if v.Core != "lux" {
 		t.Errorf("Core = %q, want lux", v.Core)
 	}
-	if len(v.Actions) != 24 {
-		t.Fatalf("the vocabulary has %d rows, want the table's twenty-four", len(v.Actions))
+	if len(v.Actions) != 25 {
+		t.Fatalf("the vocabulary has %d rows, want the table's twenty-five", len(v.Actions))
 	}
 	names := make([]string, 0, len(v.Actions))
 	for _, a := range v.Actions {
@@ -277,7 +280,7 @@ func TestVocabularyIsTheTable(t *testing.T) {
 	if !slices.Equal(names, Actions()) {
 		t.Errorf("Actions() = %v, and the vocabulary names %v", Actions(), names)
 	}
-	if got, want := v.Kinds(), []string{v1.KindProvider, v1.KindModel, v1.KindKey, v1.KindBudget, KindUsage}; !slices.Equal(got, want) {
+	if got, want := v.Kinds(), []string{v1.KindProvider, v1.KindModel, v1.KindKey, v1.KindBudget, KindUsage, KindOwnership}; !slices.Equal(got, want) {
 		t.Errorf("Kinds() = %v, want %v", got, want)
 	}
 	for _, a := range []string{"", "key", "key.rotate", "usage.write", "Provider.read"} {
@@ -322,6 +325,7 @@ func TestVocabularyLabelsEveryKind(t *testing.T) {
 		v1.KindKey:      "Keys",
 		v1.KindBudget:   "Budgets",
 		KindUsage:       "Usage",
+		KindOwnership:   "Ownership",
 	}
 	v := Vocabulary()
 	for _, kind := range v.Kinds() {

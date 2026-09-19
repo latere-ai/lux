@@ -9,7 +9,10 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
@@ -81,10 +84,30 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 	if existing != nil {
 		action, subject = k.update, existing
 	}
+	owner, ownerErr := c.requestedOwner(existing)
+	if ownerErr != nil {
+		return 0, nil, 0, ownerErr
+	}
+	proposed, proposalErr := authorizer.Proposal(in, owner)
+	if proposalErr != nil {
+		return 0, nil, 0, refuse(CodeInvalidField, "the mutation proposal could not be encoded")
+	}
 	res, _ := authorizer.ResourceFor(action, subject)
+	res.Fields["proposed"] = proposed
 	decision, err := c.authorize(ctx, action, res)
 	if err != nil {
 		return 0, nil, 0, err
+	}
+	if existing != nil && owner != existing.Owner() {
+		return 0, nil, 0, refuse(CodeInvalidField, "an existing object's owner cannot change", "Lux-Owner")
+	}
+	if existing == nil && owner != c.caller.Subject {
+		// This extra check must not replace the ordinary action's limits or the
+		// writer's rate memo, and reference checks continue as the real caller.
+		_, assignErr := c.h.o.Authorizer.Decide(ctx, c.caller, authorizer.ActionOwnerAssign, authorizer.OwnerAssignment(k.name, name, owner, proposed), c.info())
+		if assignErr != nil {
+			return 0, nil, 0, mapError(assignErr)
+		}
 	}
 	if err := pre.check(existing != nil, version); err != nil {
 		return 0, nil, 0, err
@@ -106,13 +129,13 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		return 0, nil, 0, mapError(rerr)
 	}
 	obj := resolved.Object
-	w, err := c.prepareWrite(obj, existing, refs)
+	w, err := c.prepareWrite(obj, existing, refs, owner)
 	if err != nil {
 		return 0, nil, 0, err
 	}
 	terr := c.h.o.Store.Transact(ctx, func(tx store.Store) error {
 		if existing == nil && k.name == v1.KindKey && decision.Limits.MaxKeys > 0 {
-			if err := c.checkMaxKeys(ctx, tx, decision.Limits.MaxKeys); err != nil {
+			if err := c.checkMaxKeys(ctx, tx, owner, decision.Limits.MaxKeys); err != nil {
 				return err
 			}
 		}
@@ -144,8 +167,8 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 
 // checkMaxKeys is the max_keys ceiling of spec 006 at key.create, inside
 // the write's transaction: the subject's live Keys against the cap.
-func (c *call) checkMaxKeys(ctx context.Context, tx store.Store, maxKeys int) error {
-	keys, _, err := tx.Objects().List(ctx, v1.KindKey, store.Filter{Owner: c.caller.Subject}, store.Page{})
+func (c *call) checkMaxKeys(ctx context.Context, tx store.Store, owner string, maxKeys int) error {
+	keys, _, err := tx.Objects().List(ctx, v1.KindKey, store.Filter{Owner: owner}, store.Page{})
 	if err != nil {
 		return err
 	}
@@ -167,9 +190,9 @@ type write struct {
 // the transaction's other writes: a Key's hash, a Provider's sealed
 // credential. The Key's value, minted or supplied, leaves the object
 // here; a minted one returns on the response alone.
-func (c *call) prepareWrite(obj, existing v1.Object, refs *references) (write, *Error) {
+func (c *call) prepareWrite(obj, existing v1.Object, refs *references, owner string) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
-	id, owner, createdAt := c.h.o.NewID(kindOf(obj.Kind()).prefix), c.caller.Subject, timeRef{}
+	id, createdAt := c.h.o.NewID(kindOf(obj.Kind()).prefix), timeRef{}
 	if existing != nil {
 		id, owner, createdAt = existing.ID(), existing.Owner(), createdAtOf(existing)
 	}
@@ -299,4 +322,27 @@ func (c *call) readBody() ([]byte, *Error) {
 		return nil, refuse(CodeMalformedBody, "reading the body: "+err.Error())
 	}
 	return body, nil
+}
+
+// requestedOwner preserves the existing owner unless an explicit header asks
+// for another. The caller's ordinary permission is checked before rejecting
+// an attempted transfer, so foreign object existence is not exposed by it.
+func (c *call) requestedOwner(existing v1.Object) (string, *Error) {
+	owner := c.caller.Subject
+	if existing != nil {
+		owner = existing.Owner()
+	}
+	values := c.r.Header.Values("Lux-Owner")
+	if len(values) == 0 {
+		return owner, nil
+	}
+	if len(values) != 1 {
+		return "", refuse(CodeInvalidField, "Lux-Owner must occur once", "Lux-Owner")
+	}
+	requested := values[0]
+	issuer, sub, ok := authz.SplitSubject(requested)
+	if !ok || issuer == "" || sub == "" || len(requested) > 2048 || strings.TrimSpace(requested) != requested {
+		return "", refuse(CodeInvalidField, "Lux-Owner must name a rendered issuer|subject", "Lux-Owner")
+	}
+	return requested, nil
 }

@@ -6,6 +6,12 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Authorizers receive sanitized proposed state for every create and update.
+  Cached decisions distinguish changed claims and proposals. Services can
+  assign a new object's immutable owner with `Lux-Owner`, subject to both
+  ordinary create permission and the new `owner.assign` action. The writer
+  remains the audit actor and Key quotas count the assigned owner.
+
 - `LUX_DB_POOL_URL` optionally sends serving queries through a transaction
   pooler while migrations keep using the direct `LUX_DB_URL`. Pools no
   longer keep an idle connection, and pooled serving disables pgx's

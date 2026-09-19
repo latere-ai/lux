@@ -47,6 +47,7 @@ paths:
           type: string
       - $ref: "#/components/parameters/ifMatch"
       - $ref: "#/components/parameters/ifNoneMatch"
+      - $ref: "#/components/parameters/luxOwner"
       requestBody:
         required: true
         description: A Provider manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
@@ -190,6 +191,7 @@ paths:
           type: string
       - $ref: "#/components/parameters/ifMatch"
       - $ref: "#/components/parameters/ifNoneMatch"
+      - $ref: "#/components/parameters/luxOwner"
       requestBody:
         required: true
         description: A Model manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
@@ -331,6 +333,7 @@ paths:
           type: string
       - $ref: "#/components/parameters/ifMatch"
       - $ref: "#/components/parameters/ifNoneMatch"
+      - $ref: "#/components/parameters/luxOwner"
       requestBody:
         required: true
         description: A Key manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
@@ -505,6 +508,7 @@ paths:
           type: string
       - $ref: "#/components/parameters/ifMatch"
       - $ref: "#/components/parameters/ifNoneMatch"
+      - $ref: "#/components/parameters/luxOwner"
       requestBody:
         required: true
         description: A Budget manifest, or one without apiVersion, kind, and metadata.name, which the route supplies.
@@ -937,6 +941,14 @@ components:
         minimum: 1
         maximum: 1000
         default: 50
+    luxOwner:
+      name: Lux-Owner
+      in: header
+      required: false
+      description: The immutable rendered owner (issuer|subject). Defaults to the caller on create. Assigning another owner also requires owner.assign. An update may omit this header or repeat the current owner.
+      schema:
+        type: string
+        maxLength: 2048
     ifMatch:
       name: If-Match
       in: header

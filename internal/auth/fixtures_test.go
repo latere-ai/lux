@@ -106,6 +106,7 @@ func shapes(t *testing.T) map[string]map[string]any {
 		authorizer.ActionBudgetList:   {"kind": "Budget"},
 		authorizer.ActionBudgetDraw:   budget,
 		authorizer.ActionUsageRead:    {"kind": "Usage", "keys": []any{"key_01J9TESTKEY0000000000000000"}, "owners": []any{fixtureSubject}},
+		authorizer.ActionOwnerAssign:  {"kind": "Ownership", "target_kind": "Key", "name": "run-42", "owner": fixtureSubject, "proposed": map[string]any{"owner": fixtureSubject}},
 	}
 }
 
@@ -114,6 +115,8 @@ func shapes(t *testing.T) map[string]map[string]any {
 func resourceOf(t *testing.T, action string) authz.Resource {
 	t.Helper()
 	switch action {
+	case authorizer.ActionOwnerAssign:
+		return authorizer.OwnerAssignment("Key", "run-42", fixtureSubject, map[string]any{"owner": fixtureSubject})
 	case authorizer.ActionModelUse:
 		return authorizer.ModelUse("anthropic/*", fixtureMatched)
 	case authorizer.ActionUsageRead:

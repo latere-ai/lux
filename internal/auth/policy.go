@@ -114,12 +114,23 @@ func (p *OwnerPolicy) decide(ctx context.Context, req authz.Request) (authz.Deci
 		return authz.Decision{Allow: true}, nil
 	}
 	switch req.Action {
+	case authorizer.ActionOwnerAssign:
+		return authz.Decision{Reason: ReasonAdminOnly}, nil
 	case authorizer.ActionProviderCreate:
 		if tunnel, _ := req.Resource.Fields["tunnel"].(bool); tunnel {
 			return authz.Decision{Allow: true}, nil
 		}
 		return authz.Decision{Reason: ReasonAdminOnly}, nil
 	case authorizer.ActionProviderUpdate, authorizer.ActionProviderDelete:
+		if req.Action == authorizer.ActionProviderUpdate {
+			if proposed, ok := req.Resource.Fields["proposed"].(map[string]any); ok {
+				if spec, ok := proposed["spec"].(map[string]any); ok {
+					if tunnel, _ := spec["tunnel"].(bool); !tunnel {
+						return authz.Decision{Reason: ReasonAdminOnly}, nil
+					}
+				}
+			}
+		}
 		if tunnel, _ := req.Resource.Fields["tunnel"].(bool); !tunnel {
 			return authz.Decision{Reason: ReasonAdminOnly}, nil
 		}

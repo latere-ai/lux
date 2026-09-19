@@ -221,7 +221,7 @@ func kindPaths(k kind) ordered {
 		response("200", "One page.", k.name+"List")))
 	itemOps := obj(
 		"put", operation("apply"+k.name, "Create the "+k.name+" when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.", k.create+" or "+k.update,
-			append(itemParams, ref("parameters", "ifMatch"), ref("parameters", "ifNoneMatch")), body,
+			append(itemParams, ref("parameters", "ifMatch"), ref("parameters", "ifNoneMatch"), ref("parameters", "luxOwner")), body,
 			objectResponse("200", "The object as updated.", k.name), objectResponse("201", "The object as created; a Key carries status.value once.", k.name)),
 		"get", operation("read"+k.name, "Read one "+k.name+" by id or name, with its status.", k.read, itemParams, nil, objectResponse("200", "The object.", k.name)),
 		"delete", operation("delete"+k.name, "Delete one "+k.name+" by id or name; 204 with no body.", k.del, append(itemParams, ref("parameters", "ifMatch")), nil, obj("204", obj("description", "Deleted."))),
@@ -299,6 +299,7 @@ func parameters() ordered {
 		"error", query("error", "Records carrying one error code of x-lux-errors.", obj("type", "string")),
 		"stream", query("stream", "Streamed records alone, or unstreamed alone.", obj("type", "boolean")),
 		"recordLimit", query("limit", "Page size, default 50, at most 1000; above is invalid_field.", obj("type", "integer", "minimum", 1, "maximum", maxRecordLimit, "default", defaultLimit)),
+		"luxOwner", obj("name", "Lux-Owner", "in", "header", "required", false, "description", "The immutable rendered owner (issuer|subject). Defaults to the caller on create. Assigning another owner also requires owner.assign. An update may omit this header or repeat the current owner.", "schema", obj("type", "string", "maxLength", 2048)),
 		"ifMatch", obj("name", "If-Match", "in", "header", "required", false, "description", "* for the object must exist, or one quoted integer for exactly this version; a mismatch is conflict, a free name not_found. Anything else is invalid_field.", "schema", obj("type", "string")),
 		"ifNoneMatch", obj("name", "If-None-Match", "in", "header", "required", false, "description", "* for create only; a taken name is already_exists. Anything else is invalid_field.", "schema", obj("type", "string")),
 	)

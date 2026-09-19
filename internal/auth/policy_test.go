@@ -72,6 +72,7 @@ func TestOwnerPolicy(t *testing.T) {
 	unknownBudget := fixtureBudget(t)
 	unknownBudget.Status.ID = "bud_01J9NOSUCHBUDGET00000000000"
 	rows := []row{
+		{"owner.assign", authorizer.ActionOwnerAssign, authorizer.OwnerAssignment("Key", "assigned", fixtureSubject, nil), admins, admins},
 		{"provider.create", authorizer.ActionProviderCreate, authorizer.ProviderCreate(provider), admins, admins},
 		{"provider.create of a tunnel", authorizer.ActionProviderCreate, authorizer.ProviderCreate(tunnelled), allow, allow},
 		{"provider.read", authorizer.ActionProviderRead, authorizer.ProviderObject(provider), allow, allow},

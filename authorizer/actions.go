@@ -43,11 +43,15 @@ const (
 	ActionBudgetList     = "budget.list"
 	ActionBudgetDraw     = "budget.draw"
 	ActionUsageRead      = "usage.read"
+	ActionOwnerAssign    = "owner.assign"
 )
 
 // KindUsage is the resource kind of usage.read, which is no manifest
 // kind: the resource names the Keys and owners a query asks about.
 const KindUsage = "Usage"
+
+// KindOwnership is a create-time request to assign an immutable owner.
+const KindOwnership = "Ownership"
 
 // vocabulary is spec 006's table as data, in the spec's order: every
 // action luxd asks, each paired with the resource kind it acts on. It is
@@ -78,6 +82,7 @@ var vocabulary = must(authz.NewVocabulary("lux",
 	authz.Action{Name: ActionBudgetList, Kind: v1.KindBudget},
 	authz.Action{Name: ActionBudgetDraw, Kind: v1.KindBudget},
 	authz.Action{Name: ActionUsageRead, Kind: KindUsage},
+	authz.Action{Name: ActionOwnerAssign, Kind: KindOwnership},
 )).WithLabels(kindLabels)
 
 // kindLabels is the name a person reads for each resource kind. A kind
@@ -91,6 +96,7 @@ var kindLabels = map[string]string{
 	v1.KindKey:      "Keys",
 	v1.KindBudget:   "Budgets",
 	KindUsage:       "Usage",
+	KindOwnership:   "Ownership",
 }
 
 // must is the constructor's error, which is a mistake in the table above

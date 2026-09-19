@@ -66,7 +66,7 @@ rewriting: the packages are what `luxd` is made of.
 | per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup` answers `Models` for the tenant |
 | funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person ([[006-identity]]); the gateway never sees a cookie | reads the platform's own API |
-| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the service account and becomes the `owner`; the person, when there is one, goes in a label under the platform's own prefix | the platform's own service identity in `Options.Actor` |
+| unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the default `owner`; the Lux-Owner header assigns another principal with `owner.assign` permission | the platform's own service identity in `Options.Actor` |
 | one developer credential | a Key created with `spec.value` set to the platform's own credential, or with `spec.valueSHA256` where the platform's store kept the hash alone, under the Models and the Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` |
 | audit | the signed event sink at `LUX_EVENTS_URL` ([[012-request-log-and-events]]) | the platform's own sink |
@@ -76,6 +76,12 @@ rewriting: the packages are what `luxd` is made of.
 Every row on the left is an endpoint the platform writes or an object
 it applies. There is no row that needs a fork, which is the property
 this table exists to make checkable.
+
+### Mutation admission and ownership
+
+[[025-mutation-authorization]] adds proposed mutation fields and explicit
+create-time owner assignment. The document describes the sanitized fields,
+additional permission, immutable ownership, target quota and writer audit.
 
 ### The minimal authorizer
 

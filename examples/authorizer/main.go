@@ -74,6 +74,8 @@ func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, erro
 	mine := &authz.Filter{Owners: []string{req.Subject}}
 	owner := req.Resource.String("owner")
 	switch kind := authorizer.Kind(req.Action); {
+	case kind == authorizer.KindOwnership:
+		return authz.Decision{Allow: plan == "admin", Reason: "owner assignment requires an administrator"}, nil
 	case kind == "Provider", kind == "Model":
 		switch {
 		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):

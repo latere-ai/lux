@@ -289,3 +289,13 @@ func (s *syncBuffer) Reset() {
 	defer s.mu.Unlock()
 	s.b.Reset()
 }
+
+func TestOwnerAssignmentIsExplicitlyAdminOnly(t *testing.T) {
+	for _, plan := range []string{"free", "team", "admin"} {
+		req := authz.Request{Subject: "https://login.example.com|writer", Claims: map[string]any{"plan": plan}, Action: authorizer.ActionOwnerAssign, Resource: authorizer.OwnerAssignment("Key", "managed", "https://login.example.com|target", nil)}
+		d, err := (policy{}).Decide(t.Context(), req)
+		if err != nil || d.Allow != (plan == "admin") {
+			t.Fatalf("%s: %+v %v", plan, d, err)
+		}
+	}
+}

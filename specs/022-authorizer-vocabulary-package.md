@@ -331,7 +331,7 @@ endpoint for Lux names `server.Options.PageActions` and none writes a
 
 | Change | Where | Held by |
 |---|---|---|
-| `Vocabulary()` is [[006-identity]]'s twenty-four rows, in the spec's order, each with its kind | `authorizer/actions.go` | `TestVocabularyIsSpec006sTable` in `internal/arch`, which reads the spec's own resource table; `TestVocabularyIsTheTable` for the wrappers' agreement |
+| `Vocabulary()` is [[006-identity]]'s twenty-five rows, in the spec's order, each with its kind | `authorizer/actions.go` | `TestVocabularyIsSpec006sTable` in `internal/arch`, which reads the spec's own resource table; `TestVocabularyIsTheTable` for the wrappers' agreement |
 | The table is built once and a malformed one cannot load | `authorizer/actions.go` | `TestVocabularyConstructs`, which holds the declared table to `NewVocabulary` and proves `must` refuses one it rejects |
 | `luxd` refuses an action outside the table before the wire | `internal/auth/startup.go` | `TestAnUnknownActionCostsNoRoundTrip`, which reads the `*authz.UnknownAction` and holds the stub to zero requests |
 | The suite drives from the table rather than a hand-built list, so an action outside it answers 400 | `internal/auth/authorizer_test.go`, `examples/authorizer/main_test.go` | `conformance.Run` with `WithVocabulary`, against `pkg/authz/stub` and against the sample endpoint |
@@ -344,3 +344,9 @@ one row the package was missing, and the package's promise covers it:
 `Vocabulary()` is additive within a module major, an action string never
 changes and never disappears, and a new action is a row in
 [[006-identity]] first and a row here second.
+
+## Mutation admission extension
+
+[[025-mutation-authorization]] adds `ActionOwnerAssign`, `KindOwnership`,
+`OwnerAssignment`, and `Proposal`. The API attaches sanitized proposed state
+to each create and update resource while preserving the existing builders.

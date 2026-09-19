@@ -10,14 +10,14 @@
 // The envelope on the wire is latere.ai/x/pkg/authz's: luxd POSTs a
 // request with the caller's subject, its claims, an action, and a
 // resource, and reads back an allow or a deny. This package is the Lux
-// half of that contract. Actions lists every action, twenty-four of
+// half of that contract. Actions lists every action, twenty-five of
 // them, each one a constant here; Kind reports the resource kind an
 // action acts on, and Known whether a string is in the vocabulary at
 // all. Nothing here dials: the package builds values and decodes them,
 // and the client is the caller's.
 //
 // Vocabulary is that table in one value, of the shared contract's own
-// type: the twenty-four actions in the spec's order, each paired with
+// type: the twenty-five actions in the spec's order, each paired with
 // the kind it acts on. It is what an endpoint validates a request
 // against and what latere.ai/x/pkg/authz/conformance drives its cases
 // from, and Actions, Kind, and Known read the same value, so a consumer
