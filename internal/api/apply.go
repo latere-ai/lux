@@ -113,6 +113,7 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		return 0, nil, 0, err
 	}
 	refs := &references{objects: c.h.o.Store.Objects()}
+	resolvedAt := c.h.o.Now()
 	resolved, rerr := manifest.Resolve(ctx, in, manifest.Options{
 		Actor:                 manifest.Actor{Subject: c.caller.Subject},
 		Lookup:                c.lookup(refs).ForMutation(k.name, proposed),
@@ -122,14 +123,14 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		AllowPrivateUpstreams: c.h.o.AllowPrivateUpstreams,
 		TunnelEnabled:         c.h.o.TunnelEnabled,
 		PublicURL:             c.h.o.PublicURL,
-		Now:                   c.h.o.Now,
+		Now:                   func() time.Time { return resolvedAt },
 		NewName:               c.h.o.NewName,
 	})
 	if rerr != nil {
 		return 0, nil, 0, mapError(rerr)
 	}
 	obj := resolved.Object
-	w, err := c.prepareWrite(obj, existing, refs, owner)
+	w, err := c.prepareWrite(obj, existing, refs, owner, resolvedAt)
 	if err != nil {
 		return 0, nil, 0, err
 	}
@@ -190,9 +191,9 @@ type write struct {
 // the transaction's other writes: a Key's hash, a Provider's sealed
 // credential. The Key's value, minted or supplied, leaves the object
 // here; a minted one returns on the response alone.
-func (c *call) prepareWrite(obj, existing v1.Object, refs *references, owner string) (write, *Error) {
+func (c *call) prepareWrite(obj, existing v1.Object, refs *references, owner string, resolvedAt time.Time) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
-	id, createdAt := c.h.o.NewID(kindOf(obj.Kind()).prefix), timeRef{}
+	id, createdAt := c.h.o.NewID(kindOf(obj.Kind()).prefix), timeRef{resolvedAt}
 	if existing != nil {
 		id, owner, createdAt = existing.ID(), existing.Owner(), createdAtOf(existing)
 	}

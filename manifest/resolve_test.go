@@ -449,15 +449,16 @@ func TestLimits(t *testing.T) {
 		o2.Existing = existing.Object
 		// 09:00 plus 2h is 11:00, so 11:30 is above the ceiling now.
 		wantErr(t, resolveErr(t, key("  expiresAt: 2026-09-13T11:30:00Z\n"), o2), CodeCeilingExceeded, "spec.expiresAt")
-		// A ttl on an update keeps its expiry from createdAt.
+		// A ttl update preserves its recorded deadline even if an older writer
+		// persisted a creation timestamp inconsistent with the resolution clock.
 		o2.Limits = Limits{}
 		o2.Existing = nil
 		existing = mustResolve(t, key("  ttl: 1h\n"), o2)
 		existing.Object.(*v1.Key).Status.CreatedAt = time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC)
 		o2.Existing = existing.Object
 		r := mustResolve(t, key("  ttl: 1h\n"), o2)
-		if got := r.Object.(*v1.Key).Status.ExpiresAt; !got.Equal(time.Date(2026, 9, 13, 10, 0, 0, 0, time.UTC)) {
-			t.Errorf("status.expiresAt = %v, want createdAt plus ttl", got)
+		if got := r.Object.(*v1.Key).Status.ExpiresAt; !got.Equal(existing.Object.(*v1.Key).Status.ExpiresAt) {
+			t.Errorf("status.expiresAt = %v, want the persisted deadline", got)
 		}
 	})
 }

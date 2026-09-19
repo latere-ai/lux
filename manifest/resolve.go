@@ -259,6 +259,11 @@ func resolveKey(ctx context.Context, in *v1.Key, o Options, now time.Time) (*v1.
 		createdAt = old.Status.CreatedAt
 	}
 	defaultKey(k, o, now, createdAt)
+	// Preserve the persisted deadline, including Keys written before creation
+	// timestamps and TTL resolution shared one clock sample.
+	if old != nil && k.Spec.TTL != "" {
+		k.Status.ExpiresAt = old.Status.ExpiresAt
+	}
 
 	// Stage 3: the budget, then every selector.
 	if o.Lookup == nil {
