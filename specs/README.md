@@ -72,6 +72,7 @@ later.
 | [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | complete | 001, 003, 006 |
 | [023](023-performance-and-benchmarks.md) | Performance and benchmarks: the gateway's own overhead, in process against a stub upstream | small | complete | 004 |
 | [024](.archive/024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | complete | 010 |
+| [025](025-mutation-authorization.md) | Proposed mutation admission and explicit owner assignment | medium | in-progress | 006, 011, 022 |
 
 ## Dependency graph
 
