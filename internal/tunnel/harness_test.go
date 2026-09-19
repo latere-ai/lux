@@ -22,10 +22,10 @@ import (
 	"latere.ai/x/pkg/authkit/issuertest"
 	"latere.ai/x/pkg/metrics"
 
+	agent "latere.ai/x/lux/client/tunnel"
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/store"
-	"latere.ai/x/lux/internal/tunnel/agent"
 	"latere.ai/x/lux/internal/tunnel/wire"
 	v1 "latere.ai/x/lux/manifest/v1"
 )

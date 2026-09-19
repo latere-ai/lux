@@ -1,6 +1,6 @@
 ---
 title: Public tunnel client for platform CLIs
-status: in-progress
+status: complete
 track: core
 depends_on:
   - 013-tunnelled-runtimes.md
@@ -48,3 +48,18 @@ clients without whole-session timeouts, and local runtime proxy bypass.
 - A public-import-only integration test applies a Provider, attaches the client,
   sends inference through a real luxd and cancels cleanly.
 - The dependency gate permits only the shared private wire codec.
+
+## Outcome
+
+Moved the existing agent to client/tunnel, exported close reasons, and switched
+all in-tree consumers. The duplicate token-file helper was removed; public
+client token sources already provide it. The private wire codec remains shared,
+with an exact-path architecture exception and a regression rejecting broader
+internal access. No protocol or reconnect behavior changed.
+
+The public-import-only real-process test applies a Provider, forwards streamed
+and nonstreamed inference, refreshes the bearer beyond the original expiry,
+and cancels cleanly. Existing lifecycle, reconnect and refusal tests pass.
+Race coverage: public client 98.2%, tunnel client 91.7%, server tunnel 91.0%,
+wire 94.3%, CLI 93.1%. Full tests, architecture, lint, vet and build pass.
+No deviations or deferred criteria.

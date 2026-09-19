@@ -169,9 +169,11 @@ it names the envelope of the shared authorizer contract, which carries
 that contract's client, and the client is a type it never constructs
 ([[022-authorizer-vocabulary-package]]). `client` is the one tree
 whose purpose is to dial, and it dials one address, the `/v1` base URL
-its caller hands it; it reaches nothing under `internal/`, carries the
-kinds as bytes rather than decoding them, and adds no retry, so one
-call is one request ([[014-agent-client]]). None of the five dials an
+its caller hands it; it carries the kinds as bytes rather than decoding them,
+and adds no retry, so one call is one request ([[014-agent-client]]).
+Its `client/tunnel` subpackage attaches a local runtime, reaching only the
+private `internal/tunnel/wire` codec ([[028-public-tunnel-agent]]); every other
+internal package remains forbidden. The caller owns session reconnect policy. None of the five dials an
 identity provider, a database, a billing system, or a webhook.
 A platform imports them to get the contract and the data plane with
 its own identity and policy around them, or runs `luxd` and gets the
@@ -425,7 +427,7 @@ every spec depends on this one, the dispatch gate waits for it to reach
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every package at the module root is `manifest`, `gateway`, `metering`, `authorizer`, or `client` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; `authorizer` reaches the shared authorizer contract, whose client it never constructs, and nothing under `internal/` or `cmd/`, no identity library, and no store driver; `client` reaches the error envelope and the standard library, and nothing under `internal/` or `cmd/`; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package, with `TestRootPackagesAreTheThree` for the layout | passing; each tree is skipped until it lands |
+| Every package at the module root is `manifest`, `gateway`, `metering`, `authorizer`, or `client` or under one of them; `manifest` and `metering` import nothing under `internal/`, no HTTP client, no database driver, and no identity library; `gateway` imports neither of the last two and reaches no package that dials anything but an upstream; `authorizer` reaches the shared authorizer contract, whose client it never constructs, and nothing under `internal/` or `cmd/`, no identity library, and no store driver; `client` reaches the error envelope, the standard library, and only `internal/tunnel/wire` for its tunnel subpackage, never any other internal package or `cmd/`; a root package that does not exist yet is skipped by name, so the test passes on the scaffold and bites as each lands | `TestRootPackagesDialNothing` over `go list -deps`, one allow list per package, with `TestRootPackagesAreTheThree` for the layout | passing; each tree is skipped until it lands |
 | Each role package's and each binary's build list matches its `depcheck` allow list | the `depcheck` gate | passing for the scaffold's list |
 | No file in the tree, a document, a manifest, a workflow, the gate's configuration, a default, a Go comment or a string, names a hostname of the maintainer's outside the API group, a particular deployment of Lux, a component internal to one, or a private document; the test walks the whole tree and skips only binaries | `TestNoLatereCoordinatesInReleasedArtifacts` | passing |
 

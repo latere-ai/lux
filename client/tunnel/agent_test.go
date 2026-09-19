@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package agent
+package tunnel
 
 import (
 	"bufio"
@@ -12,8 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -353,34 +351,6 @@ func TestRunStopsCleanly(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return")
-	}
-}
-
-// TestFileToken reads the token file on every call, trimmed, and
-// reports an empty or missing file.
-func TestFileToken(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "token")
-	src := FileToken(path)
-	if _, err := src(); err == nil {
-		t.Error("a missing file yielded a token")
-	}
-	if err := os.WriteFile(path, []byte("  \n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := src(); err == nil || !strings.Contains(err.Error(), "is empty") {
-		t.Errorf("an empty file: %v", err)
-	}
-	if err := os.WriteFile(path, []byte(" first \n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if tok, err := src(); err != nil || tok != "first" {
-		t.Errorf("first read: %q %v", tok, err)
-	}
-	if err := os.WriteFile(path, []byte("second"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if tok, err := src(); err != nil || tok != "second" {
-		t.Errorf("second read: %q %v", tok, err)
 	}
 }
 

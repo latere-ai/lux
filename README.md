@@ -174,7 +174,8 @@ install a release on a cluster, see [Install](docs/install.md).
 - A reverse tunnel, so a model on your own machine is a `Provider` like
   any other.
 - The Go packages a platform imports: `manifest`, `gateway`, `metering`,
-  `client`, the typed client of the `/v1` API, and `authorizer`, the
+  `client`, the typed client of the `/v1` API, `client/tunnel` for attaching
+  a local runtime, and `authorizer`, the
   actions and resource shapes an authorizer is written against.
 - The `lux` command, and a skill file that teaches an agent to drive it.
 - Benchmarks that measure the gateway's own overhead per request, in

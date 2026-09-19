@@ -6,6 +6,10 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `client/tunnel` exposes the existing HTTP/2 tunnel agent for platform CLIs.
+  It serves one session with a refreshing token source, typed close/refusal
+  errors, streaming and clean cancellation. The caller controls reconnects.
+
 - A disabled Key may have no model selectors, allowing provisioning before model
   access is assigned. Enabling it still requires at least one selector.
 

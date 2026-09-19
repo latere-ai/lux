@@ -24,6 +24,7 @@ import (
 	"latere.ai/x/pkg/authz/stub"
 	"latere.ai/x/pkg/metrics"
 
+	agent "latere.ai/x/lux/client/tunnel"
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
@@ -32,7 +33,6 @@ import (
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/memory"
 	"latere.ai/x/lux/internal/tunnel"
-	"latere.ai/x/lux/internal/tunnel/agent"
 	"latere.ai/x/lux/internal/tunnel/wire"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"

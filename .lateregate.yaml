@@ -99,7 +99,7 @@ depcheck:
     # latere.ai/x/pkg/httpjson for the error envelope, this module's
     # client for the /v1 routes, this module's manifest and manifest/v1,
     # which pull in the one YAML library, and this module's
-    # internal/tunnel/wire and internal/tunnel/agent, which lux serve
+    # internal/tunnel/wire and client/tunnel, which lux serve
     # holds its session through and which reach the standard library and
     # that same envelope. No HTTP client library, no command
     # line framework, no multiplexer, no WebSocket codec, no OpenTelemetry
@@ -111,7 +111,7 @@ depcheck:
         of latere.ai/x/pkg/httpjson, this module's client for the /v1
         routes, this module's manifest packages with the YAML library
         they decode with, and this module's internal/tunnel/wire and
-        internal/tunnel/agent for lux serve's session, whose transport is net/http's HTTP/2 and whose frames are
+        client/tunnel for lux serve's session, whose transport is net/http's HTTP/2 and whose frames are
         encoding/json, and nothing else without a row here (spec 014)
       allow:
         latere.ai/x/pkg/httpjson: the error envelope every refusal is decoded from (spec 014)

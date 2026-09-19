@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package agent is the agent side of spec 013's tunnel: it opens the
-// session toward the gateway with a token source, parks carriers, and
-// serves each proxied request against a runtime on this machine, whose
-// address never leaves it. The lux serve command of spec 014 is a thin
-// command over Run: it supplies the flags, reconnects with backoff, and
-// turns the close reason Run returns into an exit code. The package
-// reaches the standard library, the wire format, and
-// latere.ai/x/pkg/httpjson for the error envelope, so the lux binary's
-// build list stays what spec 014 says.
-package agent
+package tunnel
 
 import (
 	"bufio"
@@ -24,7 +15,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,7 +53,7 @@ type Options struct {
 	// Token yields the bearer, read for every request the agent sends,
 	// so a rotated token is used from the next request on; a token that
 	// differs from the last one sent is carried in the next heartbeat.
-	// FileToken reads one from a file.
+	// client.FileToken reads one from a file.
 	Token func() (string, error)
 	// Carriers is how many carriers stay parked; zero takes the ready
 	// frame's number.
@@ -82,7 +72,7 @@ type Options struct {
 }
 
 // CloseError is the gateway's close frame: the session ended for
-// Reason, one of the wire package's four.
+// Reason, one of this package's Reason constants.
 type CloseError struct {
 	Reason string
 }
@@ -107,23 +97,6 @@ func (e *RefusedError) Error() string {
 		s += ": " + e.Detail
 	}
 	return s
-}
-
-// FileToken reads the bearer from path on every call, trimmed of
-// surrounding white space, which is how a token file a login command
-// rewrites is picked up without a restart.
-func FileToken(path string) func() (string, error) {
-	return func() (string, error) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return "", err
-		}
-		token := strings.TrimSpace(string(data))
-		if token == "" {
-			return "", fmt.Errorf("token file %s is empty", path)
-		}
-		return token, nil
-	}
 }
 
 // agent is one Run.

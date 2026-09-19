@@ -526,3 +526,10 @@ carried in the Design above:
   `controlClient` and `lux serve` share, because the serve loop has to
   know whether the source can be read again before it decides that
   `token_expired` is terminal.
+
+## Public tunnel transport
+
+[[028-public-tunnel-agent]] moves the transport from internal/tunnel/agent to
+client/tunnel without changing protocol or reconnect behavior. The command uses
+the public Run, Options and close-reason constants. Token sources remain in
+client; client/tunnel shares only the private wire codec with the server.

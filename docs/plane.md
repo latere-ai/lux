@@ -100,6 +100,13 @@ endpoint that does not recognize `owner.assign` refuses the operation; upgrade
 its vocabulary before enabling provisioning. The built-in policy reserves
 assignment to administrators.
 
+A platform CLI can apply a tunnelled Provider with `client.Client`, then attach
+its local runtime through `client/tunnel.Run`. This public package owns one
+HTTP/2 session; the CLI supplies a concurrency-safe refreshing token source and
+its reconnect policy. It returns typed refusal and close errors and joins its
+goroutines on cancellation. The local runtime URL never leaves the client.
+Use `client.FileToken` or `client.StaticToken` when those token sources suffice.
+
 ## The minimal authorizer
 
 The first thing a platform replaces is the permission model. `luxd`

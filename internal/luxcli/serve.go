@@ -14,8 +14,7 @@ import (
 	"time"
 
 	"latere.ai/x/lux/client"
-	"latere.ai/x/lux/internal/tunnel/agent"
-	"latere.ai/x/lux/internal/tunnel/wire"
+	agent "latere.ai/x/lux/client/tunnel"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -36,9 +35,9 @@ var (
 // the machine identifier the protocol carries is the one this command
 // prints.
 var closeMessages = map[string]string{
-	wire.ReasonSuperseded:      "Another agent attached this provider, so this session ended.",
-	wire.ReasonProviderDeleted: "The provider this session served no longer exists.",
-	wire.ReasonTokenExpired:    "The token expired and no fresh one was there to take its place.",
+	agent.ReasonSuperseded:      "Another agent attached this provider, so this session ended.",
+	agent.ReasonProviderDeleted: "The provider this session served no longer exists.",
+	agent.ReasonTokenExpired:    "The token expired and no fresh one was there to take its place.",
 }
 
 // messageClosed is the sentence for a close reason a newer gateway
@@ -179,11 +178,11 @@ func (a *app) attach(opts agent.Options, refreshable bool) error {
 			return refusedFailure(refused)
 		case errors.As(err, &closed):
 			switch {
-			case closed.Reason == wire.ReasonDraining:
+			case closed.Reason == agent.ReasonDraining:
 				opts.Logger.InfoContext(a.ctx, "lux serve: the gateway is draining; connecting again", "provider", opts.Provider)
 				delay, expired = backoffMin, 0
 				continue
-			case closed.Reason != wire.ReasonTokenExpired:
+			case closed.Reason != agent.ReasonTokenExpired:
 				return closeFailure(closed.Reason, "the gateway's close frame ended the session and a reconnect would meet the same answer")
 			case !refreshable:
 				return closeFailure(closed.Reason, "the token came from "+EnvToken+", which a running command cannot refresh; "+EnvTokenFile+" is read again")

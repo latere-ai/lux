@@ -17,7 +17,7 @@ import (
 
 	"latere.ai/x/pkg/authkit/issuertest"
 
-	"latere.ai/x/lux/internal/tunnel/agent"
+	agent "latere.ai/x/lux/client/tunnel"
 )
 
 // forwardSecret is a 32-byte secret for the forward route.

@@ -189,7 +189,7 @@ var rootAllow = map[string]allow{
 	// kinds it carries are bytes, so it reaches no manifest package
 	// either.
 	"client": {
-		module: []string{module + "/client"},
+		module: []string{module + "/client", module + "/internal/tunnel/wire"},
 		external: []string{
 			"latere.ai/x/pkg/httpjson",
 			"github.com/google/uuid",
@@ -220,6 +220,10 @@ var rootForbid = map[string][]string{
 // outOfReach reports whether this root package may not reach the path,
 // whatever its allow list says.
 func outOfReach(name, path string) bool {
+	// The public tunnel transport shares only its private wire codec with the server.
+	if name == "client" && path == module+"/internal/tunnel/wire" {
+		return false
+	}
 	for prefix, except := range rootForbid {
 		if strings.HasPrefix(path, prefix) && !slices.Contains(except, name) {
 			return true
@@ -361,4 +365,18 @@ func stringLit(e ast.Expr) (string, bool) {
 	}
 	s, err := strconv.Unquote(lit.Value)
 	return s, err == nil
+}
+
+func TestClientInternalExceptionIsOnlyTheWireCodec(t *testing.T) {
+	for _, path := range []string{module + "/internal/tunnel", module + "/internal/tunnel/wire/extra", module + "/internal/auth", module + "/internal/store"} {
+		if !outOfReach("client", path) {
+			t.Fatal("client reached forbidden internal package", path)
+		}
+	}
+	if outOfReach("client", module+"/internal/tunnel/wire") {
+		t.Fatal("client cannot share its private wire codec")
+	}
+	if !outOfReach("gateway", module+"/internal/tunnel/wire") {
+		t.Fatal("wire exception widened to another public tree")
+	}
 }

@@ -78,7 +78,7 @@ later.
 
 | [027](.archive/027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | complete | 003, 007 |
 
-| [028](028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | in-progress | 013, 014 |
+| [028](.archive/028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | complete | 013, 014 |
 
 ## Dependency graph
 
