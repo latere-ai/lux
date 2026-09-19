@@ -85,6 +85,7 @@ later.
 | [027](.archive/027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | complete | 003, 007 |
 | [028](.archive/028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | complete | 013, 014 |
 | [032](032-key-fence-api.md) | Authorized Key fence endpoints and atomic audit events | medium | testing | 031, 022 |
+| [033](033-exact-key-disable.md) | Exact Key disable after authority withdrawal | small | in-progress | 032 |
 
 ## Dependency graph
 
