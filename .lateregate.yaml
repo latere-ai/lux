@@ -162,7 +162,14 @@ identity:
   # Access is by role: the roles rule runs, and it is one way once set.
   roles_only: true
 
-# The database shape: which endpoint the serving path connects on.
+# The database shape: which endpoint the serving path connects on. Serving
+# queries go to the pooler when LUX_DB_POOL_URL is set and fall back to
+# LUX_DB_URL; migrations always use LUX_DB_URL, because they hold a lock
+# across statements that a transaction pooler cannot keep on one connection.
+# The two names are written out rather than derived: they are luxd's own
+# configuration surface, and a deployment maps whatever its secret carries
+# onto them.
 postgres:
-  # Direct until its cutover release renames the DSN and reads the pooled name.
-  role: direct
+  role: pooled
+  direct_env: LUX_DB_URL
+  pool_env: LUX_DB_POOL_URL
