@@ -48,7 +48,7 @@ const (
 type KeyCacheOptions struct {
 	Store store.Store
 	// TTL is LUX_KEY_CACHE: how long a positive or negative entry is
-	// served before the store is asked again; zero is DefaultKeyCache.
+	// served, measured from the start of its store read; zero is DefaultKeyCache.
 	TTL time.Duration
 	// Tail is how often Run reads the journal; zero is one second.
 	Tail time.Duration
@@ -75,11 +75,13 @@ type KeyCache struct {
 	o    KeyCacheOptions
 	hits *metrics.Counter
 
-	mu       sync.Mutex
-	entries  map[string]*entry // by cache key
-	lru      lru               // most recently used at the front
-	byObject map[string]map[string]bool
-	after    int64 // the journal sequence Tail has read up to
+	mu         sync.Mutex
+	entries    map[string]*entry // by cache key
+	lru        lru               // most recently used at the front
+	byObject   map[string]map[string]bool
+	after      int64  // the journal sequence Tail has read up to
+	generation uint64 // invalidates reads whose object is not yet known
+	sequence   uint64 // orders concurrent reads even when Now is unchanged
 }
 
 // entry is one cached answer: a Key, a Budget, or neither for a value no
@@ -91,6 +93,7 @@ type entry struct {
 	k          *v1.Key
 	b          *v1.Budget
 	expires    time.Time
+	sequence   uint64
 	prev, next *entry
 }
 
@@ -168,29 +171,32 @@ func NewKeyCache(o KeyCacheOptions) *KeyCache {
 // failure otherwise, which is never cached. The Key returned is the
 // cache's copy and is read, never changed, by the caller.
 func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
-	if e, ok := c.get(cacheKeyHash + hash); ok {
+	e, hit, err := c.lookup(ctx, cacheKeyHash+hash, func() (*entry, error) { return c.readKey(ctx, hash) })
+	result := "miss"
+	if hit {
+		result = "hit"
 		if e.k == nil {
-			c.count("negative")
-			return nil, nil
+			result = "negative"
 		}
-		c.count("hit")
-		return e.k, nil
 	}
-	c.count("miss")
+	c.count(result)
+	if err != nil {
+		return nil, err
+	}
+	return e.k, nil
+}
+
+func (c *KeyCache) readKey(ctx context.Context, hash string) (*entry, error) {
 	id, err := c.o.Store.Keys().ByHash(ctx, hash)
 	if errors.Is(err, store.ErrNotFound) {
-		c.put(&entry{key: cacheKeyHash + hash})
-		return nil, nil
+		return &entry{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("looking up the Key by hash: %w", err)
 	}
 	obj, _, err := c.o.Store.Objects().Get(ctx, v1.KindKey, id)
 	if errors.Is(err, store.ErrNotFound) {
-		// The hash outlived its row, which a delete in flight leaves for
-		// a moment; the value opens nothing.
-		c.put(&entry{key: cacheKeyHash + hash})
-		return nil, nil
+		return &entry{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading Key %s: %w", id, err)
@@ -199,8 +205,7 @@ func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 	if !ok {
 		return nil, fmt.Errorf("reading Key %s: the store returned a %T", id, obj)
 	}
-	c.put(&entry{key: cacheKeyHash + hash, id: id, k: k})
-	return k, nil
+	return &entry{id: id, k: k}, nil
 }
 
 // Budget is the Budget with id, cached under the same window and dropped
@@ -209,13 +214,17 @@ func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 // Key that draws from one, so a hard Budget's amount is a cache read and
 // not a store round trip per request.
 func (c *KeyCache) Budget(ctx context.Context, id string) (*v1.Budget, error) {
-	if e, ok := c.get(cacheKeyBudget + id); ok {
-		return e.b, nil
+	e, _, err := c.lookup(ctx, cacheKeyBudget+id, func() (*entry, error) { return c.readBudget(ctx, id) })
+	if err != nil {
+		return nil, err
 	}
+	return e.b, nil
+}
+
+func (c *KeyCache) readBudget(ctx context.Context, id string) (*entry, error) {
 	obj, _, err := c.o.Store.Objects().Get(ctx, v1.KindBudget, id)
 	if errors.Is(err, store.ErrNotFound) {
-		c.put(&entry{key: cacheKeyBudget + id})
-		return nil, nil
+		return &entry{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading Budget %s: %w", id, err)
@@ -224,8 +233,39 @@ func (c *KeyCache) Budget(ctx context.Context, id string) (*v1.Budget, error) {
 	if !ok {
 		return nil, fmt.Errorf("reading Budget %s: the store returned a %T", id, obj)
 	}
-	c.put(&entry{key: cacheKeyBudget + id, id: id, b: b})
-	return b, nil
+	return &entry{id: id, b: b}, nil
+}
+
+// lookup never returns a store answer invalidated while it was in flight.
+// TTL starts before the read, so a delayed result cannot extend authority.
+// Sustained invalidation or a store slower than TTL fails closed after three reads.
+func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, error)) (*entry, bool, error) {
+	for attempt := range 3 {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		if e, ok := c.get(key); ok {
+			return e, attempt == 0, nil
+		}
+		c.mu.Lock()
+		generation := c.generation
+		c.sequence++
+		sequence := c.sequence
+		expires := c.o.Now().Add(c.o.TTL)
+		c.mu.Unlock()
+		e, err := read()
+		if err != nil {
+			return nil, false, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		e.key, e.expires, e.sequence = key, expires, sequence
+		if current, ok := c.publish(e, generation); ok {
+			return current, false, nil
+		}
+	}
+	return nil, false, errors.New("reading cached authority: concurrent invalidation or expired lookup")
 }
 
 // count records one lookup's result.
@@ -252,15 +292,20 @@ func (c *KeyCache) get(key string) (*entry, bool) {
 	return e, true
 }
 
-// put stores an answer at the front and evicts the least recent past
-// the bound. The caller holds no lock.
-func (c *KeyCache) put(e *entry) {
+// publish accepts only a still-current read, preserving a newer cached answer.
+func (c *KeyCache) publish(e *entry, generation uint64) (*entry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if generation != c.generation || !c.o.Now().Before(e.expires) {
+		return nil, false
+	}
 	if old, ok := c.entries[e.key]; ok {
+		if old.sequence > e.sequence && c.o.Now().Before(old.expires) {
+			c.lru.moveToFront(old)
+			return old, true
+		}
 		c.remove(old)
 	}
-	e.expires = c.o.Now().Add(c.o.TTL)
 	c.entries[e.key] = e
 	c.lru.pushFront(e)
 	if e.id != "" {
@@ -274,6 +319,7 @@ func (c *KeyCache) put(e *entry) {
 	for c.lru.n > KeyCacheEntries {
 		c.remove(c.lru.back)
 	}
+	return e, true
 }
 
 // remove drops one entry and its index rows. The caller holds the lock.
@@ -292,6 +338,7 @@ func (c *KeyCache) remove(e *entry) {
 func (c *KeyCache) evictObject(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation++
 	for key := range c.byObject[id] {
 		if e, ok := c.entries[key]; ok {
 			c.remove(e)
@@ -306,6 +353,7 @@ func (c *KeyCache) evictObject(id string) {
 func (c *KeyCache) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation++
 	c.entries = map[string]*entry{}
 	c.lru = lru{}
 	c.byObject = map[string]map[string]bool{}
