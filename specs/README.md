@@ -13,6 +13,8 @@ proves a server serves both. Spec 002 is the configuration reference:
 every `LUX_*` variable is in its table, owned by it or listed with its
 owner.
 
+- [[029-reference-mutation-context]] — in-progress. Bind reference checks and rotation to sanitized desired state.
+
 ## Layout
 
 Flat files `specs/NNN-name.md` in one number space with `track: core`
