@@ -1,6 +1,6 @@
 ---
 title: Object-scoped model discovery and list authorization
-status: testing
+status: complete
 track: core
 depends_on:
   - 006-identity.md
@@ -56,12 +56,12 @@ never names the final denied candidate of a page.
 - Default list behavior and file-mode behavior remain compatible.
 - Configuration and public contracts document the additional calls and fields.
 
-## Verification
+## Outcome
 
 Model-use resources carry copied labels, discovery inherits and refreshes them,
 and optional per-object list decisions preserve candidate filters and fail closed.
 The pagination regression failed before the fix and passes with it. HTTP tests
 exercise interleaved denials, entirely denied tails, outages and default behavior.
 Race coverage: authorizer 95.9%, identity 97.0%, API 94.3%, configuration 99.7%,
-serving 97.2%. Vet and build pass. The full suite's release-promise test requires
-this new environment variable to be committed before its clean-HEAD comparison.
+serving 97.2%. Full tests, lint, vet and build pass after committing the new environment
+variable for the release-promise test's clean-HEAD comparison. No deferred criteria.
