@@ -69,6 +69,9 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 	var filter *authz.Filter
 	if !c.h.fileMode() {
 		res, _ := authorizer.ResourceFor(k.list, zeroObject(k.name))
+		if c.h.o.AuthorizeListItems {
+			res.Fields = map[string]any{"authorize_items": true}
+		}
 		d, err := c.authorize(ctx, k.list, res)
 		if err != nil {
 			return err

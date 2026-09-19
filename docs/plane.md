@@ -71,7 +71,8 @@ the tree so it stays that way.
 
 Enable `LUX_AUTHORIZE_LIST_ITEMS=1` when visibility depends on object labels or
 individual grants. The list filter selects candidates; each candidate must also
-pass its read permission. `model.use` includes labels for each matched Model,
+pass its read permission. Require `resource.authorize_items == true` in list
+decisions so a missing deployment setting fails closed. `model.use` includes labels for each matched Model,
 and discovered Models inherit their Provider's labels and ownership. Decide
 tenancy from those labels rather than inferring it from the owner's memberships.
 

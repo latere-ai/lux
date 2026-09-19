@@ -34,7 +34,9 @@ Discovered Models inherit Provider labels as well as ownership. Provider label
 changes trigger discovery, refreshing inherited labels on discovered Models.
 
 Optional LUX_AUTHORIZE_LIST_ITEMS (default false) intersects the list decision
-and query filters with a read decision on every candidate object. Denials skip
+and query filters with a read decision on every candidate object. Its list
+resource includes authorize_items: true only when those checks are enforced,
+so an authorizer can reject a core missing this required deployment setting. Denials skip
 objects; authorizer errors fail the entire list without partial results. File
 mode remains read-only and needs no authorizer. The list decision alone sets
 request rate ceilings; candidate decisions never replace that request memo.
@@ -65,3 +67,7 @@ exercise interleaved denials, entirely denied tails, outages and default behavio
 Race coverage: authorizer 95.9%, identity 97.0%, API 94.3%, configuration 99.7%,
 serving 97.2%. Full tests, lint, vet and build pass after committing the new environment
 variable for the release-promise test's clean-HEAD comparison. No deferred criteria.
+
+Follow-up: TestListDecisionAdvertisesEnforcedItemAdmission failed before the
+capability marker and passes after it; turning the option off makes a policy
+requiring item admission refuse the list.

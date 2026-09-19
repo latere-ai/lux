@@ -199,6 +199,10 @@ peer's, or the forwarded one behind a proxy listed in
 | `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
 | `owner.assign` | `{"kind": "Ownership", "target_kind", "name", "owner", "proposed"}`; additional permission to assign the owner of a new object ([[025-mutation-authorization]]) |
 
+With `LUX_AUTHORIZE_LIST_ITEMS=1`, list resources additionally carry
+`authorize_items: true`. An authorizer relying on per-object checks must require
+this marker; it is absent when the checks are disabled.
+
 Create and update decisions additionally carry `proposed`, the requested owner,
 metadata and sanitized spec. Existing update fields retain the stored state.
 Secrets and status are omitted as specified in [[025-mutation-authorization]].

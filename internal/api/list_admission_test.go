@@ -98,3 +98,23 @@ func TestObjectListAdmissionIsOptIn(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestListDecisionAdvertisesEnforcedItemAdmission(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.AuthorizeListItems = true })
+	h.seed()
+	s := stub.New(t, stub.WithAction(authorizer.ActionModelList, func(req authz.Request) any {
+		enabled, _ := req.Resource.Fields["authorize_items"].(bool)
+		return map[string]any{"allow": enabled, "reason": "list_admission_required"}
+	}))
+	s.Deny(stub.Rule{Action: authorizer.ActionModelRead}, "private")
+	client, err := authz.NewClient(authz.Options{URL: s.URL(), Token: s.Token(), HTTP: &http.Client{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.h.o.Authorizer = auth.NewAuthorizer(client)
+	if got := names(t, h.request(http.MethodGet, "/v1/models", "")); len(got) != 0 {
+		t.Fatal("advertised checks were not enforced", got)
+	}
+	h.h.o.AuthorizeListItems = false
+	wantCode(t, h.request(http.MethodGet, "/v1/models", ""), CodeForbidden)
+}

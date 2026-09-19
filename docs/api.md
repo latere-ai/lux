@@ -83,7 +83,8 @@ A list answers `{"items": [...], "next_cursor": "<cursor>"}`; pass
 
 With `LUX_AUTHORIZE_LIST_ITEMS=1`, each candidate must also pass its
 `provider.read`, `model.read`, `key.read`, or `budget.read` decision. Denied
-objects are skipped without consuming page capacity. An authorization failure
+objects are skipped without consuming page capacity. The list decision carries
+`resource.authorize_items: true` only when these checks are enabled. An authorization failure
 refuses the whole list. The list filter and query selectors still apply.
 
 ## Optimistic concurrency
