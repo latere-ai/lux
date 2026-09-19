@@ -427,7 +427,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg *metrics.Registry) (store.Store, *filemode.Store, []string, error) {
 	switch {
 	case cfg.DBURL != "":
-		pg, warning, err := postgres.Connect(ctx, postgres.Options{URL: cfg.DBURL, MaxConns: cfg.DBMaxConns})
+		pg, warning, err := postgres.Connect(ctx, postgres.Options{URL: cfg.DBURL, PoolURL: cfg.DBPoolURL, MaxConns: cfg.DBMaxConns})
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -553,7 +553,7 @@ func rewrapCmd(ctx context.Context, args []string, getenv config.Getenv, stdout,
 	if err != nil {
 		return fail(stderr, err)
 	}
-	pg, err := postgres.Open(ctx, postgres.Options{URL: r.DBURL, MaxConns: 2})
+	pg, err := postgres.Open(ctx, postgres.Options{URL: r.DBURL, PoolURL: r.DBPoolURL, MaxConns: 2})
 	if err != nil {
 		return fail(stderr, err)
 	}

@@ -56,6 +56,9 @@ type Config struct {
 	// empty is the memory store. It is never echoed, because it may carry
 	// a password.
 	DBURL string
+	// DBPoolURL optionally routes serving queries through a transaction pooler.
+	// DBURL remains the direct migration connection.
+	DBPoolURL string
 	// DBMaxConns is the pool size with DBURL, DefaultDBMaxConns without.
 	DBMaxConns int
 
@@ -180,6 +183,7 @@ func Load(getenv Getenv) (Config, error) {
 		InternalAddr: withDefault(getenv("LUX_INTERNAL_ADDR"), DefaultInternalAddr),
 		ManifestDir:  strings.TrimSpace(getenv("LUX_MANIFEST_DIR")),
 		DBURL:        strings.TrimSpace(getenv("LUX_DB_URL")),
+		DBPoolURL:    strings.TrimSpace(getenv("LUX_DB_POOL_URL")),
 		DBMaxConns:   DefaultDBMaxConns,
 	}
 	var problems []string
@@ -195,6 +199,14 @@ func Load(getenv Getenv) (Config, error) {
 	if c.ManifestDir != "" {
 		if err := checkDir(c.ManifestDir); err != nil {
 			problems = append(problems, "LUX_MANIFEST_DIR "+err.Error())
+		}
+	}
+	if c.DBPoolURL != "" {
+		if c.DBURL == "" {
+			problems = append(problems, "LUX_DB_POOL_URL requires LUX_DB_URL for direct migrations")
+		}
+		if err := checkDBURL(c.DBPoolURL); err != nil {
+			problems = append(problems, "LUX_DB_POOL_URL "+err.Error())
 		}
 	}
 	if c.DBURL != "" {

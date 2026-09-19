@@ -1,6 +1,6 @@
 ---
 title: Separate pooled serving and direct migration connections
-status: in-progress
+status: complete
 track: core
 depends_on:
   - 010-state.md
@@ -33,8 +33,8 @@ also holds one idle connection even when the gateway has no traffic.
 ## Design
 
 Add optional `LUX_DB_POOL_URL` for serving. `LUX_DB_URL` remains required and
-supplies the direct migration endpoint. Both URLs must use the same database
-path; pooled hosts and ports may differ. Without the new variable existing
+supplies the direct migration endpoint. The operator points both URLs at the same database; pooler database aliases
+may differ from its physical name. Without the new variable existing
 installations keep their direct serving connection. Neither URL is echoed.
 The runtime pool has zero minimum connections and uses pgx's extended-query
 execution without a prepared statement cache when a pooled URL is configured.
@@ -52,3 +52,16 @@ the direct endpoint. No defaults mention a particular hosting provider.
   run on the serving connection.
 - Existing direct-mode and Postgres conformance tests remain green.
 - The generated environment reference documents the new variable.
+
+## Outcome
+
+Implemented on 2026-09-19. Serving, diagnostics, and credential rewrapping
+select the optional pooled URL; schema migrations retain the direct URL.
+Transaction-pool mode disables prepared-statement caches and holds no minimum
+idle connections. Existing direct installations retain their connection URL.
+
+The PostgreSQL integration test uses a serving role without schema privileges
+and verifies the migrated schema through that role. Configuration, store,
+check, and CLI tests pass with PostgreSQL enabled (store coverage 93.0%).
+Lint, vet, and build pass. The release-promise gate correctly classifies this
+new environment variable as a minor release.

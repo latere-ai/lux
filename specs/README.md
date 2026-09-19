@@ -71,8 +71,7 @@ later.
 | [021](021-translation-through-llmdialect.md) | Translation through llmdialect: the codec glue leaves the gateway for an importable bridge | medium | complete | 004, 018 |
 | [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | complete | 001, 003, 006 |
 | [023](023-performance-and-benchmarks.md) | Performance and benchmarks: the gateway's own overhead, in process against a stub upstream | small | complete | 004 |
-
-| [024](024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | in-progress | 010 |
+| [024](.archive/024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | complete | 010 |
 
 ## Dependency graph
 

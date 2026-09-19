@@ -239,7 +239,7 @@ func notChecked(name, why string) Line {
 func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (opened, error) {
 	switch {
 	case cfg.DBURL != "":
-		pg, err := postgres.Open(ctx, postgres.Options{URL: cfg.DBURL, MaxConns: cfg.DBMaxConns})
+		pg, err := postgres.Open(ctx, postgres.Options{URL: cfg.DBURL, PoolURL: cfg.DBPoolURL, MaxConns: cfg.DBMaxConns})
 		if err != nil {
 			return opened{}, err
 		}

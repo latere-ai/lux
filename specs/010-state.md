@@ -424,9 +424,11 @@ loaded from a directory.
 
 ### Postgres
 
-Selected by `LUX_DB_URL`, a `postgres://` URL. The driver is
+Selected by `LUX_DB_URL`, a `postgres://` URL. Optional `LUX_DB_POOL_URL`
+selects a transaction pooler for serving while migrations keep the direct
+URL (spec 024). The driver is
 `github.com/jackc/pgx/v5`, one `pgxpool.Pool` for the process with
-`MaxConns` `LUX_DB_MAX_CONNS`, default 8, `MinConns` 1,
+`MaxConns` `LUX_DB_MAX_CONNS`, default 8, `MinConns` 0,
 `MaxConnIdleTime` 60s, and `MaxConnLifetime` 30m: a managed cluster
 caps its connections in the low tens and a replica set multiplies
 whatever one process opens, so a pool sized for one process is an

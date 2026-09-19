@@ -6,6 +6,11 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `LUX_DB_POOL_URL` optionally sends serving queries through a transaction
+  pooler while migrations keep using the direct `LUX_DB_URL`. Pools no
+  longer keep an idle connection, and pooled serving disables pgx's
+  prepared-statement caches.
+
 - A release's clean-runner check no longer fails on the blank line
   `lateregate release` writes under a version heading; the release body
   and the CHANGELOG section are trimmed the same way before they are

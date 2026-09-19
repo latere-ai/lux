@@ -91,22 +91,28 @@ type Rewrap struct {
 	SecretsKEK *secrets.Keyring
 	// DBURL is LUX_DB_URL, the one store with rows that outlive a
 	// process. It is never echoed.
-	DBURL string
+	DBURL     string
+	DBPoolURL string
 }
 
-// LoadRewrap reads the two variables of the rewrap role, or one error
+// LoadRewrap reads the keyring and database variables of the rewrap role, or one error
 // naming every problem found, sorted by variable name. Both are
 // required: the memory store survives no process and the file mode
 // seals nothing, so there is nothing durable to re-wrap without a
 // database.
 func LoadRewrap(getenv Getenv) (Rewrap, error) {
 	var problems []string
-	r := Rewrap{DBURL: strings.TrimSpace(getenv("LUX_DB_URL"))}
+	r := Rewrap{DBURL: strings.TrimSpace(getenv("LUX_DB_URL")), DBPoolURL: strings.TrimSpace(getenv("LUX_DB_POOL_URL"))}
 	r.SecretsKEK, problems = parseKEK(getenv("LUX_SECRETS_KEK"), "LUX_SECRETS_KEK is unset, and rewrap re-wraps every stored data key under its first key", problems)
 	if r.DBURL == "" {
 		problems = append(problems, "LUX_DB_URL is unset, and rewrap re-wraps the credential rows of a database, since the memory store survives no process and the file mode seals nothing")
 	} else if err := checkDBURL(r.DBURL); err != nil {
 		problems = append(problems, "LUX_DB_URL "+err.Error())
+	}
+	if r.DBPoolURL != "" {
+		if err := checkDBURL(r.DBPoolURL); err != nil {
+			problems = append(problems, "LUX_DB_POOL_URL "+err.Error())
+		}
 	}
 	if len(problems) > 0 {
 		sort.Strings(problems)

@@ -132,6 +132,12 @@ var referenceGroups = []referenceGroup{
 			required: "No",
 		},
 		{
+			name:     "LUX_DB_POOL_URL",
+			meaning:  "Optional transaction-pooler URL for serving queries. Requires `LUX_DB_URL`, which remains the direct migration connection. Both must reach the same database. Never echoed.",
+			def:      "unset",
+			required: "No",
+		},
+		{
 			name:     "LUX_DB_MAX_CONNS",
 			meaning:  "The Postgres pool size; read only with `LUX_DB_URL`, between 1 and 100.",
 			def:      "8",

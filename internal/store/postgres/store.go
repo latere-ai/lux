@@ -28,7 +28,7 @@ import (
 // raises LUX_DB_MAX_CONNS against a cluster it has measured.
 const (
 	DefaultMaxConns = 8
-	minConns        = 1
+	minConns        = 0
 	maxConnIdleTime = 60 * time.Second
 	maxConnLifetime = 30 * time.Minute
 	connectTimeout  = 5 * time.Second
@@ -44,6 +44,8 @@ type Options struct {
 	// URL is LUX_DB_URL, a postgres:// or postgresql:// URL, its sslmode
 	// included and honoured as written. It is never echoed.
 	URL string
+	// PoolURL optionally supplies the serving endpoint. URL stays direct for migrations.
+	PoolURL string
 	// MaxConns is LUX_DB_MAX_CONNS; zero is DefaultMaxConns.
 	MaxConns int
 	// Now is the clock the store stamps rows with and measures every
@@ -96,7 +98,7 @@ func Open(ctx context.Context, o Options) (*Store, error) {
 	return &Store{
 		pool: pool, ring: memory.New(memory.WithClock(o.Now)), now: o.Now,
 		closed: new(atomic.Bool), closeOnce: new(sync.Once),
-		endpoint: endpointOf(o.URL), migrateURL: mURL, maxConns: o.MaxConns,
+		endpoint: endpointOf(servingURL(o)), migrateURL: mURL, maxConns: o.MaxConns,
 	}, nil
 }
 
@@ -105,9 +107,14 @@ func Open(ctx context.Context, o Options) (*Store, error) {
 // timeout when the URL sets none. The parser's error is not echoed,
 // because it may carry the password.
 func poolConfig(o Options) (*pgxpool.Config, error) {
-	cfg, err := pgxpool.ParseConfig(o.URL)
+	cfg, err := pgxpool.ParseConfig(servingURL(o))
 	if err != nil {
 		return nil, errors.New("LUX_DB_URL does not parse as a connection URL; the value is not echoed because it may carry a password")
+	}
+	if o.PoolURL != "" {
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+		cfg.ConnConfig.StatementCacheCapacity = 0
+		cfg.ConnConfig.DescriptionCacheCapacity = 0
 	}
 	cfg.MaxConns = int32(o.MaxConns) //nolint:gosec // bounded by config to at most 100
 	cfg.MinConns = minConns
@@ -358,4 +365,11 @@ var errNoRows = pgx.ErrNoRows
 func violates(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == constraint
+}
+
+func servingURL(o Options) string {
+	if o.PoolURL != "" {
+		return o.PoolURL
+	}
+	return o.URL
 }
