@@ -45,6 +45,7 @@ const (
 	KeyCreated          = "key.created"
 	KeyUpdated          = "key.updated"
 	KeyRotated          = "key.rotated"
+	KeyFenced           = "key.fenced"
 	KeyDeleted          = "key.deleted"
 	KeyExhausted        = "key.exhausted"
 	BudgetCreated       = "budget.created"
@@ -102,20 +103,29 @@ func Append(ctx context.Context, j store.Journal, e Event) error {
 	if e.Object == nil || e.Type == "" {
 		return errors.New("event: no object or no type")
 	}
+	return AppendRef(ctx, j, e, ObjectRef{Kind: e.Object.Kind(), ID: e.Object.ID(), Name: e.Object.Name(), Owner: e.Object.Owner(), Labels: labelsOf(e.Object)})
+}
+
+// AppendRef journals a resource that has no manifest, such as a permanent name
+// fence. The reference is explicit and must have a kind and stable id.
+func AppendRef(ctx context.Context, j store.Journal, e Event, ref ObjectRef) error {
+	if ref.Kind == "" || ref.ID == "" || e.Type == "" {
+		return errors.New("event: no resource kind, id or type")
+	}
 	if e.ID == "" {
 		e.ID = v1.NewID(v1.PrefixEvent, e.At, nil)
 	}
 	rec := Record{
 		ID: e.ID, Type: e.Type, Time: e.At.UTC(), Subject: e.Subject, Reason: e.Reason, RequestID: e.RequestID,
-		Object: ObjectRef{Kind: e.Object.Kind(), ID: e.Object.ID(), Name: e.Object.Name(), Owner: e.Object.Owner(), Labels: labelsOf(e.Object)},
+		Object: ref,
 		Data:   e.Data,
 	}
 	payload, err := encode(rec)
 	if err != nil {
-		return fmt.Errorf("encoding the %s event of %s: %w", e.Type, e.Object.ID(), err)
+		return fmt.Errorf("encoding the %s event of %s: %w", e.Type, ref.ID, err)
 	}
-	if _, err := j.Append(ctx, store.Event{ID: rec.ID, ObjectID: e.Object.ID(), Type: e.Type, At: e.At, Payload: payload}); err != nil {
-		return fmt.Errorf("journalling the %s event of %s: %w", e.Type, e.Object.ID(), err)
+	if _, err := j.Append(ctx, store.Event{ID: rec.ID, ObjectID: ref.ID, Type: e.Type, At: e.At, Payload: payload}); err != nil {
+		return fmt.Errorf("journalling the %s event of %s: %w", e.Type, ref.ID, err)
 	}
 	return nil
 }

@@ -44,11 +44,12 @@ func (f keyFences) Get(ctx context.Context, name string) (store.KeyFence, error)
 	err := f.s.read(ctx, func(q querier) error { var err error; result, err = readFence(ctx, q, name); return err })
 	return result, named("KeyFences.Get", err)
 }
-func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFence, error) {
+func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFence, bool, error) {
 	if err := input.Validate(); err != nil {
-		return store.KeyFence{}, err
+		return store.KeyFence{}, false, err
 	}
 	var result store.KeyFence
+	var inserted bool
 	err := f.s.write(ctx, func(q pgx.Tx) error {
 		if err := lockKeyWrites(ctx, q); err != nil {
 			return err
@@ -80,10 +81,11 @@ func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFenc
 		err = q.QueryRow(ctx, `INSERT INTO key_fences(name,owner,labels,created_at) VALUES($1,$2,$3,$4) RETURNING created_at`, input.Name, input.Owner, input.Labels, input.CreatedAt).Scan(&input.CreatedAt)
 		if err == nil {
 			result = input.Clone()
+			inserted = true
 		}
 		return err
 	})
-	return result, named("KeyFences.Put", err)
+	return result, inserted && err == nil, named("KeyFences.Put", err)
 }
 
 func checkKeyFence(ctx context.Context, q pgx.Tx, next *v1.Key, version int64) error {

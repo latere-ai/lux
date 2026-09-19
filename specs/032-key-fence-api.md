@@ -1,9 +1,9 @@
 ---
 title: Authorized Key fence endpoints
-status: in-progress
+status: testing
 track: core
 depends_on:
-  - 031-durable-key-fences.md
+  - .archive/031-durable-key-fences.md
   - 022-authorizer-vocabulary-package.md
 affects:
   - authorizer/

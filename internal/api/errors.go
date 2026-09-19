@@ -53,6 +53,8 @@ const (
 	CodeReadOnly              Code = "read_only"
 	CodeAlreadyExists         Code = "already_exists"
 	CodeConflict              Code = "conflict"
+	CodeKeyFenced             Code = "key_fenced"
+	CodeFenceConflict         Code = "fence_conflict"
 	CodeImmutableField        Code = "immutable_field"
 	CodeBudgetInUse           Code = "budget_in_use"
 	CodeProviderInUse         Code = "provider_in_use"
@@ -106,6 +108,8 @@ var table = map[Code]Row{
 	CodeModelNotFound:         {http.StatusNotFound, "There is no model of that name."},
 	CodeReadOnly:              {http.StatusMethodNotAllowed, "This server reads its manifests from a directory and cannot change them."},
 	CodeAlreadyExists:         {http.StatusConflict, "An object of this kind already has that name."},
+	CodeKeyFenced:             {http.StatusConflict, "This key name is permanently closed to credential changes."},
+	CodeFenceConflict:         {http.StatusConflict, "The key fence identity does not match."},
 	CodeConflict:              {http.StatusConflict, "The object changed since you read it; read it again and retry."},
 	CodeImmutableField:        {http.StatusConflict, "This field cannot be changed after the object is created."},
 	CodeBudgetInUse:           {http.StatusConflict, "Keys still draw from this budget."},
@@ -130,7 +134,7 @@ var codes = []Code{
 	CodeMissingField, CodeInvalidField, CodeReservedPrefix, CodeExclusiveFields, CodeDuplicateTarget,
 	CodeInvalidRequest, CodeUpstreamRejected, CodeDialectUnsupported, CodeProviderRequired, CodeCurrencyMismatch,
 	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeRouteNotAllowed, CodeModelNotAllowed,
-	CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeReadOnly, CodeAlreadyExists, CodeConflict,
+	CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
 	CodeImmutableField, CodeBudgetInUse, CodeProviderInUse, CodeBodyTooLarge, CodeUnsupportedMediaType,
 	CodeCeilingExceeded, CodeRateLimited, CodeSpendExceeded, CodeBudgetExhausted, CodeInternal, CodeUpstreamError,
 	CodeAuthorizerUnavailable, CodeStoreUnavailable, CodeProviderUnavailable, CodeUpstreamTimeout,
@@ -230,6 +234,10 @@ func mapError(err error) *Error {
 		return &Error{Code: Code(ae.Code), Detail: ae.Detail}
 	}
 	switch {
+	case errors.Is(err, store.ErrKeyFenced):
+		return refuse(CodeKeyFenced, err.Error())
+	case errors.Is(err, store.ErrFenceConflict):
+		return refuse(CodeFenceConflict, err.Error())
 	case errors.Is(err, store.ErrNotFound):
 		return refuse(CodeNotFound, err.Error())
 	case errors.Is(err, store.ErrVersionConflict):

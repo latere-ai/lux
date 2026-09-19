@@ -74,7 +74,7 @@ func TestAppendWritesTheRecord(t *testing.T) {
 // reason is one of the five, the four server-raised rows and check.ping
 // carry no request reason, and the members of each row are named once.
 func TestTableNamesEveryType(t *testing.T) {
-	types := []string{ProviderCreated, ProviderUpdated, ProviderDeleted, ProviderUnreachable, ProviderHealthy, ModelCreated, ModelUpdated, ModelDeleted, ModelDiscovered, ModelRemoved, KeyCreated, KeyUpdated, KeyRotated, KeyDeleted, KeyExhausted, BudgetCreated, BudgetUpdated, BudgetDeleted, BudgetExhausted, CheckPing}
+	types := []string{ProviderCreated, ProviderUpdated, ProviderDeleted, ProviderUnreachable, ProviderHealthy, ModelCreated, ModelUpdated, ModelDeleted, ModelDiscovered, ModelRemoved, KeyCreated, KeyUpdated, KeyRotated, KeyFenced, KeyDeleted, KeyExhausted, BudgetCreated, BudgetUpdated, BudgetDeleted, BudgetExhausted, CheckPing}
 	if len(Table) != len(types) {
 		t.Fatalf("%d rows for %d types", len(Table), len(types))
 	}
@@ -98,5 +98,17 @@ func TestTableNamesEveryType(t *testing.T) {
 		if Table[typ].Reason == ReasonRequest {
 			t.Errorf("%s is server-raised and has reason request", typ)
 		}
+	}
+}
+
+func TestAppendRefRequiresStableIdentity(t *testing.T) {
+	st := memory.New()
+	for _, ref := range []ObjectRef{{}, {Kind: "KeyFence"}, {ID: "key-fence/one"}} {
+		if err := AppendRef(t.Context(), st.Journal(), Event{Type: KeyFenced}, ref); err == nil {
+			t.Fatal("invalid reference accepted")
+		}
+	}
+	if err := AppendRef(t.Context(), st.Journal(), Event{}, ObjectRef{Kind: "KeyFence", ID: "key-fence/one"}); err == nil {
+		t.Fatal("missing type accepted")
 	}
 }

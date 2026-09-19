@@ -25,9 +25,11 @@ type KeyFence struct {
 // KeyFences serializes installation with Key object and credential writes.
 // Put waits for earlier writes to commit and blocks subsequent ones. Identical
 // assertions are idempotent; an occupied name must match owner and exact labels.
+// The inserted result is true only for a new committed row, so a caller can
+// append an audit event in the same transaction without duplicating replays.
 // No delete or reopen operation exists. Get returns ErrNotFound when unfenced.
 type KeyFences interface {
-	Put(context.Context, KeyFence) (KeyFence, error)
+	Put(context.Context, KeyFence) (fence KeyFence, inserted bool, err error)
 	Get(context.Context, string) (KeyFence, error)
 }
 

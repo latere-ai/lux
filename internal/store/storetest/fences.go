@@ -19,11 +19,12 @@ func keyFences(t *testing.T, s store.Store) {
 	_, err := s.KeyFences().Get(ctx, input.Name)
 	wantErr(t, err, store.ErrNotFound, "no fence")
 	for _, bad := range []store.KeyFence{{}, {Name: "x"}, {Owner: subject}} {
-		_, err := s.KeyFences().Put(ctx, bad)
+		_, _, err := s.KeyFences().Put(ctx, bad)
 		truth(t, err != nil, "invalid fence")
 	}
-	first, err := s.KeyFences().Put(ctx, input)
+	first, inserted, err := s.KeyFences().Put(ctx, input)
 	noErr(t, err, "absent fence")
+	truth(t, inserted, "first insertion")
 	truth(t, !first.CreatedAt.IsZero(), "timestamp")
 	input.Labels["tenant"] = "changed"
 	first.Labels["tenant"] = "changed"
@@ -31,15 +32,16 @@ func keyFences(t *testing.T, s store.Store) {
 	noErr(t, err, "get")
 	equal(t, stored.Labels["tenant"], "one", "input/output isolation")
 	originalTime := stored.CreatedAt
-	replay, err := s.KeyFences().Put(ctx, stored)
+	replay, again, err := s.KeyFences().Put(ctx, stored)
 	noErr(t, err, "replay")
+	truth(t, !again, "idempotent replay")
 	truth(t, replay.CreatedAt.Equal(originalTime), "replay timestamp")
 	stored.Labels["tenant"] = "changed"
-	_, err = s.KeyFences().Put(ctx, stored)
+	_, _, err = s.KeyFences().Put(ctx, stored)
 	wantErr(t, err, store.ErrFenceConflict, "labels conflict")
 	stored.Labels["tenant"] = "one"
 	stored.Owner = "other"
-	_, err = s.KeyFences().Put(ctx, stored)
+	_, _, err = s.KeyFences().Put(ctx, stored)
 	wantErr(t, err, store.ErrFenceConflict, "owner conflict")
 	for _, disabled := range []bool{false, true} {
 		k := key("reserved")
@@ -62,7 +64,7 @@ func keyFences(t *testing.T, s store.Store) {
 	cancel()
 	_, err = s.KeyFences().Get(canceled, "reserved")
 	wantErr(t, err, context.Canceled, "canceled get")
-	_, err = s.KeyFences().Put(canceled, store.KeyFence{Name: "cancel", Owner: subject})
+	_, _, err = s.KeyFences().Put(canceled, store.KeyFence{Name: "cancel", Owner: subject})
 	wantErr(t, err, context.Canceled, "canceled put")
 }
 
@@ -74,10 +76,10 @@ func fencedKeyCleanup(t *testing.T, s store.Store) {
 	noErr(t, err, "create")
 	noErr(t, s.Keys().Put(ctx, k.ID(), hash(0)), "initial hash")
 	for _, bad := range []store.KeyFence{{Name: k.Name(), Owner: "wrong", Labels: k.Metadata.Labels}, {Name: k.Name(), Owner: subject}, {Name: k.Name(), Owner: subject, Labels: map[string]string{"tenant": "one", "extra": "x"}}} {
-		_, err := s.KeyFences().Put(ctx, bad)
+		_, _, err := s.KeyFences().Put(ctx, bad)
 		wantErr(t, err, store.ErrFenceConflict, "occupant mismatch")
 	}
-	_, err = s.KeyFences().Put(ctx, store.KeyFence{Name: k.Name(), Owner: subject, Labels: k.Metadata.Labels})
+	_, _, err = s.KeyFences().Put(ctx, store.KeyFence{Name: k.Name(), Owner: subject, Labels: k.Metadata.Labels})
 	noErr(t, err, "occupied fence")
 	for _, h := range []string{hash(0), hash(1)} {
 		wantErr(t, s.Keys().Put(ctx, k.ID(), h), store.ErrKeyFenced, "hash write")
@@ -133,7 +135,7 @@ func fenceRollback(t *testing.T, s store.Store) {
 	abort := errors.New("abort")
 	input := store.KeyFence{Name: "rollback", Owner: subject}
 	err := s.Transact(ctx, func(tx store.Store) error {
-		_, err := tx.KeyFences().Put(ctx, input)
+		_, _, err := tx.KeyFences().Put(ctx, input)
 		if err != nil {
 			return err
 		}
@@ -147,7 +149,7 @@ func fenceRollback(t *testing.T, s store.Store) {
 		if _, err := tx.Objects().Put(ctx, k, 0); err != nil {
 			return err
 		}
-		if _, err := tx.KeyFences().Put(ctx, input); err != nil {
+		if _, _, err := tx.KeyFences().Put(ctx, input); err != nil {
 			return err
 		}
 		if err := tx.Keys().Put(ctx, k.ID(), hash(0)); !errors.Is(err, store.ErrKeyFenced) {

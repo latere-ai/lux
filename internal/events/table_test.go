@@ -328,6 +328,12 @@ func (p *plane) exercise() map[string]int {
 	for _, path := range []string{"/v1/keys/limited", "/v1/keys/drawing", "/v1/keys/open", "/v1/budgets/b", "/v1/models/m", "/v1/providers/up"} {
 		p.control(http.MethodDelete, path, "", http.StatusNoContent)
 	}
+	fenceBody, err := json.Marshal(map[string]any{"owner": p.subject, "labels": map[string]string{"run": "audit"}})
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	p.control(http.MethodPost, "/v1/keys/reserved/fence", string(fenceBody), http.StatusOK)
+	p.control(http.MethodPost, "/v1/keys/reserved/fence", string(fenceBody), http.StatusOK)
 	if err := events.NewSink(events.SinkOptions{URL: p.sinkURL, Secret: sinkSecret, Now: p.clock}).Ping(ctx); err != nil {
 		p.t.Fatal(err)
 	}
@@ -336,7 +342,7 @@ func (p *plane) exercise() map[string]int {
 		events.ProviderUnreachable: 1, events.ProviderHealthy: 1,
 		events.ModelCreated: 1, events.ModelUpdated: 1, events.ModelDeleted: 1,
 		events.ModelDiscovered: 2, events.ModelRemoved: 1,
-		events.KeyCreated: 3, events.KeyUpdated: 2, events.KeyRotated: 1, events.KeyDeleted: 3, events.KeyExhausted: 1,
+		events.KeyFenced: 1, events.KeyCreated: 3, events.KeyUpdated: 2, events.KeyRotated: 1, events.KeyDeleted: 3, events.KeyExhausted: 1,
 		events.BudgetCreated: 1, events.BudgetUpdated: 1, events.BudgetDeleted: 1, events.BudgetExhausted: 1,
 	}
 }

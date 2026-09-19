@@ -21,6 +21,14 @@ before `v1.0.0` a minor may break a row with a CHANGELOG entry naming
 the break; from `v1.0.0` the table binds, and the release pipeline
 checks every tag against it.
 
+## When permanent Key fences are in use
+
+Upgrade every writable replica before installing a Key fence. The new table is
+readable alongside older schema tables, but an older binary does not enforce its
+records. Once fences exist, rolling back to a writer without fence support would
+reopen credential mutations and is unsupported. Continue serving with a
+fence-capable binary; this feature changes the usual rollback guarantee.
+
 ## Across a major: one document
 
 A change that needs a drop, a rename, or a retype is the first

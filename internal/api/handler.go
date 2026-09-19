@@ -290,6 +290,10 @@ func (h *Handler) routes() {
 		}
 		h.mux.Handle(item, h.route(methods))
 		if k.name == v1.KindKey {
+			h.mux.Handle(item+"/fence", h.route(map[string]handlerFunc{
+				http.MethodPost: func(c *call, ctx context.Context) *Error { return c.keyFence(ctx, c.r.PathValue("name")) },
+				http.MethodGet:  func(c *call, ctx context.Context) *Error { return c.keyFence(ctx, c.r.PathValue("name")) },
+			}))
 			h.mux.Handle(item+"/rotate", h.route(map[string]handlerFunc{
 				http.MethodPost: func(c *call, ctx context.Context) *Error { return c.rotate(ctx, c.r.PathValue("name")) },
 			}))

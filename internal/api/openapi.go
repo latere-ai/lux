@@ -18,6 +18,7 @@ import (
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
 )
@@ -154,6 +155,8 @@ func openAPIDocument() ordered {
 		s.kind(k.name)
 	}
 	s.add("Error", errorSchema())
+	s.add("KeyFence", s.of(reflect.TypeFor[store.KeyFence]()))
+	s.add("KeyFenceAssertion", obj("type", "object", "additionalProperties", false, "required", []string{"owner"}, "properties", obj("owner", obj("type", "string", "description", "Rendered issuer|subject of the expected occupant."), "labels", obj("type", "object", "additionalProperties", obj("type", "string"), "description", "Exact expected labels; omitted means empty."))))
 	s.add("Self", s.of(reflect.TypeFor[Self]()))
 	s.add("SelfLimits", s.of(reflect.TypeFor[SelfLimits]()))
 	s.add("Filter", s.of(reflect.TypeFor[authz.Filter]()))
@@ -228,6 +231,11 @@ func kindPaths(k kind) ordered {
 	)
 	out := ordered{{"/v1/" + k.plural, list}, {item, itemOps}}
 	if k.name == v1.KindKey {
+		fenceParams := []any{obj("name", "name", "in", "path", "required", true, "description", "Key name only, never an id.", "schema", obj("type", "string", "maxLength", 63))}
+		fenceBody := obj("required", true, "content", obj("application/json", obj("schema", ref("schemas", "KeyFenceAssertion"))))
+		out = append(out, member{item + "/fence", obj(
+			"post", operation("fenceKey", "Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.", authorizer.ActionKeyFence, fenceParams, fenceBody, response("200", "The immutable fence.", "KeyFence")),
+			"get", operation("readKeyFence", "Read an immutable fence by Key name; authorization precedes existence lookup.", authorizer.ActionKeyFenceRead, fenceParams, nil, response("200", "The immutable fence.", "KeyFence")))})
 		out = append(out, member{item + "/rotate", obj("post", operation("rotateKey", "Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.", k.update, itemParams, nil, objectResponse("200", "The Key with its new value.", k.name)))})
 	}
 	return out

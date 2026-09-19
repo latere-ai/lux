@@ -36,6 +36,8 @@ const (
 	ActionKeyUpdate      = "key.update"
 	ActionKeyDelete      = "key.delete"
 	ActionKeyList        = "key.list"
+	ActionKeyFence       = "key.fence"
+	ActionKeyFenceRead   = "key.fence.read"
 	ActionBudgetCreate   = "budget.create"
 	ActionBudgetRead     = "budget.read"
 	ActionBudgetUpdate   = "budget.update"
@@ -52,6 +54,9 @@ const KindUsage = "Usage"
 
 // KindOwnership is a create-time request to assign an immutable owner.
 const KindOwnership = "Ownership"
+
+// KindKeyFence is an immutable assertion closing a Key name to writes.
+const KindKeyFence = "KeyFence"
 
 // vocabulary is spec 006's table as data, in the spec's order: every
 // action luxd asks, each paired with the resource kind it acts on. It is
@@ -75,6 +80,8 @@ var vocabulary = must(authz.NewVocabulary("lux",
 	authz.Action{Name: ActionKeyUpdate, Kind: v1.KindKey},
 	authz.Action{Name: ActionKeyDelete, Kind: v1.KindKey},
 	authz.Action{Name: ActionKeyList, Kind: v1.KindKey},
+	authz.Action{Name: ActionKeyFence, Kind: KindKeyFence},
+	authz.Action{Name: ActionKeyFenceRead, Kind: KindKeyFence},
 	authz.Action{Name: ActionBudgetCreate, Kind: v1.KindBudget},
 	authz.Action{Name: ActionBudgetRead, Kind: v1.KindBudget},
 	authz.Action{Name: ActionBudgetUpdate, Kind: v1.KindBudget},
@@ -97,6 +104,7 @@ var kindLabels = map[string]string{
 	v1.KindBudget:   "Budgets",
 	KindUsage:       "Usage",
 	KindOwnership:   "Ownership",
+	KindKeyFence:    "Key fences",
 }
 
 // must is the constructor's error, which is a mistake in the table above
@@ -335,4 +343,15 @@ func list(s []string) []string {
 	out := make([]string, len(s))
 	copy(out, s)
 	return out
+}
+
+// KeyFenceInstall asks permission for an exact assertion, before the store checks
+// the actual occupant transactionally. The assertion is not verified identity.
+func KeyFenceInstall(name, owner string, expectedLabels map[string]string) authz.Resource {
+	return authz.NewResource(KindKeyFence, name, map[string]any{"name": name, "owner": owner, "labels": labels(expectedLabels)})
+}
+
+// KeyFenceRead asks permission before looking up whether the name is fenced.
+func KeyFenceRead(name string) authz.Resource {
+	return authz.NewResource(KindKeyFence, name, map[string]any{"name": name})
 }

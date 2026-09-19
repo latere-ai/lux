@@ -136,6 +136,6 @@ type roKeyFences struct {
 	v view
 }
 
-func (f roKeyFences) Put(context.Context, store.KeyFence) (store.KeyFence, error) {
-	return store.KeyFence{}, f.v.readOnly("KeyFences.Put")
+func (f roKeyFences) Put(context.Context, store.KeyFence) (store.KeyFence, bool, error) {
+	return store.KeyFence{}, false, f.v.readOnly("KeyFences.Put")
 }

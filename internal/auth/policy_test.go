@@ -94,6 +94,8 @@ func TestOwnerPolicy(t *testing.T) {
 		{"key.update", authorizer.ActionKeyUpdate, authorizer.KeyObject(key), allow, notOwner},
 		{"key.delete", authorizer.ActionKeyDelete, authorizer.KeyObject(key), allow, notOwner},
 		{"key.list", authorizer.ActionKeyList, authorizer.KeyList(), filtered, filtered},
+		{"key.fence", authorizer.ActionKeyFence, authorizer.KeyFenceInstall("run-42", fixtureSubject, nil), admins, admins},
+		{"key.fence.read", authorizer.ActionKeyFenceRead, authorizer.KeyFenceRead("run-42"), admins, admins},
 		{"budget.create", authorizer.ActionBudgetCreate, authorizer.BudgetCreate(budget), allow, allow},
 		{"budget.read", authorizer.ActionBudgetRead, authorizer.BudgetObject(budget), allow, notOwner},
 		{"budget.update", authorizer.ActionBudgetUpdate, authorizer.BudgetObject(budget), allow, notOwner},

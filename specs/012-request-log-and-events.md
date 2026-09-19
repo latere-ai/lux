@@ -93,6 +93,7 @@ sink can key on it without parsing `data`.
 | `model.removed` | discovery deleted a discovered Model the upstream dropped | `{provider, upstreamModel}` |
 | `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, expiresAt}`; `prefix` is the minted `lux_` prefix or a supplied value's `sup_` handle ([[007-keys-and-limits]]) |
 | `key.updated` | a `Key`'s spec changed | the changed paths |
+| `key.fenced` | `POST /v1/keys/{name}/fence`, first installation only | `{}`; object kind `KeyFence`, id `key-fence/<name>`, asserted owner and labels |
 | `key.rotated` | `POST /v1/keys/{id}/rotate` | `{prefix, previousPrefix}` |
 | `key.deleted` | a `Key` was deleted | `{prefix}` |
 | `key.exhausted` | a Key's spend window reached its amount: at the first `spend_exceeded` refusal of the window ([[007-keys-and-limits]]) | `{window, amount, spent, currency, resetsAt}` |

@@ -313,7 +313,7 @@ func TestFileModeRefusesWrites(t *testing.T) {
 	fresh := &v1.Budget{Metadata: v1.ObjectMeta{Name: "new"}, Status: v1.BudgetStatus{ID: "bud_new", Owner: Subject}}
 	writes := map[string]func(s store.Store) error{
 		"KeyFences.Put": func(s store.Store) error {
-			_, err := s.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: Subject})
+			_, _, err := s.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: Subject})
 			return err
 		},
 		"Objects.Put create": func(s store.Store) error { _, err := s.Objects().Put(ctx, fresh, 0); return err },

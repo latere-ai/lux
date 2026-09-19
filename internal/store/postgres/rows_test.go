@@ -363,7 +363,7 @@ func TestPostgresQueriesUseIndexes(t *testing.T) {
 	_, err = st.Keys().ByHash(ctx, hash(1))
 	must("ByHash", err)
 	must("Keys.Delete", st.Keys().Delete(ctx, "key_1"))
-	_, err = st.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: subject})
+	_, _, err = st.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: subject})
 	must("KeyFences.Put", err)
 	_, err = st.KeyFences().Get(ctx, "closed")
 	must("KeyFences.Get", err)

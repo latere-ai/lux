@@ -19,7 +19,7 @@ owner.
 
 - [031-durable-key-fences](.archive/031-durable-key-fences.md) — complete. Close Key names to delayed credential writes.
 
-- [032-key-fence-api](032-key-fence-api.md) — in progress. Authorize and expose durable Key fences.
+- [032-key-fence-api](032-key-fence-api.md) — testing. Authorize and expose durable Key fences.
 
 ## Layout
 
@@ -81,12 +81,10 @@ later.
 | [023](023-performance-and-benchmarks.md) | Performance and benchmarks: the gateway's own overhead, in process against a stub upstream | small | complete | 004 |
 | [024](.archive/024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | complete | 010 |
 | [025](.archive/025-mutation-authorization.md) | Proposed mutation admission and explicit owner assignment | medium | complete | 006, 011, 022 |
-
 | [026](.archive/026-object-scoped-discovery.md) | Object-scoped model discovery and list authorization | medium | complete | 006, 011, 025 |
-
 | [027](.archive/027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | complete | 003, 007 |
-
 | [028](.archive/028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | complete | 013, 014 |
+| [032](032-key-fence-api.md) | Authorized Key fence endpoints and atomic audit events | medium | testing | 031, 022 |
 
 ## Dependency graph
 

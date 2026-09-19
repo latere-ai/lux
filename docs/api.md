@@ -30,6 +30,29 @@ create. Assigning another principal requires both the ordinary create permission
 and `owner.assign`. Updates may omit the header or repeat the stored owner.
 The authenticated writer remains the audit actor.
 
+## Permanent Key fences
+
+`POST /v1/keys/{name}/fence` permanently closes a name to creation, rotation and
+policy expansion. Send JSON with the expected `owner` (`issuer|subject`) and
+exact `labels` (omitted means empty). It requires `key.fence`; ordinary Key
+permissions do not grant it. `GET` on the same path requires `key.fence.read` and
+returns the original `{name, owner, labels, createdAt}` record. Both use a Key
+name, never an id, and return 200. Identical POSTs are safe to retry.
+
+A different assertion or mismatched occupant returns `fence_conflict` (409).
+Credential changes after installation return `key_fenced` (409). The existing
+Key can still be read, deleted or updated to `disabled: true` with all other
+metadata, policy and credential identity preserved. Deleting it does not reopen
+the name. First installation writes one `key.fenced` audit event atomically;
+retries do not duplicate it, including after event retention has elapsed.
+
+Fencing alone does not disable an enabled Key. A controller must close its own
+admission, fence every affected name, read and conditionally disable each current
+Key, verify the result, and wait for the maximum serving-cache lifetime before
+reporting revocation complete. Already admitted requests are a separate lifecycle.
+Upgrade every writer before using fences; older writers do not enforce them and
+cannot participate in a rollout or rollback once fences are in use.
+
 ## The doors
 
 Inference does not go through `/v1`. Each provider dialect has its own

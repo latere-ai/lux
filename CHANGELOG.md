@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Permanent Key fences close names to delayed creates, rotations and policy
+  expansion. Explicit `key.fence` and `key.fence.read` permissions control the
+  new endpoints; installation journals one `key.fenced` event atomically.
+  **Rollback restriction:** upgrade all writers before activating fences. Once
+  used, older binaries cannot participate in the deployment or a rollback.
+  Fencing must be followed by verified disable and cache drainage for revocation.
+- Delayed Key/Budget reads cannot repopulate invalidated caches or extend their
+  lifetime. Canceled memory transactions roll back. Key updates preserve the
+  original TTL deadline, including Keys created by older releases.
+
+
 ## v0.4.1 - 2026-09-19
 
 - Key mutation proposals include a credential input mode and, for a supplied

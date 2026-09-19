@@ -432,6 +432,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/keys/{name}/fence:
+    post:
+      operationId: fenceKey
+      summary: Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.
+      x-lux-action: key.fence
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: Key name only, never an id.
+        schema:
+          type: string
+          maxLength: 63
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyFenceAssertion"
+      responses:
+        "200":
+          description: The immutable fence.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyFence"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: readKeyFence
+      summary: Read an immutable fence by Key name; authorization precedes existence lookup.
+      x-lux-action: key.fence.read
+      parameters:
+      - name: name
+        in: path
+        required: true
+        description: Key name only, never an id.
+        schema:
+          type: string
+          maxLength: 63
+      responses:
+        "200":
+          description: The immutable fence.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyFence"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/keys/{name}/rotate:
     post:
       operationId: rotateKey
@@ -1703,6 +1772,8 @@ components:
               - model_not_found
               - read_only
               - already_exists
+              - key_fenced
+              - fence_conflict
               - conflict
               - immutable_field
               - budget_in_use
@@ -1737,6 +1808,22 @@ components:
                 detail:
                   type: string
                   description: One developer sentence.
+    KeyFence:
+      $ref: "#/components/schemas/KeyFence"
+    KeyFenceAssertion:
+      type: object
+      additionalProperties: false
+      required:
+      - owner
+      properties:
+        owner:
+          type: string
+          description: Rendered issuer|subject of the expected occupant.
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Exact expected labels; omitted means empty.
     Self:
       $ref: "#/components/schemas/Self"
     SelfLimits:
@@ -2082,6 +2169,12 @@ x-lux-errors:
 - code: already_exists
   status: 409
   message: An object of this kind already has that name.
+- code: key_fenced
+  status: 409
+  message: This key name is permanently closed to credential changes.
+- code: fence_conflict
+  status: 409
+  message: The key fence identity does not match.
 - code: conflict
   status: 409
   message: The object changed since you read it; read it again and retry.

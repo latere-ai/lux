@@ -433,11 +433,11 @@ type iKeyFences struct {
 	s *instrumented
 }
 
-func (f iKeyFences) Put(ctx context.Context, input KeyFence) (KeyFence, error) {
+func (f iKeyFences) Put(ctx context.Context, input KeyFence) (KeyFence, bool, error) {
 	ctx, done := f.s.begin(ctx, "KeyFences.Put", "")
-	result, err := f.KeyFences.Put(ctx, input)
+	result, inserted, err := f.KeyFences.Put(ctx, input)
 	done(err)
-	return result, err
+	return result, inserted, err
 }
 func (f iKeyFences) Get(ctx context.Context, name string) (KeyFence, error) {
 	ctx, done := f.s.begin(ctx, "KeyFences.Get", "")

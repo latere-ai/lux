@@ -191,6 +191,8 @@ peer's, or the forwarded one behind a proxy listed in
 | `model.use` | `{"kind": "Model", "selector": "anthropic/*", "matched": [{"id", "name", "owner", "labels"}]}`; asked once per selector at Key resolve through `Lookup.Models` ([[003-manifest-contract]]); the decision binds the selector, and the data plane matches it at request time against the catalog then |
 | `key.create` | `{"kind": "Key", "name", "labels", "models", "budget"}` |
 | `key.read`, `.update`, `.delete` | `{"kind": "Key", "id", "name", "owner", "prefix", "labels"}` |
+| `key.fence` | `{"kind": "KeyFence", "id": "<name>", "name", "owner", "labels"}`; requested assertion, verified transactionally by the store after authorization |
+| `key.fence.read` | `{"kind": "KeyFence", "id": "<name>", "name"}`; permission checked before existence lookup |
 | `key.list` | `{"kind": "Key"}`; `filter` applies |
 | `budget.create` | `{"kind": "Budget", "name", "amount", "currency", "window", "labels"}` |
 | `budget.read`, `.update`, `.delete` | `{"kind": "Budget", "id", "name", "owner", "labels"}` |

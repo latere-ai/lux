@@ -93,11 +93,13 @@ func shapes(t *testing.T) map[string]map[string]any {
 		authorizer.ActionModelList:   {"kind": "Model"},
 		authorizer.ActionModelUse: {"kind": "Model", "selector": "anthropic/*",
 			"matched": []any{map[string]any{"id": "mdl_01J9TESTMODEL00000000000000", "name": "gpt-5", "owner": fixtureSubject, "labels": map[string]any{}}}},
-		authorizer.ActionKeyCreate: {"kind": "Key", "name": "run-42", "labels": labels("run", "r_42"), "models": []any{"gpt-5", "anthropic/*"}, "budget": "team-research"},
-		authorizer.ActionKeyRead:   key,
-		authorizer.ActionKeyUpdate: key,
-		authorizer.ActionKeyDelete: key,
-		authorizer.ActionKeyList:   {"kind": "Key"},
+		authorizer.ActionKeyCreate:    {"kind": "Key", "name": "run-42", "labels": labels("run", "r_42"), "models": []any{"gpt-5", "anthropic/*"}, "budget": "team-research"},
+		authorizer.ActionKeyRead:      key,
+		authorizer.ActionKeyUpdate:    key,
+		authorizer.ActionKeyDelete:    key,
+		authorizer.ActionKeyList:      {"kind": "Key"},
+		authorizer.ActionKeyFence:     {"kind": "KeyFence", "id": "run-42", "name": "run-42", "owner": fixtureSubject, "labels": labels("run", "r_42")},
+		authorizer.ActionKeyFenceRead: {"kind": "KeyFence", "id": "run-42", "name": "run-42"},
 		authorizer.ActionBudgetCreate: {"kind": "Budget", "name": "team-research", "amount": "50", "currency": "USD", "window": "month",
 			"labels": labels("team", "research")},
 		authorizer.ActionBudgetRead:   budget,
@@ -115,6 +117,10 @@ func shapes(t *testing.T) map[string]map[string]any {
 func resourceOf(t *testing.T, action string) authz.Resource {
 	t.Helper()
 	switch action {
+	case authorizer.ActionKeyFence:
+		return authorizer.KeyFenceInstall("run-42", fixtureSubject, map[string]string{"run": "r_42"})
+	case authorizer.ActionKeyFenceRead:
+		return authorizer.KeyFenceRead("run-42")
 	case authorizer.ActionOwnerAssign:
 		return authorizer.OwnerAssignment("Key", "run-42", fixtureSubject, map[string]any{"owner": fixtureSubject})
 	case authorizer.ActionModelUse:

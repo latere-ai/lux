@@ -12,11 +12,12 @@ import (
 
 type keyFences struct{ s *Store }
 
-func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFence, error) {
+func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFence, bool, error) {
 	if err := input.Validate(); err != nil {
-		return store.KeyFence{}, err
+		return store.KeyFence{}, false, err
 	}
 	var result store.KeyFence
+	var inserted bool
 	err := f.s.write(ctx, func(st *state) error {
 		if old, ok := st.fences[input.Name]; ok {
 			if !old.Matches(input.Owner, input.Labels) {
@@ -33,10 +34,11 @@ func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFenc
 		}
 		input.CreatedAt = f.s.now()
 		st.fences[input.Name] = input.Clone()
+		inserted = true
 		result = input.Clone()
 		return nil
 	})
-	return result, err
+	return result, inserted && err == nil, err
 }
 func (f keyFences) Get(ctx context.Context, name string) (store.KeyFence, error) {
 	var result store.KeyFence

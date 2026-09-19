@@ -3,7 +3,9 @@
 `Store.KeyFences().Put` permanently closes a Key name to creation, rotation and
 policy changes. The assertion supplies the name, owner and exact labels; the store
 checks an existing occupant and rejects mismatches. A repeat with the same
-assertion returns the original fence. `Get` reads that assertion after an uncertain
+assertion returns the original fence. The returned insertion flag is true only for
+the first installation, so a caller can append its audit event in the same
+transaction without duplicating it on replay. `Get` reads that assertion after an uncertain
 write outcome. Neither operation exposes a credential.
 
 Installation waits for earlier Key writes to commit. After it succeeds, an older

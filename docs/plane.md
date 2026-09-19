@@ -343,7 +343,11 @@ when it names none and at most six hundred, and a deny for five. A
 revocation at the authorizer therefore takes effect on the control plane
 within that time, and on the data plane not at all: the doors ask no
 authorizer, so a platform that revokes a subject deletes or disables its
-Keys.
+Keys. To prevent a write authorized earlier from re-enabling access afterward,
+close admission in the platform, install a [permanent Key fence](api.md#permanent-key-fences)
+for each affected name, disable its current Key with an exact version precondition,
+and wait for the configured Key-cache lifetime. Fence replay is idempotent and
+survives deletion; a different name is required when access is restored.
 
 ## Giving a sandbox model access
 

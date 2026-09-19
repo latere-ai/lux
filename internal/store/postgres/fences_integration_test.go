@@ -43,7 +43,7 @@ func TestPostgresFenceTransactionOrdering(t *testing.T) {
 							err = tx.Keys().Put(t.Context(), key.ID(), strings.Repeat("a", 64))
 						}
 					} else {
-						_, err = tx.KeyFences().Put(t.Context(), fence)
+						_, _, err = tx.KeyFences().Put(t.Context(), fence)
 					}
 					close(held)
 					<-release
@@ -54,7 +54,7 @@ func TestPostgresFenceTransactionOrdering(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			var err error
 			if first == "write" {
-				_, err = b.KeyFences().Put(ctx, fence)
+				_, _, err = b.KeyFences().Put(ctx, fence)
 			} else {
 				_, err = b.Objects().Put(ctx, key, 0)
 			}
@@ -66,7 +66,7 @@ func TestPostgresFenceTransactionOrdering(t *testing.T) {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("operation crossed held transaction: %v", err)
 			}
-			if _, err := b.KeyFences().Put(t.Context(), fence); err != nil {
+			if _, _, err := b.KeyFences().Put(t.Context(), fence); err != nil {
 				t.Fatal(err)
 			}
 			// New connection sees the committed fence, including after deletion.
@@ -104,7 +104,7 @@ func TestPostgresFenceRejectsStaleIsolation(t *testing.T) {
 		if _, err := pg.tx.Exec(t.Context(), `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`); err != nil {
 			return err
 		}
-		_, err := tx.KeyFences().Put(t.Context(), store.KeyFence{Name: "stale", Owner: "owner"})
+		_, _, err := tx.KeyFences().Put(t.Context(), store.KeyFence{Name: "stale", Owner: "owner"})
 		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "READ COMMITTED") {
@@ -126,12 +126,12 @@ func TestPostgresFenceStorageFailuresFailClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			fence := store.KeyFence{Name: key.Name(), Owner: key.Status.Owner}
-			if _, err := s.KeyFences().Put(t.Context(), fence); err != nil {
+			if _, _, err := s.KeyFences().Put(t.Context(), fence); err != nil {
 				t.Fatal(err)
 			}
 			if fault == "missing fence table" {
 				pgtest.Exec(t, dbURL, `DROP TABLE key_fences`)
-				if _, err := s.KeyFences().Put(t.Context(), fence); err == nil {
+				if _, _, err := s.KeyFences().Put(t.Context(), fence); err == nil {
 					t.Fatal("fence write failed open")
 				}
 			} else {
@@ -142,5 +142,37 @@ func TestPostgresFenceStorageFailuresFailClosed(t *testing.T) {
 				t.Fatal("object write failed open")
 			}
 		})
+	}
+}
+
+func TestPostgresFenceConcurrentReplay(t *testing.T) {
+	s, _, err := Connect(t.Context(), Options{URL: pgtest.URL(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	type result struct {
+		inserted bool
+		err      error
+	}
+	done := make(chan result, 8)
+	for range 8 {
+		go func() {
+			_, inserted, err := s.KeyFences().Put(t.Context(), store.KeyFence{Name: "concurrent", Owner: "owner"})
+			done <- result{inserted, err}
+		}()
+	}
+	inserted := 0
+	for range 8 {
+		r := <-done
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		if r.inserted {
+			inserted++
+		}
+	}
+	if inserted != 1 {
+		t.Fatalf("%d first installations, want 1", inserted)
 	}
 }
