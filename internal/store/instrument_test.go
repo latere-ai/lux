@@ -42,6 +42,15 @@ func TestStoreOperationsAreCounted(t *testing.T) {
 		result string
 		call   func() error
 	}{
+		{"KeyFences.Put", store.ResultOK, func() error {
+			_, err := s.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: "owner"})
+			return err
+		}},
+		{"KeyFences.Get", store.ResultOK, func() error { _, err := s.KeyFences().Get(ctx, "closed"); return err }},
+		{"KeyFences.Put", store.ResultConflict, func() error {
+			_, err := s.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: "other"})
+			return err
+		}},
 		{"Objects.Put", store.ResultOK, func() error { _, err := s.Objects().Put(ctx, p, 0); return err }},
 		{"Objects.Put", store.ResultConflict, func() error { _, err := s.Objects().Put(ctx, p, 9); return err }},
 		{"Objects.Get", store.ResultOK, func() error { _, _, err := s.Objects().Get(ctx, v1.KindProvider, "prv_none"); return err }},

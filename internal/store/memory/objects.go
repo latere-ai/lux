@@ -58,6 +58,11 @@ func (o objects) Put(ctx context.Context, obj v1.Object, ifVersion int64) (int64
 	}
 	var version int64
 	err = o.s.write(ctx, func(st *state) error {
+		if key, ok := obj.(*v1.Key); ok {
+			if err := checkKeyFence(st, key, ifVersion); err != nil {
+				return err
+			}
+		}
 		now := o.s.now()
 		row := objectRow{kind: kind, id: *f.id, name: name, owner: *f.owner, version: 1, createdAt: *f.createdAt, updatedAt: *f.updatedAt}
 		if ifVersion == 0 {

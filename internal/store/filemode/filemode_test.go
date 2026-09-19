@@ -312,6 +312,10 @@ func TestFileModeRefusesWrites(t *testing.T) {
 	k, _ := byName(t, s, v1.KindKey, "run-42")
 	fresh := &v1.Budget{Metadata: v1.ObjectMeta{Name: "new"}, Status: v1.BudgetStatus{ID: "bud_new", Owner: Subject}}
 	writes := map[string]func(s store.Store) error{
+		"KeyFences.Put": func(s store.Store) error {
+			_, err := s.KeyFences().Put(ctx, store.KeyFence{Name: "closed", Owner: Subject})
+			return err
+		},
 		"Objects.Put create": func(s store.Store) error { _, err := s.Objects().Put(ctx, fresh, 0); return err },
 		"Objects.Put update": func(s store.Store) error { _, err := s.Objects().Put(ctx, p, 1); return err },
 		"Objects.Delete":     func(s store.Store) error { return s.Objects().Delete(ctx, v1.KindProvider, p.ID()) },
@@ -344,6 +348,9 @@ func TestFileModeRefusesWrites(t *testing.T) {
 				t.Errorf("%s via %s: the detail does not name the directory: %v", name, via, err)
 			}
 		}
+	}
+	if _, err := s.KeyFences().Get(ctx, "closed"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatal(err)
 	}
 	// Nothing changed, and a read-only Transact still refuses nesting.
 	if _, v := byName(t, s, v1.KindProvider, "openai"); v != 1 {

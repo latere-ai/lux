@@ -12,6 +12,10 @@ import "errors"
 // invalid_field at cursor there; ErrNested is a programming error a
 // test catches.
 var (
+	// ErrKeyFenced is a credential or policy write to a permanently fenced name.
+	ErrKeyFenced = errors.New("store: key fenced")
+	// ErrFenceConflict is an inconsistent fence identity assertion.
+	ErrFenceConflict = errors.New("store: fence identity conflict")
 	// ErrNotFound is a row that does not exist or is deleted.
 	ErrNotFound = errors.New("store: not found")
 	// ErrVersionConflict is a write at a version the row has moved past,
@@ -34,5 +38,5 @@ var (
 // test can hold every implementation to raising these and no other for
 // the conditions the contract states.
 func Errors() []error {
-	return []error{ErrNotFound, ErrVersionConflict, ErrNameTaken, ErrHashTaken, ErrReadOnly, ErrInvalidCursor, ErrNested}
+	return []error{ErrNotFound, ErrVersionConflict, ErrNameTaken, ErrHashTaken, ErrReadOnly, ErrInvalidCursor, ErrNested, ErrKeyFenced, ErrFenceConflict}
 }

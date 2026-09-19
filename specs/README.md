@@ -17,7 +17,7 @@ owner.
 
 - [030-key-credential-admission](.archive/030-key-credential-admission.md) — complete. Admit registered Key credentials without exposing their verifier.
 
-- [031-durable-key-fences](031-durable-key-fences.md) — in progress. Close Key names to delayed credential writes.
+- [031-durable-key-fences](.archive/031-durable-key-fences.md) — complete. Close Key names to delayed credential writes.
 
 ## Layout
 

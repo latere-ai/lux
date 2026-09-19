@@ -272,6 +272,9 @@ func (s *Store) Objects() store.Objects { return objects{s} }
 // Keys implements store.Store.
 func (s *Store) Keys() store.Keys { return keys{s} }
 
+// KeyFences implements store.Store.
+func (s *Store) KeyFences() store.KeyFences { return keyFences{s} }
+
 // Credentials implements store.Store.
 func (s *Store) Credentials() store.Credentials { return credentials{s} }
 

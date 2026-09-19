@@ -38,6 +38,11 @@ func (k keys) Put(ctx context.Context, keyID, hash string) error {
 		return err
 	}
 	return k.s.write(ctx, func(st *state) error {
+		if row, ok := st.objects[keyID]; ok {
+			if _, fenced := st.fences[row.name]; fenced {
+				return store.ErrKeyFenced
+			}
+		}
 		if other, ok := st.hashes[hash]; ok && other != keyID {
 			return fmt.Errorf("%w: the hash is registered to another key", store.ErrHashTaken)
 		}

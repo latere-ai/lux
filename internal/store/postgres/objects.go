@@ -66,6 +66,11 @@ func (o objects) Put(ctx context.Context, obj v1.Object, ifVersion int64) (int64
 	createdAt, updatedAt := *f.createdAt, *f.updatedAt
 	var version int64
 	err = o.s.write(ctx, func(q pgx.Tx) error {
+		if key, ok := obj.(*v1.Key); ok {
+			if err := checkKeyFence(ctx, q, key, ifVersion); err != nil {
+				return err
+			}
+		}
 		now := o.s.now()
 		if updatedAt.IsZero() {
 			updatedAt = now
@@ -305,7 +310,12 @@ func (o objects) List(ctx context.Context, kind string, f store.Filter, p store.
 // Delete implements store.Objects: the row is marked, so its name is
 // free at once and its id never is.
 func (o objects) Delete(ctx context.Context, kind, id string) error {
-	err := o.s.read(ctx, func(q querier) error {
+	err := o.s.write(ctx, func(q pgx.Tx) error {
+		if kind == v1.KindKey {
+			if err := lockKeyWrites(ctx, q); err != nil {
+				return err
+			}
+		}
 		tag, err := q.Exec(ctx, `UPDATE objects SET deleted_at = $3 WHERE kind = $1 AND id = $2 AND deleted_at IS NULL`, kind, id, o.s.now())
 		if err != nil {
 			return err

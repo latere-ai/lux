@@ -72,7 +72,7 @@ func TestErrorsAreDistinct(t *testing.T) {
 		}
 		seen[err.Error()] = true
 	}
-	if len(seen) != 7 {
-		t.Fatalf("%d errors, want 7", len(seen))
+	if len(seen) != 9 {
+		t.Fatalf("%d errors, want 9", len(seen))
 	}
 }

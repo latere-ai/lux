@@ -1,6 +1,6 @@
 ---
 title: Durable Key write fences
-status: in-progress
+status: complete
 track: core
 depends_on:
   - 010-state.md
@@ -48,7 +48,7 @@ Denials return `ErrKeyFenced`; unfenced behavior remains unchanged.
 
 Memory stores fences in its rollback snapshot. Postgres adds one table and uses
 one transaction advisory lock shared by fence installation, Key object writes
-and credential writes. The lock is held until the enclosing transaction commits,
+credential writes and Key deletion. The lock is held until the enclosing transaction commits,
 including when an operation uses a savepoint. A global control-plane lock avoids
 absent-name and rename lock-order races; inference never acquires it. Queries
 checking fences run after acquiring the lock under READ COMMITTED isolation.
@@ -74,3 +74,23 @@ control-plane reconciliation before reporting enforcement complete.
 - Fence state and input/output maps cannot be changed by caller aliasing.
 - File mode refuses mutation. Existing store tests continue passing. New logic
   targets greater than 90% coverage; the HTTP slice owns end-to-end API tests.
+
+## Outcome
+
+Implemented the immutable fence collection, memory snapshots, additive Postgres
+migration, transaction-scoped serialization, exact disable-only comparison,
+read-only wrappers and instrumentation. Key deletion shares the writer lock to
+keep its lock order consistent with mixed credential transactions.
+
+The shared suite covers occupied/absent names, map isolation, conflicting replay,
+all preserved policy fields, rename in both directions, rollback, savepoints,
+pruning and recreation. Real Postgres tests use independent connections in both
+transaction orders, reconnect after installation, reject stale isolation and fail
+closed for missing/corrupt storage. All store race tests and the full Lux suite
+pass. Store/memory coverage is 98.8%; Postgres is 93.1%; new memory fence and shared
+assertion/disable helpers are 100%. Vet and ordinary lint pass. Tagged lint of the
+change passes; a full tagged lint also reports 20 pre-existing findings elsewhere
+in rows_test.go (context propagation and literal modernization).
+
+HTTP exposure and an inference revocation completion claim remain outside this
+slice. Operators must upgrade every writer before activating fences.

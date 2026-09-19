@@ -26,6 +26,7 @@ func (v view) readOnly(what string) error {
 }
 
 func (v view) Objects() store.Objects         { return roObjects{v.inner.Objects(), v} }
+func (v view) KeyFences() store.KeyFences     { return roKeyFences{v.inner.KeyFences(), v} }
 func (v view) Keys() store.Keys               { return roKeys{v.inner.Keys(), v} }
 func (v view) Credentials() store.Credentials { return roCredentials{v} }
 func (v view) Counters() store.Counters       { return v.inner.Counters() }
@@ -128,4 +129,13 @@ func (c roCredentials) Delete(context.Context, string) error {
 
 func (c roCredentials) List(context.Context) ([]string, error) {
 	return nil, c.v.readOnly("Credentials.List; nothing is sealed in this mode")
+}
+
+type roKeyFences struct {
+	store.KeyFences
+	v view
+}
+
+func (f roKeyFences) Put(context.Context, store.KeyFence) (store.KeyFence, error) {
+	return store.KeyFence{}, f.v.readOnly("KeyFences.Put")
 }

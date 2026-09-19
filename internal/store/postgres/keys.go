@@ -44,6 +44,16 @@ func (k keys) Put(ctx context.Context, keyID, hash string) error {
 		return err
 	}
 	err := k.s.write(ctx, func(q pgx.Tx) error {
+		if err := lockKeyWrites(ctx, q); err != nil {
+			return err
+		}
+		var fenced bool
+		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM objects o JOIN key_fences f ON f.name=o.name WHERE o.id=$1 AND o.kind='Key')`, keyID).Scan(&fenced); err != nil {
+			return err
+		}
+		if fenced {
+			return store.ErrKeyFenced
+		}
 		var other string
 		err := q.QueryRow(ctx, `SELECT key_id FROM key_hashes WHERE hash = $1`, hash).Scan(&other)
 		switch {
@@ -94,7 +104,10 @@ func (k keys) ByHash(ctx context.Context, hash string) (string, error) {
 
 // Delete implements store.Keys.
 func (k keys) Delete(ctx context.Context, keyID string) error {
-	err := k.s.read(ctx, func(q querier) error {
+	err := k.s.write(ctx, func(q pgx.Tx) error {
+		if err := lockKeyWrites(ctx, q); err != nil {
+			return err
+		}
 		tag, err := q.Exec(ctx, `DELETE FROM key_hashes WHERE key_id = $1`, keyID)
 		if err != nil {
 			return err

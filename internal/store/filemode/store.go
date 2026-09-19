@@ -150,6 +150,9 @@ func (s *Store) Objects() store.Objects { return s.view.Objects() }
 // Keys implements store.Store.
 func (s *Store) Keys() store.Keys { return s.view.Keys() }
 
+// KeyFences implements store.Store.
+func (s *Store) KeyFences() store.KeyFences { return s.view.KeyFences() }
+
 // Credentials implements store.Store.
 func (s *Store) Credentials() store.Credentials { return s.view.Credentials() }
 

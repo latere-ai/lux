@@ -57,6 +57,7 @@ func New(opts ...Option) *Store {
 // edited in place: a write copies the row, changes the copy, and stores
 // it back.
 type state struct {
+	fences   map[string]store.KeyFence
 	objects  map[string]objectRow    // by id
 	names    map[string]string       // kind/name of a live row to its id
 	hashes   map[string]string       // key hash to key id
@@ -79,6 +80,7 @@ type state struct {
 
 func newState() *state {
 	return &state{
+		fences:   map[string]store.KeyFence{},
 		objects:  map[string]objectRow{},
 		names:    map[string]string{},
 		hashes:   map[string]string{},
@@ -99,6 +101,7 @@ func newState() *state {
 // deep, which is enough because no row is ever edited in place.
 func (st *state) clone() *state {
 	return &state{
+		fences:   maps.Clone(st.fences),
 		objects:  maps.Clone(st.objects),
 		names:    maps.Clone(st.names),
 		hashes:   maps.Clone(st.hashes),
@@ -147,6 +150,9 @@ func (s *Store) Objects() store.Objects { return objects{s} }
 
 // Keys implements store.Store.
 func (s *Store) Keys() store.Keys { return keys{s} }
+
+// KeyFences implements store.Store.
+func (s *Store) KeyFences() store.KeyFences { return keyFences{s} }
 
 // Credentials implements store.Store.
 func (s *Store) Credentials() store.Credentials { return credentials{s} }

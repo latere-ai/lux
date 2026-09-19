@@ -64,7 +64,7 @@ func resultOf(err error) string {
 	case err == nil, errors.Is(err, ErrNotFound):
 		return ResultOK
 	case errors.Is(err, ErrVersionConflict), errors.Is(err, ErrNameTaken), errors.Is(err, ErrHashTaken),
-		errors.Is(err, ErrReadOnly), errors.Is(err, ErrInvalidCursor):
+		errors.Is(err, ErrReadOnly), errors.Is(err, ErrInvalidCursor), errors.Is(err, ErrKeyFenced), errors.Is(err, ErrFenceConflict):
 		return ResultConflict
 	default:
 		return ResultError
@@ -109,6 +109,7 @@ func kindOf(obj v1.Object) string {
 }
 
 func (s *instrumented) Objects() Objects         { return iObjects{s.inner.Objects(), s} }
+func (s *instrumented) KeyFences() KeyFences     { return iKeyFences{s.inner.KeyFences(), s} }
 func (s *instrumented) Keys() Keys               { return iKeys{s.inner.Keys(), s} }
 func (s *instrumented) Credentials() Credentials { return iCredentials{s.inner.Credentials(), s} }
 func (s *instrumented) Counters() Counters       { return iCounters{s.inner.Counters(), s} }
@@ -425,4 +426,22 @@ func (u iUsage) Records(ctx context.Context, q metering.RecordQuery, p Page) ([]
 	recs, next, err := u.Usage.Records(ctx, q, p)
 	done(err)
 	return recs, next, err
+}
+
+type iKeyFences struct {
+	KeyFences
+	s *instrumented
+}
+
+func (f iKeyFences) Put(ctx context.Context, input KeyFence) (KeyFence, error) {
+	ctx, done := f.s.begin(ctx, "KeyFences.Put", "")
+	result, err := f.KeyFences.Put(ctx, input)
+	done(err)
+	return result, err
+}
+func (f iKeyFences) Get(ctx context.Context, name string) (KeyFence, error) {
+	ctx, done := f.s.begin(ctx, "KeyFences.Get", "")
+	result, err := f.KeyFences.Get(ctx, name)
+	done(err)
+	return result, err
 }

@@ -27,6 +27,9 @@ func Run(t *testing.T, newStore Factory) {
 		name string
 		run  func(t *testing.T, s store.Store)
 	}{
+		{"TestKeyFences", keyFences},
+		{"TestFencedKeyCleanup", fencedKeyCleanup},
+		{"TestFenceRollback", fenceRollback},
 		{"TestOptimisticConcurrency", optimisticConcurrency},
 		{"TestNamesAreUniqueAmongLiveObjects", namesAreUnique},
 		{"TestDeclaredReplacesDiscoveredInPlace", declaredReplacesDiscovered},

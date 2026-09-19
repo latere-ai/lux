@@ -22,6 +22,7 @@ import (
 type Store interface {
 	Objects() Objects
 	Keys() Keys
+	KeyFences() KeyFences
 	Credentials() Credentials
 	Counters() Counters
 	Leases() Leases
