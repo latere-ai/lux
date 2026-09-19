@@ -45,6 +45,14 @@ kind and name/id before looking up the fence. It returns 404 when no fence exist
 The read resource contains no owner or labels. Ordinary Key permissions grant
 neither action. Existing authorizers that do not recognize the actions fail closed.
 
+First installation appends one `key.fenced` event atomically with the fence.
+Its object kind is `KeyFence`, stable journal id is `key-fence/<name>`, and its
+object contains the asserted name, owner and labels; data is `{}`. The store Put
+result adds an inserted boolean decided under its write lock. Identical replay
+never appends another event, even after acknowledgment/pruning. Journal failure
+rolls back installation. This preserves spec 012's mutation audit invariant;
+`key.fenced` does not invalidate inference caches or claim a disabled credential.
+
 Both successful endpoints return 200 with `{name,owner,labels,createdAt}`. POST
 replay preserves creation time; conflicts return `fence_conflict` (409). A fenced
 credential or unsafe policy write returns `key_fenced` (409), independently of a
@@ -70,5 +78,7 @@ part of the deployment or a rollback while fences exist.
   addressing, conditional headers, missing identity and read-only mode.
 - HTTP authorization resource tests expose exactly the requested assertion and
   no credential. Owner policy admits configured admins only for both actions.
+- Concurrent replay, replay after journal pruning, journal rollback and signed
+  sink delivery verify exactly one journal insertion (delivery remains at least once).
 - A real-process integration test proves the lifecycle end to end. New logic
   targets greater than 90% coverage; generated API documentation stays current.
