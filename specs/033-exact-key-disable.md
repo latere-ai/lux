@@ -1,9 +1,9 @@
 ---
 title: Disable existing Keys after access has been withdrawn
-status: in-progress
+status: testing
 track: core
 depends_on:
-  - 032-key-fence-api.md
+  - .archive/032-key-fence-api.md
 affects:
   - internal/api/
   - docs/api.md
@@ -30,8 +30,8 @@ write. After those checks, recognize an exact disable-only proposal: metadata an
 every spec field equal the persisted Key except `disabled: true`; credential
 input must be absent. Clone the existing object, changing only that flag, without
 resolving references or applying new default/ceiling/expiry rules. Preserve the
-stored budget identity, expiry, selectors and credential identity. Explicit
-status input remains rejected by Decode. This applies to fenced and unfenced Keys
+stored budget identity, expiry, selectors and credential identity. Caller
+status input remains ignored; only the stored status is preserved. This applies to fenced and unfenced Keys
 and to an identical disabled replay. No broader policy change uses this path.
 
 An authorizer can independently scope `key.update` to an exact staged disable.

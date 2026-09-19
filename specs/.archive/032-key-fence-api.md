@@ -1,6 +1,6 @@
 ---
 title: Authorized Key fence endpoints
-status: testing
+status: complete
 track: core
 depends_on:
   - .archive/031-durable-key-fences.md
@@ -82,3 +82,23 @@ part of the deployment or a rollback while fences exist.
   sink delivery verify exactly one journal insertion (delivery remains at least once).
 - A real-process integration test proves the lifecycle end to end. New logic
   targets greater than 90% coverage; generated API documentation stays current.
+
+## Outcome
+
+Implemented on 2026-09-19. POST/GET expose name-addressed immutable fences with
+explicit authorization, strict bounded input and no credential output. First
+installation and its signed `key.fenced` journal record commit atomically;
+identical retries append nothing, including after journal pruning.
+
+HTTP race tests prove already-authorized create/update/rotation cannot commit
+through a later fence. Store conformance and real PostgreSQL tests cover one
+insertion under concurrent replay. The real-process lifecycle verifies fencing,
+conditional disable, inference refusal, delete and denied recreation. Endpoint
+coverage is 100%; strict assertion decoding exceeds 90%. API/events race tests,
+PostgreSQL tests, lint, vet and generated documentation checks pass. Full-suite
+checks also identified and corrected vocabulary table ordering and an audit
+fixture lacking a stable object ID.
+
+A follow-up in spec 033 lets exact disable succeed after reference permissions,
+expiry or issuance ceilings have changed. Fence success alone still makes no
+inference-revocation claim.
