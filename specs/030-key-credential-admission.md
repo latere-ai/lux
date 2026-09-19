@@ -1,0 +1,46 @@
+---
+title: Admit supplied Key credentials by commitment
+status: in-progress
+track: core
+depends_on:
+  - .archive/025-mutation-authorization.md
+affects:
+  - authorizer/
+  - internal/api/
+  - docs/
+effort: small
+created: 2026-09-19
+updated: 2026-09-19
+author: changkun
+---
+
+# Admit supplied Key credentials by commitment
+
+## Problem
+
+A provisioning authorizer cannot distinguish its registered supplied Key hash
+from another hash or a request to mint a new credential. The sanitized policy
+is identical in all three cases.
+
+## Contract
+
+Key proposals add a top-level `credential` descriptor. Its `mode` is `absent`,
+`inline`, `sha256`, `reference`, or `conflict` when multiple inputs are present.
+For `sha256` only, `commitment` is lowercase hex SHA-256 of the exact UTF-8 bytes
+of the supplied verifier string. Neither the credential nor its original verifier
+is included. Invalid verifier syntax remains subject to normal manifest validation.
+
+`absent` means no credential input: create normally generates a value, while
+update retains the existing value. Rotation remains distinguished by its existing
+operation marker. The descriptor is identical in the main mutation, owner
+assignment and all reference bindings. It is additive and changes no action names,
+manifest shape, storage format or default owner-policy behavior.
+
+## Acceptance
+
+- An authorizer can allow only the registered supplied hash and refuse a different
+  hash, inline secret, reference, omitted input or conflicting inputs.
+- Updating without credential input remains distinguishable from supplying a hash.
+- Secret and verifier canaries remain absent from authorization requests.
+- HTTP integration verifies creation, owner assignment and reference checks use
+  the same descriptor, and refusal prevents an installed credential.
