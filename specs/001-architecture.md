@@ -172,7 +172,7 @@ whose purpose is to dial, and it dials one address, the `/v1` base URL
 its caller hands it; it carries the kinds as bytes rather than decoding them,
 and adds no retry, so one call is one request ([[014-agent-client]]).
 Its `client/tunnel` subpackage attaches a local runtime, reaching only the
-private `internal/tunnel/wire` codec ([[028-public-tunnel-agent]]); every other
+private `internal/tunnel/wire` codec ([028-public-tunnel-agent](.archive/028-public-tunnel-agent.md)); every other
 internal package remains forbidden. The caller owns session reconnect policy. None of the five dials an
 identity provider, a database, a billing system, or a webhook.
 A platform imports them to get the contract and the data plane with

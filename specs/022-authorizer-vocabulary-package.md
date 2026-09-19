@@ -347,6 +347,6 @@ changes and never disappears, and a new action is a row in
 
 ## Mutation admission extension
 
-[[025-mutation-authorization]] adds `ActionOwnerAssign`, `KindOwnership`,
+[025-mutation-authorization](.archive/025-mutation-authorization.md) adds `ActionOwnerAssign`, `KindOwnership`,
 `OwnerAssignment`, and `Proposal`. The API attaches sanitized proposed state
 to each create and update resource while preserving the existing builders.

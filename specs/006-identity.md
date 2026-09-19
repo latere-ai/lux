@@ -197,7 +197,7 @@ peer's, or the forwarded one behind a proxy listed in
 | `budget.list` | `{"kind": "Budget"}`; `filter` applies |
 | `budget.draw` | the Budget as above; asked at Key resolve through `Lookup.Budget` |
 | `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
-| `owner.assign` | `{"kind": "Ownership", "target_kind", "name", "owner", "proposed"}`; additional permission to assign the owner of a new object ([[025-mutation-authorization]]) |
+| `owner.assign` | `{"kind": "Ownership", "target_kind", "name", "owner", "proposed"}`; additional permission to assign the owner of a new object ([025-mutation-authorization](.archive/025-mutation-authorization.md)) |
 
 With `LUX_AUTHORIZE_LIST_ITEMS=1`, list resources additionally carry
 `authorize_items: true`. An authorizer relying on per-object checks must require
@@ -205,7 +205,7 @@ this marker; it is absent when the checks are disabled.
 
 Create and update decisions additionally carry `proposed`, the requested owner,
 metadata and sanitized spec. Existing update fields retain the stored state.
-Secrets and status are omitted as specified in [[025-mutation-authorization]].
+Secrets and status are omitted as specified in [025-mutation-authorization](.archive/025-mutation-authorization.md).
 
 Every list and map field of a resource is present and never `null`, so
 an authorizer in any language reads `resource.labels` as an object and
@@ -435,7 +435,7 @@ holds.
 | `LUX_OIDC_AUDIENCE` | no | `lux` | the one audience a caller token must contain; a value with a comma is a configuration error, because a list is not accepted |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
-| `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([[026-object-scoped-discovery]]) |
+| `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([026-object-scoped-discovery](.archive/026-object-scoped-discovery.md)) |
 | `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included, a duration above zero; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
 | `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects, each `<iss>\|<sub>`, the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set; an entry without the separator is a configuration error |
 

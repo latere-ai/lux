@@ -529,7 +529,7 @@ carried in the Design above:
 
 ## Public tunnel transport
 
-[[028-public-tunnel-agent]] moves the transport from internal/tunnel/agent to
+[028-public-tunnel-agent](.archive/028-public-tunnel-agent.md) moves the transport from internal/tunnel/agent to
 client/tunnel without changing protocol or reconnect behavior. The command uses
 the public Run, Options and close-reason constants. Token sources remain in
 client; client/tunnel shares only the private wire codec with the server.

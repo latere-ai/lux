@@ -293,7 +293,7 @@ the discovered one.
 
 | Field | Type | Default | Mutable | Rule |
 |---|---|---|---|---|
-| `models[]` | []string | non-empty unless disabled ([[027-disabled-key-provisioning]]) | yes | at most 64 selectors, each a Model name or a glob under the glob rule; `*` alone is every model; duplicates `invalid_field`; each selector is a `model.use` decision at resolve, below |
+| `models[]` | []string | non-empty unless disabled ([027-disabled-key-provisioning](.archive/027-disabled-key-provisioning.md)) | yes | at most 64 selectors, each a Model name or a glob under the glob rule; `*` alone is every model; duplicates `invalid_field`; each selector is a `model.use` decision at resolve, below |
 | `limits.requestsPerMinute`, `.tokensPerMinute` | int | `Defaults.RequestsPerMinute`, `Defaults.TokensPerMinute` | yes | `0` is none; above the authorizer's `Limits` is `ceiling_exceeded`, and `0` is above any ceiling, because no limit exceeds every limit |
 | `limits.spend.amount` | money | absent | yes | positive; above `Limits.MaxSpend` is `ceiling_exceeded`, and so is an absent spend limit under a `MaxSpend`; requires `window` |
 | `limits.spend.currency` | string | `USD` | yes | ISO 4217; a request for a Model priced in another currency is `currency_mismatch` ([[007-keys-and-limits]]) |

@@ -79,7 +79,7 @@ this table exists to make checkable.
 
 ### Mutation admission and ownership
 
-[[025-mutation-authorization]] adds proposed mutation fields and explicit
+[025-mutation-authorization](.archive/025-mutation-authorization.md) adds proposed mutation fields and explicit
 create-time owner assignment. The document describes the sanitized fields,
 additional permission, immutable ownership, target quota and writer audit.
 
