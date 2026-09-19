@@ -161,3 +161,8 @@ identity:
   reached_by: self-hosted
   # Access is by role: the roles rule runs, and it is one way once set.
   roles_only: true
+
+# The database shape of the family: specs/infrastructure/database-pooling.md in latere-ai/specs
+postgres:
+  # Direct until its cutover release renames the DSN and reads the pooled name.
+  role: direct
