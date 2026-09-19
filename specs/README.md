@@ -19,6 +19,8 @@ owner.
 
 - [031-durable-key-fences](.archive/031-durable-key-fences.md) — complete. Close Key names to delayed credential writes.
 
+- [032-key-fence-api](032-key-fence-api.md) — in progress. Authorize and expose durable Key fences.
+
 ## Layout
 
 Flat files `specs/NNN-name.md` in one number space with `track: core`
