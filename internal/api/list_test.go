@@ -209,3 +209,26 @@ func sortedUnique(s []string) bool {
 	}
 	return true
 }
+
+func TestFilteredPaginationDoesNotDiscardVisibleOverflow(t *testing.T) {
+	h := newHarness(t, nil)
+	for i, owner := range []string{"denied", h.subject(), h.subject(), h.subject()} {
+		b := &v1.Budget{Metadata: v1.ObjectMeta{Name: "page-" + strconv.Itoa(i)}, Spec: v1.BudgetSpec{Currency: "USD", Window: v1.WindowMonth}, Status: v1.BudgetStatus{ID: h.newID(v1.PrefixBudget), Owner: owner}}
+		if _, err := h.st.Objects().Put(t.Context(), b, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.stub.Allow(stub.Rule{Action: "budget.list", Filter: &authz.Filter{Owners: []string{h.subject(), "another"}}})
+	first := h.request(http.MethodGet, "/v1/budgets?limit=2", "")
+	if got := names(t, first); !reflect.DeepEqual(got, []string{"page-1", "page-2"}) {
+		t.Fatal(got)
+	}
+	next, _ := body(t, first)["next_cursor"].(string)
+	if next == "" {
+		t.Fatal("permitted overflow was dropped: no next cursor")
+	}
+	second := h.request(http.MethodGet, "/v1/budgets?limit=2&cursor="+next, "")
+	if got := names(t, second); !reflect.DeepEqual(got, []string{"page-3"}) {
+		t.Fatal("permitted overflow was dropped", got)
+	}
+}

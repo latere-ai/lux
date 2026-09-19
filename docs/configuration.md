@@ -41,6 +41,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 
 | Variable | Meaning | Default | When required |
 |---|---|---|---|
+| `LUX_AUTHORIZE_LIST_ITEMS` | Set to 1 to require each listed object's read permission in addition to the list filter. Refused objects are skipped; an authorizer outage fails the list. | `unset` | No |
 | `LUX_AUTHORIZER_URL` | The operator's authorization endpoint; unset selects the built-in owner policy. | `unset` | No |
 | `LUX_AUTHORIZER_TOKEN` | The bearer luxd sends the authorizer. Never echoed. | `unset` | When `LUX_AUTHORIZER_URL` is set |
 | `LUX_AUTHORIZER_TIMEOUT` | One authorization decision's deadline, the retry included. | `5s` | No |

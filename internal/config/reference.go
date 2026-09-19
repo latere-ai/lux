@@ -91,6 +91,7 @@ var referenceGroups = []referenceGroup{
 		},
 	}},
 	{title: "Authorizer", vars: []referenceVar{
+		{name: "LUX_AUTHORIZE_LIST_ITEMS", meaning: "Set to 1 to require each listed object's read permission in addition to the list filter. Refused objects are skipped; an authorizer outage fails the list.", def: "unset", required: "No"},
 		{
 			name:     "LUX_AUTHORIZER_URL",
 			meaning:  "The operator's authorization endpoint; unset selects the built-in owner policy.",

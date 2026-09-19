@@ -78,6 +78,8 @@ type Config struct {
 	AuthorizerToken string
 	// AuthorizerTimeout bounds one decision, the retry included.
 	AuthorizerTimeout time.Duration
+	// AuthorizeListItems intersects list visibility with each object read decision.
+	AuthorizeListItems bool
 	// AdminSubjects are the rendered subjects the owner policy lets act on
 	// every object; read and unused when an authorizer is set.
 	AdminSubjects []string

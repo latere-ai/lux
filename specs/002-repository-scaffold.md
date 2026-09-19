@@ -159,6 +159,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_OIDC_AUDIENCE` | 006 | `lux` | the audience a caller token must contain |
 | `LUX_OIDC_INSECURE_ISSUERS` | 006 | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | 006 | unset | the operator's authorization endpoint and the bearer luxd sends it; unset selects the built-in owner policy; the URL without the token is a start-up failure |
+| `LUX_AUTHORIZE_LIST_ITEMS` | 026 | unset | `1` checks each candidate's read permission after the list filter; denials skip, failures fail the list |
 | `LUX_AUTHORIZER_TIMEOUT` | 006 | `5s` | one decision's deadline, the retry included; the cache times are the shared contract's (`latere.ai/x/pkg/authz`): an allow for the answer's `ttl`, default 60 s and at most 600 s, a deny for 5 s, and no variable changes them |
 | `LUX_ADMIN_SUBJECTS` | 006 | unset | comma separated subjects the built-in owner policy lets act on every object; read and unused when an authorizer is set |
 | `LUX_KEY_CACHE` | 007 | `10s` | how long a Key lookup is cached per replica on the data plane |

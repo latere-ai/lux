@@ -93,7 +93,7 @@ func shapes(t *testing.T) map[string]map[string]any {
 		ActionModelDelete: model,
 		ActionModelList:   {"kind": "Model"},
 		ActionModelUse: {"kind": "Model", "selector": "anthropic/*",
-			"matched": []any{map[string]any{"id": "mdl_01J9TESTMODEL00000000000000", "name": "gpt-5", "owner": fixtureSubject}}},
+			"matched": []any{map[string]any{"id": "mdl_01J9TESTMODEL00000000000000", "name": "gpt-5", "owner": fixtureSubject, "labels": map[string]any{}}}},
 		ActionKeyCreate: {"kind": "Key", "name": "run-42", "labels": labels("run", "r_42"), "models": []any{"gpt-5", "anthropic/*"}, "budget": "team-research"},
 		ActionKeyRead:   key,
 		ActionKeyUpdate: key,
@@ -340,5 +340,19 @@ func TestVocabularyLabelsEveryKind(t *testing.T) {
 	// shared type's own answer and not this package's.
 	if got := v.Label("Sandbox"); got != "Sandbox" {
 		t.Errorf("Label of a kind outside the table = %q, want the kind", got)
+	}
+}
+
+func TestModelUseCopiesLabels(t *testing.T) {
+	refs := []v1.ModelRef{{ID: "model", Name: "model", Owner: fixtureSubject, Labels: map[string]string{"tenant": "a"}}}
+	r := ModelUse("model", refs)
+	refs[0].Labels["tenant"] = "b"
+	entries, ok := r.Fields["matched"].([]map[string]any)
+	if !ok {
+		t.Fatal("missing models")
+	}
+	labels, ok := entries[0]["labels"].(map[string]string)
+	if !ok || labels["tenant"] != "a" {
+		t.Fatal("resource aliases model labels", entries)
 	}
 }

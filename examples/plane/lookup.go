@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"maps"
 
 	"latere.ai/x/pkg/authz"
 
@@ -67,7 +68,7 @@ func (l *lookup) Models(ctx context.Context, selector string) ([]v1.ModelRef, er
 	var matched []v1.ModelRef
 	for _, obj := range l.c.p.store.list(v1.KindModel) {
 		if m, ok := obj.(*v1.Model); ok && manifest.Match(selector, m.Metadata.Name) {
-			matched = append(matched, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner})
+			matched = append(matched, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner, Labels: maps.Clone(m.Metadata.Labels)})
 		}
 	}
 	res := authz.NewResource(v1.KindModel, "", map[string]any{"selector": selector, "matched": matched, "labels": map[string]string{}})

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -107,7 +108,7 @@ func (s *snapshot) Models(_ context.Context, selector string) ([]v1.ModelRef, er
 	var refs []v1.ModelRef
 	for _, m := range s.models {
 		if manifest.Match(selector, m.Metadata.Name) {
-			refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner})
+			refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner, Labels: maps.Clone(m.Metadata.Labels)})
 		}
 	}
 	return refs, nil

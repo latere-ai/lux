@@ -58,6 +58,8 @@ type Options struct {
 	// Authorizer decides every action and answers the Lookup of Resolve;
 	// nil in the file mode alone.
 	Authorizer *auth.Authorizer
+	// AuthorizeListItems requires a read decision for each listed candidate.
+	AuthorizeListItems bool
 	// PublicURL is LUX_PUBLIC_URL, the base of every URL in a response
 	// and Resolve's loop check. Required.
 	PublicURL *url.URL

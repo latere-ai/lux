@@ -81,6 +81,11 @@ A list answers `{"items": [...], "next_cursor": "<cursor>"}`; pass
 `next_cursor` back as `?cursor=` for the next page, absent on the last.
 `?limit=` defaults to 50, at most 200.
 
+With `LUX_AUTHORIZE_LIST_ITEMS=1`, each candidate must also pass its
+`provider.read`, `model.read`, `key.read`, or `budget.read` decision. Denied
+objects are skipped without consuming page capacity. An authorization failure
+refuses the whole list. The list filter and query selectors still apply.
+
 ## Optimistic concurrency
 
 Every object response carries `ETag: "<version>"`; send it back as

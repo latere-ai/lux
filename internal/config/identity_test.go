@@ -119,3 +119,21 @@ func TestIdentityProblemsJoinTheOneMessage(t *testing.T) {
 		t.Errorf("want %d problems in one message:\n%s", len(order), got)
 	}
 }
+
+func TestAuthorizeListItemsFlag(t *testing.T) {
+	for _, value := range []string{"", "0", "1", "true"} {
+		c := Config{}
+		problems := c.loadIdentity(func(name string) string {
+			if name == "LUX_AUTHORIZE_LIST_ITEMS" {
+				return value
+			}
+			if name == "LUX_OIDC_ISSUERS" {
+				return "https://issuer.example.com"
+			}
+			return ""
+		})
+		if c.AuthorizeListItems != (value == "1") || (len(problems) > 0) != (value == "true" || value == "0") {
+			t.Fatalf("%q: %v %v", value, c.AuthorizeListItems, problems)
+		}
+	}
+}

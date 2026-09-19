@@ -93,7 +93,7 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 	cursor := q.cursor
 	var next string
 	for {
-		page, n, lerr := c.h.o.Store.Objects().List(ctx, k.name, f, store.Page{Limit: q.limit, Cursor: cursor})
+		page, n, lerr := c.h.o.Store.Objects().List(ctx, k.name, f, store.Page{Limit: q.limit - len(items), Cursor: cursor})
 		if lerr != nil {
 			return mapError(lerr)
 		}
@@ -101,12 +101,20 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 			if len(owners) > 0 && !slices.Contains(owners, obj.Owner()) {
 				continue
 			}
-			if len(items) < q.limit {
-				items = append(items, obj)
+			if c.h.o.AuthorizeListItems && !c.h.fileMode() {
+				res, _ := authorizer.ResourceFor(k.read, obj)
+				if _, err := c.h.o.Authorizer.Decide(ctx, c.caller, k.read, res, c.info()); err != nil {
+					refusal := mapError(err)
+					if refusal.Code == CodeForbidden {
+						continue
+					}
+					return refusal
+				}
 			}
+			items = append(items, obj)
 		}
 		next = n
-		if next == "" || len(items) >= q.limit || len(owners) == 0 {
+		if next == "" || len(items) >= q.limit {
 			break
 		}
 		cursor = next

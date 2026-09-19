@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 
 	"latere.ai/x/pkg/authz"
@@ -91,7 +92,7 @@ func (l *Lookup) Models(ctx context.Context, selector string) ([]v1.ModelRef, er
 	}
 	refs := make([]v1.ModelRef, 0, len(models))
 	for _, m := range models {
-		refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner})
+		refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner, Labels: maps.Clone(m.Metadata.Labels)})
 	}
 	detail := "selector " + strconv.Quote(selector) + " names no Model the caller may use"
 	if err := l.allow(ctx, authorizer.ActionModelUse, authorizer.ModelUse(selector, refs), detail); err != nil {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -267,7 +268,7 @@ func relist(e store.Event) bool {
 		paths = obj.Paths
 	}
 	for _, path := range paths {
-		if path == "spec.baseURL" || strings.HasPrefix(path, "spec.credential") {
+		if (path == "metadata.labels" || strings.HasPrefix(path, "metadata.labels.")) || path == "spec.baseURL" || strings.HasPrefix(path, "spec.credential") {
 			return true
 		}
 	}
@@ -437,7 +438,7 @@ func declared(ctx context.Context, tx store.Store, name string) (bool, error) {
 func (d *Discovery) resolve(ctx context.Context, p *v1.Provider, c candidate, old *v1.Model, now time.Time) (*v1.Model, error) {
 	weight := 100
 	in := &v1.Model{
-		Metadata: v1.ObjectMeta{Name: p.Metadata.Name + "/" + c.name},
+		Metadata: v1.ObjectMeta{Name: p.Metadata.Name + "/" + c.name, Labels: maps.Clone(p.Metadata.Labels)},
 		Spec: v1.ModelSpec{
 			Targets:  []v1.Target{{Provider: p.Metadata.Name, Model: c.name, Weight: &weight, Priority: 0}},
 			Fallback: v1.FallbackNever,

@@ -188,7 +188,7 @@ peer's, or the forwarded one behind a proxy listed in
 | `model.create` | `{"kind": "Model", "name", "targets": [{"provider", "model"}], "labels"}` |
 | `model.read`, `.update`, `.delete` | `{"kind": "Model", "id", "name", "owner", "source", "labels"}` |
 | `model.list` | `{"kind": "Model"}`; `filter` applies |
-| `model.use` | `{"kind": "Model", "selector": "anthropic/*", "matched": [{"id", "name", "owner"}]}`; asked once per selector at Key resolve through `Lookup.Models` ([[003-manifest-contract]]); the decision binds the selector, and the data plane matches it at request time against the catalog then |
+| `model.use` | `{"kind": "Model", "selector": "anthropic/*", "matched": [{"id", "name", "owner", "labels"}]}`; asked once per selector at Key resolve through `Lookup.Models` ([[003-manifest-contract]]); the decision binds the selector, and the data plane matches it at request time against the catalog then |
 | `key.create` | `{"kind": "Key", "name", "labels", "models", "budget"}` |
 | `key.read`, `.update`, `.delete` | `{"kind": "Key", "id", "name", "owner", "prefix", "labels"}` |
 | `key.list` | `{"kind": "Key"}`; `filter` applies |
@@ -431,6 +431,7 @@ holds.
 | `LUX_OIDC_AUDIENCE` | no | `lux` | the one audience a caller token must contain; a value with a comma is a configuration error, because a list is not accepted |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
+| `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([[026-object-scoped-discovery]]) |
 | `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included, a duration above zero; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
 | `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects, each `<iss>\|<sub>`, the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set; an entry without the separator is a configuration error |
 

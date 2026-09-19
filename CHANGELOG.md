@@ -6,6 +6,11 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `LUX_AUTHORIZE_LIST_ITEMS=1` checks each listed object's read permission.
+  Filtered pagination no longer drops visible objects after a partially filled
+  page. Model references now carry labels, and discovered Models inherit and
+  refresh Provider labels so external authorizers can enforce object tenancy.
+
 - Authorizers receive sanitized proposed state for every create and update.
   Cached decisions distinguish changed claims and proposals. Services can
   assign a new object's immutable owner with `Lux-Owner`, subject to both

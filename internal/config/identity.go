@@ -57,6 +57,7 @@ func (c *Config) loadIdentity(getenv Getenv) []string {
 		}
 	}
 
+	c.AuthorizeListItems, problems = flag("LUX_AUTHORIZE_LIST_ITEMS", getenv("LUX_AUTHORIZE_LIST_ITEMS"), problems)
 	c.AuthorizerTimeout = DefaultAuthorizerTimeout
 	if raw := strings.TrimSpace(getenv("LUX_AUTHORIZER_TIMEOUT")); raw != "" {
 		d, err := time.ParseDuration(raw)

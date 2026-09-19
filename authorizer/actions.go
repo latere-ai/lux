@@ -212,12 +212,12 @@ func ModelObject(m *v1.Model) authz.Resource {
 func ModelList() authz.Resource { return authz.NewResource(v1.KindModel, "", nil) }
 
 // ModelUse is model.use's resource: one selector of a Key and the Models
-// it matches now, each by id, name, and owner. It carries no id, so the
+// it matches now, each by id, name, owner, and labels. It carries no id, so the
 // decision is never cached and binds the selector, not the matches.
 func ModelUse(selector string, matched []v1.ModelRef) authz.Resource {
 	refs := make([]map[string]any, 0, len(matched))
 	for _, r := range matched {
-		refs = append(refs, map[string]any{"id": r.ID, "name": r.Name, "owner": r.Owner})
+		refs = append(refs, map[string]any{"id": r.ID, "name": r.Name, "owner": r.Owner, "labels": labels(r.Labels)})
 	}
 	return authz.NewResource(v1.KindModel, "", map[string]any{"selector": selector, "matched": refs})
 }

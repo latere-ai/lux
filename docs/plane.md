@@ -69,6 +69,12 @@ the tree so it stays that way.
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
 | a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` | the same |
 
+Enable `LUX_AUTHORIZE_LIST_ITEMS=1` when visibility depends on object labels or
+individual grants. The list filter selects candidates; each candidate must also
+pass its read permission. `model.use` includes labels for each matched Model,
+and discovered Models inherit their Provider's labels and ownership. Decide
+tenancy from those labels rather than inferring it from the owner's memberships.
+
 ## Mutation admission and ownership
 
 Create and update decisions include `resource.proposed` with the requested

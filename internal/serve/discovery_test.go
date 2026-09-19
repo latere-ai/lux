@@ -493,3 +493,33 @@ func TestDiscoveryStoreFailures(t *testing.T) {
 	}
 	_ = h.st.Close()
 }
+
+func TestDiscoveredModelInheritsAndRefreshesLabels(t *testing.T) {
+	h := newHarness(t)
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
+	p := h.provider(t, "openai", v1.DialectOpenAI, serveStub(t, up), func(p *v1.Provider) { p.Metadata.Labels = map[string]string{"tenant": "a"} })
+	d := h.discovery("a")
+	d.acquire(t.Context())
+	d.Tick(t.Context())
+	first := h.models(t, "")["openai/gpt-5"]
+	if first.Metadata.Labels["tenant"] != "a" {
+		t.Fatal("model lost tenancy", first.Metadata)
+	}
+	p = h.get(t, p.Status.ID)
+	p.Metadata.Labels["tenant"] = "b"
+	if _, err := h.st.Objects().Put(t.Context(), p, p.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte(`{"data":{"paths":["metadata.labels.tenant"]}}`)
+	if !relist(store.Event{Type: eventProviderUpdated, Payload: payload}) {
+		t.Fatal("labels do not trigger rediscovery")
+	}
+	d.Tick(t.Context())
+	second := h.models(t, "")["openai/gpt-5"]
+	if second.Metadata.Labels["tenant"] != "b" || second.Status.Version <= first.Status.Version {
+		t.Fatal("model labels not refreshed", second.Metadata, second.Status.Version)
+	}
+	if first.Metadata.Labels["tenant"] != "a" {
+		t.Fatal("old model shares provider labels")
+	}
+}

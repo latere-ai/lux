@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -33,7 +34,7 @@ func (l importerLookup) Models(ctx context.Context, selector string) ([]v1.Model
 	}
 	refs := make([]v1.ModelRef, 0, len(ms))
 	for _, m := range ms {
-		refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner})
+		refs = append(refs, v1.ModelRef{ID: m.Status.ID, Name: m.Metadata.Name, Owner: m.Status.Owner, Labels: maps.Clone(m.Metadata.Labels)})
 	}
 	return refs, nil
 }
