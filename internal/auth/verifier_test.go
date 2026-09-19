@@ -106,17 +106,44 @@ func jsonKeys(keys ...map[string]string) func(http.ResponseWriter) {
 	}
 }
 
+func closedIssuerEndpoint(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep the address reserved while refusing HTTP by closing each connection.
+	// Closing the listener first lets a later issuer fixture inherit this port.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	t.Cleanup(func() { _ = listener.Close(); <-done })
+	return "http://" + listener.Addr().String()
+}
+
+func TestClosedIssuerEndpointCannotBeReusedByAnotherFixture(t *testing.T) {
+	endpoint := closedIssuerEndpoint(t)
+	listener, err := net.Listen("tcp", strings.TrimPrefix(endpoint, "http://"))
+	if err == nil {
+		_ = listener.Close()
+		t.Fatal("failed issuer endpoint can become an unrelated fixture")
+	}
+}
+
 // TestUnreachableIssuerIsAStartupFailure: an issuer that refuses the
 // connection, one that never answers, one whose discovery is not a 200,
 // one whose document names another issuer or no key set, and one whose
 // key set is not JSON each refuse the start, naming the issuer.
 func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
-	closed, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	refused := "http://" + closed.Addr().String()
-	_ = closed.Close()
+	refused := closedIssuerEndpoint(t)
 
 	hanging := newIssuer(t)
 	hanging.Hang()
@@ -148,7 +175,7 @@ func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name, issuer, want string
 	}{
-		{"a refused connection", refused, "discovery: "},
+		{"a closed connection", refused, "discovery: "},
 		{"an issuer that is not a URL", "::not-a-url", "discovery: "},
 		{"an issuer that never answers", hanging.URL(), "discovery: "},
 		{"a discovery that is not a 200", notFound.URL, "answered 404"},
