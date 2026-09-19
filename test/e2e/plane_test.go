@@ -8,6 +8,7 @@ package e2e
 import (
 	"io"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -109,9 +110,7 @@ func newEgress(t *testing.T, placeholder, key, scoped string) *egress {
 	e.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		target := e.scoped
 		header := http.Header{}
-		for name, values := range r.Header {
-			header[name] = values
-		}
+		maps.Copy(header, r.Header)
 		if bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer "); ok && bearer == e.placeholder {
 			header.Set("Authorization", "Bearer "+e.key)
 			e.substitutions++
@@ -133,9 +132,7 @@ func newEgress(t *testing.T, placeholder, key, scoped string) *egress {
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
-		for name, values := range resp.Header {
-			w.Header()[name] = values
-		}
+		maps.Copy(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
 		_, _ = io.Copy(w, resp.Body)
 	}))
