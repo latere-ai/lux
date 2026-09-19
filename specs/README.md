@@ -72,6 +72,8 @@ later.
 | [022](022-authorizer-vocabulary-package.md) | The authorizer vocabulary as a package: the actions, resource shapes, and limits an authorizer is written against | small | complete | 001, 003, 006 |
 | [023](023-performance-and-benchmarks.md) | Performance and benchmarks: the gateway's own overhead, in process against a stub upstream | small | complete | 004 |
 
+| [024](024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | in-progress | 010 |
+
 ## Dependency graph
 
 Arrows point from a spec to the specs it builds on. The picture is the
