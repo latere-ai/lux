@@ -78,6 +78,8 @@ later.
 
 | [027](027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | in-progress | 003, 007 |
 
+| [028](028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | in-progress | 013, 014 |
+
 ## Dependency graph
 
 Arrows point from a spec to the specs it builds on. The picture is the
