@@ -180,6 +180,9 @@ func (s *Store) Transact(ctx context.Context, fn func(tx store.Store) error) (er
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	snapshot := s.st.clone()
 	defer func() {
 		if r := recover(); r != nil {
@@ -190,7 +193,10 @@ func (s *Store) Transact(ctx context.Context, fn func(tx store.Store) error) (er
 			s.st = snapshot
 		}
 	}()
-	return fn(&Store{now: s.now, st: s.st, inTx: true, closed: s.closed})
+	if err := fn(&Store{now: s.now, st: s.st, inTx: true, closed: s.closed}); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // Ready implements store.Store: nil until Close, because memory answers
