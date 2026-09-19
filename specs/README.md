@@ -15,7 +15,7 @@ owner.
 
 - [029-reference-mutation-context](.archive/029-reference-mutation-context.md) — complete. Bind reference checks and rotation to sanitized desired state.
 
-- [030-key-credential-admission](030-key-credential-admission.md) — in progress. Admit registered Key credentials without exposing their verifier.
+- [030-key-credential-admission](.archive/030-key-credential-admission.md) — complete. Admit registered Key credentials without exposing their verifier.
 
 ## Layout
 

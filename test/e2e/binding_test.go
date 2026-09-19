@@ -6,7 +6,10 @@
 package e2e
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"latere.ai/x/pkg/authz"
@@ -49,5 +52,29 @@ func TestE2EKeyGrantBindingAndRotation(t *testing.T) {
 	}
 	if got := s.chat(t, next, "paid-model", "rotated", false); got.status != http.StatusOK {
 		t.Fatal(got.status, string(got.body))
+	}
+}
+
+func TestE2ERegisteredCredentialAdmission(t *testing.T) {
+	const secret = "registered-workload-secret"
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(secret)))
+	commitment := fmt.Sprintf("%x", sha256.Sum256([]byte(hash)))
+	policy := stub.New(t, stub.WithAction(authorizer.ActionKeyCreate, func(r authz.Request) any {
+		proposed, _ := r.Resource.Fields["proposed"].(map[string]any)
+		credential, _ := proposed["credential"].(map[string]any)
+		return map[string]any{"allow": credential["mode"] == "sha256" && credential["commitment"] == commitment, "reason": "unregistered_credential"}
+	}))
+	s := newStack(t, map[string]string{"LUX_AUTHORIZER_URL": policy.URL(), "LUX_AUTHORIZER_TOKEN": policy.Token()})
+	s.provider(t, "openai", "openai", false, "")
+	s.model(t, "registered-model", "openai", "stub-openai", true)
+	s.apply(t, "key", "registered", keySpec("registered", "  models: [registered-model]\n  valueSHA256: "+hash+"\n"))
+	if got := s.chat(t, secret, "registered-model", "hello", false); got.status != http.StatusOK {
+		t.Fatal(got.status, string(got.body))
+	}
+	for _, extra := range []string{"", "  value: substituted-secret\n", "  valueSHA256: " + strings.Repeat("f", 64) + "\n"} {
+		denied := applyWith(t, s, s.token, "key", "unregistered", keySpec("unregistered", "  models: [registered-model]\n"+extra))
+		if denied.status != http.StatusForbidden {
+			t.Fatal("unregistered credential installed", denied.status, string(denied.body))
+		}
 	}
 }

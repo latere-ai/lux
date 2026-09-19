@@ -525,3 +525,12 @@ the target owner; the caller remains the authenticated writer. Policies can bind
 model permissions to that Key's selected Budget. Direct reads omit `binding`.
 Key rotation sends its unchanged sanitized Key as `resource.proposed`, with
 `resource.operation: "rotate"`, on `key.update`.
+
+Key proposals additionally carry `credential.mode`: `absent`, `inline`, `sha256`,
+`reference`, or `conflict` for multiple credential inputs. For `sha256`,
+`credential.commitment` is lowercase hex SHA-256 of the exact UTF-8 verifier
+string. It exposes neither the original verifier nor the credential. An external
+registry can compare this fingerprint to admit only its registered credential.
+`absent` means create may mint a new value, while update retains its value;
+rotation is distinguished by `resource.operation`. Reference bindings and owner
+assignment carry the identical descriptor.

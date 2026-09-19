@@ -4,6 +4,8 @@
 package authorizer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -57,6 +59,9 @@ func Proposal(obj v1.Object, owner string) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &proposal); err != nil {
 		return nil, err
 	}
+	if key, ok := obj.(*v1.Key); ok {
+		proposal["credential"] = keyCredential(key.Spec)
+	}
 	if obj.Kind() == v1.KindProvider {
 		fields, _ := proposal["spec"].(map[string]any)
 		if headerNames == nil {
@@ -72,4 +77,30 @@ func Proposal(obj v1.Object, owner string) (map[string]any, error) {
 // object. The caller remains the authenticated writer, never the target.
 func OwnerAssignment(kind, name, owner string, proposed map[string]any) authz.Resource {
 	return authz.NewResource(KindOwnership, "", map[string]any{"target_kind": kind, "name": name, "owner": owner, "proposed": proposed})
+}
+
+// keyCredential identifies the input without forwarding a usable credential or
+// its verifier. The commitment hashes the exact verifier string, not its bytes
+// decoded from hex, so the contract has no normalization ambiguity.
+func keyCredential(spec v1.KeySpec) map[string]any {
+	descriptor := map[string]any{"mode": "absent"}
+	count := 0
+	if _, ok := spec.Value(); ok {
+		count++
+		descriptor["mode"] = "inline"
+	}
+	if hash, ok := spec.ValueSHA256(); ok {
+		count++
+		descriptor["mode"] = "sha256"
+		digest := sha256.Sum256([]byte(hash))
+		descriptor["commitment"] = hex.EncodeToString(digest[:])
+	}
+	if spec.ValueFrom != nil {
+		count++
+		descriptor["mode"] = "reference"
+	}
+	if count > 1 {
+		descriptor = map[string]any{"mode": "conflict"}
+	}
+	return descriptor
 }

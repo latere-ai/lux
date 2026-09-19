@@ -6,6 +6,10 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Key mutation proposals include a credential input mode and, for a supplied
+  hash, a second hash as its commitment. Provisioning authorizers can refuse
+  substituted or generated credentials without receiving the stored verifier.
+
 ## v0.4.0 - 2026-09-19
 
 - `client/tunnel` exposes the existing HTTP/2 tunnel agent for platform CLIs.

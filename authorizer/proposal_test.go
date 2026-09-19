@@ -4,7 +4,9 @@
 package authorizer
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,40 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 	empty, err := Proposal(&v1.Provider{}, "owner")
 	if err != nil || empty["spec"].(map[string]any)["headerNames"] == nil {
 		t.Fatal("empty header names must be an array", err)
+	}
+}
+
+func TestKeyCredentialDescriptor(t *testing.T) {
+	hash := strings.Repeat("1", 64)
+	for _, tc := range []struct {
+		name string
+		edit func(*v1.KeySpec)
+		mode string
+	}{
+		{"absent", func(*v1.KeySpec) {}, "absent"},
+		{"inline", func(k *v1.KeySpec) { k.SetValue("secret") }, "inline"},
+		{"sha256", func(k *v1.KeySpec) { k.SetValueSHA256(hash) }, "sha256"},
+		{"reference", func(k *v1.KeySpec) { k.ValueFrom = &v1.ValueFrom{Env: "KEY"} }, "reference"},
+		{"conflict", func(k *v1.KeySpec) { k.SetValueSHA256(hash); k.SetValue("secret") }, "conflict"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := &v1.Key{}
+			tc.edit(&key.Spec)
+			p, err := Proposal(key, "issuer|owner")
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := p["credential"].(map[string]any)
+			if descriptor["mode"] != tc.mode {
+				t.Fatal(descriptor)
+			}
+			if tc.mode == "sha256" {
+				if descriptor["commitment"] != fmt.Sprintf("%x", sha256.Sum256([]byte(hash))) {
+					t.Fatal("wrong commitment")
+				}
+			} else if descriptor["commitment"] != nil {
+				t.Fatal("unexpected commitment")
+			}
+		})
 	}
 }
