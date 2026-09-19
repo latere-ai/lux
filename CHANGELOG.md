@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.5.0 - 2026-09-19
+
 - Permanent Key fences close names to delayed creates, rotations and policy
   expansion. Explicit `key.fence` and `key.fence.read` permissions control the
   new endpoints; installation journals one `key.fenced` event atomically.
