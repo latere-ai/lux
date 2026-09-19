@@ -517,3 +517,11 @@ around them rather than waiting: it issues no token for a person and
 holds no session, and it reads no claim of its own accord, so an
 organization, a role, and a plan mean whatever the platform's authorizer
 says they mean and nothing to `luxd`.
+
+Reference decisions during apply (`provider.read`, `model.use`, `budget.draw`)
+include `resource.binding: {kind, proposed}` for the enclosing mutation. This is
+the same sanitized desired state sent to the create/update decision, including
+the target owner; the caller remains the authenticated writer. Policies can bind
+model permissions to that Key's selected Budget. Direct reads omit `binding`.
+Key rotation sends its unchanged sanitized Key as `resource.proposed`, with
+`resource.operation: "rotate"`, on `key.update`.

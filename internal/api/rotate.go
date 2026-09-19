@@ -38,7 +38,13 @@ func (c *call) rotate(ctx context.Context, ref string) *Error {
 	if !ok {
 		return refuse(CodeInternal, "")
 	}
+	proposed, proposalErr := authorizer.Proposal(key, key.Status.Owner)
+	if proposalErr != nil {
+		return refuse(CodeInternal, "the rotation proposal could not be encoded")
+	}
 	res, _ := authorizer.ResourceFor(k.update, key)
+	res.Fields["proposed"] = proposed
+	res.Fields["operation"] = "rotate"
 	if _, err := c.authorize(ctx, k.update, res); err != nil {
 		return err
 	}

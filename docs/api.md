@@ -109,3 +109,11 @@ Open either in an OpenAPI viewer (Swagger UI, Redoc, or an editor plugin)
 for the full schema of every kind, every route, and every error code.
 `GET /.well-known/lux` names the served document's URL, so a client finds
 it before it holds a token.
+
+Reference decisions during apply (`provider.read`, `model.use`, `budget.draw`)
+include `resource.binding: {kind, proposed}` for the enclosing mutation. This is
+the same sanitized desired state sent to the create/update decision, including
+the target owner; the caller remains the authenticated writer. Policies can bind
+model permissions to that Key's selected Budget. Direct reads omit `binding`.
+Key rotation sends its unchanged sanitized Key as `resource.proposed`, with
+`resource.operation: "rotate"`, on `key.update`.

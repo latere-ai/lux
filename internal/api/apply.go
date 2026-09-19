@@ -115,7 +115,7 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 	refs := &references{objects: c.h.o.Store.Objects()}
 	resolved, rerr := manifest.Resolve(ctx, in, manifest.Options{
 		Actor:                 manifest.Actor{Subject: c.caller.Subject},
-		Lookup:                c.lookup(refs),
+		Lookup:                c.lookup(refs).ForMutation(k.name, proposed),
 		Defaults:              c.h.o.Defaults,
 		Limits:                decision.Limits.Key,
 		Existing:              existing,

@@ -1,6 +1,6 @@
 ---
 title: Bind reference authorization to the proposed mutation
-status: in-progress
+status: complete
 track: core
 depends_on:
   - 006-identity.md
@@ -40,3 +40,12 @@ Key rotation includes the sanitized existing Key as `proposed` and
 - A policy requiring proposed state can authorize rotation; its deny prevents it.
 - Reference and rotation envelopes contain no credential values or hashes.
 - Existing default owner-policy behavior and direct-read envelopes are preserved.
+
+## Outcome
+
+Reference lookups now carry the sanitized enclosing mutation without changing
+the authenticated writer. Rotation carries the unchanged proposed state and an
+explicit operation marker. Regressions failed without these fields, then passed.
+The real-process integration test creates a grant-bound Key, refuses an unbound
+one, performs inference, rotates the credential and performs inference again.
+API and auth race coverage is 94.3% and 95.8%; lint and package suites pass.

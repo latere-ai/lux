@@ -41,11 +41,19 @@ type Lookup struct {
 	caller  Caller
 	info    authz.Caller
 	catalog Catalog
+	binding map[string]any
 }
 
 // Lookup builds the Lookup manifest.Resolve asks for one request.
 func (z *Authorizer) Lookup(c Caller, info authz.Caller, catalog Catalog) *Lookup {
 	return &Lookup{z: z, caller: c, info: info, catalog: catalog}
+}
+
+// ForMutation binds every reference decision to the sanitized enclosing proposal.
+// The lookup is request-local; the caller must not mutate the proposal afterward.
+func (l *Lookup) ForMutation(kind string, proposed map[string]any) *Lookup {
+	l.binding = map[string]any{"kind": kind, "proposed": proposed}
+	return l
 }
 
 // Provider is the provider.read decision for one target's Provider.
@@ -105,6 +113,9 @@ func (l *Lookup) Models(ctx context.Context, selector string) ([]v1.ModelRef, er
 // not_found with the given detail on a deny, and authorizer_unavailable
 // when no decision could be had.
 func (l *Lookup) allow(ctx context.Context, action string, res authz.Resource, detail string) error {
+	if l.binding != nil {
+		res.Fields["binding"] = l.binding
+	}
 	d, err := l.z.ask(ctx, l.caller, action, res, l.info)
 	if err != nil {
 		return &manifest.Error{Code: manifest.CodeAuthorizerUnavailable, Message: manifest.CodeAuthorizerUnavailable.Message(), Detail: err.Error()}
