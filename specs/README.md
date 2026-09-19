@@ -76,6 +76,8 @@ later.
 
 | [026](.archive/026-object-scoped-discovery.md) | Object-scoped model discovery and list authorization | medium | complete | 006, 011, 025 |
 
+| [027](027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | in-progress | 003, 007 |
+
 ## Dependency graph
 
 Arrows point from a spec to the specs it builds on. The picture is the
