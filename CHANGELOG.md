@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.4.1 - 2026-09-19
+
 - Key mutation proposals include a credential input mode and, for a supplied
   hash, a second hash as its commitment. Provisioning authorizers can refuse
   substituted or generated credentials without receiving the stored verifier.
