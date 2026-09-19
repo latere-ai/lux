@@ -270,8 +270,8 @@ func checkModalities(list []v1.Modality, path string) error {
 // checkKey applies the Key.spec table.
 func checkKey(k *v1.Key, o Options, now time.Time) error {
 	s := &k.Spec
-	if len(s.Models) == 0 {
-		return refuse(CodeMissingField, "models is required, with at least one selector", "spec.models")
+	if len(s.Models) == 0 && !s.Disabled {
+		return refuse(CodeMissingField, "an enabled Key requires at least one model selector", "spec.models")
 	}
 	if len(s.Models) > maxSelectors {
 		return refuse(CodeInvalidField, "at most 64 selectors; "+strconv.Itoa(len(s.Models))+" given", "spec.models")

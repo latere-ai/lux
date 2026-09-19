@@ -6,6 +6,9 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A disabled Key may have no model selectors, allowing provisioning before model
+  access is assigned. Enabling it still requires at least one selector.
+
 - `LUX_AUTHORIZE_LIST_ITEMS=1` checks each listed object's read permission.
   Filtered pagination no longer drops visible objects after a partially filled
   page. Model references now carry labels, and discovered Models inherit and

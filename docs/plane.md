@@ -75,6 +75,10 @@ pass its read permission. `model.use` includes labels for each matched Model,
 and discovered Models inherit their Provider's labels and ownership. Decide
 tenancy from those labels rather than inferring it from the owner's memberships.
 
+A credential awaiting model access may be a disabled Key with no model selectors.
+It cannot invoke models, including ones declared later. Enabling it requires
+applying at least one authorized selector in the same update.
+
 ## Mutation admission and ownership
 
 Create and update decisions include `resource.proposed` with the requested
