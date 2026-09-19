@@ -15,6 +15,9 @@ refused before it is pushed.
 - Delayed Key/Budget reads cannot repopulate invalidated caches or extend their
   lifetime. Canceled memory transactions roll back. Key updates preserve the
   original TTL deadline, including Keys created by older releases.
+- Exact Key disable remains available after reference permissions or issuance
+  ceilings are withdrawn, references are removed, or the Key expires. It retains
+  normal update authorization and version checks.
 
 
 ## v0.4.1 - 2026-09-19

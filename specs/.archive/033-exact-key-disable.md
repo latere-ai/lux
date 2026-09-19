@@ -1,6 +1,6 @@
 ---
 title: Disable existing Keys after access has been withdrawn
-status: testing
+status: complete
 track: core
 depends_on:
   - .archive/032-key-fence-api.md
@@ -47,3 +47,18 @@ A stale explicit precondition still refuses and a concurrent write still conflic
 - Any changed selector, limit, TTL, expiry, labels, budget or credential uses normal
   resolution and cannot exploit this path. New logic exceeds 90% coverage.
 - The real-process fence lifecycle test disables after its model is deleted.
+
+## Outcome
+
+Implemented on 2026-09-19. Exact disable retains ordinary mutation authorization,
+owner checks, preconditions and transactional update events while preserving the
+stored credential, budget reference and expiry. Every other change follows normal
+resolution. The HTTP regression reproduces withdrawn model/budget authority,
+reduced ceilings and expired Keys before the fix; all pass afterward. Additional
+tests refuse altered policy, metadata and credential inputs and retain denial and
+stale-version behavior. The real-process fence lifecycle disables after model
+deletion and verifies inference refusal.
+
+The new branch has 100% statement coverage; the full API race suite has 94.8%.
+The complete repository suite, lint, vet and real-process test pass. No new
+endpoint or permission is added.
