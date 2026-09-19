@@ -291,7 +291,7 @@ func TestHelpers(t *testing.T) {
 		t.Fatal("defaultHolder")
 	}
 	// appendEvent over a journal that refuses.
-	err := appendEvent(t.Context(), brokenJournal{fail: map[string]bool{"Journal.Append": true}}, "x", "y", &v1.Model{}, nil, time.Now(), func() string { return "evt_1" })
+	err := appendEvent(t.Context(), brokenJournal{fail: map[string]bool{"Journal.Append": true}}, "x", "y", &v1.Model{Status: v1.ModelStatus{ID: "mdl_1"}}, nil, time.Now(), func() string { return "evt_1" })
 	if !errors.Is(err, errBroken) {
 		t.Fatalf("appendEvent = %v", err)
 	}
