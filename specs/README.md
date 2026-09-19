@@ -74,6 +74,8 @@ later.
 | [024](.archive/024-pooled-database-connections.md) | Pooled serving connections with direct schema migrations | small | complete | 010 |
 | [025](.archive/025-mutation-authorization.md) | Proposed mutation admission and explicit owner assignment | medium | complete | 006, 011, 022 |
 
+| [026](026-object-scoped-discovery.md) | Object-scoped model discovery and list authorization | medium | in-progress | 006, 011, 025 |
+
 ## Dependency graph
 
 Arrows point from a spec to the specs it builds on. The picture is the
