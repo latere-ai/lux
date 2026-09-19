@@ -274,7 +274,7 @@ Rules:
   authorizer that accepts the old and the new bearer during the swap
   loses no decision. The endpoint should be reachable from inside the
   installation only, which is the operator's network policy
-  ([[017-release-and-installation]]) and nothing `luxd` can check; `luxd
+  ([release and installation](.archive/017-release-and-installation.md)) and nothing `luxd` can check; `luxd
   check` reports the URL's scheme and host so an operator sees what it
   dials.
 - The authorizer is asked inside a control plane request, so it must
@@ -325,7 +325,7 @@ Rules:
 - The resource id `00000000-0000-0000-0000-000000000001`,
   `authz.ProbeID`, is reserved as a probe: every authorizer denies it
   for every subject and every action, the anonymous subject included,
-  and `luxd check` ([[017-release-and-installation]]) sends it through
+  and `luxd check` ([release and installation](.archive/017-release-and-installation.md)) sends it through
   `authz.Check` and reads an allow as an endpoint that does not read the
   request. It is one id for the three open cores, so one authorizer
   serves all three with one rule, and it is deliberately not a Lux id:
@@ -551,7 +551,7 @@ how a platform writes an authorizer ([[020-building-a-plane]]).
 | Every `limits` field reaches its consumer: the control plane rate, the four `Resolve` limits refusing with `ceiling_exceeded`, and `max_keys` refusing the next `key.create` | `TestAuthorizerLimitsReachTheirConsumers`, `TestDecodeLimits`, the `authorizer` package's ([[022-authorizer-vocabulary-package]]) | passing to the figures, the rate, `manifest.Limits` refusing through `Resolve`, and `max_keys`; the rate bucket and the `key.create` check are [[011-api]]'s |
 | `filter` narrows `list` and `usage.read` to the owners and labels named | `TestAuthorizerFilter` | passing to the decision; the narrowing of a list is [[011-api]]'s |
 | An allow is cached for the answer's `ttl`, `60s` when it names none, and at the `600s` cap, a deny for `5s`, unavailability never, and an answer about a resource with no id never, so ten applies of a Key naming one selector send ten `model.use` calls; a revoked subject is refused on the control plane within the allow's `ttl` | `TestDecisionCache`, `TestNoIdIsNeverCached` | passing |
-| `authz.ProbeID` is denied by the stub authorizer and by the owner policy for every subject and action, `luxd check` reports an authorizer that allows it, and an item route given the probe id answers `not_found` | `TestProbeIdIsAlwaysDenied` | passing for the stub, the owner policy, and `Check`; `luxd check` is [[017-release-and-installation]]'s and the item route [[011-api]]'s |
+| `authz.ProbeID` is denied by the stub authorizer and by the owner policy for every subject and action, `luxd check` reports an authorizer that allows it, and an item route given the probe id answers `not_found` | `TestProbeIdIsAlwaysDenied` | passing for the stub, the owner policy, and `Check`; `luxd check` is [release and installation](.archive/017-release-and-installation.md)'s and the item route [[011-api]]'s |
 | The owner policy: an admin declares a Provider and a Model and a non-admin cannot, except a `tunnel: true` Provider, which its creator owns; every subject reads the catalog and uses every Model in a Key; an owner reads, updates, deletes, and draws its own objects and no other subject's, the deny reason being `not_owner` whether the object exists or not; `list` returns only the subject's own Keys and Budgets; no `Limits` are granted | `TestOwnerPolicy`, table-driven over every action and both roles | passing |
 | A Key applied with a token whose `sub` is a person is owned by `<iss>\|<person>`; one applied with a service token is owned by `<iss>\|<service account>`; the issuer is rendered without a trailing slash in both | `TestOwnerIsTheTokensSubject`, `TestSubjectRendering` | passing for the subject each token renders to; the write of `owner` is [[011-api]]'s |
 | `LUX_AUTHORIZER_TOKEN` is sent as the bearer of every authorizer call and never as a bearer to any other endpoint; the issuer's and the sink's requests carry other credentials | `TestAuthorizerTokenStaysOnItsEndpoint`, over the e2e capture | passing over a recording transport for the issuer and the authorizer; the e2e capture with the sink is [[015-test-stubs-and-tiers]]'s |
@@ -627,7 +627,7 @@ subject's last allow, which that spec's surface memoises itself rather
 than reading from the shared client's cache, since that cache is keyed
 by subject, action, and resource id and cannot be read by subject
 alone; a `Catalog` failure inside `Resolve` passes through as the
-store's own error, which the API answers as `store_unavailable`. [[017-release-and-installation]]
+store's own error, which the API answers as `store_unavailable`. [release and installation](.archive/017-release-and-installation.md)
 says the probe's answer is not entered in the decision cache; the
 shared client holds its deny for five seconds like any deny, under the
 anonymous subject and the reserved id, which no request about an object

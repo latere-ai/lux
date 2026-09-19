@@ -526,7 +526,7 @@ it finishes or fails on its own timeout.
 | `dialects` | every Provider's dialect has the codec its Models' routes need, or every Model on it is reachable only through an unmodelled route: [[004-request-path]]'s route table |
 
 The functions are this spec's; the role that prints the lines is
-[[017-release-and-installation]]'s.
+[release and installation](.archive/017-release-and-installation.md)'s.
 
 ## Not in this spec
 
@@ -640,4 +640,4 @@ selection half of `TestUnreachableLeavesSelection`
 [[012-request-log-and-events]]); the e2e half of
 `TestProviderCredentialNeverLeavesTheGateway`
 ([[015-test-stubs-and-tiers]]); and the `luxd check` lines, whose
-functions are here and whose role is [[017-release-and-installation]]'s.
+functions are here and whose role is [release and installation](.archive/017-release-and-installation.md)'s.

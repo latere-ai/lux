@@ -47,7 +47,7 @@ policy ([[006-identity]]), the Key value, its cache, and the limits
 ([[012-request-log-and-events]]), the tunnel
 ([[013-tunnelled-runtimes]]), the stubs and the tiers
 ([[015-test-stubs-and-tiers]]), the release and the hardened deploy
-manifests ([[017-release-and-installation]]), the telemetry
+manifests ([release and installation](.archive/017-release-and-installation.md)), the telemetry
 ([[019-observability]]), and the plane document
 ([[020-building-a-plane]]) are all in the tree with their tests. So
 the threat table below is read once, against the tree, and every row
@@ -150,7 +150,7 @@ the data plane.
 | A Key value is guessed | 240 bits from a cryptographically secure source; a negative cache bounded to `LUX_KEY_CACHE` keeps a flood off the store; `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` bounds the flood per client address on both planes | [[007-keys-and-limits]], [[011-api]] | `TestKeyValueShape`, `TestNegativeCache`, `TestRateLimits` | built |
 | A Key value leaks and is used by someone else | `POST /v1/keys/{id}/rotate` replaces the value with no grace period; `spec.disabled` refuses at once; `ttl` bounds the window; the spend limit and the Budget bound the loss in money; every refusal and every success is a record with the Key's prefix | [[007-keys-and-limits]], [[011-api]] | `TestKeyStates`, `TestSpendWindow`, `TestRotate`, `TestRevocationPropagates` | built |
 | A hash lookup leaks the stored value through timing | the gateway compares nothing: it hashes the presented value with SHA-256 and asks the store for that hash, and the store answers from an index. There is no comparison to time, and an index probe with a 240-bit input leaks nothing an attacker can walk | [[007-keys-and-limits]], [[010-state]] | `TestStoreConformance`, `TestKeyLookupComparesNothing` | built |
-| A replica is compromised | the blast radius is stated rather than denied: the KEK in that process's memory, the credentials it opened for requests in flight, the store connection, and the Key hashes, which are not values. It does not hold a Key value, a person's password, or a token it could mint. Recovery is `luxd rewrap` under a new KEK and a rotation of every Provider credential, which the deploy documentation names as the incident step | [[005-providers]], [[010-state]], [[017-release-and-installation]] | `TestRewrapUnderANewKEK` | built |
+| A replica is compromised | the blast radius is stated rather than denied: the KEK in that process's memory, the credentials it opened for requests in flight, the store connection, and the Key hashes, which are not values. It does not hold a Key value, a person's password, or a token it could mint. Recovery is `luxd rewrap` under a new KEK and a rotation of every Provider credential, which the deploy documentation names as the incident step | [[005-providers]], [[010-state]], [release and installation](.archive/017-release-and-installation.md) | `TestRewrapUnderANewKEK` | built |
 | The authorizer is down or slow, and a caller hopes that means allow | every non-200, unparseable body, body without `allow`, TLS failure, refused connection, and timeout is `authorizer_unavailable`, 503, and never an allow; the one retry is the connection that failed before a response line arrived, never a non-200, a parse failure, or a timeout after the request was sent, so a slow endpoint is not multiplied; availability is not a readiness check, so the data plane keeps serving | [[006-identity]] | `TestAuthorizerUnavailability`, `TestDataPlaneServesWhileAuthorizerIsDown` | built |
 | A caller acts on an object before anyone decided it may | every item route is read, authorize, act: the object is loaded by id or name, the authorizer's `resource` is built from what was loaded, the decision is asked, and only then does the handler act; a missing object is `not_found` and a deny on the request's own action is `forbidden` | [[006-identity]], [[011-api]] | `TestActionsAndKinds`, `TestRouteTableActions` | built |
 | A subject probes for objects it may not see by naming them in a manifest | a `Lookup` deny on `model.use`, `budget.draw`, or a target's `provider.read` is `not_found` with the field's path, identical to a missing object | [[003-manifest-contract]], [[006-identity]] | `TestLookupDenyIsNotFound` | built |
@@ -175,7 +175,7 @@ the data plane.
 | The store connection is read on the wire, or a backup of it is taken | a credential is sealed before it reaches the store and opens only under a `LUX_SECRETS_KEK` the store never sees, so the wire and the backup carry ciphertext; a Key row carries a hash and not a value; desired state and the counters are readable, which is what the operator's own transport security on `LUX_DB_URL` and the egress policy in the hardening table below are for | [[005-providers]], [[010-state]] | `TestCredentialRowsAreSealed`, `TestStoreCannotDecrypt` | built |
 | A sandbox running untrusted code reads the credential it calls a model with | it holds neither: the platform applies a Key for the run, hands the value to the sandbox's egress gateway, and puts a per-sandbox placeholder in the sandbox, so reading the sandbox's environment, file system, and memory yields a placeholder and the Key is substituted outside it; the Key's `ttl`, its Budget, and its `models` bound what one run can do even if the egress gateway is the thing that leaks | [[007-keys-and-limits]], [[020-building-a-plane]] | `TestE2ESandboxComposition` | built |
 | The authorizer or the sink is the adversary | the authorizer is told the verified claims, the action, and the resource, and never a Key value, a credential, a request body, or a response body, so a hostile endpoint learns who called and not what they said; it can widen only within the schema's own ceilings, because its `limits` reach `Resolve` as `Limits` and cap rather than replace what a manifest may ask; it cannot mint or read a Key value, which only the API's own mint does. The sink receives the signed event bodies of [[012-request-log-and-events]], which carry no secret and no content. Beyond that, an endpoint the operator wrote is the operator's, as the list below says | [[006-identity]], [[012-request-log-and-events]] | `TestAuthorizerRequestShapes`, `TestAuthorizerTokenStaysOnItsEndpoint`, `TestAuthorizerLimitsReachTheirConsumers`, `TestEventsCarryNoSecrets` | built |
-| A released image or binary is not what this repository built | multi-arch images and archives are signed with cosign keyless against the workflow identity, with an SPDX bill of materials and a build provenance attestation per image, so `gh attestation verify` answers for the image about to run; the module graph is checked for known vulnerabilities on every push; the `depcheck` allow list makes a new dependency a reviewed row | [[002-repository-scaffold]], [[017-release-and-installation]] | the `vuln` gate and the `depcheck` gate; the release pipeline's `release-verify` job of [[017-release-and-installation]], which downloads every asset onto a clean runner and runs `cosign verify`, `cosign verify-blob`, and `gh attestation verify` | the two gates built; the signatures and the attestations exist at a tag, so the job is proven at the first tag, 017 |
+| A released image or binary is not what this repository built | multi-arch images and archives are signed with cosign keyless against the workflow identity, with an SPDX bill of materials and a build provenance attestation per image, so `gh attestation verify` answers for the image about to run; the module graph is checked for known vulnerabilities on every push; the `depcheck` allow list makes a new dependency a reviewed row | [[002-repository-scaffold]], [release and installation](.archive/017-release-and-installation.md) | the `vuln` gate and the `depcheck` gate; the release pipeline's `release-verify` job of [release and installation](.archive/017-release-and-installation.md), which downloads every asset onto a clean runner and runs `cosign verify`, `cosign verify-blob`, and `gh attestation verify` | the two gates built; the signatures and the attestations exist at a tag, so the job is proven at the first tag, 017 |
 
 A row's State is `built` when every test it names is in the tree. A test
 that is not there yet carries, in parentheses after its name, the spec
@@ -207,7 +207,7 @@ Threat cell of the row that answers it.
 
 ### The gateway process itself
 
-The release ships the process hardened, and [[017-release-and-installation]]
+The release ships the process hardened, and [release and installation](.archive/017-release-and-installation.md)
 carries the manifests that do it.
 
 | Property | Value | Why |
@@ -293,7 +293,7 @@ and changed where the tree disagreed with it.
 
 The mechanisms themselves, each owned by the spec its row names; the
 deploy manifests that carry the hardening fields and the release
-attestations ([[017-release-and-installation]]); the vulnerability
+attestations ([release and installation](.archive/017-release-and-installation.md)); the vulnerability
 reporting address and the response times (`SECURITY.md`).
 
 ## Acceptance criteria
@@ -314,7 +314,7 @@ reporting address and the response times (`SECURITY.md`).
 | Every hop-by-hop header, and every header named by `Connection`, is removed from the request toward the provider and from the response toward the caller | `TestHopByHopHeadersAreRemovedBothWays`; the request direction is [[004-request-path]]'s `TestSameDialectSameBytes` | passing |
 | With the authorizer refusing, timing out, and answering a body without `allow`, every control plane request is refused and every data plane request with a valid Key is served | [[006-identity]]'s `TestAuthorizerUnavailability`, [[004-request-path]]'s `TestDataPlaneServesWhileAuthorizerIsDown` | passing |
 | An object a subject may not see is `not_found` whether it exists or not, through every reference a manifest can name | [[006-identity]]'s `TestLookupDenyIsNotFound` | passing |
-| The rendered Deployment carries every property in the hardening table, and the container runs as a non-root user with a read-only root file system | [[017-release-and-installation]]'s `TestBaseIsConfined` | passing, `internal/arch`, over the rendered base |
+| The rendered Deployment carries every property in the hardening table, and the container runs as a non-root user with a read-only root file system | [release and installation](.archive/017-release-and-installation.md)'s `TestBaseIsConfined` | passing, `internal/arch`, over the rendered base |
 | A Key created with a JWT as `spec.value` opens a door by hash, is refused on `/v1`, is returned by no read, list, event, record, or log line, and stops working at rotate, expiry, disable, and delete | [[007-keys-and-limits]]'s `TestSuppliedKeyValue` and `TestKeyStates`, [[004-request-path]]'s `TestSuppliedValueOpensTheDoor`, [[011-api]]'s `TestRotate` and `TestSuppliedValueIsNotEchoed`, and `TestRevocationPropagates` for the delete | passing |
 | No header on an outbound request came from the caller's body or query, and the headers the caller's own request contributes are the ones the removal list of [[004-request-path]] leaves | [[004-request-path]]'s `TestSameDialectSameBytes`, `TestCallerCredentialsNeverForwarded`, and `TestProviderHeadersAndCredentialSchemes` | passing |
 | A name, label value, and model string carrying newlines, ANSI escapes, and JSON control characters produce one escaped log line and one valid event body each, and add no field | `TestLogFieldsAreTheTable` with [[019-observability]]'s field tables, in `cmd/luxd` over a run's own lines | passing |
@@ -328,7 +328,7 @@ the test that proves it: the record canary is
 [[012-request-log-and-events]]'s, the tunnel rows
 [[013-tunnelled-runtimes]]'s, the e2e sweep of the credential canary
 [[015-test-stubs-and-tiers]]'s, the hardened Deployment
-[[017-release-and-installation]]'s, the log and span canaries
+[release and installation](.archive/017-release-and-installation.md)'s, the log and span canaries
 [[019-observability]]'s, and the sandbox composition
 [[020-building-a-plane]]'s. Three tests this spec named and no other
 landed where the spec that owns the mechanism lives:
@@ -377,7 +377,7 @@ Two things the close settled, each carried above:
   the credential value.
 - The release row is the one row whose control no test in the tree can
   run: cosign signatures and the two attestations exist at a tag, and
-  what verifies them is [[017-release-and-installation]]'s
+  what verifies them is [release and installation](.archive/017-release-and-installation.md)'s
   `release-verify` job from a clean runner. The row says so rather than
   claiming `built`, and the guard admits it because the row's State
   names the spec that owns the job. A row like it in a later spec is

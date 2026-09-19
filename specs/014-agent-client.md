@@ -130,7 +130,7 @@ which closes because `status` in an applied manifest is ignored.
 There is no `lux check` either: verifying an installation is the
 server's own `luxd check`, which reaches the store, the KEK, and the
 operator's endpoints that no client can see
-([[017-release-and-installation]]). There is no `lux env` printing an
+([release and installation](.archive/017-release-and-installation.md)). There is no `lux env` printing an
 SDK's variables and no `lux invoke` sending a prompt: a door **is** an
 SDK base URL and a Key **is** its api key, so the two variables a
 caller exports are its SDK's own, and the program that sends the prompt
@@ -440,7 +440,7 @@ document ([[011-api]]); the schema the command sends
 ([[003-manifest-contract]]); the usage parameters and the row shape
 ([[009-usage-and-metering]]); the tunnel protocol and the registry
 ([[013-tunnelled-runtimes]]); how the binary is built and shipped
-([[017-release-and-installation]]); the suite that proves the server
+([release and installation](.archive/017-release-and-installation.md)); the suite that proves the server
 this command speaks to ([[018-conformance-suite]]).
 
 ## Acceptance criteria

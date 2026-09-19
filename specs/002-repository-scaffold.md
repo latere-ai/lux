@@ -133,7 +133,7 @@ role by its args. Each role is a package under `internal/` with its own
 dependency allow list in the gate, so the binary carrying every role
 does not loosen what any one role may reach. An unknown subcommand is a
 usage error, exit 2. `check` and `rewrap` landed with their specs,
-[[017-release-and-installation]] and [[005-providers]].
+[release and installation](.archive/017-release-and-installation.md) and [[005-providers]].
 
 ### Configuration
 
@@ -145,7 +145,7 @@ deployment that sets one before its spec lands is not refused. Variables
 the test suites read, the `LUX_TEST_*` family, the ones a CI job
 reads, the `LUX_INSTALL_*` family, and the `lux` command's own, are
 not the server's and live in the tables of [[018-conformance-suite]],
-[[017-release-and-installation]], and [[014-agent-client]].
+[release and installation](.archive/017-release-and-installation.md), and [[014-agent-client]].
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
@@ -197,7 +197,7 @@ static base as a non-root user with both ports exposed. The base
 carries the CA roots because luxd dials the providers, the issuers, and
 the webhooks, and nothing else: the gateway writes no local state, so
 the image declares no volume. The release image of
-[[017-release-and-installation]] copies a binary the pipeline built and
+[release and installation](.archive/017-release-and-installation.md) copies a binary the pipeline built and
 attested and shares this runtime stage byte for byte between the two
 markers, checked by a test in that spec.
 
@@ -205,12 +205,12 @@ markers, checked by a test in that spec.
 
 `verify.yml` runs on every push to `main`, every pull request, and on
 demand; on a tag it triggers and every job skips, because the release
-pipeline of [[017-release-and-installation]] owns tags: the `gate` job calls
+pipeline of [release and installation](.archive/017-release-and-installation.md) owns tags: the `gate` job calls
 `latere-ai/ci/.github/workflows/lateregate.yml@v1` on GitHub's runners,
 `tidy` checks `go mod tidy -diff`, and `image` builds the developer
 image and asks it for its version. The tiers that need a provider
 beside them join in [[015-test-stubs-and-tiers]]; the release pipeline
-is [[017-release-and-installation]]'s. Every third-party action is
+is [release and installation](.archive/017-release-and-installation.md)'s. Every third-party action is
 pinned by commit with its version in a comment.
 
 ### Community files
@@ -231,7 +231,7 @@ default or an example, and no particular deployment of Lux is named.
 ## Not in this spec
 
 The release pipeline, the deploy manifests, and the install document
-([[017-release-and-installation]]); the stubs and the tiers that need a
+([release and installation](.archive/017-release-and-installation.md)); the stubs and the tiers that need a
 provider beside them ([[015-test-stubs-and-tiers]]); the generated
 configuration page, which lands with the generator once the table has
 two owners.
@@ -267,6 +267,6 @@ branch yet; the whole bar had passed locally on the same commits, and
 every later push runs the hook. The developer image was built locally
 through a podman backend and by the `image` job on Docker in the same
 run. Deferred as the spec says: the release pipeline and the deploy
-manifests to [[017-release-and-installation]], the stubs and the tiers
+manifests to [release and installation](.archive/017-release-and-installation.md), the stubs and the tiers
 to [[015-test-stubs-and-tiers]], the generated configuration page until
 the table has two owners.

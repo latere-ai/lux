@@ -8,7 +8,7 @@ stub issuer, and a stub provider per dialect — so nothing here outlives
 `docker compose down`. For a real cluster, read [`install.md`](install.md).
 
 The images are published by the release pipeline of the
-[release and installation spec](../specs/017-release-and-installation.md),
+[release and installation spec](../specs/.archive/017-release-and-installation.md),
 and no tag has been cut yet. **Until the first release the images do not
 exist in the registry**, so build them from a checkout first;
 [`compose.yaml`](../compose.yaml) then runs them unchanged, tagged

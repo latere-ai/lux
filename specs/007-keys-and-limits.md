@@ -194,7 +194,7 @@ hash of a low-entropy value is a guessing target. A rotate mints a
 `lux_` value and replaces the hash. The gateway cannot check the
 hash's bounds on the value it stands for, so the importer answers for
 them: a value under 32 bytes registered this way is the importer's
-choice, and the version promise of [[017-release-and-installation]]
+choice, and the version promise of [release and installation](.archive/017-release-and-installation.md)
 does not extend to it.
 
 ### Verification and the cache

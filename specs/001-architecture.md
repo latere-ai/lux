@@ -117,7 +117,7 @@ Two binaries ship to users. `luxd` is the server, one image, one role
 per process selected by subcommand; `lux` is the client, small and
 dependency-light because it runs where agents run. A third,
 `lux-stubs`, ships only as the test image the release pipeline's
-conformance job runs ([[017-release-and-installation]]).
+conformance job runs ([release and installation](.archive/017-release-and-installation.md)).
 
 | Binary and role | Runs where | Owns |
 |---|---|---|
@@ -155,7 +155,7 @@ word for an upstream is `provider`, in every spec and every identifier;
 | `internal/api` | the `/v1` handlers, the OpenAPI document | none | [[011-api]] |
 | `internal/auth` | the OIDC verifier over the issuers, the authorizer client, the owner policy | none | [[006-identity]] |
 | `internal/store` | desired state, credential values, key hashes, counters, the journal; memory, Postgres, and the file mode | none | [[010-state]] |
-| `internal/serve`, `internal/check`, `internal/rewrap` | the three roles of `luxd`, one package each with its own dependency allow list | none | [[002-repository-scaffold]], [[017-release-and-installation]], [[005-providers]] |
+| `internal/serve`, `internal/check`, `internal/rewrap` | the three roles of `luxd`, one package each with its own dependency allow list | none | [[002-repository-scaffold]], [release and installation](.archive/017-release-and-installation.md), [[005-providers]] |
 | `internal/events`, `internal/reqlog`, `internal/tunnel`, `internal/config`, `internal/version`, `internal/luxcli` | as their specs say | none | [[012-request-log-and-events]], [[013-tunnelled-runtimes]], [[002-repository-scaffold]], [[014-agent-client]] |
 
 The rule for the root packages: they compute, validate, and drive.
@@ -445,7 +445,7 @@ that builds the component; the row is complete when that spec's is.
 | 4 and 5, identity verified and permission from outside: `luxd` refuses to start with no issuer configured and no manifest directory; with the authorizer URL set and the endpoint down every control plane request is `authorizer_unavailable` and every data plane request with a valid Key is served | [[006-identity]] | `TestServeRefusesToStartWithoutAnIssuer`; the conformance suite's `identity` group |
 | 7, one usage record per request: every data plane request in the e2e tier, refused, failed, or successful, has exactly one usage record and the record carries no request or response content | [[009-usage-and-metering]] | `TestEveryRequestHasOneUsageRecord` |
 | 7, money that cannot be counted is not spent: a Key under a hard Budget naming an unpriced Model is refused with `model_unpriced` before any bytes reach a provider | [[007-keys-and-limits]] | `TestUnpricedModelRefusedUnderABudget` |
-| 8, a fork publishes under its own namespace | [[017-release-and-installation]] | `TestReleasePublishesUnderTheOwnersNamespace` |
+| 8, a fork publishes under its own namespace | [release and installation](.archive/017-release-and-installation.md) | `TestReleasePublishesUnderTheOwnersNamespace` |
 | 10, desired state survives: after `luxd` restarts with Postgres, a Key's spend window carries what was spent before the restart within the flush lag | [[010-state]], [[015-test-stubs-and-tiers]] | the postgres tier's `TestPostgresTwoReplicas`, which runs against a database since the Postgres store landed |
 
 ## Outcome

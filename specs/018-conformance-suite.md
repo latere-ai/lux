@@ -23,7 +23,7 @@ the acceptance criteria of the manifest contract, the dialect doors,
 and the `/v1` API against whatever is listening, and reports which
 hold. `luxd` passes it in every tier ([[015-test-stubs-and-tiers]]);
 the release pipeline passes it against the published images before a
-tag publishes ([[017-release-and-installation]]); a platform that
+tag publishes ([release and installation](.archive/017-release-and-installation.md)); a platform that
 composes the packages behind its own front runs it against that front
 to prove its edge did not change what a manifest means or what a door
 answers ([[020-building-a-plane]]).
@@ -46,7 +46,7 @@ and prove the suite green against it, red against a server that
 answers everything with a plausible success, and specific under each
 mutation. The stubs binary and the tiers that start `luxd` as a
 process are [[015-test-stubs-and-tiers]]'s and are not built; the
-fixture group skips until [[017-release-and-installation]] writes the
+fixture group skips until [release and installation](.archive/017-release-and-installation.md) writes the
 first release's directory. Against `luxd` as this tree wires it the
 suite finds one drift, named in the Outcome, which [[011-api]] owns.
 
@@ -357,7 +357,7 @@ build's resolver to this build's goldens, which a release older than
 the change cannot, so `mut_default` reddens both the corpus case and
 this one. The release pipeline writes the next fixture directory at
 each tag, so the set grows by one per release and old ones are kept
-([[017-release-and-installation]]). Before the first tag the directory
+([release and installation](.archive/017-release-and-installation.md)). Before the first tag the directory
 holds a placeholder alone and the group skips saying so;
 `TestFixtureGroupReadsAPreviousRelease` drives it over a synthetic
 release built from the golden corpus and proves it passes a release
@@ -375,7 +375,7 @@ the client, the cache, the owner policy, the stub, and
 `authz/conformance`, the test every authorizer passes, and this suite
 does not repeat it; an operator's check that its endpoint is wired
 correctly is `luxd check`'s authorizer row
-([[017-release-and-installation]]) and the `identity` group here.
+([release and installation](.archive/017-release-and-installation.md)) and the `identity` group here.
 
 ### The mutation check
 
@@ -482,7 +482,7 @@ The conformance test an authorizer passes, which is
 groups need, the document they serve, and the tiers that start them
 ([[015-test-stubs-and-tiers]]); the release pipeline that runs the
 suite against the published images and writes the next fixture
-([[017-release-and-installation]]); the criteria themselves, which
+([release and installation](.archive/017-release-and-installation.md)); the criteria themselves, which
 belong to the specs the cases are named after; the `lux` command,
 whose own scenario is [[014-agent-client]]'s.
 
@@ -497,7 +497,7 @@ whose own scenario is [[014-agent-client]]'s.
 | Without `LUX_TEST_URL` the suite skips with one line and exits zero | `TestContractSkipsWithoutAURL` | passing |
 | Each mutation reddens exactly the cases its row names and no others | `TestSuiteCatchesADroppedCapability`, table-driven over the mutation table | passing, eight rows |
 | Every object the suite creates carries the run label and is gone after the run, and no object created before the run is touched | `TestSuiteCleansUpExactlyItsOwn` | passing |
-| The previous release's manifests read back with an equal `spec` and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over the releases [[017-release-and-installation]]'s pipeline wrote, and over a synthetic one in `TestFixtureGroupReadsAPreviousRelease` and `TestFixtureGroupNamesEachReleaseApart` |
+| The previous release's manifests read back with an equal `spec` and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over the releases [release and installation](.archive/017-release-and-installation.md)'s pipeline wrote, and over a synthetic one in `TestFixtureGroupReadsAPreviousRelease` and `TestFixtureGroupNamesEachReleaseApart` |
 | Every group but `fixture` is green against a server that is not `luxd` and holds none of this repository's state | `TestExamplePlaneConforms` ([[020-building-a-plane]]) | not built, [[020-building-a-plane]]'s |
 | The suite mints its own Key through `/v1` before the door cases, deletes it at teardown, and skips the `doors` and `keys` groups naming `read_only` against a `file` mode server | `case007SuiteMintsItsKey`, `TestFileModeSkipList` | passing |
 | Every response the suite receives validates against the server's own `GET /v1/openapi.json` | `case011OpenAPIValidatesEveryResponse` | passing as a check on every `/v1` answer; against `luxd` it finds the one drift the Outcome names, owed by [[011-api]] |
@@ -585,7 +585,7 @@ of [[003-manifest-contract]], which compares a Provider's host with
 the public URL's host and not its port, so every loopback stub reads
 as this gateway's own host until the check compares the authority.
 [[011-api]] owns the `targetDialect` enum and the redirect. [[002-repository-scaffold]]
-lists `LUX_TEST_INTERNAL_URL`. [[017-release-and-installation]] writes
+lists `LUX_TEST_INTERNAL_URL`. [release and installation](.archive/017-release-and-installation.md) writes
 the first fixture directory and runs the suite against the images.
 [[020-building-a-plane]] runs it against the example plane. A door's
 model list carries a Model only after the health tick of

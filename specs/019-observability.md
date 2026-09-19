@@ -47,7 +47,7 @@ spec's health job emits `lux_provider_health`, and
 metric of the table that waited on its owner,
 [[013-tunnelled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
 on every configuration, and the rules file's `promtool` step is the
-`rules` job [[017-release-and-installation]] wrote into `verify.yml`.
+`rules` job [release and installation](.archive/017-release-and-installation.md) wrote into `verify.yml`.
 Every row of the acceptance table passes.
 
 ## Design
@@ -419,7 +419,7 @@ because telemetry never stops the gateway.
 ### Alerts
 
 `deploy/base/prometheusrule.yaml`, shipped by
-[[017-release-and-installation]] and checked with `promtool check
+[release and installation](.archive/017-release-and-installation.md) and checked with `promtool check
 rules` in CI. Every metric an expression names is in the table above.
 `TestAlertsNameKnownMetrics` in `internal/arch` reads the file and this
 spec's two tables: the file parses as a `PrometheusRule` with one group,
@@ -427,7 +427,7 @@ carries exactly the alerts of the table with the table's expressions
 and durations, names only metrics of the metric table with a
 histogram's suffixes on a histogram alone and only labels of each
 metric's row, and gives every rule a severity and a summary. The
-`promtool` step is [[017-release-and-installation]]'s CI job.
+`promtool` step is [release and installation](.archive/017-release-and-installation.md)'s CI job.
 
 | Name | Expression | For | Means |
 |---|---|---|---|
@@ -513,7 +513,7 @@ sink ([[012-request-log-and-events]]); the listeners, the readiness
 checks, and what `/livez`, `/readyz`, and `/version` answer, which this
 spec reads and does not define ([[002-repository-scaffold]]); the rules
 file's place in the deploy tree and its `promtool` step
-([[017-release-and-installation]]); the health gauge's writer
+([release and installation](.archive/017-release-and-installation.md)); the health gauge's writer
 ([[005-providers]]); the two gauges and the counter of the request log,
 the events, and the tunnel ([[012-request-log-and-events]],
 [[013-tunnelled-runtimes]]).
@@ -587,7 +587,7 @@ owes the paragraph claiming `lux_upstream_requests_total` and
 names and its text does not. [[016-security-and-threat-model]]'s
 verification rows that still say `019` are its own to update, the
 three test markers this build dropped having already gone.
-[[017-release-and-installation]] owns the `rules` job of `verify.yml`
+[release and installation](.archive/017-release-and-installation.md) owns the `rules` job of `verify.yml`
 that runs `promtool check rules` over the file this spec's alert table
 fixes. A dashboard over any of it is a platform's and is not shipped
 here.

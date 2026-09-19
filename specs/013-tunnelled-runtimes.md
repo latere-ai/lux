@@ -807,7 +807,7 @@ What other specs carry from here: [[014-agent-client]] builds
 fold rule in its `tunnel: true` row; [[015-test-stubs-and-tiers]] owns
 `TestTunnelEndToEnd` and the every-door forms of the metering and
 credential rows; [[010-state]]'s Postgres phase runs the forwarding
-and registry rows across processes; [[017-release-and-installation]]
+and registry rows across processes; [release and installation](.archive/017-release-and-installation.md)
 owns the `tunnels` line of `luxd check`; [[011-api]] decides whether
 the two streaming routes join the OpenAPI document, which does not
 carry them.

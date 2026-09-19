@@ -442,7 +442,7 @@ asks the caller to. The module paths the build list gains, the driver
 with its pool and the three small packages it reads a connection string
 with, and the migrator, are the `depcheck` rows this spec adds to
 `./cmd/luxd` in `.lateregate.yaml`, each with its reason; the role
-packages hold no list of their own ([[017-release-and-installation]]),
+packages hold no list of their own ([release and installation](.archive/017-release-and-installation.md)),
 and [[001-architecture]]'s build list names them as "the Postgres
 driver for the store". The migrator opens a `database/sql` pool of its
 own for the length of `Up` and closes it, so a start briefly holds
@@ -515,11 +515,11 @@ Before applying, the store reads golang-migrate's `schema_migrations`
 | The stored version | `luxd serve` does |
 |---|---|
 | dirty | refuses to start naming the version, for an operator to repair; `Up` is never retried over a dirty schema because it can only report the dirt |
-| another major than the binary's | refuses to start naming both, because a schema of another major is one this binary cannot read, and `docs/upgrades/<major>.md` of [[017-release-and-installation]] is the way across |
+| another major than the binary's | refuses to start naming both, because a schema of another major is one this binary cannot read, and `docs/upgrades/<major>.md` of [release and installation](.archive/017-release-and-installation.md) is the way across |
 | the binary's major, above its highest embedded | logs one `WARN` line naming both and serves, because the additive rule below guarantees it can read the schema; this is what makes `kubectl rollout undo` inside a major a rollback and not an outage |
 | at or below the binary's highest | applies what is missing and serves |
 
-The additive rule, which [[017-release-and-installation]]'s version
+The additive rule, which [release and installation](.archive/017-release-and-installation.md)'s version
 promise cites: within a major a migration only creates a table, adds a
 nullable or defaulted column, or adds an index, and never drops,
 renames, or retypes anything, so the previous minor's binary keeps
@@ -713,7 +713,7 @@ design can give, and `luxd check` repeats it.
 | `store` | the mode is named; with Postgres the pool opens and `SELECT 1` answers inside the readiness budget |
 | `migrations` | the schema is not dirty and is of the binary's major; the line names the stored and the embedded highest version, `ok` when they agree or the stored one is behind, `warn` when it is ahead within the major, `fail` when dirty or of another major |
 | `manifest dir` | in file mode, the directory is readable, the line names how many files were read per kind, and every one of them resolves |
-| `db conns` | with Postgres, the line reads `max_connections` and `superuser_reserved_connections` from the cluster and prints them beside `LUX_DB_MAX_CONNS` plus one; it warns when two replicas' worth, the base Deployment's count of [[017-release-and-installation]], exceeds `max_connections` minus the reserved slots, and fails when one replica's does |
+| `db conns` | with Postgres, the line reads `max_connections` and `superuser_reserved_connections` from the cluster and prints them beside `LUX_DB_MAX_CONNS` plus one; it warns when two replicas' worth, the base Deployment's count of [release and installation](.archive/017-release-and-installation.md), exceeds `max_connections` minus the reserved slots, and fails when one replica's does |
 
 `luxd check` applies nothing, so over a database whose schema is not
 applied yet, the state before a first `luxd serve`, `store` is `ok`,
@@ -737,7 +737,7 @@ does not.
 | `journal.payload` | `jsonb` | `bytea` | a delivery is signed over the exact bytes of the payload, and jsonb re-spells a document, its spaces and key order, so a retry would carry another signature input; the suite's `TestJournalTail` reads the bytes back byte for byte |
 | `journal.gseq` | `bigserial` | `bigint`, the table's maximum plus one under `pg_advisory_xact_lock` for the length of the appending transaction | a sequence hands out values that commit out of order, and a replica tailing `Since` past the later one would never see the earlier; the lock costs one append at a time, which mutations, rare beside the data plane, do not notice |
 | the clock | "Postgres reads its own" in the suite's doc | the process's clock, passed into every expiry comparison and stamped on every row the caller left unset | the contract's callers hand in Go times, and the database's clock is not the process's: the container this was built against sat fifty minutes from the host, which a mixed reading turned into leases that never lapsed and deliveries never due |
-| `depcheck` | rows on `./cmd/luxd`, `internal/serve`, `internal/rewrap`, and `internal/check` | rows on `./cmd/luxd` alone, six of them: `pgx`, `puddle`, `pgpassfile`, `pgservicefile`, `pgerrcode`, and `golang-migrate/migrate` | the role packages have no allow list of their own ([[017-release-and-installation]]), and the build reaches the driver's small dependencies, each a row with its reason |
+| `depcheck` | rows on `./cmd/luxd`, `internal/serve`, `internal/rewrap`, and `internal/check` | rows on `./cmd/luxd` alone, six of them: `pgx`, `puddle`, `pgpassfile`, `pgservicefile`, `pgerrcode`, and `golang-migrate/migrate` | the role packages have no allow list of their own ([release and installation](.archive/017-release-and-installation.md)), and the build reaches the driver's small dependencies, each a row with its reason |
 | the migrations | one, `1000001_init` | two, `1000001_init` and `1000002_usage` | the aggregates joined the store with [[009-usage-and-metering]] after this spec was drafted, and a second file makes the migration from the previous schema a path the tier walks |
 | `objects.status`, `objects.observed` | two jsonb columns, merged on read | the same, the observed column keyed by the status members' own JSON names, so a read is `status \|\| observed` and `PutStatus` is `observed \|\| $incoming` with the zero members left out of the incoming document | one statement each, no read-modify-write, and one merge rule for every kind |
 | `Usage().AppendRecord`, `Records` | the process's own ring, "on Postgres as on memory" | the memory store's ring, held by the Postgres store | the ring is the memory store's already, and one implementation of a bounded ring is enough |
@@ -755,7 +755,7 @@ cost, and the aggregate columns' meaning
 ([[009-usage-and-metering]]); the routes and the HTTP mapping of
 `read_only` ([[011-api]]); the event payloads and the archive
 ([[012-request-log-and-events]]); backups and restores
-([[017-release-and-installation]]).
+([release and installation](.archive/017-release-and-installation.md)).
 
 ## Acceptance criteria
 
@@ -871,5 +871,5 @@ and carried as a row of its table of departures:
 What the neighbouring specs own from here. [[009-usage-and-metering]]'s
 Postgres half of `Usage()` is this store's and is built.
 [[013-tunnelled-runtimes]]'s registry runs on Postgres through the
-suite's tunnel group. [[017-release-and-installation]]'s `luxd check`
+suite's tunnel group. [release and installation](.archive/017-release-and-installation.md)'s `luxd check`
 reads the three database rows against a real cluster.

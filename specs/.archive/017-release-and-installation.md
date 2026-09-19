@@ -1,6 +1,6 @@
 ---
 title: "Release and installation: images, binaries, attestations, deploy manifests, luxd check, upgrades"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
@@ -9,7 +9,7 @@ depends_on:
 affects: [.github/workflows/release.yml, .github/workflows/verify.yml, Dockerfile.release, Dockerfile.stubs, deploy/base/, deploy/components/, deploy/overlays/, deploy/bootstrap/, tools/release/, tools/docs/, internal/check/, cmd/luxd/, test/conformance/testdata/previous/, docs/install.md, docs/upgrades/, CHANGELOG.md]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-17
+updated: 2026-09-19
 author: changkun
 ---
 
@@ -35,23 +35,16 @@ under the fork's ([[001-architecture]], invariant 8).
 
 ## Current state
 
-Built and at `testing`. `release.yml` holds the seven jobs below in the
-spec's order; `Dockerfile.release` and `Dockerfile.stubs` share the
-developer image's runtime stage between the markers; `deploy/` holds
-the base, the HPA component, the `kind` and `generic` overlays, and the
-bootstrap Secret; `internal/check` is the `check` role and `luxd check`
-prints its sixteen lines; `tools/release` holds the version promise and
-the image check, `tools/docs` the block runner and the stubs-in-cluster
-script the two install jobs share; `docs/install.md` walks an
-installation and `docs/upgrades/` says how a release follows the one
-before it; `test/conformance/testdata/previous/` documents the layout
-the `fixture` job writes. Every acceptance row a test can prove on a
-machine with the toolchain passes; the rows only a tag, a cluster, or a
-runner can prove are built as jobs and steps and are marked so below,
-since no tag has been cut and `verify` has not yet run the new `install`
-and `rules` jobs on a push. `SECURITY.md` says the first tag is
-`v0.1.0`. The build's departures from the design are listed under
-"What the build changed".
+Complete. The published `v0.4.1` release passed every release job, including
+candidate conformance, clean-runner signature/checksum/attestation verification,
+and installation from published artifacts. Its source commit passed every
+verification job, including the checkout installation and alert rules. Local
+negative tests execute the workflow's exact commands against a failed verify
+response and a deliberately invalid candidate; dependency checks ensure neither
+failure can be ignored by publication. These tests do not create a failing tag.
+
+The release fixtures through `v0.4.1` are retained in the conformance corpus.
+The departures from the original design remain recorded below.
 
 ## Design
 
@@ -457,20 +450,20 @@ specs own.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every artifact in the table is attached to the release of a tag, and every signature, checksum, and attestation verifies from a clean runner with no checkout on the path | the `release-verify` job | job built, proven at the first tag |
-| Each image is a multi-arch index over `linux/amd64` and `linux/arm64` whose two layers carry the same binaries the archives do | `TestImagesCarryTheReleasedBinaries`, comparing the extracted layer's digest with the archive's | passing, `tools/release`, over synthetic binaries and archives; the `build` job runs the same command over the pushed digests and `release-verify` repeats it in shell, both proven at the first tag |
+| Every artifact in the table is attached to the release of a tag, and every signature, checksum, and attestation verifies from a clean runner with no checkout on the path | the `release-verify` job | passing in the v0.4.1 release workflow |
+| Each image is a multi-arch index over `linux/amd64` and `linux/arm64` whose two layers carry the same binaries the archives do | `TestImagesCarryTheReleasedBinaries`, comparing the extracted layer's digest with the archive's | passing, `tools/release`, over synthetic binaries and archives; the `build` job runs the same command over the pushed digests and `release-verify` repeats it in shell, both passing in the v0.4.1 release workflow |
 | No workflow, deploy manifest, or archived file names a fixed image namespace; the published references are the repository owner's | `TestReleasePublishesUnderTheOwnersNamespace` | passing, `internal/arch`, over the whole tree |
 | `Dockerfile`, `Dockerfile.release`, and `Dockerfile.stubs` are byte-identical between the shared runtime markers | `TestRuntimeStagesMatch` | passing, `internal/arch`; both release images built and ran locally from the binaries `tools/release/build.sh` produced |
-| A tag whose commit has no `verify` run for its own SHA concluded `success` publishes nothing and tags no image | the `gate-green` job, driven against a red fixture commit | job built; not yet driven against a red commit, which only a tag on one can do |
-| A tag with no CHANGELOG section fails the release and the pre-push hook, with the same message from `go tool lateregate release-notes` | the gate's `release-notes` command, the `publish` job | passing for the rule; the `publish` job reads it, proven at the first tag |
+| A tag whose commit has no `verify` run for its own SHA concluded `success` publishes nothing and tags no image | `TestReleaseVerifyCommandRejectsRedCommit` executes the exact `gate-green` script with a failed verification response; `TestReleaseFailuresCannotBeIgnoredByPublish` checks the publication dependency gate | passing locally; no intentionally failing remote tag was created |
+| A tag with no CHANGELOG section fails the release and the pre-push hook, with the same message from `go tool lateregate release-notes` | the gate's `release-notes` command, the `publish` job | passing for the rule; the `publish` job passed in the v0.4.1 release workflow |
 | Every overlay in `deploy/` renders, the rendered base carries every hardening field, the `PrometheusRule` passes `promtool check rules`, and no file under `deploy/` names the stub image | `TestOverlaysRender`, `TestBaseIsConfined`, `TestDeployNamesNoStub`, the rules step | passing, `internal/arch`, the renders through `kubectl kustomize` where kubectl is on PATH and skipped by name where it is not; the `rules` job of `verify.yml` is built and its command passed locally through the Prometheus image, ten rules found |
 | The Deployment's strategy surges no replica, so a rollout never opens more than `replicas × LUX_DB_MAX_CONNS` connections | `TestRolloutDoesNotSurgeThePool`, reading the rendered Deployment | passing, `internal/arch` |
 | `luxd check` prints one line per requirement in the order above and exits 1 when any one of them fails, with each requirement removed one at a time | `TestCheckNamesEachFailure`, table-driven over every row | passing, `internal/check`, over two baselines and a removal per row that can fail, with `TestCheckCommand` in `cmd/luxd` at the process |
 | The authorizer probe is `authz.Probe("provider.read", "Provider")`, carries `authz.ProbeID`, is cached as any deny is, and fails the row on an allow with `authz.ErrProbeAllowed`'s sentence as the developer detail | `TestCheckAuthorizerProbe`, against `latere.ai/x/pkg/authz/stub` for the deny and against a stub that allows everything for the allow | passing, `internal/check` |
 | `luxd check` against a serving installation changes no object and leaves no archive object behind | `TestCheckIsReadOnly` | passing, `cmd/luxd`: the objects unchanged, one `check.ping` at the sink, the archive as it was, one probe at the authorizer |
-| The blocks of `docs/install.md` run green against a kind cluster from the checkout on every push, and against the published artifacts with no checkout on the path after a tag | the `install` and `install-release` jobs | jobs built; the runner is proven by `TestRunBlocksRunsTheFencedBlocksInOrder` in `internal/arch`, and the document walked green end to end on the author's machine against a kind cluster with the checkout's image and the stubs Pod through the same runner, which found and fixed three defects of the manifests; the `install` job runs on the first push of this branch and `install-release` at the first tag |
-| The conformance suite passes against the two image digests before either carries the `:<tag>` reference, so a failed run leaves no pullable tag and no release | the `conformance` job, [[018-conformance-suite]]'s `TestContract`, driven against a deliberately non-conformant candidate | job built, proven at the first tag; not yet driven against a non-conformant candidate |
-| A tag attaches `fixture-<tag>.tar.gz` to the release and pushes one branch `conformance/fixture-<tag>` adding `test/conformance/testdata/previous/<tag>/` with one resolved manifest per kind and the run's archived records; no job in `release.yml` pushes to `main` and none opens a pull request (the amendment of 2026-09-17) | the `fixture` job, with [[018-conformance-suite]]'s `fixture` group reading it on the next release; `TestReleaseWorkflowNeverPushesToTheDefaultBranch` | `TestReleaseWorkflowNeverPushesToTheDefaultBranch` passing, `internal/arch`, over the branch push and the absence of `pull-requests: write`; the `fixture` job is built and its branch is proven at the first tag |
+| The blocks of `docs/install.md` run green against a kind cluster from the checkout on every push, and against the published artifacts with no checkout on the path after a tag | the `install` and `install-release` jobs | jobs built; the runner is proven by `TestRunBlocksRunsTheFencedBlocksInOrder` in `internal/arch`, and the document walked green end to end on the author's machine against a kind cluster with the checkout's image and the stubs Pod through the same runner, which found and fixed three defects of the manifests; both `install` and `install-release` passed for v0.4.1 |
+| The conformance suite passes against the two image digests before either carries the `:<tag>` reference, so a failed run leaves no pullable tag and no release | the `conformance` job, [[018-conformance-suite]]'s `TestContract`, driven against a deliberately non-conformant candidate | passing against v0.4.1 candidate digests; `TestReleaseConformanceCommandRejectsNonconformantCandidate` runs the exact workflow command against an invalid discovery document and observes TestContract fail; `TestReleaseFailuresCannotBeIgnoredByPublish` checks publication dependencies |
+| A tag attaches `fixture-<tag>.tar.gz` to the release and pushes one branch `conformance/fixture-<tag>` adding `test/conformance/testdata/previous/<tag>/` with one resolved manifest per kind and the run's archived records; no job in `release.yml` pushes to `main` and none opens a pull request (the amendment of 2026-09-17) | the `fixture` job, with [[018-conformance-suite]]'s `fixture` group reading it on the next release; `TestReleaseWorkflowNeverPushesToTheDefaultBranch` | `TestReleaseWorkflowNeverPushesToTheDefaultBranch` passing, `internal/arch`, over the branch push and the absence of `pull-requests: write`; the `fixture` job passed for v0.4.1; release fixtures through v0.4.1 are imported and checked against the reference server |
 | Every row of the version promise table is checked against the tag being cut: `TestVersionPromise` diffs the committed `api/openapi.yaml`, the `LUX_*` table, the error code table, the event type table, and `manifest/testdata/v1`'s golden outputs against the previous tag's, classifies each difference as patch, minor, or major by the table, and fails when the tag's own bump is smaller than the largest class it found | `TestVersionPromise`, driven with a synthetic removal of a variable, a code, a record field, and a golden change | passing, `tools/release`; the `build` job runs `go run ./tools/release promise` against the previous tag at every release |
 
 ## Amendment, 2026-09-17: the fixture is a branch, not a pull request
@@ -501,3 +494,22 @@ on `main` and no second release.
 carries the rule: the `fixture` job pushes `conformance/fixture-<tag>`,
 runs no `gh pr create`, declares `contents: write` alone, and no job of
 the file declares a `pull-requests` permission.
+
+## Outcome
+
+The release pipeline is verified through published v0.4.1 artifacts. Evidence:
+[release run](https://github.com/latere-ai/lux/actions/runs/35446047542) and
+[source verification](https://github.com/latere-ai/lux/actions/runs/35446048354).
+All seven release jobs and all source verification jobs succeeded, including
+signatures, checksums, attestations, candidate conformance and both installation
+walks. The negative tests run the actual workflow commands locally and assert
+failure; they replace the proposed experiment of publishing deliberately failing
+tags. Workflow graph assertions preserve the successful-dependency requirement.
+
+The v0.3.0, v0.4.0 and v0.4.1 fixture imports match their published archive
+checksums and every byte on their release-generated fixture branches. Signature
+verification is evidenced by the clean-runner release job; it was not repeated
+locally. The reference server passes the complete corpus through v0.4.1.
+`go test ./internal/arch ./test/conformance`, the restored-fixture reference-server
+run, vet and lint pass. The design departures are recorded in “What the build
+changed”; no release or hosted deployment is triggered by this completion.

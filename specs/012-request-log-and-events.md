@@ -98,7 +98,7 @@ sink can key on it without parsing `data`.
 | `key.exhausted` | a Key's spend window reached its amount: at the first `spend_exceeded` refusal of the window ([[007-keys-and-limits]]) | `{window, amount, spent, currency, resetsAt}` |
 | `budget.created`, `.updated`, `.deleted` | the API applied or deleted a `Budget` | `{amount, currency, window, hard}` on a create, `amount` present when the Budget names one; the changed paths on an update; empty on a delete |
 | `budget.exhausted` | a Budget's window reached its amount: at the first `budget_exhausted` refusal for a hard Budget, at the first flush that observes it for a soft one ([[007-keys-and-limits]]) | `{window, amount, spent, currency, resetsAt, hard}` |
-| `check.ping` | `luxd check` verifying the sink ([[017-release-and-installation]]); names no object, `reason: check`, never journalled | `{}` |
+| `check.ping` | `luxd check` verifying the sink ([release and installation](.archive/017-release-and-installation.md)); names no object, `reason: check`, never journalled | `{}` |
 
 `events.Table` is this table in code, the reason and the `data` members
 of every type, the optional members apart (`expiresAt`, `resetsAt`,
@@ -404,7 +404,7 @@ Design above:
   read `events`'s constants.
 - `events.Verify`, `events.Parse`, `events.Table`, and `Sink.Ping` are
   exported for the stub sink of [[015-test-stubs-and-tiers]] and `luxd
-  check` of [[017-release-and-installation]].
+  check` of [release and installation](.archive/017-release-and-installation.md).
 
 What other specs take from here:
 
@@ -427,7 +427,7 @@ What other specs take from here:
   `TestArchiveCarriesNoContent` lost their not-built markers with this
   spec, because `TestThreatTableIsGrounded` refuses a marker on a test
   that exists.
-- [[017-release-and-installation]]: the `events` row of `luxd check` is
+- [release and installation](.archive/017-release-and-installation.md): the `events` row of `luxd check` is
   `events.NewSink(...).Ping(ctx)`; the `requestlog` row writes and
   deletes one object through the same `s3.Client` the exporter uses.
 - [[010-state]]: nothing prunes the journal yet, so acknowledged rows

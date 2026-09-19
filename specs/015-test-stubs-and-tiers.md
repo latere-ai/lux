@@ -31,7 +31,7 @@ provider and the sink, and adds Lux's own vocabulary around all four.
 One binary, `lux-stubs`, serves them, which is what lets `make run`
 give a clean clone a working gateway in one command and what lets the
 release pipeline run the conformance suite against a published image
-with one sidecar ([[017-release-and-installation]]).
+with one sidecar ([release and installation](.archive/017-release-and-installation.md)).
 
 The tiers that need something beside the toolchain are selected by
 build tag and test name prefix, never by an environment check that
@@ -67,7 +67,7 @@ under "What the build changed".
 `cmd/lux-stubs` is a `main` over the packages under `test/stubs/`. It
 starts every stub on one loopback address each, prints one line per
 stub with its URL, and exits on `SIGTERM`. It ships as the test image
-of [[017-release-and-installation]] and is never part of an
+of [release and installation](.archive/017-release-and-installation.md) and is never part of an
 installation; [[001-architecture]]'s binary table says so.
 
 | Stub | Comes from | Serves |
@@ -196,7 +196,7 @@ adds nothing to it. Its routes, and what each is here for:
 
 | Route | Used by |
 |---|---|
-| `GET /.well-known/openid-configuration`, `GET /jwks` | the verifier of [[006-identity]], and `luxd check`'s `issuers` row ([[017-release-and-installation]]) |
+| `GET /.well-known/openid-configuration`, `GET /jwks` | the verifier of [[006-identity]], and `luxd check`'s `issuers` row ([release and installation](.archive/017-release-and-installation.md)) |
 | `POST /mint` | every tier that needs a token for a subject; the body is `issuertest.Claims`, and a field the struct does not name is minted as an extra claim, so one `POST` produces each row of [[006-identity]]'s verification table |
 | `POST /token` | the `client_credentials` grant, the service token a platform's unattended work reaches `/v1` with ([[020-building-a-plane]]) |
 | `POST /actor-tokens` | the one-hop actor token a platform mints for a person acting in its console ([[020-building-a-plane]]) |
@@ -235,7 +235,7 @@ It allows every subject when no rule matches, so a tier that is not
 testing permission writes no rules, and it denies `authz.ProbeID` for
 every subject and action whatever the table says, which is what makes
 `luxd check`'s authorizer row mean anything
-([[017-release-and-installation]]). The bearer it requires is
+([release and installation](.archive/017-release-and-installation.md)). The bearer it requires is
 `stub.DefaultToken` unless `WithToken` sets another, and that is the
 value `LUX_AUTHORIZER_TOKEN` takes in every tier.
 
@@ -455,7 +455,7 @@ Outcome at `complete` records nothing the tree does not.
 | `make run` | applies every manifest under `deploy/examples/` | renders them into `out/run/examples/` first: the stub ports rewritten and, in server mode, the Key's `valueFrom` block dropped | a Provider's `valueFrom` is refused through `/v1` and a Key's `valueFrom` is required in the file mode, so one directory serves both modes only through a render |
 | `deploy/examples/` | one Provider per dialect at its stub | the same, with `credential.value: stub-credential` and `discovery.mode: none` | the stub's credential is no secret and a literal is what both modes accept; discovery would list `stub-<dialect>` beside the declared Models of the same name |
 | `make run`, `make run-file` | nothing on `PATH` but the toolchain | `curl` beside it, and `make` itself | the token is minted and the examples applied over HTTP from a recipe; the tier's two `make` rows fail, never skip, without them |
-| `TestE2ECheckAgainstTheStubs` | `luxd check`'s authorizer row | the row's call, `auth.Authorizer.Check` over `authz.Client`, against the stub as a process with an allow-everything table in force | `luxd check` is [[017-release-and-installation]]'s and not in this build |
+| `TestE2ECheckAgainstTheStubs` | `luxd check`'s authorizer row | the row's call, `auth.Authorizer.Check` over `authz.Client`, against the stub as a process with an allow-everything table in force | `luxd check` is [release and installation](.archive/017-release-and-installation.md)'s and not in this build |
 | the postgres tier | the same tree of cases against a shared store | `TestMain` refuses an unset `LUX_DB_URL` as designed; `TestPostgresTwoReplicas` runs the two replicas, and the tagged cases in `internal/store/postgres`, `internal/check`, and `cmd/luxd` are [[010-state]]'s, written with that store | the tier is one tag and one prefix across the tree, so the spec that builds a component behind a database writes its cases where the component lives |
 | the tiers' rules | `TestEveryTestIsInATier`, `TestPostgresMainRefusesWithoutAURL` | both in `test/stubs`, the root package of the stubs tree, untagged | the tagged run cannot host a test of its own refusal; the name keeps the tier's prefix so `make test-postgres` runs it too |
 | the tier | `TestE2E*` as the table names them | two more: `TestE2EFailureInjectionReachesTheDoors` over the failure table through a Model's target, and `TestE2EEventsReachTheSink` with a first delivery refused | the table is the stub's own; these prove the two contracts through the gateway |
@@ -476,7 +476,7 @@ so the tier's first request after a start is retried.
 
 The conformance suite the stubs are wired into
 ([[018-conformance-suite]]); the release pipeline and the test image
-([[017-release-and-installation]]); the s3 archive's own assertions,
+([release and installation](.archive/017-release-and-installation.md)); the s3 archive's own assertions,
 which run against `s3test` ([[012-request-log-and-events]]); what each
 stub's contract is, which is its owning spec's; the issuer's and the
 authorizer's own behaviour, which is `latere.ai/x/pkg`'s and is tested
@@ -504,7 +504,7 @@ in `pkg` v0.66.0, the version `go.mod` pins, and nothing waits on them.
 | A Model whose target is `tokens-1000-500` produces a usage record of exactly 1000 and 500 tokens and the cost [[009-usage-and-metering]]'s arithmetic gives for its pricing | `TestE2ECostIsExact` | passing, `test/e2e`: 7500 micro-units of USD at 2.50 and 10 per million |
 | Each of [[006-identity]]'s six unavailability forms, driven through `latere.ai/x/pkg/authz/stub`, is `authorizer_unavailable` at the gateway and none is an allow | `TestE2EAuthorizerUnavailability`, table-driven over the six rows | passing; the refused connection and the TLS failure through a `luxd` of the row's own |
 | `lux-stubs` mounts `latere.ai/x/pkg/authkit/issuertest` and `latere.ai/x/pkg/authz/stub` rather than a reimplementation: no package under `test/stubs/` serves a discovery document, a key set, or an authorization decision | `TestStubsMountTheSharedPackages`, over `go list -deps ./cmd/lux-stubs` and the routes each package registers | passing, `cmd/lux-stubs` |
-| The stub authorizer denies `authz.ProbeID` whatever rules are set, so `luxd check`'s authorizer row passes against it | `TestE2ECheckAgainstTheStubs` | passing, through the row's call; `luxd check` itself is [[017-release-and-installation]]'s |
+| The stub authorizer denies `authz.ProbeID` whatever rules are set, so `luxd check`'s authorizer row passes against it | `TestE2ECheckAgainstTheStubs` | passing, through the row's call; `luxd check` itself is [release and installation](.archive/017-release-and-installation.md)'s |
 | The stub sink refuses a body whose signature does not verify and records it apart | `TestSinkVerifiesSignature` | passing |
 | `make run` on a clean clone prints the three exports, and a request through the `/openai` door with the printed Key returns a stub answer, produces one usage record, and delivers one event to the sink | `TestE2EMakeRun` | passing; the applies' ten events reach the sink, and the record costs the 450 micro-units the example names |
 | `make run-file` serves the same door from the manifest directory and refuses a `PUT` with `read_only` | `TestE2EMakeRunFileMode` | passing |

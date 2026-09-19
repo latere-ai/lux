@@ -16,7 +16,7 @@ series `kubectl rollout undo` and nothing else: the older binary finds a
 newer schema of its own major, warns, and serves.
 
 What a version number promises is the table in the
-[release and installation spec](../../specs/017-release-and-installation.md):
+[release and installation spec](../../specs/.archive/017-release-and-installation.md):
 before `v1.0.0` a minor may break a row with a CHANGELOG entry naming
 the break; from `v1.0.0` the table binds, and the release pipeline
 checks every tag against it.

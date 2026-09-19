@@ -285,10 +285,10 @@ To a platform, the gateway promises:
   resolves to the same object ([[003-manifest-contract]]);
 - the compatibility of `manifest`, `gateway`, and `metering`: additive
   within a module major, with a break named in the CHANGELOG
-  ([[001-architecture]], [[017-release-and-installation]]);
+  ([[001-architecture]], [release and installation](.archive/017-release-and-installation.md));
 - that the conformance suite passes against `luxd` on every release, so
   the suite is a bar the reference implementation actually clears
-  ([[017-release-and-installation]]);
+  ([release and installation](.archive/017-release-and-installation.md));
 - that a platform passing the suite against its own front serves the
   same contract.
 
