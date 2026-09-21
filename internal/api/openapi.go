@@ -174,15 +174,15 @@ func openAPIDocument() ordered {
 		paths = append(paths, kindPaths(k)...)
 	}
 	paths = append(paths,
-		member{"/v1/usage", obj("get", operation("readUsage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", authorizer.ActionUsageRead,
+		member{"/v1/usage", obj("get", operation("readUsage", "Aggregate usage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "by"), ref("parameters", "interval"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel")},
 			nil, response("200", "The rows.", "UsageList")))},
-		member{"/v1/requests", obj("get", operation("listRequests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", authorizer.ActionUsageRead,
+		member{"/v1/requests", obj("get", operation("listRequests", "List requests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
 			nil, response("200", "One page of records.", "RecordList")))},
-		member{"/v1/self", obj("get", operation("readSelf", "The caller's identity, who decides permission, and what this replica remembers granting the subject.", "none", nil, nil, response("200", "The caller.", "Self")))},
-		member{"/v1/openapi.json", obj("get", operation("readOpenAPI", "This document as JSON; no bearer.", "none", []any{}, nil, obj("200", obj("description", "The document.", "content", obj("application/json", obj("schema", obj("type", "object"))))))).set("security", []any{})},
-		member{"/.well-known/lux", obj("get", operation("readWellKnown", "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer.", "none", []any{}, nil, response("200", "The server.", "WellKnown")).set("security", []any{}))},
+		member{"/v1/self", obj("get", operation("readSelf", "Read caller identity", "The caller's identity, who decides permission, and what this replica remembers granting the subject.", "none", nil, nil, response("200", "The caller.", "Self")))},
+		member{"/v1/openapi.json", obj("get", operation("readOpenAPI", "Read OpenAPI document", "This document as JSON; no bearer.", "none", []any{}, nil, obj("200", obj("description", "The document.", "content", obj("application/json", obj("schema", obj("type", "object"))))))).set("security", []any{})},
+		member{"/.well-known/lux", obj("get", operation("readWellKnown", "Read server identity", "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer.", "none", []any{}, nil, response("200", "The server.", "WellKnown")).set("security", []any{}))},
 	)
 	errs := make([]any, 0, len(codes))
 	for _, c := range codes {
@@ -220,23 +220,23 @@ func kindPaths(k kind) ordered {
 		"application/yaml", obj("schema", obj("$ref", kindRef)),
 	))
 	item := "/v1/" + k.plural + "/{name}"
-	list := obj("get", operation("list"+k.name+"s", "List "+k.name+"s under the authorizer's filter, paged by limit and cursor.", k.list, listParams, nil,
+	list := obj("get", operation("list"+k.name+"s", "List "+strings.ToLower(k.name)+"s", "List "+k.name+"s under the authorizer's filter, paged by limit and cursor.", k.list, listParams, nil,
 		response("200", "One page.", k.name+"List")))
 	itemOps := obj(
-		"put", operation("apply"+k.name, "Create the "+k.name+" when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.", k.create+" or "+k.update,
+		"put", operation("apply"+k.name, "Apply "+strings.ToLower(k.name), "Create the "+k.name+" when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.", k.create+" or "+k.update,
 			append(itemParams, ref("parameters", "ifMatch"), ref("parameters", "ifNoneMatch"), ref("parameters", "luxOwner")), body,
 			objectResponse("200", "The object as updated.", k.name), objectResponse("201", "The object as created; a Key carries status.value once.", k.name)),
-		"get", operation("read"+k.name, "Read one "+k.name+" by id or name, with its status.", k.read, itemParams, nil, objectResponse("200", "The object.", k.name)),
-		"delete", operation("delete"+k.name, "Delete one "+k.name+" by id or name; 204 with no body.", k.del, append(itemParams, ref("parameters", "ifMatch")), nil, obj("204", obj("description", "Deleted."))),
+		"get", operation("read"+k.name, "Read "+strings.ToLower(k.name), "Read one "+k.name+" by id or name, with its status.", k.read, itemParams, nil, objectResponse("200", "The object.", k.name)),
+		"delete", operation("delete"+k.name, "Delete "+strings.ToLower(k.name), "Delete one "+k.name+" by id or name; 204 with no body.", k.del, append(itemParams, ref("parameters", "ifMatch")), nil, obj("204", obj("description", "Deleted."))),
 	)
 	out := ordered{{"/v1/" + k.plural, list}, {item, itemOps}}
 	if k.name == v1.KindKey {
 		fenceParams := []any{obj("name", "name", "in", "path", "required", true, "description", "Key name only, never an id.", "schema", obj("type", "string", "maxLength", 63))}
 		fenceBody := obj("required", true, "content", obj("application/json", obj("schema", ref("schemas", "KeyFenceAssertion"))))
 		out = append(out, member{item + "/fence", obj(
-			"post", operation("fenceKey", "Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.", authorizer.ActionKeyFence, fenceParams, fenceBody, response("200", "The immutable fence.", "KeyFence")),
-			"get", operation("readKeyFence", "Read an immutable fence by Key name; authorization precedes existence lookup.", authorizer.ActionKeyFenceRead, fenceParams, nil, response("200", "The immutable fence.", "KeyFence")))})
-		out = append(out, member{item + "/rotate", obj("post", operation("rotateKey", "Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.", k.update, itemParams, nil, objectResponse("200", "The Key with its new value.", k.name)))})
+			"post", operation("fenceKey", "Fence key name", "Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.", authorizer.ActionKeyFence, fenceParams, fenceBody, response("200", "The immutable fence.", "KeyFence")),
+			"get", operation("readKeyFence", "Read key fence", "Read an immutable fence by Key name; authorization precedes existence lookup.", authorizer.ActionKeyFenceRead, fenceParams, nil, response("200", "The immutable fence.", "KeyFence")))})
+		out = append(out, member{item + "/rotate", obj("post", operation("rotateKey", "Rotate key", "Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.", k.update, itemParams, nil, objectResponse("200", "The Key with its new value.", k.name)))})
 	}
 	return out
 }
@@ -252,13 +252,13 @@ func pathName(k kind) ordered {
 }
 
 // operation is one operation's object.
-func operation(id, summary, action string, params []any, body ordered, responses ...ordered) ordered {
+func operation(id, summary, description, action string, params []any, body ordered, responses ...ordered) ordered {
 	res := ordered{}
 	for _, r := range responses {
 		res = append(res, r...)
 	}
 	res = append(res, member{"default", obj("description", "A refusal: one code of x-lux-errors with its fixed sentence.", "headers", obj("Lux-Request-Id", ref("headers", "Lux-Request-Id")), "content", obj("application/json", obj("schema", obj("$ref", "#/components/schemas/Error"))))})
-	op := obj("operationId", id, "summary", summary, "x-lux-action", action)
+	op := obj("operationId", id, "summary", summary, "description", description, "x-lux-action", action)
 	if params != nil {
 		op = op.set("parameters", params)
 	}

@@ -7,7 +7,8 @@ paths:
   /v1/providers:
     get:
       operationId: listProviders
-      summary: List Providers under the authorizer's filter, paged by limit and cursor.
+      summary: List providers
+      description: List Providers under the authorizer's filter, paged by limit and cursor.
       x-lux-action: provider.list
       parameters:
       - $ref: "#/components/parameters/label"
@@ -36,7 +37,8 @@ paths:
   /v1/providers/{name}:
     put:
       operationId: applyProvider
-      summary: Create the Provider when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      summary: Apply provider
+      description: Create the Provider when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
       x-lux-action: provider.create or provider.update
       parameters:
       - name: name
@@ -92,7 +94,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       operationId: readProvider
-      summary: Read one Provider by id or name, with its status.
+      summary: Read provider
+      description: Read one Provider by id or name, with its status.
       x-lux-action: provider.read
       parameters:
       - name: name
@@ -124,7 +127,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       operationId: deleteProvider
-      summary: Delete one Provider by id or name; 204 with no body.
+      summary: Delete provider
+      description: Delete one Provider by id or name; 204 with no body.
       x-lux-action: provider.delete
       parameters:
       - name: name
@@ -149,7 +153,8 @@ paths:
   /v1/models:
     get:
       operationId: listModels
-      summary: List Models under the authorizer's filter, paged by limit and cursor.
+      summary: List models
+      description: List Models under the authorizer's filter, paged by limit and cursor.
       x-lux-action: model.list
       parameters:
       - $ref: "#/components/parameters/label"
@@ -180,7 +185,8 @@ paths:
   /v1/models/{name}:
     put:
       operationId: applyModel
-      summary: Create the Model when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      summary: Apply model
+      description: Create the Model when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
       x-lux-action: model.create or model.update
       parameters:
       - name: name
@@ -236,7 +242,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       operationId: readModel
-      summary: Read one Model by id or name, with its status.
+      summary: Read model
+      description: Read one Model by id or name, with its status.
       x-lux-action: model.read
       parameters:
       - name: name
@@ -268,7 +275,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       operationId: deleteModel
-      summary: Delete one Model by id or name; 204 with no body.
+      summary: Delete model
+      description: Delete one Model by id or name; 204 with no body.
       x-lux-action: model.delete
       parameters:
       - name: name
@@ -293,7 +301,8 @@ paths:
   /v1/keys:
     get:
       operationId: listKeys
-      summary: List Keys under the authorizer's filter, paged by limit and cursor.
+      summary: List keys
+      description: List Keys under the authorizer's filter, paged by limit and cursor.
       x-lux-action: key.list
       parameters:
       - $ref: "#/components/parameters/label"
@@ -322,7 +331,8 @@ paths:
   /v1/keys/{name}:
     put:
       operationId: applyKey
-      summary: Create the Key when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      summary: Apply key
+      description: Create the Key when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
       x-lux-action: key.create or key.update
       parameters:
       - name: name
@@ -378,7 +388,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       operationId: readKey
-      summary: Read one Key by id or name, with its status.
+      summary: Read key
+      description: Read one Key by id or name, with its status.
       x-lux-action: key.read
       parameters:
       - name: name
@@ -410,7 +421,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       operationId: deleteKey
-      summary: Delete one Key by id or name; 204 with no body.
+      summary: Delete key
+      description: Delete one Key by id or name; 204 with no body.
       x-lux-action: key.delete
       parameters:
       - name: name
@@ -435,7 +447,8 @@ paths:
   /v1/keys/{name}/fence:
     post:
       operationId: fenceKey
-      summary: Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.
+      summary: Fence key name
+      description: Permanently close the name to credential changes. Idempotent for the same owner and exact labels; existing Keys still need conditional disable and cache drainage.
       x-lux-action: key.fence
       parameters:
       - name: name
@@ -472,7 +485,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       operationId: readKeyFence
-      summary: Read an immutable fence by Key name; authorization precedes existence lookup.
+      summary: Read key fence
+      description: Read an immutable fence by Key name; authorization precedes existence lookup.
       x-lux-action: key.fence.read
       parameters:
       - name: name
@@ -504,7 +518,8 @@ paths:
   /v1/keys/{name}/rotate:
     post:
       operationId: rotateKey
-      summary: Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.
+      summary: Rotate key
+      description: Mint a new value for the Key, keeping its id, name, spec, owner, and windows; 200 with status.value. A repeat is a second rotation.
       x-lux-action: key.update
       parameters:
       - name: name
@@ -537,7 +552,8 @@ paths:
   /v1/budgets:
     get:
       operationId: listBudgets
-      summary: List Budgets under the authorizer's filter, paged by limit and cursor.
+      summary: List budgets
+      description: List Budgets under the authorizer's filter, paged by limit and cursor.
       x-lux-action: budget.list
       parameters:
       - $ref: "#/components/parameters/label"
@@ -566,7 +582,8 @@ paths:
   /v1/budgets/{name}:
     put:
       operationId: applyBudget
-      summary: Create the Budget when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
+      summary: Apply budget
+      description: Create the Budget when no object of the name exists, update it when one does; 201 on create, 200 on update. Apply is by name and only by name.
       x-lux-action: budget.create or budget.update
       parameters:
       - name: name
@@ -622,7 +639,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     get:
       operationId: readBudget
-      summary: Read one Budget by id or name, with its status.
+      summary: Read budget
+      description: Read one Budget by id or name, with its status.
       x-lux-action: budget.read
       parameters:
       - name: name
@@ -654,7 +672,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       operationId: deleteBudget
-      summary: Delete one Budget by id or name; 204 with no body.
+      summary: Delete budget
+      description: Delete one Budget by id or name; 204 with no body.
       x-lux-action: budget.delete
       parameters:
       - name: name
@@ -679,7 +698,8 @@ paths:
   /v1/usage:
     get:
       operationId: readUsage
-      summary: Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.
+      summary: Aggregate usage
+      description: Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.
       x-lux-action: usage.read
       parameters:
       - $ref: "#/components/parameters/from"
@@ -713,7 +733,8 @@ paths:
   /v1/requests:
     get:
       operationId: listRequests
-      summary: Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.
+      summary: List requests
+      description: Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.
       x-lux-action: usage.read
       parameters:
       - $ref: "#/components/parameters/from"
@@ -750,7 +771,8 @@ paths:
   /v1/self:
     get:
       operationId: readSelf
-      summary: The caller's identity, who decides permission, and what this replica remembers granting the subject.
+      summary: Read caller identity
+      description: The caller's identity, who decides permission, and what this replica remembers granting the subject.
       x-lux-action: none
       responses:
         "200":
@@ -774,7 +796,8 @@ paths:
   /v1/openapi.json:
     get:
       operationId: readOpenAPI
-      summary: This document as JSON; no bearer.
+      summary: Read OpenAPI document
+      description: This document as JSON; no bearer.
       x-lux-action: none
       parameters: []
       responses:
@@ -797,7 +820,8 @@ paths:
   /.well-known/lux:
     get:
       operationId: readWellKnown
-      summary: "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer."
+      summary: Read server identity
+      description: "The server's identity: the build, the API and the doors under LUX_PUBLIC_URL, the issuers, the audience, and the mode; no bearer."
       x-lux-action: none
       parameters: []
       responses:
