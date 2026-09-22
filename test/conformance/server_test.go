@@ -182,7 +182,7 @@ func startServer(t testing.TB, o serverOptions) *server {
 		st = store.Instrument(memory.New(), reg)
 		s.iss = issuertest.New(t, issuertest.WithDefaultAudience(harnessAudience))
 		s.az = stub.New(t)
-		opts := auth.Options{Issuers: []string{s.iss.URL()}, Audience: harnessAudience, HTTP: httpClient, AuthorizerTimeout: 2 * time.Second}
+		opts := auth.Options{Issuers: []string{s.iss.URL()}, Audiences: []string{harnessAudience}, HTTP: httpClient, AuthorizerTimeout: 2 * time.Second}
 		if o.ownerPolicy {
 			opts.AdminSubjects = []string{s.subject("alice")}
 		} else {

@@ -67,8 +67,11 @@ type Config struct {
 	// OIDCIssuers are the issuer URLs whose tokens the control plane
 	// accepts, each without its trailing slash. Empty in the file mode.
 	OIDCIssuers []string
-	// OIDCAudience is the one audience a caller token must contain.
-	OIDCAudience string
+	// OIDCAudiences are the names a caller token may be addressed to, a
+	// token accepted when its aud contains any of them. The first is the
+	// primary: the name this installation mints its own tokens for and the
+	// one audience /.well-known/lux reports. Never empty once loaded.
+	OIDCAudiences []string
 	// OIDCInsecureIssuers are the issuers from the list that may use
 	// http:// on a host other than loopback.
 	OIDCInsecureIssuers []string

@@ -36,11 +36,11 @@ const (
 // Options is what Startup reads from the configuration, so a test builds
 // one by hand.
 type Options struct {
-	// Issuers, Audience, AuthorizerURL, AuthorizerToken, AuthorizerTimeout,
-	// and AdminSubjects are the configuration rows of spec 006. No issuer
-	// is the file mode.
+	// Issuers, Audiences, AuthorizerURL, AuthorizerToken,
+	// AuthorizerTimeout, and AdminSubjects are the configuration rows of
+	// spec 006. No issuer is the file mode.
 	Issuers           []string
-	Audience          string
+	Audiences         []string
 	AuthorizerURL     string
 	AuthorizerToken   string
 	AuthorizerTimeout time.Duration
@@ -80,7 +80,7 @@ type Auth struct {
 func Startup(ctx context.Context, cfg config.Config, client *http.Client, observe func(result string, seconds float64)) (*Auth, error) {
 	return New(ctx, Options{
 		Issuers:           cfg.OIDCIssuers,
-		Audience:          cfg.OIDCAudience,
+		Audiences:         cfg.OIDCAudiences,
 		AuthorizerURL:     cfg.AuthorizerURL,
 		AuthorizerToken:   cfg.AuthorizerToken,
 		AuthorizerTimeout: cfg.AuthorizerTimeout,
@@ -100,7 +100,7 @@ func New(ctx context.Context, o Options) (*Auth, error) {
 	if len(o.Issuers) == 0 {
 		return a, nil
 	}
-	v, err := NewVerifier(ctx, VerifierOptions{Issuers: o.Issuers, Audience: o.Audience, HTTP: client})
+	v, err := NewVerifier(ctx, VerifierOptions{Issuers: o.Issuers, Audiences: o.Audiences, HTTP: client})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (a *Auth) String() string {
 	b.WriteString("identity: issuers ")
 	b.WriteString(strings.Join(a.Verifier.Issuers(), ", "))
 	b.WriteString("; audience ")
-	b.WriteString(a.Verifier.Audience())
+	b.WriteString(strings.Join(a.Verifier.Audiences(), ", "))
 	admins := strconv.Itoa(len(a.Admins)) + " admin subject(s)"
 	switch a.Policy {
 	case PolicyAuthorizer:

@@ -49,6 +49,31 @@ func TestWellKnown(t *testing.T) {
 	}
 }
 
+// TestWellKnownReportsThePrimaryAudience is spec 034: with an audience
+// list the document's one audience member is the primary, the name a
+// client asks a token for, and GET /v1/self reports the caller and no
+// audience.
+func TestWellKnownReportsThePrimaryAudience(t *testing.T) {
+	h := newHarness(t, func(o *Options) {
+		a, err := auth.New(t.Context(), auth.Options{Issuers: o.Auth.Verifier.Issuers(), Audiences: []string{audience, "api.example.com"}, HTTP: &http.Client{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		o.Auth, o.Authorizer = a, a.Authorizer(&serve.ObjectOwners{Objects: o.Store.Objects()})
+	})
+	doc := body(t, h.request(http.MethodGet, "/.well-known/lux", "", "Authorization", ""))
+	if doc["audience"] != audience {
+		t.Fatalf("audience %v, want the primary %q", doc["audience"], audience)
+	}
+	self := body(t, h.request(http.MethodGet, "/v1/self", ""))
+	if self["subject"] != h.subject() {
+		t.Fatalf("self %v", self)
+	}
+	if _, has := self["audience"]; has {
+		t.Fatalf("/v1/self reports an audience: %v", self)
+	}
+}
+
 // TestSelf: GET /v1/self returns the caller's subject, issuer, sub, and
 // claims, the policy, and, once a decision has been made for the
 // subject on this replica, the cached limits and filter; it asks the
@@ -94,7 +119,7 @@ func TestSelf(t *testing.T) {
 func newOwnerHarness(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t, nil)
-	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{h.iss.URL()}, Audience: audience, AdminSubjects: []string{h.subject()}, HTTP: &http.Client{}})
+	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{h.iss.URL()}, Audiences: []string{audience}, AdminSubjects: []string{h.subject()}, HTTP: &http.Client{}})
 	if err != nil {
 		t.Fatal(err)
 	}

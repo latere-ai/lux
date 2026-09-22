@@ -94,7 +94,7 @@ func newReplica(t *testing.T, st store.Store, o replicaOptions) *replica {
 	}
 	r.verifier = o.verifier
 	if r.verifier == nil {
-		v, err := auth.NewVerifier(t.Context(), auth.VerifierOptions{Issuers: []string{r.iss.URL()}, Audience: audience, HTTP: &http.Client{}})
+		v, err := auth.NewVerifier(t.Context(), auth.VerifierOptions{Issuers: []string{r.iss.URL()}, Audiences: []string{audience}, HTTP: &http.Client{}})
 		if err != nil {
 			t.Fatal(err)
 		}

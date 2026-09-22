@@ -33,10 +33,13 @@ func TestCheckCommand(t *testing.T) {
 	}
 	errOut.Reset()
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
-	vars := serveEnv(t, map[string]string{"LUX_OIDC_ISSUERS": iss.URL()})
+	vars := serveEnv(t, map[string]string{"LUX_OIDC_ISSUERS": iss.URL(), "LUX_OIDC_AUDIENCE": "lux,api.example.com"})
 	out.Reset()
 	if code := run(t.Context(), []string{"check"}, env(vars), &out, &errOut); code != 0 {
 		t.Fatalf("exit %d:\n%s%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "; audience lux, api.example.com\n") {
+		t.Errorf("the issuers line does not report the whole audience list:\n%s", out.String())
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 	if len(lines) != len(check.Names) {

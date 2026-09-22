@@ -156,7 +156,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_DB_URL`, `LUX_DB_POOL_URL`, `LUX_DB_MAX_CONNS` | 010, 024 | unset, unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory, and a set URL selects the Postgres store, whose migrations `luxd serve` applies directly at start; the optional pool URL carries serving queries ([[010-state]]) |
 | `LUX_SECRETS_KEK` | yes for `serve` and `rewrap`, except in file mode, from 005 | none | one to eight 32-byte keys, standard base64, comma separated; the first wraps every new data key, every key is tried to open one, so rotation is prepending a key and running `luxd rewrap` |
 | `LUX_OIDC_ISSUERS` | yes, from 006 | none | comma separated issuer URLs whose tokens are accepted on the control plane |
-| `LUX_OIDC_AUDIENCE` | 006 | `lux` | the audience a caller token must contain |
+| `LUX_OIDC_AUDIENCE` | 006 | `lux` | a comma list of names a caller token may be addressed to, the first the primary (amended 2026-09-23, 034) |
 | `LUX_OIDC_INSECURE_ISSUERS` | 006 | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | 006 | unset | the operator's authorization endpoint and the bearer luxd sends it; unset selects the built-in owner policy; the URL without the token is a start-up failure |
 | `LUX_AUTHORIZE_LIST_ITEMS` | 026 | unset | `1` checks each candidate's read permission after the list filter; denials skip, failures fail the list |

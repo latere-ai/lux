@@ -78,7 +78,7 @@ var referenceGroups = []referenceGroup{
 		},
 		{
 			name:     "LUX_OIDC_AUDIENCE",
-			meaning:  "The one audience a caller token must contain.",
+			meaning:  "Comma-separated names a caller token may be addressed to; a token is accepted when its `aud` contains any of them, and the first is the primary `/.well-known/lux` reports.",
 			def:      "lux",
 			required: "No",
 			envValue: "lux",

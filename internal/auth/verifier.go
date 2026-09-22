@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,8 +42,10 @@ type VerifierOptions struct {
 	// Issuers are the issuer URLs whose tokens are accepted, each fetched
 	// at start. At least one is required.
 	Issuers []string
-	// Audience is the one value a token's aud must contain.
-	Audience string
+	// Audiences are the names a token's aud may contain, a token accepted
+	// when it contains any of them; the first is the primary. At least one
+	// is required, and none is empty.
+	Audiences []string
 	// HTTP fetches discovery and the key sets, at start and on a refresh.
 	// Optional: the default is an instrumented client with a ten second
 	// timeout.
@@ -57,7 +60,7 @@ type VerifierOptions struct {
 // schedule, so a request path never waits on an issuer that is up and
 // keeps working against one that has gone away.
 type Verifier struct {
-	audience   string
+	audiences  []string
 	issuers    []string
 	validators map[string]*jwt.Validator
 }
@@ -110,14 +113,17 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 	if len(o.Issuers) == 0 {
 		return nil, errors.New("LUX_OIDC_ISSUERS: no issuer to verify against")
 	}
-	if o.Audience == "" {
+	if len(o.Audiences) == 0 {
 		return nil, errors.New("LUX_OIDC_AUDIENCE: no audience to verify")
+	}
+	if slices.Contains(o.Audiences, "") {
+		return nil, errors.New("LUX_OIDC_AUDIENCE: an empty audience would verify nothing, so none is accepted")
 	}
 	client := o.HTTP
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second, Transport: otel.Transport(nil)}
 	}
-	v := &Verifier{audience: o.Audience, validators: make(map[string]*jwt.Validator, len(o.Issuers))}
+	v := &Verifier{audiences: slices.Clone(o.Audiences), validators: make(map[string]*jwt.Validator, len(o.Issuers))}
 	for _, raw := range o.Issuers {
 		iss := strings.TrimRight(raw, "/")
 		if _, dup := v.validators[iss]; dup {
@@ -131,7 +137,7 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 		validator := jwt.New(jwt.Config{
 			JWKSURL:   doc.JWKSURI,
 			Issuer:    doc.Issuer,
-			Audiences: []string{o.Audience},
+			Audiences: slices.Clone(o.Audiences),
 			CacheTTL:  o.CacheTTL,
 			// A personal access token carries the grants its holder chose
 			// as RFC 9396's authorization_details (spec 006). This gateway
@@ -223,8 +229,13 @@ func (v *Verifier) Issuers() []string {
 	return out
 }
 
-// Audience is the one value a token's aud must contain.
-func (v *Verifier) Audience() string { return v.audience }
+// Audience is the primary audience: the name this installation's own
+// tokens are minted for, and the one /.well-known/lux reports.
+func (v *Verifier) Audience() string { return v.audiences[0] }
+
+// Audiences lists every name a token's aud may contain, the primary
+// first, for the start-up line and luxd check.
+func (v *Verifier) Audiences() []string { return slices.Clone(v.audiences) }
 
 // Authenticate reads the request's bearer and verifies it. Every refusal
 // is an *Error with code unauthenticated and the developer's finding in
@@ -255,7 +266,11 @@ func (v *Verifier) Verify(token string) (Caller, error) {
 	}
 	c, err := validator.Validate(token)
 	if err != nil {
-		return Caller{}, refuse(CodeUnauthenticated, "issuer "+iss+" token: "+err.Error())
+		detail := "issuer " + iss + " token: " + err.Error()
+		if errors.Is(err, jwt.ErrInvalidAudience) {
+			detail += "; its aud names none of LUX_OIDC_AUDIENCE " + strings.Join(v.audiences, ", ")
+		}
+		return Caller{}, refuse(CodeUnauthenticated, detail)
 	}
 	issuer := strings.TrimRight(c.Iss, "/")
 	return Caller{Subject: authz.Subject(issuer, c.Sub), Issuer: issuer, Sub: c.Sub, Claims: claims}, nil

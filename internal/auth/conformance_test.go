@@ -51,7 +51,7 @@ func TestConformance(t *testing.T) {
 	conformance.Run(t, conformance.Service{
 		Audience: audience,
 		New: func(tb testing.TB, issuerURL, _ string) authkit.Authenticator {
-			v, err := NewVerifier(tb.Context(), VerifierOptions{Issuers: []string{issuerURL}, Audience: audience})
+			v, err := NewVerifier(tb.Context(), VerifierOptions{Issuers: []string{issuerURL}, Audiences: []string{audience}})
 			if err != nil {
 				tb.Fatal(err)
 			}

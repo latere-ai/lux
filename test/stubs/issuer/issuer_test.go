@@ -29,7 +29,7 @@ func TestIssuerStubMintsVerifiableTokens(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			iss := New(t, tc.es256)
-			v, err := auth.NewVerifier(t.Context(), auth.VerifierOptions{Issuers: []string{iss.URL()}, Audience: Audience, HTTP: &http.Client{}})
+			v, err := auth.NewVerifier(t.Context(), auth.VerifierOptions{Issuers: []string{iss.URL()}, Audiences: []string{Audience}, HTTP: &http.Client{}})
 			if err != nil {
 				t.Fatalf("the verifier luxd uses refused the stub: %v", err)
 			}

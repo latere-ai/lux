@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 	}
 	want := Config{
 		PublicAddr: ":8080", InternalAddr: ":8081", DBMaxConns: 8,
-		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
+		OIDCIssuers: []string{issuer}, OIDCAudiences: []string{"lux"}, AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
@@ -140,7 +141,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 	want := Config{
 		PublicAddr: "127.0.0.1:9000", InternalAddr: "127.0.0.1:9001", ManifestDir: dir, DBMaxConns: 8,
 		OIDCIssuers:                      []string{issuer, "http://issuer.internal.example"},
-		OIDCAudience:                     "gateway",
+		OIDCAudiences:                    []string{"gateway"},
 		OIDCInsecureIssuers:              []string{"http://issuer.internal.example"},
 		AuthorizerURL:                    "https://authz.example.com/decide",
 		AuthorizerToken:                  "s3cret",
@@ -189,7 +190,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 	want = Config{
 		PublicAddr: ":8080", InternalAddr: ":8081",
 		DBURL: "postgres://lux:secret@db.example.com:5432/lux?sslmode=require", DBMaxConns: 20,
-		OIDCIssuers: []string{issuer}, OIDCAudience: "lux", AuthorizerTimeout: 5 * time.Second,
+		OIDCIssuers: []string{issuer}, OIDCAudiences: []string{"lux"}, AuthorizerTimeout: 5 * time.Second,
 		SecretsKEK: keyring(t), DiscoveryInterval: time.Hour, HealthInterval: 30 * time.Second,
 		KeyCache: 10 * time.Second, MeteringFlush: time.Second,
 		PublicURL: wantPublicURL(t), RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
@@ -256,7 +257,7 @@ func TestLoadTreatsBlankAsUnset(t *testing.T) {
 	if c.PublicAddr != DefaultPublicAddr || c.InternalAddr != DefaultInternalAddr || c.ManifestDir != "" || c.DBURL != "" || c.DBMaxConns != DefaultDBMaxConns {
 		t.Fatalf("blank values did not fall back to defaults: %+v", c)
 	}
-	if c.OIDCAudience != DefaultOIDCAudience || c.AuthorizerURL != "" || c.AuthorizerTimeout != DefaultAuthorizerTimeout || c.AdminSubjects != nil {
+	if !slices.Equal(c.OIDCAudiences, []string{DefaultOIDCAudience}) || c.AuthorizerURL != "" || c.AuthorizerTimeout != DefaultAuthorizerTimeout || c.AdminSubjects != nil {
 		t.Fatalf("blank identity values did not fall back to defaults: %+v", c)
 	}
 	if c.UpstreamAllowPrivate || c.DiscoveryInterval != DefaultDiscoveryInterval || c.HealthInterval != DefaultHealthInterval {

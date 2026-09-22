@@ -69,7 +69,7 @@ func newHarness(t *testing.T, edit func(*Options)) *harness {
 	}
 	h.keys = keys
 	a, err := auth.New(t.Context(), auth.Options{
-		Issuers: []string{h.iss.URL()}, Audience: audience,
+		Issuers: []string{h.iss.URL()}, Audiences: []string{audience},
 		AuthorizerURL: h.stub.URL(), AuthorizerToken: h.stub.Token(), AuthorizerTimeout: 2 * time.Second,
 		HTTP: &http.Client{}, Now: h.clock,
 	})

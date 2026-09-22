@@ -89,7 +89,7 @@ func startGateway(t *testing.T) *gatewayHarness {
 		t.Fatal(err)
 	}
 	a, err := auth.New(ctx, auth.Options{
-		Issuers: []string{iss.URL()}, Audience: "lux",
+		Issuers: []string{iss.URL()}, Audiences: []string{"lux"},
 		AuthorizerURL: authorizer.URL(), AuthorizerToken: authorizer.Token(), AuthorizerTimeout: 2 * time.Second,
 		HTTP: &http.Client{},
 	})

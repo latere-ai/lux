@@ -130,7 +130,7 @@ func newServeGateway(t *testing.T) *serveGateway {
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
 	authorizer := stub.New(t)
 	identity, err := auth.New(t.Context(), auth.Options{
-		Issuers: []string{iss.URL()}, Audience: "lux",
+		Issuers: []string{iss.URL()}, Audiences: []string{"lux"},
 		AuthorizerURL: authorizer.URL(), AuthorizerToken: authorizer.Token(), AuthorizerTimeout: 2 * time.Second,
 		HTTP: &http.Client{},
 	})

@@ -39,7 +39,7 @@ func newIssuer(t *testing.T, opts ...issuertest.Option) *issuertest.Server {
 // on a start-up refusal.
 func newVerifier(t *testing.T, issuers ...string) *Verifier {
 	t.Helper()
-	v, err := NewVerifier(t.Context(), VerifierOptions{Issuers: issuers, Audience: audience})
+	v, err := NewVerifier(t.Context(), VerifierOptions{Issuers: issuers, Audiences: []string{audience}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// The good issuer comes second, so the failure is the bad one's
 			// and the good one is never reached.
-			_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{tc.issuer, good.URL()}, Audience: audience, HTTP: client})
+			_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{tc.issuer, good.URL()}, Audiences: []string{audience}, HTTP: client})
 			if err == nil {
 				t.Fatal("NewVerifier accepted the issuer")
 			}
@@ -198,7 +198,7 @@ func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
 		})
 	}
 	t.Run("no issuer", func(t *testing.T) {
-		if _, err := NewVerifier(t.Context(), VerifierOptions{Audience: audience}); err == nil {
+		if _, err := NewVerifier(t.Context(), VerifierOptions{Audiences: []string{audience}}); err == nil {
 			t.Fatal("NewVerifier built a verifier over no issuer")
 		}
 	})
@@ -208,7 +208,7 @@ func TestUnreachableIssuerIsAStartupFailure(t *testing.T) {
 		}
 	})
 	t.Run("an issuer listed twice", func(t *testing.T) {
-		_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{good.URL(), good.URL() + "/"}, Audience: audience})
+		_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{good.URL(), good.URL() + "/"}, Audiences: []string{audience}})
 		if err == nil || !strings.Contains(err.Error(), "listed twice") {
 			t.Fatalf("err = %v", err)
 		}
@@ -243,7 +243,7 @@ func TestIssuerWithoutUsableKeysIsAStartupFailure(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			iss := startFakeIssuer(t, &fakeIssuer{jwks: jsonKeys(tc.keys...)})
-			_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{iss}, Audience: audience})
+			_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{iss}, Audiences: []string{audience}})
 			if tc.ok {
 				if err != nil {
 					t.Fatalf("NewVerifier refused a usable key set: %v", err)
@@ -338,6 +338,67 @@ func TestBearerAcceptance(t *testing.T) {
 				t.Fatalf("Authenticate() accepted the token as %q", c.Subject)
 			}
 			unauthenticated(t, err, tc.detail)
+		})
+	}
+}
+
+// TestBearerAcceptsAnyListedAudience is spec 034's audience list at the
+// verifier: a token addressed to the primary or to the second name is
+// accepted, one addressed to neither is unauthenticated with the list in
+// the finding, and the primary is what Audience reports.
+func TestBearerAcceptsAnyListedAudience(t *testing.T) {
+	iss := newIssuer(t)
+	v, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{iss.URL()}, Audiences: []string{audience, "api.example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Audience() != audience || !slices.Equal(v.Audiences(), []string{audience, "api.example.com"}) {
+		t.Fatalf("Audience() = %q, Audiences() = %q", v.Audience(), v.Audiences())
+	}
+	for _, tc := range []struct {
+		name string
+		aud  issuertest.StringList
+		ok   bool
+	}{
+		{"the primary", issuertest.StringList{audience}, true},
+		{"the second name", issuertest.StringList{"api.example.com"}, true},
+		{"a list holding the second name", issuertest.StringList{"other", "api.example.com"}, true},
+		{"neither name", issuertest.StringList{"other"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := v.Authenticate(request("Bearer " + iss.Mint(issuertest.Claims{Sub: "alice", Aud: tc.aud})))
+			if tc.ok {
+				if err != nil || c.Subject != iss.URL()+"|alice" {
+					t.Fatalf("Authenticate() = %q, %v", c.Subject, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Authenticate() accepted a token for %q", tc.aud)
+			}
+			unauthenticated(t, err, "its aud names none of LUX_OIDC_AUDIENCE "+audience+", api.example.com")
+		})
+	}
+}
+
+// TestVerifierRefusesAnEmptyAudienceList is spec 034's start-up rule:
+// no audience, and an empty name among them, each refuse to build a
+// verifier rather than verifying nothing.
+func TestVerifierRefusesAnEmptyAudienceList(t *testing.T) {
+	iss := newIssuer(t)
+	for _, tc := range []struct {
+		name      string
+		audiences []string
+	}{
+		{"no list", nil},
+		{"an empty list", []string{}},
+		{"an empty name", []string{audience, ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewVerifier(t.Context(), VerifierOptions{Issuers: []string{iss.URL()}, Audiences: tc.audiences})
+			if err == nil || !strings.Contains(err.Error(), "LUX_OIDC_AUDIENCE") {
+				t.Fatalf("NewVerifier(%q) = %v, want a refusal naming LUX_OIDC_AUDIENCE", tc.audiences, err)
+			}
 		})
 	}
 }

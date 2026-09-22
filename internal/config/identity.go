@@ -31,10 +31,7 @@ func (c *Config) loadIdentity(getenv Getenv) []string {
 	if len(c.OIDCIssuers) == 0 && c.ManifestDir == "" {
 		problems = append(problems, "LUX_OIDC_ISSUERS is unset, and the control plane needs at least one issuer unless LUX_MANIFEST_DIR selects the file mode")
 	}
-	c.OIDCAudience = strings.TrimSpace(withDefault(getenv("LUX_OIDC_AUDIENCE"), DefaultOIDCAudience))
-	if strings.Contains(c.OIDCAudience, ",") {
-		problems = append(problems, "LUX_OIDC_AUDIENCE is "+strconv.Quote(c.OIDCAudience)+", a list, and one audience is accepted")
-	}
+	c.OIDCAudiences = audiences(getenv("LUX_OIDC_AUDIENCE"), &problems)
 	c.OIDCInsecureIssuers = c.insecureIssuers(getenv("LUX_OIDC_INSECURE_ISSUERS"), &problems)
 	for _, iss := range c.OIDCIssuers {
 		if u, _ := endpoint(iss); !isHTTPS(u) && !isLoopback(u) && !slices.Contains(c.OIDCInsecureIssuers, iss) {
@@ -97,6 +94,33 @@ func (c *Config) issuers(raw string, problems *[]string) []string {
 			continue
 		}
 		out = append(out, iss)
+	}
+	return out
+}
+
+// audiences reads LUX_OIDC_AUDIENCE: a comma separated list of distinct
+// names, each trimmed, the first the primary. Unset is DefaultOIDCAudience
+// alone, so an installation on its own hostname is unchanged. An empty
+// entry is a problem, because `a,,b` and `lux,` are typing mistakes and an
+// empty audience would verify nothing or everything depending on where it
+// landed; a name listed twice is a problem, because it permits nothing new
+// and hides a typo, the rule LUX_OIDC_ISSUERS runs.
+func audiences(raw string, problems *[]string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{DefaultOIDCAudience}
+	}
+	var out []string
+	for s := range strings.SplitSeq(raw, ",") {
+		s = strings.TrimSpace(s)
+		switch {
+		case s == "":
+			*problems = append(*problems, "LUX_OIDC_AUDIENCE is "+strconv.Quote(raw)+", and one of its entries is empty")
+			return out
+		case slices.Contains(out, s):
+			*problems = append(*problems, "LUX_OIDC_AUDIENCE lists "+s+" twice")
+		default:
+			out = append(out, s)
+		}
 	}
 	return out
 }

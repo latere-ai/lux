@@ -353,11 +353,11 @@ func (r *run) issuers(ctx context.Context) Line {
 	if len(r.cfg.OIDCIssuers) == 0 {
 		return Line{OK, name, "none; the file mode has no control plane bearer to verify"}
 	}
-	v, err := auth.NewVerifier(ctx, auth.VerifierOptions{Issuers: r.cfg.OIDCIssuers, Audience: r.cfg.OIDCAudience, HTTP: r.o.HTTP})
+	v, err := auth.NewVerifier(ctx, auth.VerifierOptions{Issuers: r.cfg.OIDCIssuers, Audiences: r.cfg.OIDCAudiences, HTTP: r.o.HTTP})
 	if err != nil {
 		return Line{Fail, name, strings.TrimPrefix(err.Error(), "LUX_OIDC_ISSUERS: ")}
 	}
-	return Line{OK, name, fmt.Sprintf("%d issuer(s) answer discovery and a key set with an RS256 or ES256 key: %s", len(v.Issuers()), strings.Join(v.Issuers(), ", "))}
+	return Line{OK, name, fmt.Sprintf("%d issuer(s) answer discovery and a key set with an RS256 or ES256 key: %s; audience %s", len(v.Issuers()), strings.Join(v.Issuers(), ", "), strings.Join(v.Audiences(), ", "))}
 }
 
 // authorizerClient builds the client serve would, over the check's own

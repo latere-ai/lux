@@ -34,7 +34,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | Variable | Meaning | Default | When required |
 |---|---|---|---|
 | `LUX_OIDC_ISSUERS` | Comma-separated issuer URLs whose tokens the control plane accepts. | `none` | Yes, unless file mode |
-| `LUX_OIDC_AUDIENCE` | The one audience a caller token must contain. | `lux` | No |
+| `LUX_OIDC_AUDIENCE` | Comma-separated names a caller token may be addressed to; a token is accepted when its `aud` contains any of them, and the first is the primary `/.well-known/lux` reports. | `lux` | No |
 | `LUX_OIDC_INSECURE_ISSUERS` | Issuers from the list allowed to use `http://` off loopback; the test stubs set it, never production. | `unset` | No |
 
 ## Authorizer

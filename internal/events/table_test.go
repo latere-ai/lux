@@ -149,7 +149,7 @@ func newPlane(t *testing.T) *plane {
 	iss := issuertest.New(t, issuertest.WithDefaultAudience("lux"))
 	p.bearer = iss.Mint(issuertest.Claims{Sub: "alice"})
 	p.subject = iss.URL() + "|alice"
-	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{iss.URL()}, Audience: "lux", AdminSubjects: []string{p.subject}, Now: p.clock})
+	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{iss.URL()}, Audiences: []string{"lux"}, AdminSubjects: []string{p.subject}, Now: p.clock})
 	if err != nil {
 		t.Fatal(err)
 	}

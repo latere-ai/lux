@@ -120,8 +120,8 @@ func TestStartupRefusals(t *testing.T) {
 		o    Options
 		want string
 	}{
-		{"an unreachable issuer", Options{Issuers: []string{"http://127.0.0.1:1"}, Audience: audience}, "LUX_OIDC_ISSUERS: issuer http://127.0.0.1:1"},
-		{"a URL without its token", Options{Issuers: []string{iss.URL()}, Audience: audience, AuthorizerURL: "http://127.0.0.1:1"}, "LUX_AUTHORIZER_TOKEN is unset"},
+		{"an unreachable issuer", Options{Issuers: []string{"http://127.0.0.1:1"}, Audiences: []string{audience}}, "LUX_OIDC_ISSUERS: issuer http://127.0.0.1:1"},
+		{"a URL without its token", Options{Issuers: []string{iss.URL()}, Audiences: []string{audience}, AuthorizerURL: "http://127.0.0.1:1"}, "LUX_AUTHORIZER_TOKEN is unset"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(t.Context(), tc.o)
@@ -144,7 +144,7 @@ func TestAdminSubjectsIgnoredUnderAnAuthorizer(t *testing.T) {
 	res := authorizer.ProviderCreate(fixtureProvider())
 
 	withAuthorizer, err := New(t.Context(), Options{
-		Issuers: []string{iss.URL()}, Audience: audience, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(),
+		Issuers: []string{iss.URL()}, Audiences: []string{audience}, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(),
 		AdminSubjects: []string{adminSubject}, HTTP: &http.Client{},
 	})
 	if err != nil {
@@ -162,7 +162,7 @@ func TestAdminSubjectsIgnoredUnderAnAuthorizer(t *testing.T) {
 	}
 
 	withoutAuthorizer, err := New(t.Context(), Options{
-		Issuers: []string{iss.URL()}, Audience: audience, AdminSubjects: []string{adminSubject}, HTTP: &http.Client{},
+		Issuers: []string{iss.URL()}, Audiences: []string{audience}, AdminSubjects: []string{adminSubject}, HTTP: &http.Client{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestAuthorizerTokenStaysOnItsEndpoint(t *testing.T) {
 	s := stub.New(t, stub.WithToken("authorizer-bearer-0123"))
 	rec := &recorder{}
 	a, err := New(t.Context(), Options{
-		Issuers: []string{iss.URL()}, Audience: audience, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(),
+		Issuers: []string{iss.URL()}, Audiences: []string{audience}, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(),
 		HTTP: &http.Client{Transport: rec},
 	})
 	if err != nil {
@@ -244,7 +244,7 @@ func TestAuthorizerObservesEveryCall(t *testing.T) {
 	var mu sync.Mutex
 	var results []string
 	a, err := New(t.Context(), Options{
-		Issuers: []string{iss.URL()}, Audience: audience, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(), HTTP: &http.Client{},
+		Issuers: []string{iss.URL()}, Audiences: []string{audience}, AuthorizerURL: s.URL(), AuthorizerToken: s.Token(), HTTP: &http.Client{},
 		Observe: func(result string, _ float64) { mu.Lock(); results = append(results, result); mu.Unlock() },
 	})
 	if err != nil {

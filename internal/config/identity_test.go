@@ -4,6 +4,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -49,8 +50,6 @@ func TestIdentityRules(t *testing.T) {
 			`LUX_OIDC_ISSUERS entry "ftp://login.example.com" is not an http:// or https:// URL`},
 		{"an issuer listed twice", map[string]string{"LUX_OIDC_ISSUERS": issuer + "," + issuer + "/"},
 			"LUX_OIDC_ISSUERS lists " + issuer + " twice"},
-		{"an audience list", map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_OIDC_AUDIENCE": "lux,other"},
-			`LUX_OIDC_AUDIENCE is "lux,other", a list, and one audience is accepted`},
 		{"an authorizer with its token", map[string]string{
 			"LUX_OIDC_ISSUERS": issuer, "LUX_AUTHORIZER_URL": "https://authz.example.com", "LUX_AUTHORIZER_TOKEN": "t"}, ""},
 		{"an authorizer without its token", map[string]string{
@@ -135,5 +134,44 @@ func TestAuthorizeListItemsFlag(t *testing.T) {
 		if c.AuthorizeListItems != (value == "1") || (len(problems) > 0) != (value == "true" || value == "0") {
 			t.Fatalf("%q: %v %v", value, c.AuthorizeListItems, problems)
 		}
+	}
+}
+
+// TestAudienceListIsParsed is spec 034's audience list: a comma list of
+// distinct names with the first the primary, an empty entry and a
+// repeated entry each a problem naming the variable, and an unset value
+// the default alone.
+func TestAudienceListIsParsed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want []string // the audiences, or nil when the value is a problem
+		fail string   // a fragment of the problem
+	}{
+		{"unset", "", []string{DefaultOIDCAudience}, ""},
+		{"blank", "  ", []string{DefaultOIDCAudience}, ""},
+		{"one name", "lux", []string{"lux"}, ""},
+		{"two names, the first the primary", "lux,api.example.com", []string{"lux", "api.example.com"}, ""},
+		{"two names spaced", " api.example.com , lux ", []string{"api.example.com", "lux"}, ""},
+		{"a trailing comma", "lux,", nil, `LUX_OIDC_AUDIENCE is "lux,", and one of its entries is empty`},
+		{"a leading comma", ",lux", nil, `LUX_OIDC_AUDIENCE is ",lux", and one of its entries is empty`},
+		{"two commas", "lux,,api.example.com", nil, "one of its entries is empty"},
+		{"a repeated name", "lux,lux", nil, "LUX_OIDC_AUDIENCE lists lux twice"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_OIDC_AUDIENCE": tc.raw})))
+			if tc.fail != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.fail) {
+					t.Fatalf("Load(%q) = %v, want a problem with %q", tc.raw, err, tc.fail)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(%q): %v", tc.raw, err)
+			}
+			if !slices.Equal(c.OIDCAudiences, tc.want) {
+				t.Fatalf("Load(%q).OIDCAudiences = %q, want %q", tc.raw, c.OIDCAudiences, tc.want)
+			}
+		})
 	}
 }

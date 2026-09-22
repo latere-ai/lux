@@ -101,7 +101,7 @@ func TestTunnelRoutesAreNotFoundWhenOff(t *testing.T) {
 func TestTunnelOwnerPolicyException(t *testing.T) {
 	f := &fakeTunnel{}
 	h := newHarness(t, withTunnel(f))
-	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{h.iss.URL()}, Audience: audience, AdminSubjects: []string{h.subject()}, HTTP: &http.Client{}})
+	a, err := auth.New(t.Context(), auth.Options{Issuers: []string{h.iss.URL()}, Audiences: []string{audience}, AdminSubjects: []string{h.subject()}, HTTP: &http.Client{}})
 	if err != nil {
 		t.Fatal(err)
 	}

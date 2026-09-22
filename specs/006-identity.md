@@ -89,12 +89,18 @@ refreshes it on an unknown `kid` at most once per fifteen seconds, and
 serves the stale set while a refresh fails, so an issuer that goes away
 later degrades to refusing new keys rather than every request. A
 request's bearer is accepted when it is a JWS signed by a listed
-issuer's key, `iss` matches, `aud` contains `LUX_OIDC_AUDIENCE`
-(default `lux`), `exp` is present and in the future, and `nbf` if
-present is past. `LUX_OIDC_AUDIENCE` is one value: the audience is the
-gateway's own name, and no second audience is needed because a
-platform's own developer credential never reaches `/v1` as a token; it
-reaches the doors as a Key ([[020-building-a-plane]]). Every claim of
+issuer's key, `iss` matches, `aud` contains any name of
+`LUX_OIDC_AUDIENCE` (default `lux`), `exp` is present and in the future,
+and `nbf` if present is past. `LUX_OIDC_AUDIENCE` is a comma list whose
+first name is the primary, the one `/.well-known/lux` reports
+([[034-serving-behind-a-shared-origin]]). Amended 2026-09-23: this
+paragraph argued that one audience suffices because a platform's own
+developer credential never reaches `/v1` as a token. An installation
+behind a shared origin decided otherwise: a script holding a credential
+calls the origin directly and the core asks the authorizer, the same
+path an interactive caller's token takes, so the boundary between two
+services behind one origin is the authorizer's answer and not the
+audience. Every claim of
 the verified token, read from the payload with `jwt.DecodePayload` after
 `Validate` accepted it, is handed to the authorizer verbatim in
 `claims`, and none is interpreted by the gateway: an issuer's
@@ -434,7 +440,7 @@ holds.
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `LUX_OIDC_ISSUERS` | yes, unless `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error |
-| `LUX_OIDC_AUDIENCE` | no | `lux` | the one audience a caller token must contain; a value with a comma is a configuration error, because a list is not accepted |
+| `LUX_OIDC_AUDIENCE` | no | `lux` | a comma list of distinct names a caller token may be addressed to, the first the primary; an empty entry and a repeated name are configuration errors (amended 2026-09-23, [[034-serving-behind-a-shared-origin]]) |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
 | `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([026-object-scoped-discovery](.archive/026-object-scoped-discovery.md)) |
