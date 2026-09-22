@@ -284,6 +284,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Authorizer:            identity.Authorizer(&serve.ObjectOwners{Objects: st.Objects()}),
 		AuthorizeListItems:    cfg.AuthorizeListItems,
 		PublicURL:             cfg.PublicURL,
+		BasePath:              cfg.BasePath,
 		Version:               version.Version,
 		RequestsPerMinute:     cfg.RequestsPerMinute,
 		TrustedProxies:        cfg.TrustedProxies,
@@ -368,9 +369,12 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s listening public=%s internal=%s\n",
 		version.Version, publicLn.Addr(), internalLn.Addr())
+	if cfg.BasePath != "" {
+		_, _ = fmt.Fprintf(stdout, "luxd: the public listener answers under %s\n", cfg.BasePath)
+	}
 
 	servers := []*http.Server{
-		{Handler: public, ReadHeaderTimeout: 10 * time.Second},
+		{Handler: mountAt(cfg.BasePath, public), ReadHeaderTimeout: 10 * time.Second},
 		{Handler: internal, ReadHeaderTimeout: 10 * time.Second},
 	}
 	if tun != nil {

@@ -155,3 +155,47 @@ func TestFormatBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestBasePathRules is spec 034's LUX_BASE_PATH at load: empty is the
+// root; a set value begins with a slash, ends without one, is clean,
+// carries no query, fragment, or escape, and equals the path of
+// LUX_PUBLIC_URL, each problem naming the variables.
+func TestBasePathRules(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		base   string
+		public string
+		want   string // the loaded base path
+		fail   string // a fragment of the problem, or "" for a configuration that loads
+	}{
+		{"unset", "", "https://lux.example.com", "", ""},
+		{"unset beside a public URL with a path", "", "https://api.example.com/v1/models", "", ""},
+		{"a prefix equal to the public path", "/v1/models", "https://api.example.com/v1/models", "/v1/models", ""},
+		{"a prefix equal to a public path with a trailing slash", "/v1/models", "https://api.example.com/v1/models/", "/v1/models", ""},
+		{"no leading slash", "v1/models", "https://api.example.com/v1/models", "", `LUX_BASE_PATH is "v1/models", not a clean path`},
+		{"a trailing slash", "/v1/models/", "https://api.example.com/v1/models", "", `LUX_BASE_PATH is "/v1/models/", not a clean path`},
+		{"the root spelled as a slash", "/", "https://api.example.com", "", `LUX_BASE_PATH is "/", not a clean path`},
+		{"an empty segment", "/v1//models", "https://api.example.com/v1//models", "", "not a clean path"},
+		{"a dot segment", "/v1/../models", "https://api.example.com/models", "", "not a clean path"},
+		{"a query", "/v1/models?x=1", "https://api.example.com/v1/models", "", "no query, fragment, or escape sequence"},
+		{"an escape", "/v1/mod%65ls", "https://api.example.com/v1/models", "", "no query, fragment, or escape sequence"},
+		{"a public URL without the prefix", "/v1/models", "https://api.example.com", "", `LUX_BASE_PATH is /v1/models and the path of LUX_PUBLIC_URL is ""`},
+		{"a public URL with another prefix", "/v1/models", "https://api.example.com/models", "", `the path of LUX_PUBLIC_URL is "/models"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_PUBLIC_URL": tc.public, "LUX_BASE_PATH": tc.base})))
+			if tc.fail != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.fail) {
+					t.Fatalf("Load() = %v, want a problem with %q", err, tc.fail)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if c.BasePath != tc.want {
+				t.Fatalf("BasePath = %q, want %q", c.BasePath, tc.want)
+			}
+		})
+	}
+}

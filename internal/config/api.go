@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/netip"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ const (
 func (c *Config) loadAPI(getenv Getenv) []string {
 	var problems []string
 	c.PublicURL, problems = publicURL(getenv("LUX_PUBLIC_URL"), problems)
+	c.BasePath, problems = basePath(getenv("LUX_BASE_PATH"), problems)
 	c.RequestsPerMinute, problems = countOr("LUX_REQUESTS_PER_MINUTE", getenv("LUX_REQUESTS_PER_MINUTE"), DefaultRequestsPerMinute, problems)
 	c.UnauthenticatedRequestsPerMinute, problems = countOr("LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE", getenv("LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE"), DefaultUnauthenticatedRequestsPerMinute, problems)
 	c.TrustedProxies, problems = prefixes("LUX_TRUSTED_PROXIES", getenv("LUX_TRUSTED_PROXIES"), problems)
@@ -69,6 +71,25 @@ func publicURL(raw string, problems []string) (*url.URL, []string) {
 	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawPath = ""
 	return u, problems
+}
+
+// basePath reads LUX_BASE_PATH: empty is the root; a set value is one
+// spelling of a path prefix, so the routing rule in front, the mount, and
+// the served document carry the same literal. It begins with a slash,
+// carries no trailing slash, no query, fragment, or escape sequence, and
+// is clean, since a request path is cleaned before it is routed and a
+// prefix with an empty or dot segment would match nothing.
+func basePath(raw string, problems []string) (string, []string) {
+	raw = strings.TrimSpace(raw)
+	switch {
+	case raw == "":
+		return "", problems
+	case strings.ContainsAny(raw, "?#%"):
+		return "", append(problems, "LUX_BASE_PATH is "+strconv.Quote(raw)+", a path prefix with no query, fragment, or escape sequence")
+	case !strings.HasPrefix(raw, "/") || strings.HasSuffix(raw, "/") || path.Clean(raw) != raw:
+		return "", append(problems, "LUX_BASE_PATH is "+strconv.Quote(raw)+", not a clean path that begins with a slash and ends without one, such as /v1/models")
+	}
+	return raw, problems
 }
 
 // countOr reads a whole number of zero or more, or def when blank.

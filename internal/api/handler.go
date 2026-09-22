@@ -63,6 +63,11 @@ type Options struct {
 	// PublicURL is LUX_PUBLIC_URL, the base of every URL in a response
 	// and Resolve's loop check. Required.
 	PublicURL *url.URL
+	// BasePath is LUX_BASE_PATH, the prefix the listener in front of this
+	// handler trims (spec 034); set, the served OpenAPI document carries
+	// it on every path and names PublicURL as its server. The handler's
+	// own routes stay rooted.
+	BasePath string
 	// Version is the build's, for /.well-known/lux.
 	Version string
 	// RequestsPerMinute is LUX_REQUESTS_PER_MINUTE, which an authorizer's
@@ -156,7 +161,7 @@ func New(o Options) *Handler {
 	if o.Metrics != nil {
 		h.refusals = o.Metrics.Counter(MetricRefusals, "Control plane refusals by code.")
 	}
-	h.openapi = openAPIJSON()
+	h.openapi = openAPIJSONAt(o.BasePath, o.PublicURL)
 	h.routes()
 	return h
 }

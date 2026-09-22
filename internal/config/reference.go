@@ -66,6 +66,12 @@ var referenceGroups = []referenceGroup{
 			envValue:    "https://lux.example.com",
 			envRequired: true,
 		},
+		{
+			name:     "LUX_BASE_PATH",
+			meaning:  "Prefix the whole public listener answers under, such as `/v1/models` behind a shared origin; set, it equals the path of `LUX_PUBLIC_URL`.",
+			def:      "unset",
+			required: "No",
+		},
 	}},
 	{title: "Identity", vars: []referenceVar{
 		{

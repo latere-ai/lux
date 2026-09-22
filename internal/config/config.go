@@ -124,6 +124,11 @@ type Config struct {
 	// public listener at, without a trailing slash; every URL in a
 	// response and the loop check of Resolve are built from it.
 	PublicURL *url.URL
+	// BasePath is LUX_BASE_PATH: the prefix the whole public listener
+	// answers under, "" for the root. Set, it equals the path of
+	// PublicURL, so the routing rule in front, the mount, and every
+	// advertised URL carry one literal.
+	BasePath string
 	// RequestsPerMinute is the control plane rate per subject per
 	// replica, which an authorizer's limits.requests_per_minute overrides
 	// for that subject; 0 is no limit.
@@ -244,6 +249,12 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadAPI(getenv)...)
 	problems = append(problems, c.loadEvents(getenv)...)
 	problems = append(problems, c.loadTunnel(getenv)...)
+	// One fact, two spellings: an installation that serves under a prefix
+	// and advertises an address without it would publish links that 404.
+	// The rule reads both loaders' results, so it runs after both.
+	if c.BasePath != "" && c.PublicURL != nil && c.PublicURL.Path != c.BasePath {
+		problems = append(problems, "LUX_BASE_PATH is "+c.BasePath+" and the path of LUX_PUBLIC_URL is "+strconv.Quote(c.PublicURL.Path)+"; the listener's prefix and the advertised address are one prefix")
+	}
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return Config{}, errors.New("configuration: " + strings.Join(problems, "; "))

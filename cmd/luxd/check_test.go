@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,6 +41,18 @@ func TestCheckCommand(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "; audience lux, api.example.com\n") {
 		t.Errorf("the issuers line does not report the whole audience list:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "the public listener answers under the root") {
+		t.Errorf("the public url line does not say where the listener is mounted:\n%s", out.String())
+	}
+	based := maps.Clone(vars)
+	based["LUX_BASE_PATH"], based["LUX_PUBLIC_URL"] = "/v1/models", "https://api.example.com/v1/models"
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(based), &out, &errOut); code != 0 {
+		t.Fatalf("exit %d under a base path:\n%s%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "https://api.example.com/v1/models is absolute, the public listener answers under base path /v1/models") {
+		t.Errorf("the public url line does not report the base path:\n%s", out.String())
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 	if len(lines) != len(check.Names) {

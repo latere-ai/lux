@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -135,6 +136,39 @@ func openAPIJSON() []byte {
 		panic("api: the OpenAPI document does not encode: " + err.Error())
 	}
 	return append(data, '\n')
+}
+
+// openAPIJSONAt renders the document GET /v1/openapi.json serves behind
+// a base path: every path carries the base and servers names the public
+// URL, so servers[0].url plus a path is the address a client reaches the
+// route at, and a document fetched through a shared origin describes that
+// origin. With no base it is openAPIJSON, byte for byte the committed
+// document, which names no server.
+func openAPIJSONAt(base string, public *url.URL) []byte {
+	if base == "" {
+		return openAPIJSON()
+	}
+	doc := openAPIDocument()
+	out := make(ordered, 0, len(doc)+1)
+	for _, m := range doc {
+		if m.key == "paths" {
+			paths, _ := m.value.(ordered)
+			prefixed := make(ordered, 0, len(paths))
+			for _, p := range paths {
+				prefixed = append(prefixed, member{base + p.key, p.value})
+			}
+			m.value = prefixed
+		}
+		out = append(out, m)
+		if m.key == "info" {
+			out = append(out, member{"servers", []any{obj("url", public.String())}})
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		panic("api: the OpenAPI document does not encode: " + err.Error())
+	}
+	return b
 }
 
 // openAPI is GET /v1/openapi.json; no bearer, because a document that

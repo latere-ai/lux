@@ -28,6 +28,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | `LUX_PUBLIC_ADDR` | Address the public listener binds: the dialect doors, the control plane under `/v1`, and the public probes. | `:8080` | No |
 | `LUX_INTERNAL_ADDR` | Address the internal listener binds for the cluster's probes; must differ from `LUX_PUBLIC_ADDR` unless both ask for port 0. | `:8081` | No |
 | `LUX_PUBLIC_URL` | Absolute URL callers reach the public listener at; the base of every URL in a response and the loop check of resolve. | `none` | Yes |
+| `LUX_BASE_PATH` | Prefix the whole public listener answers under, such as `/v1/models` behind a shared origin; set, it equals the path of `LUX_PUBLIC_URL`. | `unset` | No |
 
 ## Identity
 

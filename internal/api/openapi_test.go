@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -171,4 +172,47 @@ func TestSchemaOfEveryShape(t *testing.T) {
 		}
 	}()
 	s.of(reflect.TypeFor[chan int]())
+}
+
+// TestServedDocumentCarriesTheBasePath is spec 034's served document:
+// under a base path every path of GET /v1/openapi.json carries the base,
+// the document names the public URL as its one server, and nothing else
+// differs from the committed document.
+func TestServedDocumentCarriesTheBasePath(t *testing.T) {
+	const base = "/v1/models"
+	public, err := url.Parse("https://api.example.com" + base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, func(o *Options) { o.BasePath, o.PublicURL = base, public })
+	rec := h.request(http.MethodGet, "/v1/openapi.json", "", "Authorization", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	var served, committed map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &served); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(openAPIJSON(), &committed); err != nil {
+		t.Fatal(err)
+	}
+	if want := []any{map[string]any{"url": public.String()}}; !reflect.DeepEqual(served["servers"], want) {
+		t.Errorf("servers %v, want %v", served["servers"], want)
+	}
+	paths, _ := served["paths"].(map[string]any)
+	rooted, _ := committed["paths"].(map[string]any)
+	if len(paths) != len(rooted) || len(paths) == 0 {
+		t.Fatalf("%d paths served, %d committed", len(paths), len(rooted))
+	}
+	for p, item := range rooted {
+		if !reflect.DeepEqual(paths[base+p], item) {
+			t.Errorf("the served document lacks %s as the committed %s", base+p, p)
+		}
+	}
+	delete(served, "servers")
+	delete(served, "paths")
+	delete(committed, "paths")
+	if !reflect.DeepEqual(served, committed) {
+		t.Error("the served document differs from the committed one outside paths and servers")
+	}
 }

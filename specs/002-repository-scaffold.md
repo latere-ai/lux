@@ -151,6 +151,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 |---|---|---|---|
 | `LUX_PUBLIC_ADDR`, `LUX_INTERNAL_ADDR` | no | `:8080`, `:8081` | listen addresses; a test binds `127.0.0.1:0`; the two must differ unless both ask for port 0 |
 | `LUX_PUBLIC_URL` | yes, from 011 | none | the absolute URL callers reach the public listener at; the base of every URL in a response |
+| `LUX_BASE_PATH` | 034 | unset | the prefix the whole public listener answers under; set, it equals the path of `LUX_PUBLIC_URL` (added 2026-09-23) |
 | `LUX_MANIFEST_DIR` | 010 | unset | a directory of manifests read at start: file mode, where desired state comes from disk and the kinds it declares are read-only through the API |
 | the variables a file-mode manifest names in `credential.valueFrom.env` or `Key.spec.valueFrom.env` | 003, 010 | none | the operator's own names, outside the `LUX_` namespace, read once at start in file mode and refused in server mode |
 | `LUX_DB_URL`, `LUX_DB_POOL_URL`, `LUX_DB_MAX_CONNS` | 010, 024 | unset, unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory, and a set URL selects the Postgres store, whose migrations `luxd serve` applies directly at start; the optional pool URL carries serving queries ([[010-state]]) |

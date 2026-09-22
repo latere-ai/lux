@@ -343,7 +343,11 @@ func (r *run) publicURL(context.Context) Line {
 	if len(loops) > 0 {
 		return Line{Fail, name, fmt.Sprintf("%s is the host of the baseURL of Provider %s too, so a request there would loop back into the gateway", u.Hostname(), strings.Join(loops, ", "))}
 	}
-	return Line{OK, name, fmt.Sprintf("%s is absolute and none of %d Provider(s) names its host", u, len(r.providers))}
+	mount := "the root"
+	if r.cfg.BasePath != "" {
+		mount = "base path " + r.cfg.BasePath
+	}
+	return Line{OK, name, fmt.Sprintf("%s is absolute, the public listener answers under %s, and none of %d Provider(s) names its host", u, mount, len(r.providers))}
 }
 
 // issuers: every LUX_OIDC_ISSUERS entry answers discovery and a key set
