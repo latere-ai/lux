@@ -28,6 +28,12 @@ const (
 	// ReasonCheck is luxd check verifying the sink; the one reason that
 	// is never journalled.
 	ReasonCheck = "check"
+	// ReasonBootstrap is the start-up apply of LUX_BOOTSTRAP_DIR (spec
+	// 035) creating or updating an object, with no subject and no
+	// request id. It raises the <kind>.created and <kind>.updated rows
+	// with the data the API writes for them; Table names request as
+	// those rows' reason, the source that raises them while serving.
+	ReasonBootstrap = "bootstrap"
 )
 
 // The event types, one constant per row of the table.

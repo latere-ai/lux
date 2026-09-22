@@ -9,7 +9,7 @@ depends_on:
 affects: [internal/events/, internal/reqlog/, internal/config/, test/stubs/, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -76,8 +76,10 @@ the server raised itself; `reason` says which: `request` for a
 mutation through [[011-api]], `discovery` for the job of
 [[005-providers]], `probe` for a health transition, `limit` for a
 window reaching its amount, `check` for `luxd check`, which sends it
-through `events.Sink.Ping`. `request_id` is set for `reason: request`
-and empty otherwise. `object` is the kind,
+through `events.Sink.Ping`, `bootstrap` for the start-up apply of
+`LUX_BOOTSTRAP_DIR` ([[035-running-the-core-on-your-own]]), which
+raises the `<kind>.created` and `.updated` rows below with their data.
+`request_id` is set for `reason: request` and empty otherwise. `object` is the kind,
 the id, the name, the owner, and the labels, and nothing else, so a
 sink can key on it without parsing `data`.
 
@@ -444,3 +446,11 @@ no exporter configured, `lux_events_pending` and
 `events.RegisterIdle` and `reqlog.RegisterIdle`, so the process's
 registry always carries the metric table whether or not delivery and the
 archive are on.
+
+Amended when [[035-running-the-core-on-your-own]] landed: the reason
+`bootstrap`, `events.ReasonBootstrap`, marks the rows the start-up apply
+of `LUX_BOOTSTRAP_DIR` writes. They are `<kind>.created` and
+`<kind>.updated` with the data of the API's rows, an empty subject and
+an empty `request_id`, because no caller made the change. `events.Table`
+keeps `request` as those rows' reason, the source that raises them
+while the server runs.
