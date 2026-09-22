@@ -639,3 +639,14 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // sprintf is fmt.Sprintf under a shorter name.
 func sprintf(format string, args ...any) string { return fmt.Sprintf(format, args...) }
+
+// basePath is the prefix the server answers under, read from the API
+// base the discovery document gave: its path less the trailing /v1, ""
+// for a server at the root.
+func (c *client) basePath() string {
+	u, err := url.Parse(c.api)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(u.Path, "/v1")
+}

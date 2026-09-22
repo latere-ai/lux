@@ -250,7 +250,7 @@ func serverEnv(t *testing.T, s *stubs, extra map[string]string) map[string]strin
 	env := map[string]string{
 		"LUX_PUBLIC_ADDR":            "127.0.0.1:" + strconv.Itoa(port),
 		"LUX_INTERNAL_ADDR":          "127.0.0.1:0",
-		"LUX_PUBLIC_URL":             "http://localhost:" + strconv.Itoa(port),
+		"LUX_PUBLIC_URL":             "http://localhost:" + strconv.Itoa(port) + extra["LUX_BASE_PATH"],
 		"LUX_SECRETS_KEK":            kek,
 		"LUX_OIDC_ISSUERS":           s.urls["issuer"],
 		"LUX_OIDC_INSECURE_ISSUERS":  s.urls["issuer"],
@@ -368,6 +368,10 @@ func newStack(t *testing.T, extra map[string]string, stubArgs ...string) *stack 
 	t.Helper()
 	s := startStubs(t, stubArgs...)
 	gw := startLuxd(t, serverEnv(t, s, extra))
+	// Under a base path every route of the public listener moves (spec
+	// 034), so the stack's public address carries the prefix and every
+	// helper built on it reaches the prefixed installation unchanged.
+	gw.public += extra["LUX_BASE_PATH"]
 	return &stack{stubs: s, gw: gw, token: mint(t, s, "dev")}
 }
 

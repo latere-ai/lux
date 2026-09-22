@@ -6,8 +6,11 @@
 package e2e
 
 import (
+	"net/http"
 	"strings"
 	"testing"
+
+	"latere.ai/x/pkg/authkit/issuertest"
 
 	"latere.ai/x/lux/test/conformance"
 )
@@ -19,6 +22,26 @@ import (
 func TestE2EConformance(t *testing.T) {
 	s := newStack(t, nil)
 	key := s.fixtures(t)
+	runConformance(t, s, key)
+}
+
+// TestE2EConformanceUnderBasePath is spec 034's criterion 8: the same case
+// files against an installation serving under a base path with an audience
+// list, driven through the prefixed address the stack advertises. A token
+// addressed to the second name of the list is accepted beside the
+// primary's, and nothing answers at the root.
+func TestE2EConformanceUnderBasePath(t *testing.T) {
+	const base = "/v1/models"
+	s := newStack(t, map[string]string{"LUX_BASE_PATH": base, "LUX_OIDC_AUDIENCE": "lux,api.example.com"})
+	key := s.fixtures(t)
+	other := mintClaims(t, s, issuertest.Claims{Sub: "dev", Aud: issuertest.StringList{"api.example.com"}})
+	if resp := do(t, http.MethodGet, s.gw.public+"/v1/self", bearer(other), ""); resp.status != http.StatusOK {
+		t.Fatalf("a token for the second audience under the base: %d %s", resp.status, resp.body)
+	}
+	root := strings.TrimSuffix(s.gw.public, base)
+	if resp := do(t, http.MethodGet, root+"/.well-known/lux", nil, ""); resp.status != http.StatusNotFound {
+		t.Fatalf("the root answered %d: %s", resp.status, resp.body)
+	}
 	runConformance(t, s, key)
 }
 

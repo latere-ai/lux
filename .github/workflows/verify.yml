@@ -93,6 +93,8 @@ jobs:
           go-version-file: go.mod
       - name: after
         run: go test -tags=integration -run '^TestE2EConformance$' -v ./test/e2e/
+      - name: after, under a base path
+        run: go test -tags=integration -run '^TestE2EConformanceUnderBasePath$' -v ./test/e2e/
       - name: before
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}

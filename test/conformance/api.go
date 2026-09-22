@@ -581,14 +581,17 @@ func case011SecretsNeverInResponses(t testing.TB, c *client) {
 // case011OpenAPIValidatesEveryResponse: GET /v1/openapi.json is the
 // document every /v1 answer of the run is held to, which the client does
 // on every request; the case asserts the document names every route of
-// spec 011's table and that the holding ran.
+// spec 011's table and that the holding ran. Behind a base path (spec
+// 034) the served document names each route under the base, and the
+// route names are read relative to the base the discovery document gave.
 func case011OpenAPIValidatesEveryResponse(t testing.TB, c *client) {
 	if c.doc == nil {
 		c.skip(t, "the server is in file mode, where /v1 is on the internal listener, and "+EnvInternalURL+" is unset")
 	}
+	base := c.basePath()
 	for _, p := range []string{"/v1/providers", "/v1/providers/{name}", "/v1/models", "/v1/models/{name}", "/v1/keys", "/v1/keys/{name}", "/v1/keys/{name}/rotate", "/v1/budgets", "/v1/budgets/{name}", "/v1/usage", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
-		if c.doc.paths[p] == nil {
-			t.Errorf("the document names no %s", p)
+		if c.doc.paths[base+p] == nil {
+			t.Errorf("the document names no %s", base+p)
 		}
 	}
 	for _, s := range []string{"Provider", "Model", "Key", "Budget", "Error"} {
@@ -603,7 +606,7 @@ func case011OpenAPIValidatesEveryResponse(t testing.TB, c *client) {
 		t.Error("no /v1 answer was held to the document")
 	}
 	known := c.request(t, http.MethodGet, c.cfg.URL+"/.well-known/lux", nil)
-	for _, p := range c.doc.validate(http.MethodGet, "/.well-known/lux", known.Status, known.Header.Get("Content-Type"), known.Body) {
+	for _, p := range c.doc.validate(http.MethodGet, base+"/.well-known/lux", known.Status, known.Header.Get("Content-Type"), known.Body) {
 		t.Errorf("/.well-known/lux: %s", p)
 	}
 }
