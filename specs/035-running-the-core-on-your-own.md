@@ -401,8 +401,9 @@ Dated 2026-09-22, landing with the implementation:
 
 ## Not in this spec
 
-- The audience list, the base path and the production overlay, which are
-  [[034-serving-behind-a-shared-origin]].
+- The audience list and the base path, which are
+  [[034-serving-behind-a-shared-origin]], and any installation's own
+  overlay, which lives with that installation.
 - Any change to the file mode, which keeps its read-only control plane
   and its fixed owner.
 - A price refresh of any kind. The catalog is a dated snapshot and the
@@ -425,7 +426,7 @@ Dated 2026-09-22, landing with the implementation:
 | 6 | `luxd token` prints one token the running server accepts; its subject, audience and TTL follow the flags; a TTL above the cap, a missing subject and an unset key are usage errors with exit code 2 | `TestTokenCommand` in `cmd/luxd`, table driven, with `TestTokenCommandRoundTrip` minting and then calling `/v1/self` |
 | 7 | `luxd token` writes nothing: no store row, no journal entry, no event | `TestTokenCommandIsReadOnly` in `cmd/luxd`, in the shape of `TestCheckIsReadOnly` |
 | 8 | A rotation verifies: a token signed by the previous key still verifies while it is listed in `LUX_LOCAL_ISSUER_KEYS`, and stops when it is dropped | `TestLocalIssuerRotation` in `internal/auth` |
-| 9 | The production overlay names no local issuer key in any container, as a value or a `secretKeyRef` | `TestTheProdOverlayPublishesTheDoors` in `cmd/luxd`, the assertion this spec adds |
+| 9 | No overlay this tree ships (`deploy/overlays/kind`, `deploy/overlays/generic`) sets a local issuer key in any container, as a value or a `secretKeyRef`; an installation with its own issuer holds the same rule in its own overlay ([[034-serving-behind-a-shared-origin]], "What an installation adds") | `TestShippedOverlaysSetNoLocalIssuerKey` in `cmd/luxd`, rendering each overlay |
 | 10 | `LUX_BOOTSTRAP_DIR` applies every manifest of a directory at start, resolving a Provider credential and a Key value from the environment, in kind order, and the control plane is writable afterwards | `TestBootstrapAppliesTheDirectory` in `cmd/luxd` |
 | 11 | A second start over the same directory creates nothing and updates nothing; an edited Model is updated and nothing else is; an existing Key is left as it is | `TestBootstrapIsIdempotent` in `internal/bootstrap` |
 | 12 | A document that fails to decode, to resolve, or whose credential variable is unset stops start-up with a message naming the file, the object and the code | `TestBootstrapRefusalNamesTheFile` in `cmd/luxd` |
