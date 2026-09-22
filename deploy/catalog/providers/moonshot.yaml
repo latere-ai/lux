@@ -1,0 +1,14 @@
+# This is the international host; an account on the China platform uses
+# https://api.moonshot.cn/v1.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: moonshot
+spec:
+  dialect: openai
+  baseURL: https://api.moonshot.ai/v1
+  credential:
+    valueFrom:
+      env: MOONSHOT_API_KEY
+  discovery:
+    mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

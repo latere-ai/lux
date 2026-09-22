@@ -1,0 +1,15 @@
+# Zhipu serves its OpenAI-compatible API under /api/paas/v4, not /v1.
+# This is the international host; an account on the China platform uses
+# https://open.bigmodel.cn/api/paas/v4.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: zhipu
+spec:
+  dialect: openai
+  baseURL: https://api.z.ai/api/paas/v4
+  credential:
+    valueFrom:
+      env: ZHIPU_API_KEY
+  discovery:
+    mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

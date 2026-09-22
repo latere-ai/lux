@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: openai/gpt-5.4-mini
+spec:
+  targets:
+    - provider: openai
+      model: gpt-5.4-mini
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "0.75"
+    output: "4.5"
+    cachedInput: "0.075"

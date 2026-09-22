@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: gemini/gemini-2.5-pro
+spec:
+  targets:
+    - provider: gemini
+      model: gemini-2.5-pro
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "1.25"
+    output: "10"
+    cachedInput: "0.125"

@@ -1,0 +1,12 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: xai
+spec:
+  dialect: openai
+  baseURL: https://api.x.ai/v1
+  credential:
+    valueFrom:
+      env: XAI_API_KEY
+  discovery:
+    mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

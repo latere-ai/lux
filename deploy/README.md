@@ -14,6 +14,7 @@ works.
 | `overlays/generic/` | any cluster: two replicas over a Postgres store named in the bootstrap Secret, behind an ingress you add |
 | `bootstrap/` | the Secret template for the four values no manifest in a repository should carry: `LUX_SECRETS_KEK`, `LUX_AUTHORIZER_TOKEN`, `LUX_EVENTS_SECRET`, `LUX_DB_URL`; filled once, applied by hand |
 | `examples/` | one Provider per dialect, one Model each, a Budget, and a Key: what `make run` applies to a gateway on a laptop and what an operator edits first once the gateway serves. They point at the stub providers of the test binary and are not part of an installation |
+| `catalog/` | a priced example catalog for a gateway you run yourself: 94 Models over seven Providers at the vendors' public addresses, applied at start with `LUX_BOOTSTRAP_DIR`. They are not cluster objects; the [README](catalog/README.md) says how to use them and the date of the prices |
 
 The configuration is a ConfigMap named `luxd` that each overlay
 generates from its `luxd.env`; every `LUX_*` variable is in the table of

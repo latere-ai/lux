@@ -1,0 +1,12 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic
+spec:
+  dialect: anthropic
+  baseURL: https://api.anthropic.com/v1
+  credential:
+    valueFrom:
+      env: ANTHROPIC_API_KEY
+  discovery:
+    mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

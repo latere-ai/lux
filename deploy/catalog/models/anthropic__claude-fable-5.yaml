@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-fable-5
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-fable-5
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "10"
+    output: "50"
+    cachedInput: "1"

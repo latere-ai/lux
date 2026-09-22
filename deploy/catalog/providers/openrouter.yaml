@@ -1,0 +1,14 @@
+# OpenRouter speaks the openai dialect; its model names carry the vendor
+# segment, as in anthropic/claude-sonnet-4.
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: openrouter
+spec:
+  dialect: openai
+  baseURL: https://openrouter.ai/api/v1
+  credential:
+    valueFrom:
+      env: OPENROUTER_API_KEY
+  discovery:
+    mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

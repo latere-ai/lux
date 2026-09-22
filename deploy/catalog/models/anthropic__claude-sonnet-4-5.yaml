@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-sonnet-4-5
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-sonnet-4-5
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "3"
+    output: "15"
+    cachedInput: "0.3"

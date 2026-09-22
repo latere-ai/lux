@@ -1,0 +1,16 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-haiku-4
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-haiku-4
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "0.8"
+    output: "4"

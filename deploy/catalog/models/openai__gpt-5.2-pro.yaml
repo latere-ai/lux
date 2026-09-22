@@ -1,0 +1,16 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: openai/gpt-5.2-pro
+spec:
+  targets:
+    - provider: openai
+      model: gpt-5.2-pro
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "21"
+    output: "168"

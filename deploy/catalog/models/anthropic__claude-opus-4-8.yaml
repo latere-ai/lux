@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: anthropic/claude-opus-4-8
+spec:
+  targets:
+    - provider: anthropic
+      model: claude-opus-4-8
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "5"
+    output: "25"
+    cachedInput: "0.5"

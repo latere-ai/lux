@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: xai/grok-build-0.1
+spec:
+  targets:
+    - provider: xai
+      model: grok-build-0.1
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "1"
+    output: "2"
+    cachedInput: "0.2"

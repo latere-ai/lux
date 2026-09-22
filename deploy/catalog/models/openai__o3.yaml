@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: openai/o3
+spec:
+  targets:
+    - provider: openai
+      model: o3
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "10"
+    output: "40"
+    cachedInput: "2.5"

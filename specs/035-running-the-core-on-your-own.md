@@ -65,7 +65,8 @@ tree carries `spec.pricing`. A person who wires their own OpenAI key gets
 a gateway that meters tokens and prices nothing, so
 [[009-usage-and-metering]]'s cost is zero and [[007-keys-and-limits]]'s
 spend windows and Budgets do not bind. The priced catalog exists, 105
-Model manifests, and it lives in the tree of the deployment that
+Model manifests, 94 of them routable by this core, and it lives in the
+tree of the deployment that
 dispatched this spec, which that deployment is retiring.
 
 ## Current state
@@ -82,7 +83,7 @@ dispatched this spec, which that deployment is retiring.
 | The file mode's control plane is read-only for callers | `internal/store/filemode/readonly.go:14-25` |
 | The file mode owns every object as `file|manifest-dir` | `internal/store/filemode/store.go:23` |
 | `deploy/examples/` names the stubs and prices nothing | `deploy/examples/` |
-| The priced catalog is 105 Models over seven providers | the dispatching deployment's manifest tree, one file per Model |
+| The priced catalog is 105 files, 94 distinct routable Models over seven providers | the dispatching deployment's manifest tree, one file per Model |
 | Every one of the 105 carries one label keyed under that deployment's own domain | the same files, line 6 of each |
 | The install document's blocks are run in order by CI on every push | `.github/workflows/verify.yml:162-181`, `tools/docs/run-blocks.sh` |
 
@@ -294,18 +295,23 @@ log line after a successful start is the worse failure.
 
 ### The example catalog
 
-`deploy/catalog/`, the 105 priced Model manifests of
+`deploy/catalog/`, the 94 priced Model manifests of
 the dispatching deployment's manifest tree, with the Providers they name, as the example catalog a self-hoster starts from.
 
 | Provider | Models |
 |---|---|
 | openai | 30 |
-| gemini | 22 |
+| gemini | 11 |
 | anthropic | 21 |
 | zhipu | 17 |
 | moonshot | 8 |
 | xai | 4 |
 | openrouter | 3 |
+
+Amended 2026-09-23: the dispatching deployment's tree held 105 files,
+eleven of them gemini Models whose target repeats the `models/` segment
+this core's gemini door already adds; those eleven are dropped, since
+their bare-named twins carry the same prices.
 
 Seven Providers, not four: `deploy/catalog/providers/` ships one per
 name, each with `spec.baseURL` and `spec.credential.valueFrom.env` naming
@@ -316,13 +322,13 @@ two they hold and deletes the rest. The dialect of each is
 
 Two edits are made in the move.
 
-- Every one of the 105 files carries
+- Every one of the 94 files carries
   one label keyed under the dispatching deployment's own domain, which is
   a fact about that deployment's plane and not about this core. It is
   dropped. It is also a coordinate of one company in a tree that carries
   none: invariant 8 of [[001-architecture]] is held by
   `TestNoLatereCoordinatesInReleasedArtifacts`, which admits this core's
-  own API group as a manifest prefix and no other domain anywhere, so 105
+  own API group as a manifest prefix and no other domain anywhere, so 94
   files would fail the tree's own rules as they stand.
 - `spec.fallback: never` and the single-target shape are kept as they
   are. The catalog is a rate card, not a routing policy, and a person who

@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: zhipu/glm-4.5-x
+spec:
+  targets:
+    - provider: zhipu
+      model: glm-4.5-x
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "2.2"
+    output: "8.9"
+    cachedInput: "0.45"

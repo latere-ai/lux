@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: moonshot/kimi-k2.7-code
+spec:
+  targets:
+    - provider: moonshot
+      model: kimi-k2.7-code
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "0.95"
+    output: "4"
+    cachedInput: "0.19"

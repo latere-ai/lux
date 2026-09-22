@@ -1,0 +1,17 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: gemini/gemini-3.1-flash
+spec:
+  targets:
+    - provider: gemini
+      model: gemini-3.1-flash
+      weight: 100
+      priority: 0
+  fallback: never
+  pricing:
+    currency: USD
+    per: 1000000
+    input: "0.5"
+    output: "3"
+    cachedInput: "0.05"
