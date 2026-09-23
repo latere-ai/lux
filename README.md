@@ -146,7 +146,8 @@ cut by the release pipeline, so until the first tag they are built from a
 checkout, which the quick start shows.
 
 `make` runs the quality gate and `make run-down` stops the stack. To
-install a release on a cluster, see [Install](docs/install.md).
+run a build against a real provider with no issuer, or install a release
+on a cluster, see [Install](docs/install.md).
 
 ## What you get
 
@@ -190,7 +191,7 @@ For running Lux and building on it:
 | | |
 |---|---|
 | [Quick start](docs/quickstart.md) | the published images on your machine, no build: `docker compose up` and a few requests to a running gateway |
-| [Install](docs/install.md) | from an empty cluster to a request through a door |
+| [Install](docs/install.md) | from a checkout to a first completion on your machine, and from an empty cluster to a request through a door |
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
 | [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |
 | [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |

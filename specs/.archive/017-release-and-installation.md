@@ -157,7 +157,10 @@ flowchart LR
    through a door. Both are variables of this job and of the block
    runner, read by no server: they substitute an image reference and a
    directory into the document's commands, so `internal/config` gains
-   nothing and [[002-repository-scaffold]]'s table does not grow. A
+   nothing and [[002-repository-scaffold]]'s table does not grow. The
+   document's first part runs before them with `LUX_INSTALL_BIN` naming
+   the `luxd` of the release's `luxd_<tag>_linux_amd64.tar.gz` (added
+   2026-09-23, [[035-running-the-core-on-your-own]]). A
    failure fails the workflow after the release exists, which the
    release notes link.
 6. `release-verify`: from a clean runner with no checkout on the path,
@@ -301,6 +304,18 @@ fenced block with a language tag, and `tools/docs/run-blocks.sh` runs
 the blocks in order against a kind cluster, so a command that stopped
 working fails a build rather than an operator.
 
+That walk is the document's part 2. Part 1 comes before it and runs from
+a checkout on the local machine with no issuer and no cluster: a local
+issuer key written by `openssl`, `luxd serve` as a background process
+over the memory store with `LUX_BOOTSTRAP_DIR` naming two manifests the
+walk writes, one Provider at `LUX_INSTALL_UPSTREAM` and one Model for
+`LUX_INSTALL_MODEL` priced from `deploy/catalog/`, a token from `luxd
+token`, a Key from `lux keys create`, one completion through the OpenAI
+door, and the server stopped with every variable the part exported and
+part 2 does not name unset, so part 2 starts against nothing of part 1.
+Both parts run as one script in both jobs (added 2026-09-23,
+[[035-running-the-core-on-your-own]]).
+
 CI runs it twice with the same script and different inputs: the
 `install` job of `verify.yml` on every push and pull request, against
 the developer image and `deploy/` from the checkout, and the
@@ -325,11 +340,24 @@ the family and this is its table.
 | `LUX_INSTALL_UPSTREAM` | `https://api.openai.com/v1` | the first Provider's base URL |
 | `LUX_INSTALL_UPSTREAM_KEY` | none, required | the first Provider's credential, sent once and sealed |
 | `LUX_INSTALL_MODEL` | `gpt-4o-mini` | the upstream model the first Model routes to |
+| `LUX_INSTALL_BIN` | `out/luxd` | the `luxd` binary part 1 runs as a process: the one `make build` wrote in `install`, the one unpacked from the release archive in `install-release` (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
 
-The two jobs create the cluster and the stubs before the walk with
-`tools/docs/stubs-in-cluster.sh`, which writes the last six inputs from
-the stub issuer and the stub provider; the document's own cluster step
-finds the cluster and moves on. `tools/docs/run-blocks.sh` runs every
+Part 1 reads `LUX_INSTALL_BIN` and the three upstream inputs; part 2
+reads every input but `LUX_INSTALL_BIN`. The two jobs create the cluster
+and the stubs before the walk with `tools/docs/stubs-in-cluster.sh`,
+which writes the six inputs from `LUX_INSTALL_ISSUER` to
+`LUX_INSTALL_MODEL` from the stub issuer and the stub provider; the
+document's own cluster step finds the cluster and moves on. Then
+`tools/docs/stubs-local.sh` starts the stub OpenAI provider as a process
+on the runner at `127.0.0.1:9101` and adds the stub Pod's in-cluster
+name to the runner's `/etc/hosts` as `127.0.0.1`, so the one
+`LUX_INSTALL_UPSTREAM` reaches that process from part 1's `luxd` on the
+runner and the Pod from part 2's inside the cluster. `install` passes it
+the stub binary it builds for the image; `install-release` copies the
+binary out of the published stub image, since no release archive
+carries it (added 2026-09-23, [[035-running-the-core-on-your-own]]).
+
+`tools/docs/run-blocks.sh` runs every
 ` ```sh ` block as one script and first writes every block fenced
 ` ```yaml file=NAME ` to that file, which is how the document hands the
 runner its kind cluster configuration and shows the operator the same
@@ -428,7 +456,7 @@ Outcome at `complete` records nothing the tree does not.
 | `release-verify`, `install-release` | `contents: read` | `packages: read` beside it; `fixture` takes `contents: write` alone | pulling the images needs `packages: read`, and `fixture` pushes a branch and opens no pull request (the amendment of 2026-09-17) |
 | `install-release` | no checkout on the path | the checkout for the document and its runner, and the published artifacts for everything the document consumes | the document and the runner are in no archive; `release-verify` is the job with no checkout |
 | `install`, `install-release` | the published stub image applied as a Pod from the job | `tools/docs/stubs.yaml` applied by `tools/docs/stubs-in-cluster.sh`, which also creates the cluster the document would and loads the images into it | a document that creates a cluster cannot have an image loaded into it first, so the jobs create it and the document's step skips an existing one |
-| `docs/install.md` | two inputs | the eight of the table above, and the block runner writes a named `yaml` block to its file | an installation from nothing needs an issuer, a token, a subject, and an upstream, none of which a document can carry |
+| `docs/install.md` | two inputs | the eight of the table above, nine with part 1's `LUX_INSTALL_BIN` since 2026-09-23, and the block runner writes a named `yaml` block to its file | an installation from nothing needs an issuer, a token, a subject, and an upstream, none of which a document can carry |
 | `deploy/base` | the configuration from a ConfigMap | the base carries none; each overlay generates `luxd` from its `luxd.env`, and the document's own kustomization merges the operator's values over the kind overlay by relative path | a base ConfigMap would carry a placeholder issuer, and kustomize refuses an absolute path |
 | `deploy/base` | `runAsNonRoot: true` and the image's `nonroot:nonroot` | the same, and `runAsUser: 65532` with `runAsGroup: 65532` on the pod | the local walk of `docs/install.md` left the pod in `CreateContainerConfigError`: a kubelet cannot verify `runAsNonRoot` against an image user given by name, so the pod names distroless's nonroot uid; the image stays as [[016-security-and-threat-model]]'s table says |
 | `deploy/base`, `deploy/overlays/kind` | egress to the endpoints the configuration names | the base admits DNS, TLS on 443, Postgres on 5432, and the other replicas; the kind overlay replaces the egress with one rule admitting every destination | kind's network plugin enforces policies, and the local walk found the check process cut off from a plaintext issuer on its own port while the serving process had reached it in the seconds before enforcement caught up; a lab's endpoints listen anywhere, and a real installation's are named by port in the base |

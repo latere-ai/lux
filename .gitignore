@@ -35,3 +35,10 @@ coverage.out
 # An agent tool's worktrees, checked out under the repository and never
 # part of it.
 .claude/
+
+# What part 1 of docs/install.md writes when walked from the root of a
+# checkout: the local issuer's private key, the manifests the server
+# applies at start, and the server's log.
+/local-issuer.pem
+/bootstrap/
+/luxd.log

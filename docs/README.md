@@ -8,7 +8,7 @@ packages.
 | Page | |
 |---|---|
 | Quick start | the published images on your machine with no build, `docker compose up` and a few `curl`s, in [`quickstart.md`](quickstart.md); the wiring is [`compose.yaml`](../compose.yaml) |
-| Install | from nothing to a request through a door on a kind cluster, in [`install.md`](install.md); the manifests it applies are [`deploy/`](../deploy/README.md), and upgrades and rollback are in [`upgrades/`](upgrades/README.md) |
+| Install | from a checkout to a first completion on your machine with no issuer, and from nothing to a request through a door on a kind cluster, in [`install.md`](install.md); the manifests it applies are [`deploy/`](../deploy/README.md), and upgrades and rollback are in [`upgrades/`](upgrades/README.md) |
 | Configuration | every `LUX_*` variable `luxd` reads, its meaning, default, and when it is required, in [`configuration.md`](configuration.md); [`.env.example`](../.env.example) is the same set as a file to copy |
 | Security | what the gateway protects and what you must do to run it safely, the KEK, TLS, trusted proxies, the authorizer, key rotation, and verifying releases, in [`security.md`](security.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
 | Observability | the `/metrics` endpoint and the metrics worth watching, the health probes, the log fields, traces, and the shipped alerts, in [`observability.md`](observability.md); the rules file is [`deploy/base/prometheusrule.yaml`](../deploy/base/prometheusrule.yaml) |
