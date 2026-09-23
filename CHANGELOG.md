@@ -6,8 +6,6 @@ refused before it is pushed.
 
 ## Unreleased
 
-## v0.6.0 - 2026-09-23
-
 - `LUX_OIDC_AUDIENCE` takes a comma list of names. A token is accepted when
   its `aud` contains any of them; the first is the primary, the one
   `/.well-known/lux` reports. An empty entry and a repeated name refuse to
