@@ -100,7 +100,7 @@ var referenceGroups = []referenceGroup{
 			meaning:  "A PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits, for an installation without an issuer: `luxd token` signs control plane tokens with it, issued as `LUX_PUBLIC_URL`, and the control plane accepts them. Unset turns the local issuer off. Never echoed.",
 			def:      "unset",
 			required: "No",
-			envNote:  "generate a key: openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256",
+			envNote:  "generate a key: openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -pkeyopt ec_param_enc:named_curve",
 		},
 		{
 			name:     "LUX_LOCAL_ISSUER_KEYS",

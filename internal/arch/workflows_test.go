@@ -300,6 +300,56 @@ func TestRunBlocksRunsTheFencedBlocksInOrder(t *testing.T) {
 	}
 }
 
+// TestKeyGenerationNamesTheCurve: every openssl command the tree gives a
+// reader for an EC key names the curve in the key rather than writing
+// its parameters out. LibreSSL, the openssl of macOS, writes the explicit
+// parameters unless told ec_param_enc:named_curve, and the local issuer's
+// PKCS#8 parser refuses such a key as an unknown curve, so a command
+// without the option works on Linux and fails on a Mac.
+func TestKeyGenerationNamesTheCurve(t *testing.T) {
+	dir := root(t)
+	self := filepath.Join(dir, "internal", "arch")
+	var commands int
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] && path != dir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Dir(path) == self && strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.IndexByte(data, 0) >= 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		for i, line := range strings.Split(string(data), "\n") {
+			if !strings.Contains(line, "ec_paramgen_curve") {
+				continue
+			}
+			commands++
+			if !strings.Contains(line, "ec_param_enc:named_curve") {
+				t.Errorf("%s:%d generates an EC key without -pkeyopt ec_param_enc:named_curve, which LibreSSL answers with a key the local issuer refuses", filepath.ToSlash(rel), i+1)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if commands == 0 {
+		t.Error("no openssl command in the tree generates an EC key; docs/install.md gives one for the local issuer")
+	}
+}
+
 // exported matches a variable a block exports, at the start of its line.
 var exported = regexp.MustCompile(`(?m)^export ([A-Z_][A-Z0-9_]*)=`)
 
