@@ -298,7 +298,7 @@ Flags:
 ```
 Usage: lux serve -dialect <d> -upstream <u> -as <n> [flags]
 
-Attach a model runtime on this machine to the gateway as a tunnelled
+Attach a model runtime on this machine to the gateway as a tunneled
 Provider, which the gateway reaches over the session this command
 holds open. The runtime's URL stays on this machine. The command runs
 until it is stopped, connecting again when the session breaks, and

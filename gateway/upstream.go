@@ -42,7 +42,7 @@ const (
 
 // The failures the client raises before any byte reaches an upstream.
 // The door maps them: ErrHostPinned to upstream_error, ErrProviderBusy
-// to provider_unavailable; ErrPrivateAddress and ErrTunnelled surface as
+// to provider_unavailable; ErrPrivateAddress and ErrTunneled surface as
 // transport failures, which are provider_unavailable too.
 var (
 	// ErrHostPinned is a request whose URL scheme, host, or port differs
@@ -55,9 +55,9 @@ var (
 	// link-local, unique-local, or private, without
 	// LUX_UPSTREAM_ALLOW_PRIVATE.
 	ErrPrivateAddress = errors.New("gateway: the host resolves to no address outside the private ranges")
-	// ErrTunnelled is a tunnel: true Provider, whose client is the
+	// ErrTunneled is a tunnel: true Provider, whose client is the
 	// carrier transport of spec 013 and is not in this build.
-	ErrTunnelled = errors.New("gateway: a tunnelled Provider has no client in this build")
+	ErrTunneled = errors.New("gateway: a tunneled Provider has no client in this build")
 )
 
 // ClientOptions is what NewClientSource builds every client under: the
@@ -136,7 +136,7 @@ func (c *Clients) Client(_ context.Context, p *v1.Provider) (*http.Client, error
 		return nil, errors.New("gateway: Client of a nil Provider")
 	}
 	if p.Spec.Tunnel {
-		return nil, fmt.Errorf("%w: %s", ErrTunnelled, p.Metadata.Name)
+		return nil, fmt.Errorf("%w: %s", ErrTunneled, p.Metadata.Name)
 	}
 	id := p.Status.ID
 	if id == "" {

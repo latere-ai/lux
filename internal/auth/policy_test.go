@@ -50,11 +50,11 @@ var (
 // is allowed with the filter narrowed to the subject; and no limits are
 // granted on any allow.
 func TestOwnerPolicy(t *testing.T) {
-	tunnelled := fixtureProvider()
-	tunnelled.Spec.Tunnel = true
-	tunnelled.Status.ID = "prv_01J9TESTTUNNEL000000000000"
-	tunnelled.Metadata.Name = "laptop"
-	objects := objectsOf(fixtureProvider(), tunnelled, fixtureModel(), fixtureKey(), fixtureBudget(t))
+	tunneled := fixtureProvider()
+	tunneled.Spec.Tunnel = true
+	tunneled.Status.ID = "prv_01J9TESTTUNNEL000000000000"
+	tunneled.Metadata.Name = "laptop"
+	objects := objectsOf(fixtureProvider(), tunneled, fixtureModel(), fixtureKey(), fixtureBudget(t))
 	policy := &OwnerPolicy{Admins: []string{adminSubject}, Objects: objects}
 
 	// object builds the resource of an action on the fixture of its kind,
@@ -74,13 +74,13 @@ func TestOwnerPolicy(t *testing.T) {
 	rows := []row{
 		{"owner.assign", authorizer.ActionOwnerAssign, authorizer.OwnerAssignment("Key", "assigned", fixtureSubject, nil), admins, admins},
 		{"provider.create", authorizer.ActionProviderCreate, authorizer.ProviderCreate(provider), admins, admins},
-		{"provider.create of a tunnel", authorizer.ActionProviderCreate, authorizer.ProviderCreate(tunnelled), allow, allow},
+		{"provider.create of a tunnel", authorizer.ActionProviderCreate, authorizer.ProviderCreate(tunneled), allow, allow},
 		{"provider.read", authorizer.ActionProviderRead, authorizer.ProviderObject(provider), allow, allow},
 		{"provider.update", authorizer.ActionProviderUpdate, authorizer.ProviderObject(provider), admins, admins},
-		{"provider.update of a tunnel", authorizer.ActionProviderUpdate, authorizer.ProviderObject(tunnelled), allow, notOwner},
+		{"provider.update of a tunnel", authorizer.ActionProviderUpdate, authorizer.ProviderObject(tunneled), allow, notOwner},
 		{"provider.delete", authorizer.ActionProviderDelete, authorizer.ProviderObject(provider), admins, admins},
-		{"provider.delete of a tunnel", authorizer.ActionProviderDelete, authorizer.ProviderObject(tunnelled), allow, notOwner},
-		{"provider.tunnel", authorizer.ActionProviderTunnel, authorizer.ProviderObject(tunnelled), allow, notOwner},
+		{"provider.delete of a tunnel", authorizer.ActionProviderDelete, authorizer.ProviderObject(tunneled), allow, notOwner},
+		{"provider.tunnel", authorizer.ActionProviderTunnel, authorizer.ProviderObject(tunneled), allow, notOwner},
 		{"provider.list", authorizer.ActionProviderList, authorizer.ProviderList(), allow, allow},
 		{"model.create", authorizer.ActionModelCreate, authorizer.ModelCreate(model), admins, admins},
 		{"model.read", authorizer.ActionModelRead, authorizer.ModelObject(model), allow, allow},

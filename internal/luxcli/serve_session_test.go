@@ -252,7 +252,7 @@ func (g *serveGateway) reaches(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(g.t.Context(), http.MethodGet, "http://tunnelled/models", nil)
+	req, err := http.NewRequestWithContext(g.t.Context(), http.MethodGet, "http://tunneled/models", nil)
 	if err != nil {
 		return 0, err
 	}

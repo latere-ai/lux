@@ -99,7 +99,7 @@ func runServe(a *app, o *serveOptions, args []string) error {
 	c := a.client(base)
 	c.Token = token
 	if !o.noApply {
-		if err := a.applyTunnelled(c, o, labels); err != nil {
+		if err := a.applyTunneled(c, o, labels); err != nil {
 			return err
 		}
 	}
@@ -114,12 +114,12 @@ func runServe(a *app, o *serveOptions, args []string) error {
 	}, refreshable)
 }
 
-// applyTunnelled is the PUT that declares the Provider this session
+// applyTunneled is the PUT that declares the Provider this session
 // serves: the dialect, spec.tunnel, the discovery globs, and the
 // labels, through the same route lux apply uses. It carries no base
 // URL and no credential, because a tunneled runtime is reached over
 // the session and holds its own.
-func (a *app) applyTunnelled(c *client.Client, o *serveOptions, labels map[string]string) error {
+func (a *app) applyTunneled(c *client.Client, o *serveOptions, labels map[string]string) error {
 	p := &v1.Provider{
 		Metadata: v1.ObjectMeta{Name: o.as, Labels: labels},
 		Spec: v1.ProviderSpec{

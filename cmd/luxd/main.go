@@ -535,7 +535,7 @@ func composeTunnel(cfg config.Config, st store.Store, identity *auth.Auth, clien
 	})
 	notice := fmt.Sprintf("tunnel: on, registry TTL %s", cfg.TunnelRegistryTTL)
 	if cfg.TunnelForwardAddr == "" {
-		notice += "; tunnelled Providers are served by the holding replica only, and an installation with more than one replica sets LUX_TUNNEL_FORWARD_ADDR"
+		notice += "; tunneled Providers are served by the holding replica only, and an installation with more than one replica sets LUX_TUNNEL_FORWARD_ADDR"
 		if cfg.DBURL != "" {
 			notice = "WARN " + notice
 		}

@@ -203,13 +203,13 @@ func (s *Stub) handle(rt routeKind) http.HandlerFunc {
 		if name == "" {
 			name = req.model
 		}
-		s.answer(w, r, kind, req, ParseBehaviour(name))
+		s.answer(w, r, kind, req, ParseBehavior(name))
 	}
 }
 
 // answer runs the behavior: a refusal, a wait, a hang, a broken stream,
 // or the deterministic answer, whole or streamed.
-func (s *Stub) answer(w http.ResponseWriter, r *http.Request, rt routeKind, req parsed, b Behaviour) {
+func (s *Stub) answer(w http.ResponseWriter, r *http.Request, rt routeKind, req parsed, b Behavior) {
 	switch b.Kind {
 	case KindFail500:
 		s.refuse(w, http.StatusInternalServerError, "the stub was asked to fail with 500")

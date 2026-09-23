@@ -115,7 +115,7 @@ func TestTunnelOwnerPolicyException(t *testing.T) {
 	// dialed one.
 	rec := h.request(http.MethodPut, "/v1/providers/laptop", tunnelProviderJSON, as(h.bob)...)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("bob's tunnelled Provider: %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("bob's tunneled Provider: %d %s", rec.Code, rec.Body.String())
 	}
 	if st := status(t, rec); st["owner"] != h.iss.URL()+"|bob" {
 		t.Errorf("status %v", st)

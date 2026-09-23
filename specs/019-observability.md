@@ -45,7 +45,7 @@ attempt emits the two upstream metrics of [[005-providers]]'s row, that
 spec's health job emits `lux_provider_health`, and
 `deploy/base/prometheusrule.yaml` carries the ten alerts. The last
 metric of the table that waited on its owner,
-[[013-tunnelled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
+[[013-tunneled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
 on every configuration, and the rules file's `promtool` step is the
 `rules` job [release and installation](.archive/017-release-and-installation.md) wrote into `verify.yml`.
 Every row of the acceptance table passes.
@@ -108,7 +108,7 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_authorizer_duration_seconds` | histogram | `decision` | [[006-identity]] |
 | `lux_store_operations_total` | counter | `op`, `result` | [[010-state]] |
 | `lux_circuit_open` | gauge | `provider`, `model` | [[008-routing-and-models]] |
-| `lux_tunnel_sessions` | gauge | none | [[013-tunnelled-runtimes]] |
+| `lux_tunnel_sessions` | gauge | none | [[013-tunneled-runtimes]] |
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream
@@ -167,7 +167,7 @@ otherwise, one series per target, which is the `provider` and the
 target's upstream model name of [[008-routing-and-models]]'s key and is
 bounded by the catalog like every other pair. `lux_tunnel_sessions` is
 the number of tunnel sessions this replica holds,
-`tunnel.MetricSessions` ([[013-tunnelled-runtimes]]); the provider name
+`tunnel.MetricSessions` ([[013-tunneled-runtimes]]); the provider name
 is not a label on it, because a session's Provider is already a series
 of `lux_provider_health`. Both are gauges, which
 `latere.ai/x/pkg/metrics` serves as a callback read at scrape time, so
@@ -177,7 +177,7 @@ scrape is the count at the moment it is taken and no close can leave it
 standing.
 
 The tunnel is optional, so its gauge is registered twice over: by
-`tunnel.New` when [[013-tunnelled-runtimes]]'s `LUX_TUNNEL_ENABLED` is
+`tunnel.New` when [[013-tunneled-runtimes]]'s `LUX_TUNNEL_ENABLED` is
 on, and by `tunnel.RegisterIdle` from the serve wiring when it is off
 or the file mode leaves it off, which reads a constant zero. The
 unlabelled series is therefore in the registry on every configuration,
@@ -482,7 +482,7 @@ Each of these is written into the Design above in the same commit.
   `NewHealth`, with the one wiring line in `cmd/luxd`.
 - `lux_output_tokens_per_second` is the Recorder's, with the time rule
   above, as [[009-usage-and-metering]] left it to this spec to place.
-- `lux_tunnel_sessions` is [[013-tunnelled-runtimes]]'s own and is
+- `lux_tunnel_sessions` is [[013-tunneled-runtimes]]'s own and is
   registered by `tunnel.New`, which that spec's Design already claimed;
   what this spec settled is the idle registration, `tunnel.RegisterIdle`
   from the serve wiring, since the table holds every metric of a process
@@ -516,7 +516,7 @@ file's place in the deploy tree and its `promtool` step
 ([release and installation](.archive/017-release-and-installation.md)); the health gauge's writer
 ([[005-providers]]); the two gauges and the counter of the request log,
 the events, and the tunnel ([[012-request-log-and-events]],
-[[013-tunnelled-runtimes]]).
+[[013-tunneled-runtimes]]).
 
 ## Acceptance criteria
 
@@ -555,7 +555,7 @@ row of `.lateregate.yaml`. Every acceptance row passes and the gate
 passes whole.
 
 The last row to close was the metric table's own. `lux_tunnel_sessions`
-is [[013-tunnelled-runtimes]]'s, and that spec built the gauge with the
+is [[013-tunneled-runtimes]]'s, and that spec built the gauge with the
 `Gateway` that holds the sessions it counts; what this spec waited on
 was the family being in the registry of a process with the tunnel off,
 which is the default and was the one configuration the table did not

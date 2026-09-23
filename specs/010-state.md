@@ -364,7 +364,7 @@ other's members.
 | Kind | Written by `Put`, the control plane's | Written by `PutStatus`, the observed |
 |---|---|---|
 | every kind | `id`, `owner`, `createdAt`, `updatedAt`, `warnings`; `version` is the row's | |
-| `Provider` | `credential` ([[005-providers]]) | `health`, `discovered`, `tunnel` ([[005-providers]], [[013-tunnelled-runtimes]]) |
+| `Provider` | `credential` ([[005-providers]]) | `health`, `discovered`, `tunnel` ([[005-providers]], [[013-tunneled-runtimes]]) |
 | `Model` | `source` | `available`, `targets[].health` ([[008-routing-and-models]]) |
 | `Key` | `prefix`, `expiresAt`, `budget`, `selectors` ([[003-manifest-contract]], [[007-keys-and-limits]]) | `lastUsedAt` ([[007-keys-and-limits]]); `state` and `usage` are rendered at read time from the counters and never stored, though `KeyObserved` admits them for a store that is written by another program |
 | `Budget` | | none written by `luxd`: `state`, `spent`, `remaining`, `resetsAt`, and `keys` are rendered at read time from the counters and the Keys that name the Budget ([[007-keys-and-limits]]), though `BudgetObserved` admits them |
@@ -461,7 +461,7 @@ are not one thing and the contract's callers hand in Go times.
 | `counters` | `key` text pk, `value` bigint, `expires_at` timestamptz null | the spend windows; null is a `none` window |
 | `leases` | `name` text pk, `holder` text, `expires_at` timestamptz | the jobs |
 | `journal` | `id` text pk, `gseq` bigint assigned as the table's maximum plus one under a transaction-scoped advisory lock, `object_id` text, `seq` bigint, `type` text, `at` timestamptz, `payload` bytea, `attempts` int, `next_attempt_at` timestamptz, `acked_at` timestamptz null | the events of 012; `payload` is bytea because a delivery is signed over the exact bytes and jsonb would re-spell them, and `gseq` is not a sequence because a sequence's values commit out of order and a replica tailing `Since` past the later one would never see the earlier |
-| `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunnelled-runtimes]], one live row per tunneled Provider |
+| `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunneled-runtimes]], one live row per tunneled Provider |
 | `usage_hourly` | the dimensions and sums of [[009-usage-and-metering]] | the aggregates |
 
 Indexes, one per query shape:
@@ -761,7 +761,7 @@ cost, and the aggregate columns' meaning
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunnelled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | passing against memory in `memory` and `storetest`, and against Postgres in `internal/store/postgres` under the tag, every case on a database of its own |
+| One suite, `storetest.Run(t, func(t *testing.T) store.Store)`, covers every method of every collection, `Transact`, and the tunnel registry of [[013-tunneled-runtimes]], and runs against memory and Postgres; the memory store is exempt only from durability across a restart and from the schema guards | `storetest.Run` driven by `TestStoreConformance` and the postgres tier's `TestPostgresStoreConformance` ([[015-test-stubs-and-tiers]]) | passing against memory in `memory` and `storetest`, and against Postgres in `internal/store/postgres` under the tag, every case on a database of its own |
 | `Put` with a stale version is `ErrVersionConflict` and with the current version advances it by one from 1; two concurrent writers at one version yield one success | `TestOptimisticConcurrency` | passing |
 | A name is unique per kind among objects that are not deleted and is reusable after a delete; a declared Model `Put` at version 0 over a discovered one of that name keeps the id, sets `source` `declared` and the actor's owner, and advances the version rather than `ErrNameTaken` | `TestNamesAreUniqueAmongLiveObjects`, `TestDeclaredReplacesDiscoveredInPlace` | passing |
 | `PutStatus` changes no member of the control plane's column and `Put` changes no member of the observed column, for every member in the table by kind; a read merges both | `TestStatusHalvesAreSeparate`, table-driven over the members | passing |
@@ -870,6 +870,6 @@ and carried as a row of its table of departures:
 
 What the neighboring specs own from here. [[009-usage-and-metering]]'s
 Postgres half of `Usage()` is this store's and is built.
-[[013-tunnelled-runtimes]]'s registry runs on Postgres through the
+[[013-tunneled-runtimes]]'s registry runs on Postgres through the
 suite's tunnel group. [release and installation](.archive/017-release-and-installation.md)'s `luxd check`
 reads the three database rows against a real cluster.

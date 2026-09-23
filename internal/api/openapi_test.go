@@ -79,12 +79,12 @@ func TestOpenAPIServedMatchesCommitted(t *testing.T) {
 	}
 	// Numbers decode differently from YAML and from JSON; a JSON round
 	// trip of the YAML's value gives both one shape.
-	normalised, err := json.Marshal(fromYAML)
+	normalized, err := json.Marshal(fromYAML)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var committed any
-	_ = json.Unmarshal(normalised, &committed)
+	_ = json.Unmarshal(normalized, &committed)
 	if !reflect.DeepEqual(served, committed) {
 		t.Fatalf("the served document differs from the committed one")
 	}

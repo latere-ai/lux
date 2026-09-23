@@ -776,12 +776,12 @@ func (r *run) tunnels(ctx context.Context) Line {
 		}
 	}
 	if len(missing) > 0 {
-		return Line{Fail, name, "no live session for tunnelled Provider " + strings.Join(missing, ", ") + "; its agent is not connected"}
+		return Line{Fail, name, "no live session for tunneled Provider " + strings.Join(missing, ", ") + "; its agent is not connected"}
 	}
-	detail := fmt.Sprintf("on; %d tunnelled Provider(s), every one with a live session", live)
+	detail := fmt.Sprintf("on; %d tunneled Provider(s), every one with a live session", live)
 	if r.cfg.TunnelForwardAddr == "" {
 		if r.cfg.DBURL != "" {
-			return Line{Warn, name, detail + "; tunnelled Providers serve on the holding replica alone, and an installation with more than one replica sets LUX_TUNNEL_FORWARD_ADDR"}
+			return Line{Warn, name, detail + "; tunneled Providers serve on the holding replica alone, and an installation with more than one replica sets LUX_TUNNEL_FORWARD_ADDR"}
 		}
 		return Line{OK, name, detail}
 	}

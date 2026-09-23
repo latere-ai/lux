@@ -103,7 +103,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 |---|---|---|---|
 | `LUX_TUNNEL_ENABLED` | 1 serves the tunnel routes and admits `spec.tunnel`. | `unset` | No |
 | `LUX_TUNNEL_REGISTRY_TTL` | The liveness window of a registry row; the agent heartbeats at a third of it (5s to 5m). | `30s` | No |
-| `LUX_TUNNEL_FORWARD_ADDR` | The `host:port` other replicas reach this one's internal listener at; unset serves a tunnelled Provider on the holding replica only. | `unset` | No |
+| `LUX_TUNNEL_FORWARD_ADDR` | The `host:port` other replicas reach this one's internal listener at; unset serves a tunneled Provider on the holding replica only. | `unset` | No |
 | `LUX_TUNNEL_FORWARD_SECRET` | Comma-separated bearers of the forward route: the first is sent, every one is accepted, so a rotation is prepending. Each at least 32 bytes. Never echoed. | `unset` | When `LUX_TUNNEL_FORWARD_ADDR` is set |
 
 ## Secrets

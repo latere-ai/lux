@@ -68,7 +68,7 @@ later.
 | [010](010-state.md) | State: desired and observed, the store contract, memory, Postgres, the file mode | large | complete | 003 |
 | [011](011-api.md) | API: the /v1 kinds, addressing and concurrency, the error table, OpenAPI | large | complete | 003, 004, 006, 007, 010 |
 | [012](012-request-log-and-events.md) | Request log and events: one signed event per mutation to the operator's sink, one record per request to an archive | small | complete | 006, 009, 010 |
-| [013](013-tunnelled-runtimes.md) | Tunneled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | complete | 004, 005 |
+| [013](013-tunneled-runtimes.md) | Tunneled runtimes: a local model server attached as a Provider through an outbound tunnel | medium | complete | 004, 005 |
 | [014](014-agent-client.md) | Agent client: the lux command and the skill | medium | complete | 003, 011 |
 | [015](015-test-stubs-and-tiers.md) | Test stubs and tiers: the stub providers, issuer, authorizer, and sink, make run, the tiers, CI jobs | medium | complete | 002, 005, 006, 012 |
 | [016](016-security-and-threat-model.md) | Security and threat model: what Lux protects, against whom, and how | medium | complete | 001, 004, 006, 007 |

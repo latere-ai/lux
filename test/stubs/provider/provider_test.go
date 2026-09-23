@@ -223,11 +223,11 @@ func TestProviderStubIsDeterministic(t *testing.T) {
 // Lux-Stub-Fail header.
 func TestFailureInjection(t *testing.T) {
 	for _, d := range dialects {
-		for _, name := range Behaviours() {
+		for _, name := range Behaviors() {
 			for _, by := range []string{"name", "header"} {
 				t.Run(string(d)+"/"+name+"/by-"+by, func(t *testing.T) {
 					srv := start(t, d)
-					b := ParseBehaviour(name)
+					b := ParseBehavior(name)
 					stream := b.Kind == KindEvents || b.Kind == KindFailStreamMid
 					model, header := name, http.Header{}
 					if by == "header" {
@@ -243,7 +243,7 @@ func TestFailureInjection(t *testing.T) {
 }
 
 // checkRow asserts one row's behavior on one dialect.
-func checkRow(t *testing.T, srv *server, d v1.Dialect, path, body string, header http.Header, b Behaviour) {
+func checkRow(t *testing.T, srv *server, d v1.Dialect, path, body string, header http.Header, b Behavior) {
 	t.Helper()
 	switch b.Kind {
 	case KindHang:
@@ -479,25 +479,25 @@ func TestProviderStubUsageShapes(t *testing.T) {
 	}
 }
 
-// TestParseBehaviour holds the parser to the table: a malformed figure
+// TestParseBehavior holds the parser to the table: a malformed figure
 // is a model name and answers normally.
-func TestParseBehaviour(t *testing.T) {
+func TestParseBehavior(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		want Behaviour
+		want Behavior
 	}{
-		{"gpt-4o", Behaviour{InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"fail-500", Behaviour{Kind: KindFail500, InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"slow-1s", Behaviour{Kind: KindSlow, Wait: time.Second, InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"slow-soon", Behaviour{InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"tokens-7-3", Behaviour{Kind: KindTokens, InputTokens: 7, OutputTokens: 3, Events: 5}},
-		{"tokens-7", Behaviour{InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"tokens-x-3", Behaviour{InputTokens: 100, OutputTokens: 20, Events: 5}},
-		{"events-0", Behaviour{Kind: KindEvents, InputTokens: 100, OutputTokens: 20, Events: 0}},
-		{"events-many", Behaviour{InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"gpt-4o", Behavior{InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"fail-500", Behavior{Kind: KindFail500, InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"slow-1s", Behavior{Kind: KindSlow, Wait: time.Second, InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"slow-soon", Behavior{InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"tokens-7-3", Behavior{Kind: KindTokens, InputTokens: 7, OutputTokens: 3, Events: 5}},
+		{"tokens-7", Behavior{InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"tokens-x-3", Behavior{InputTokens: 100, OutputTokens: 20, Events: 5}},
+		{"events-0", Behavior{Kind: KindEvents, InputTokens: 100, OutputTokens: 20, Events: 0}},
+		{"events-many", Behavior{InputTokens: 100, OutputTokens: 20, Events: 5}},
 	} {
-		if got := ParseBehaviour(tc.name); got != tc.want {
-			t.Errorf("ParseBehaviour(%q) = %+v, want %+v", tc.name, got, tc.want)
+		if got := ParseBehavior(tc.name); got != tc.want {
+			t.Errorf("ParseBehavior(%q) = %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 	if got := pieces("abcdefg", 3); strings.Join(got, "") != "abcdefg" || len(got) != 3 {

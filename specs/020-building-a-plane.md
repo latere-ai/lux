@@ -71,7 +71,7 @@ rewriting: the packages are what `luxd` is made of.
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` |
 | audit | the signed event sink at `LUX_EVENTS_URL` ([[012-request-log-and-events]]) | the platform's own sink |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
-| a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` ([[013-tunnelled-runtimes]]) | the same |
+| a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` ([[013-tunneled-runtimes]]) | the same |
 
 Every row on the left is an endpoint the platform writes or an object
 it applies. There is no row that needs a fork, which is the property

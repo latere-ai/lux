@@ -45,7 +45,7 @@ policy ([[006-identity]]), the Key value, its cache, and the limits
 ([[009-usage-and-metering]]), the three store modes ([[010-state]]),
 `/v1` ([[011-api]]), the events and the request log
 ([[012-request-log-and-events]]), the tunnel
-([[013-tunnelled-runtimes]]), the stubs and the tiers
+([[013-tunneled-runtimes]]), the stubs and the tiers
 ([[015-test-stubs-and-tiers]]), the release and the hardened deploy
 manifests ([release and installation](.archive/017-release-and-installation.md)), the telemetry
 ([[019-observability]]), and the plane document
@@ -166,8 +166,8 @@ the data plane.
 | A KEK leaks and every credential must be re-wrapped | `LUX_SECRETS_KEK` is a list, so the new key and the old are live together; `luxd rewrap` re-wraps every data key without touching a value ciphertext and is idempotent; `luxd serve` refuses to start when a stored credential opens under no listed key | [[005-providers]] | `TestRewrapUnderANewKEK`, `TestStartupRequiresAWorkingKEK` | built |
 | A credential is written to disk in the clear by the gateway | the gateway writes no local state; a credential is decoded into a field the JSON and YAML encoders skip, so no object carrying one can be serialized at all; in file mode a Provider names `credential.valueFrom.env` and the value is read from the environment and held in memory, never written | [[003-manifest-contract]], [[005-providers]], [[010-state]] | `TestCredentialValueNeverEncodes`, `TestWriteOnlyValuesNeverEncode`, `TestFileModeValuesFromEnvironment` | built |
 | A directory of manifests is edited to widen what a gateway serves | in file mode every write under `/v1/{kind}s` is `read_only` and `/v1` is on the internal listener only; a file that fails to resolve at start is a start-up failure and nothing is served; a `SIGHUP` that fails leaves the previous snapshot serving | [[010-state]], [[011-api]] | `TestFileModeRefusesWrites`, `TestFileModeStartupNamesTheFailingFile` | built |
-| A tunnel becomes a path from the internet into the operator's network | the gateway dials nothing on the agent's machine: the agent dials its own `--upstream`; the carrier carries one proxied request and one response and no other route; a session is bound to the subject that opened it and to that token's lifetime; `/internal/tunnel/{id}` is on the internal listener and needs `LUX_TUNNEL_FORWARD_SECRET` | [[013-tunnelled-runtimes]] | `TestTunnelCarriesNoCredential`, `TestForwardRouteNeedsTheSecret` | built |
-| An unauthorized machine attaches itself as a Provider | `provider.tunnel` is an authorizer decision with `tunnel: true` in the `resource`; under the owner policy a subject may attach a Provider it owns and may not declare one with a credential | [[006-identity]], [[013-tunnelled-runtimes]] | `TestTunnelOwnerPolicyException` | built |
+| A tunnel becomes a path from the internet into the operator's network | the gateway dials nothing on the agent's machine: the agent dials its own `--upstream`; the carrier carries one proxied request and one response and no other route; a session is bound to the subject that opened it and to that token's lifetime; `/internal/tunnel/{id}` is on the internal listener and needs `LUX_TUNNEL_FORWARD_SECRET` | [[013-tunneled-runtimes]] | `TestTunnelCarriesNoCredential`, `TestForwardRouteNeedsTheSecret` | built |
+| An unauthorized machine attaches itself as a Provider | `provider.tunnel` is an authorizer decision with `tunnel: true` in the `resource`; under the owner policy a subject may attach a Provider it owns and may not declare one with a credential | [[006-identity]], [[013-tunneled-runtimes]] | `TestTunnelOwnerPolicyException` | built |
 | A browser page is tricked into calling the API with an ambient credential | no `Access-Control-*` header is written on either plane and `OPTIONS` is `not_found`, so a browser cannot make a cross-origin call at all; neither credential is one a page should hold | [[011-api]] | `TestNoCORS` | built |
 | A manifest claims a name the gateway reserves | labels and annotations under `lux.latere.ai/` are `reserved_prefix`; a reserved header in `headers` is the same; a caller's `Lux-Request-Id` is ignored and replaced on both planes | [[003-manifest-contract]], [[011-api]] | `TestExclusiveMissingAndDuplicates`, `TestRequestIDOnEveryResponse` | built |
 | The request log archive becomes a corpus of prompts | an archived object is newline-delimited records of the one struct [[009-usage-and-metering]] defines, which has no body, header, prompt, or completion member and no `any` member that could hold one, so the canary test is over the same type the gateway writes; the bucket, its encryption, and its retention are the operator's, named by `LUX_S3_*` and by nothing this project ships | [[009-usage-and-metering]], [[012-request-log-and-events]] | `TestArchiveCarriesNoContent`, `TestRecordCarriesNoContent` | built |
@@ -326,7 +326,7 @@ the test that proves it: the record canary is
 [[009-usage-and-metering]]'s, the rotate and the responses
 [[011-api]]'s, the signature and the archive
 [[012-request-log-and-events]]'s, the tunnel rows
-[[013-tunnelled-runtimes]]'s, the e2e sweep of the credential canary
+[[013-tunneled-runtimes]]'s, the e2e sweep of the credential canary
 [[015-test-stubs-and-tiers]]'s, the hardened Deployment
 [release and installation](.archive/017-release-and-installation.md)'s, the log and span canaries
 [[019-observability]]'s, and the sandbox composition

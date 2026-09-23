@@ -30,7 +30,7 @@ const (
 func ModelName(d v1.Dialect) string { return "stub-" + string(d) }
 
 // whole is the non-streaming answer of a route.
-func whole(d v1.Dialect, rt routeKind, req parsed, b Behaviour) any {
+func whole(d v1.Dialect, rt routeKind, req parsed, b Behavior) any {
 	content := Content(d, req.model, req.text)
 	in, out := b.InputTokens, b.OutputTokens
 	switch rt {
@@ -239,14 +239,14 @@ type streamer struct {
 	d      v1.Dialect
 	rt     routeKind
 	req    parsed
-	b      Behaviour
+	b      Behavior
 	text   string
 	pieces []string
 	sse    bool
 	wrote  bool // an array element was written, so the next needs a comma
 }
 
-func newStreamer(w http.ResponseWriter, d v1.Dialect, rt routeKind, req parsed, b Behaviour) *streamer {
+func newStreamer(w http.ResponseWriter, d v1.Dialect, rt routeKind, req parsed, b Behavior) *streamer {
 	content := Content(d, req.model, req.text)
 	return &streamer{
 		w: w, d: d, rt: rt, req: req, b: b, text: content, pieces: pieces(content, b.Events),

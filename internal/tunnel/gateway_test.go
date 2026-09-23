@@ -21,14 +21,14 @@ import (
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-// TestClientDelegatesADialledProvider: a Provider that is not tunneled
+// TestClientDelegatesADialedProvider: a Provider that is not tunneled
 // gets spec 005's client, a nil Provider and a tunneled one without an
 // id are refused, and Revoke reaches spec 005's clients too.
-func TestClientDelegatesADialledProvider(t *testing.T) {
+func TestClientDelegatesADialedProvider(t *testing.T) {
 	st := memory.New()
 	r := newReplica(t, st, replicaOptions{})
-	dialled := &v1.Provider{Metadata: v1.ObjectMeta{Name: "openai"}, Spec: v1.ProviderSpec{Dialect: v1.DialectOpenAI, BaseURL: "https://api.example.com/v1", Concurrency: 4}, Status: v1.ProviderStatus{ID: "prv_dialled"}}
-	client, err := r.g.Client(t.Context(), dialled)
+	dialed := &v1.Provider{Metadata: v1.ObjectMeta{Name: "openai"}, Spec: v1.ProviderSpec{Dialect: v1.DialectOpenAI, BaseURL: "https://api.example.com/v1", Concurrency: 4}, Status: v1.ProviderStatus{ID: "prv_dialed"}}
+	client, err := r.g.Client(t.Context(), dialed)
 	if err != nil || client == nil {
 		t.Fatalf("a dialed Provider: %v", err)
 	}
@@ -39,11 +39,11 @@ func TestClientDelegatesADialledProvider(t *testing.T) {
 		t.Error("a nil Provider was answered")
 	}
 	if _, err := r.g.Client(t.Context(), &v1.Provider{Spec: v1.ProviderSpec{Tunnel: true}}); err == nil {
-		t.Error("a tunnelled Provider without an id was answered")
+		t.Error("a tunneled Provider without an id was answered")
 	}
 	// Revoke of a Provider with no session changes nothing and panics on
 	// nothing.
-	r.g.Revoke("prv_dialled")
+	r.g.Revoke("prv_dialed")
 	r.g.Revoke("prv_none")
 }
 

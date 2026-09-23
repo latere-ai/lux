@@ -6,6 +6,11 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Exported names spell in American English: `gateway.ErrTunnelled` is now
+  `gateway.ErrTunneled`, and the provider stub's `Behaviour`, `Behaviours` and
+  `ParseBehaviour` are `Behavior`, `Behaviors` and `ParseBehavior`. Code that
+  names them needs the new spelling; error codes and the wire are unchanged.
+
 ## v0.6.0 - 2026-09-23
 
 - `LUX_OIDC_AUDIENCE` takes a comma list of names. A token is accepted when

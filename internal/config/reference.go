@@ -346,7 +346,7 @@ var referenceGroups = []referenceGroup{
 		},
 		{
 			name:     "LUX_TUNNEL_FORWARD_ADDR",
-			meaning:  "The `host:port` other replicas reach this one's internal listener at; unset serves a tunnelled Provider on the holding replica only.",
+			meaning:  "The `host:port` other replicas reach this one's internal listener at; unset serves a tunneled Provider on the holding replica only.",
 			def:      "unset",
 			required: "No",
 		},

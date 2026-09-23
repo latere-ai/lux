@@ -544,7 +544,7 @@ func TestCheckNamesWhatItReads(t *testing.T) {
 	if want := "none declared; over the memory store"; !strings.Contains(server["providers"].Detail, want) {
 		t.Errorf("providers: %s", server["providers"])
 	}
-	if want := "on; 0 tunnelled Provider(s)"; !strings.Contains(server["tunnels"].Detail, want) {
+	if want := "on; 0 tunneled Provider(s)"; !strings.Contains(server["tunnels"].Detail, want) {
 		t.Errorf("tunnels: %s", server["tunnels"])
 	}
 	for _, lines := range []map[string]Line{file, server} {

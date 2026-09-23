@@ -124,7 +124,7 @@ conformance job runs ([release and installation](.archive/017-release-and-instal
 | `luxd serve` | the gateway | both planes: the `/v1` API, resolve, identity, the dialect doors, routing, translation, credential injection, metering, the store, the webhook clients, event delivery, the request log exporter |
 | `luxd check` | wherever an installation is verified | one line per requirement, exit 1 on any failure |
 | `luxd rewrap` | wherever the store is reachable, once per KEK rotation | re-wraps every stored credential's data key under the first key of `LUX_SECRETS_KEK` and exits ([[005-providers]]) |
-| `lux` | a shell or an agent | the client of the `/v1` API and a local door for a runtime on the operator's machine ([[013-tunnelled-runtimes]]) |
+| `lux` | a shell or an agent | the client of the `/v1` API and a local door for a runtime on the operator's machine ([[013-tunneled-runtimes]]) |
 | `lux-stubs` | tests, `make run`, and the release pipeline's conformance job; never an installation | the stub providers, one per dialect, the stub issuer, authorizer, and sink |
 
 Each role is its own package under `internal/` (`internal/serve`,
@@ -156,7 +156,7 @@ word for an upstream is `provider`, in every spec and every identifier;
 | `internal/auth` | the OIDC verifier over the issuers, the authorizer client, the owner policy | none | [[006-identity]] |
 | `internal/store` | desired state, credential values, key hashes, counters, the journal; memory, Postgres, and the file mode | none | [[010-state]] |
 | `internal/serve`, `internal/check`, `internal/rewrap` | the three roles of `luxd`, one package each with its own dependency allow list | none | [[002-repository-scaffold]], [release and installation](.archive/017-release-and-installation.md), [[005-providers]] |
-| `internal/events`, `internal/reqlog`, `internal/tunnel`, `internal/config`, `internal/version`, `internal/luxcli` | as their specs say | none | [[012-request-log-and-events]], [[013-tunnelled-runtimes]], [[002-repository-scaffold]], [[014-agent-client]] |
+| `internal/events`, `internal/reqlog`, `internal/tunnel`, `internal/config`, `internal/version`, `internal/luxcli` | as their specs say | none | [[012-request-log-and-events]], [[013-tunneled-runtimes]], [[002-repository-scaffold]], [[014-agent-client]] |
 
 The rule for the root packages: they compute, validate, and drive.
 `manifest` and `metering` import nothing under `internal/`, no HTTP
@@ -222,7 +222,7 @@ the gateway through an extension point or the exported packages.
 | Authorizer webhook | on every control plane request that names a subject and an action, and at Key resolve for every Model the Key names | [[006-identity]]; unavailability is a refusal | the built-in owner policy |
 | Event sink | after every mutation, and on every limit or budget state change | [[012-request-log-and-events]]: signed `POST`, at-least-once, ordered per object | off |
 | Request log archive | after every data plane request, batched | [[012-request-log-and-events]]: one record per request to an S3 compatible bucket | off |
-| Providers | applied by an operator, or attached by a local runtime through the tunnel | [[005-providers]], [[013-tunnelled-runtimes]] | none: a gateway with no Provider answers every data plane request `model_not_found` |
+| Providers | applied by an operator, or attached by a local runtime through the tunnel | [[005-providers]], [[013-tunneled-runtimes]] | none: a gateway with no Provider answers every data plane request `model_not_found` |
 | File mode | at start, from `LUX_MANIFEST_DIR` | [[010-state]]: desired state from disk, the kinds read-only through the API, credentials from the environment | off |
 | Gateway interfaces | at import time, by a platform that constructs the handler itself | [[004-request-path]] | the store and clients `luxd serve` constructs |
 
@@ -411,7 +411,7 @@ rules and credential custody ([[005-providers]]), the webhook payloads
 arithmetic ([[007-keys-and-limits]]), the target selection
 ([[008-routing-and-models]]), the usage record ([[009-usage-and-metering]]),
 the store contract ([[010-state]]), the endpoint table ([[011-api]]),
-the tunnel ([[013-tunnelled-runtimes]]), the threat model
+the tunnel ([[013-tunneled-runtimes]]), the threat model
 ([[016-security-and-threat-model]]), and how a platform composes the
 packages and the webhooks ([[020-building-a-plane]]).
 

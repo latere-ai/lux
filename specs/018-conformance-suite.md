@@ -250,7 +250,7 @@ plaintext, single-label, `.local`, and `.internal` host cases with a
 create and a warning, which the rule allows, and the suite reads the
 warning as the server's answer and deletes what it created. A tunneled
 Provider the server refuses at `spec.tunnel`, and the Models that
-target it, skip by name: the tunnel is [[013-tunnelled-runtimes]]'s and
+target it, skip by name: the tunnel is [[013-tunneled-runtimes]]'s and
 not built.
 
 Every case cleans up what it created, and the suite runs in under five
@@ -552,7 +552,7 @@ what was built; what diverged from the text as dispatched:
   which says any path outside it is `not_found`; that spec owns the
   answer.
 - A tunneled Provider and the Models over it skip, since `spec.tunnel`
-  is refused until [[013-tunnelled-runtimes]] enables it.
+  is refused until [[013-tunneled-runtimes]] enables it.
 - The mutation check is `go test -tags=<tag> -json` over the reference
   server's own test rather than a build of `luxd` with one capability
   removed, and the shims act through three seams `luxd` never calls;

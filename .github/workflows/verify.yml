@@ -1,6 +1,6 @@
 # Every push to main and every pull request runs the gate, the shared
 # pipeline of latere-ai/ci, the checks that need the tree and no network,
-# a tidy module file and the licence notice on every source file, the
+# a tidy module file and the license notice on every source file, the
 # two tiers of spec 015 that need more than the toolchain: the integration
 # tier over the stubs it builds itself, and the postgres tier against a
 # service container, and the install document of specs 035 and 017 from

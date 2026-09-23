@@ -209,7 +209,7 @@ one:
 | Object | What it carries |
 |---|---|
 | `Deployment` | 2 replicas; the hardening fields of [[016-security-and-threat-model]]; `terminationGracePeriodSeconds: 90` for the drain of [[002-repository-scaffold]]; `strategy.rollingUpdate` with `maxSurge: 0` and `maxUnavailable: 1`; `livenessProbe` on `/livez` and `readinessProbe` on `/readyz`, both on the internal port; the configuration from a ConfigMap and the four secrets from a Secret |
-| `Service` | the public port; the internal port is named and reachable inside the namespace for `/metrics` and for the tunnel forward route ([[013-tunnelled-runtimes]]) |
+| `Service` | the public port; the internal port is named and reachable inside the namespace for `/metrics` and for the tunnel forward route ([[013-tunneled-runtimes]]) |
 | `ServiceAccount` | no Role and no RoleBinding: `luxd` calls no Kubernetes API, and its token is not mounted |
 | `NetworkPolicy` | egress to DNS, to the providers, the issuers, the authorizer, the sink, the archive, and the store, and to the other replicas on the internal port; ingress from the ingress controller on the public port and from the other replicas on the internal port |
 | `PodDisruptionBudget` | `minAvailable: 1` |
@@ -284,7 +284,7 @@ and printed only when `LUX_BOOTSTRAP_DIR` is set, the dry run of the
 start-up apply with its counts or the first file that does not resolve
 (added 2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)); `secrets
 kek`, `credentials`, `providers`, `dialects` ([[005-providers]]);
-`tunnels` ([[013-tunnelled-runtimes]]).
+`tunnels` ([[013-tunneled-runtimes]]).
 
 `luxd check` dials the operator's endpoints and the providers. It
 changes no object, no counter, no journal row, and no cache entry; the

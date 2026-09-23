@@ -24,12 +24,12 @@ func TestTunnelProviderSchema(t *testing.T) {
 	off.TunnelEnabled = false
 	file := off
 	file.FileMode = true
-	tunnelled := "spec:\n  dialect: openai\n  tunnel: true\n"
-	dialled := minProvider
+	tunneled := "spec:\n  dialect: openai\n  tunnel: true\n"
+	dialed := minProvider
 	existing := func(tunnel bool) v1.Object {
-		body := head(v1.KindProvider, "laptop") + dialled
+		body := head(v1.KindProvider, "laptop") + dialed
 		if tunnel {
-			body = head(v1.KindProvider, "laptop") + tunnelled
+			body = head(v1.KindProvider, "laptop") + tunneled
 		}
 		r := mustResolve(t, body, on)
 		p := r.Object.(*v1.Provider)
@@ -45,13 +45,13 @@ func TestTunnelProviderSchema(t *testing.T) {
 		paths    []string
 		detail   string
 	}{
-		{"tunnel with a baseURL", tunnelled + "  baseURL: https://api.example.com/v1\n", on, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.baseURL"}, "no address"},
-		{"tunnel with a credential value", tunnelled + "  credential: {value: sk-x}\n", on, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.credential"}, "the tunnel is the credential"},
-		{"tunnel with a credential from the environment", tunnelled + "  credential: {valueFrom: {env: KEY}}\n", file, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.credential"}, "the tunnel is the credential"},
-		{"tunnel turned on by an update", tunnelled, on, existing(false), CodeImmutableField, []string{"spec.tunnel"}, ""},
-		{"tunnel turned off by an update", dialled, on, existing(true), CodeImmutableField, []string{"spec.tunnel"}, ""},
-		{"tunnel with the tunnel off", tunnelled, off, nil, CodeInvalidField, []string{"spec.tunnel"}, "LUX_TUNNEL_ENABLED"},
-		{"tunnel in the file mode", tunnelled, file, nil, CodeInvalidField, []string{"spec.tunnel"}, "LUX_TUNNEL_ENABLED"},
+		{"tunnel with a baseURL", tunneled + "  baseURL: https://api.example.com/v1\n", on, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.baseURL"}, "no address"},
+		{"tunnel with a credential value", tunneled + "  credential: {value: sk-x}\n", on, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.credential"}, "the tunnel is the credential"},
+		{"tunnel with a credential from the environment", tunneled + "  credential: {valueFrom: {env: KEY}}\n", file, nil, CodeExclusiveFields, []string{"spec.tunnel", "spec.credential"}, "the tunnel is the credential"},
+		{"tunnel turned on by an update", tunneled, on, existing(false), CodeImmutableField, []string{"spec.tunnel"}, ""},
+		{"tunnel turned off by an update", dialed, on, existing(true), CodeImmutableField, []string{"spec.tunnel"}, ""},
+		{"tunnel with the tunnel off", tunneled, off, nil, CodeInvalidField, []string{"spec.tunnel"}, "LUX_TUNNEL_ENABLED"},
+		{"tunnel in the file mode", tunneled, file, nil, CodeInvalidField, []string{"spec.tunnel"}, "LUX_TUNNEL_ENABLED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := tc.o
@@ -64,7 +64,7 @@ func TestTunnelProviderSchema(t *testing.T) {
 	}
 	// The accepted shape: no baseURL, no credential block at all, the
 	// discovery and health defaults, and the field visible as true.
-	r := mustResolve(t, head(v1.KindProvider, "laptop")+tunnelled, on)
+	r := mustResolve(t, head(v1.KindProvider, "laptop")+tunneled, on)
 	p := r.Object.(*v1.Provider)
 	if !p.Spec.Tunnel || p.Spec.BaseURL != "" || p.Spec.Credential != nil || p.Spec.Discovery.Mode != v1.DiscoveryAuto || p.Spec.Health.Mode != v1.HealthProbe {
 		t.Fatalf("resolved %+v", p.Spec)
@@ -72,7 +72,7 @@ func TestTunnelProviderSchema(t *testing.T) {
 	// An update that keeps tunnel true is accepted, with the field kept.
 	o := on
 	o.Existing = existing(true)
-	if _, err := Resolve(context.Background(), mustDecode(t, head(v1.KindProvider, "laptop")+tunnelled+"  timeout: 30s\n"), o); err != nil {
+	if _, err := Resolve(context.Background(), mustDecode(t, head(v1.KindProvider, "laptop")+tunneled+"  timeout: 30s\n"), o); err != nil {
 		t.Fatalf("an update keeping tunnel: %v", err)
 	}
 }

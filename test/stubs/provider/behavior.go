@@ -50,7 +50,7 @@ const (
 
 // Behavior is what one upstream model name asks of the stub: the row,
 // and the figures the row's name carried.
-type Behaviour struct {
+type Behavior struct {
 	Kind Kind
 	// Wait is slow-<duration>'s duration.
 	Wait time.Duration
@@ -62,7 +62,7 @@ type Behaviour struct {
 
 // Behaviors lists the names of the table, one per row, as a test that
 // walks the table reads them.
-func Behaviours() []string {
+func Behaviors() []string {
 	return []string{
 		string(KindFail500), string(KindFail429), string(KindFail401), "slow-10ms", string(KindHang),
 		string(KindFailStreamMid), string(KindFailBody), string(KindRedirect), string(KindFail400),
@@ -70,12 +70,12 @@ func Behaviours() []string {
 	}
 }
 
-// ParseBehaviour reads an upstream model name against the table: an exact
+// ParseBehavior reads an upstream model name against the table: an exact
 // row name, a slow-, tokens-, or events- name with its figures, and the
 // deterministic answer for anything else, a malformed figure included,
 // because a Model named tokens-x is a model and not a request to fail.
-func ParseBehaviour(name string) Behaviour {
-	b := Behaviour{InputTokens: DefaultInputTokens, OutputTokens: DefaultOutputTokens, Events: DefaultEvents}
+func ParseBehavior(name string) Behavior {
+	b := Behavior{InputTokens: DefaultInputTokens, OutputTokens: DefaultOutputTokens, Events: DefaultEvents}
 	switch Kind(name) {
 	case KindFail500, KindFail429, KindFail401, KindHang, KindFailStreamMid, KindFailBody, KindRedirect, KindFail400, KindFail529, KindFailHTML:
 		b.Kind = Kind(name)

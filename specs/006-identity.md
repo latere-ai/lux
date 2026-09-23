@@ -232,7 +232,7 @@ peer's, or the forwarded one behind a proxy listed in
 | Action | `resource` |
 |---|---|
 | `provider.create` | `{"kind": "Provider", "name", "dialect", "baseURL", "tunnel", "labels"}` from the manifest; no `id` yet |
-| `provider.read`, `.update`, `.delete`, `.tunnel` | `{"kind": "Provider", "id", "name", "owner", "dialect", "baseURL", "tunnel", "labels"}`; `tunnel` is asked when an agent opens a session for a tunneled Provider ([[013-tunnelled-runtimes]]) |
+| `provider.read`, `.update`, `.delete`, `.tunnel` | `{"kind": "Provider", "id", "name", "owner", "dialect", "baseURL", "tunnel", "labels"}`; `tunnel` is asked when an agent opens a session for a tunneled Provider ([[013-tunneled-runtimes]]) |
 | `provider.list` | `{"kind": "Provider"}`; the response may carry `filter` |
 | `model.create` | `{"kind": "Model", "name", "targets": [{"provider", "model"}], "labels"}` |
 | `model.read`, `.update`, `.delete` | `{"kind": "Model", "id", "name", "owner", "source", "labels"}` |
@@ -416,7 +416,7 @@ decided by Lux's rows. The rows, in order, before the frame:
   Provider with `tunnel: true`, which holds neither, so any subject may
   create one, and `update`, `delete`, and `tunnel` fall to the frame,
   which allows the owner; its discovered Models are then usable by
-  every subject under the rule below ([[013-tunnelled-runtimes]] states
+  every subject under the rule below ([[013-tunneled-runtimes]] states
   the consequence and the remedy, an authorizer);
 - `provider.read`, `provider.list`, `model.read`, `model.list`, and
   `model.use` are allowed to every subject that is not anonymous: the

@@ -137,12 +137,12 @@ func TestClientEmbedsNoIssuer(t *testing.T) {
 	}
 }
 
-// TestClientHonoursProxyVariables is spec 014's row: with HTTP_PROXY set
+// TestClientHonorsProxyVariables is spec 014's row: with HTTP_PROXY set
 // to a refusing address the command fails to reach the server and exits
 // 1, and with it set to a proxy that answers it reaches it, so the
 // transport reads the process's proxy variables. The target is a name
 // off loopback, since the standard transport never proxies loopback.
-func TestClientHonoursProxyVariables(t *testing.T) {
+func TestClientHonorsProxyVariables(t *testing.T) {
 	var proxied atomic.Int64
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host == "lux.example.com" && r.URL.Path == "/v1/self" {

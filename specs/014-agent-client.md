@@ -35,7 +35,7 @@ This spec owns the command set, the flags, the output, the exit codes,
 the client package, and the skill file that teaches an agent the
 command. The routes it calls are [[011-api]]'s and the manifest it
 sends is [[003-manifest-contract]]'s; `lux serve`'s protocol is
-[[013-tunnelled-runtimes]]'s and only its flags are here.
+[[013-tunneled-runtimes]]'s and only its flags are here.
 
 ## Current state
 
@@ -46,7 +46,7 @@ and the `lux serve` loop, and `client` the `/v1` client with
 and `docs/cli.md` are in the tree, the `depcheck` row for `./cmd/lux`
 is in `.lateregate.yaml`, and every acceptance row has its test.
 `lux serve` is one row of the command table over
-[[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: the `PUT` of the
+[[013-tunneled-runtimes]]'s `internal/tunnel/agent`: the `PUT` of the
 Provider goes through this package's own client, and the same token
 source serves the session's requests and its heartbeats.
 
@@ -106,7 +106,7 @@ addresses it, so a Model's two-segment name works unescaped.
 | `lux usage [--key k]... [--model m]... [--provider p]... [--owner s]... [--since d] [--from t] [--to t] [--by d]... [--interval i] [--label k=v]...` | `GET /v1/usage` | `--since 24h` is `--from now-24h`; the parameters are [[009-usage-and-metering]]'s |
 | `lux requests [the same filters] [--status s] [--error c] [--limit n]` | `GET /v1/requests` | records, newest first |
 | `lux models` | `GET /lux/v1/models` with `LUX_KEY` | the door's view: the Models this Key may call now ([[004-request-path]]) |
-| `lux serve --dialect d --upstream u --as n [...]` | [[013-tunnelled-runtimes]] | attaches a local runtime as a Provider |
+| `lux serve --dialect d --upstream u --as n [...]` | [[013-tunneled-runtimes]] | attaches a local runtime as a Provider |
 | `lux whoami` | `GET /v1/self` | the subject, the claims, the policy, and the limits this server holds |
 
 `lux -version` prints `lux <version> (<commit>, <date>)` and exits 0,
@@ -202,7 +202,7 @@ version naming one object.
 | Flag | Default | Purpose |
 |---|---|---|
 | `--dialect` | none, required | the dialect the local runtime speaks: `openai`, `anthropic`, `gemini`, or `lux` |
-| `--upstream` | none, required | the runtime's base URL on this machine; it stays on this machine ([[013-tunnelled-runtimes]]) |
+| `--upstream` | none, required | the runtime's base URL on this machine; it stays on this machine ([[013-tunneled-runtimes]]) |
 | `--as` | none, required | the `Provider` name to apply and attach |
 | `--carriers` | `4` | streams parked at the gateway |
 | `--include`, `--exclude` | empty | globs written into the Provider's `discovery` |
@@ -216,7 +216,7 @@ reason a retry cannot fix: `superseded`, because another agent holds
 the Provider; `provider_deleted`; and `token_expired` after one retry
 with a fresh token from `--token-file`, terminal only when none is
 available. `draining` reconnects at once, and a `forbidden` answer is a
-refusal to connect, not a close reason ([[013-tunnelled-runtimes]]).
+refusal to connect, not a close reason ([[013-tunneled-runtimes]]).
 When the file behind `--token-file` changes, `lux serve` sends the
 fresh token in a heartbeat frame rather than reconnecting. `SIGINT` and `SIGTERM` close the session cleanly, so the
 Provider is `Unreachable` at once rather than at the registry TTL.
@@ -346,7 +346,7 @@ which rule applies where.
 ### The packages
 
 `internal/luxcli` is the command: flag parsing, the file walk, the
-output renderers, the exit codes, and, once [[013-tunnelled-runtimes]]
+output renderers, the exit codes, and, once [[013-tunneled-runtimes]]
 lands its agent package, the `lux serve` loop. `client` is the client
 of the `/v1` API, one method per route of [[011-api]], returning the
 response bytes as they arrived beside the status and the request id so
@@ -387,7 +387,7 @@ third-party one, and this spec is where those two rows are written
 down. No HTTP client library, no command line framework, no YAML
 library of the command's own, no multiplexer and no WebSocket codec for
 `lux serve`, whose transport is `net/http`'s HTTP/2
-([[013-tunnelled-runtimes]]), no store driver, no identity library, no
+([[013-tunneled-runtimes]]), no store driver, no identity library, no
 provider SDK, and no OpenTelemetry SDK: the command is a person's
 process and exports nothing. The `depcheck` gate holds the list as a
 row for `./cmd/lux` in `.lateregate.yaml` beside the one for
@@ -439,7 +439,7 @@ The routes, the error table, the preconditions, and the OpenAPI
 document ([[011-api]]); the schema the command sends
 ([[003-manifest-contract]]); the usage parameters and the row shape
 ([[009-usage-and-metering]]); the tunnel protocol and the registry
-([[013-tunnelled-runtimes]]); how the binary is built and shipped
+([[013-tunneled-runtimes]]); how the binary is built and shipped
 ([release and installation](.archive/017-release-and-installation.md)); the suite that proves the server
 this command speaks to ([[018-conformance-suite]]).
 
@@ -460,9 +460,9 @@ this command speaks to ([[018-conformance-suite]]).
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | passing, `internal/luxcli` |
 | A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command | `TestSDKVariableFallbacks` | passing, `internal/luxcli` |
 | The binary contains no issuer URL, no OAuth client id, and no audience string, and no command performs a token exchange of any kind | `TestClientEmbedsNoIssuer`, over `go list -deps` and the string table of the built binary | passing, `cmd/lux`; the claim and parameter names are matched quoted, since a bare `id_token` is a substring of a libc symbol, and `login.example.com` is not among the canaries because `manifest` embeds its golden corpus, whose example owners carry it, into every importer |
-| With `HTTPS_PROXY` set to a refusing address the command fails to reach the server and exits 1, and with it unset it reaches it | `TestClientHonoursProxyVariables` | passing, `cmd/lux`, as a subprocess with `HTTP_PROXY`, because the standard transport reads the proxy variables once per process and never proxies loopback, so the target is a name off loopback the proxy answers for |
+| With `HTTPS_PROXY` set to a refusing address the command fails to reach the server and exits 1, and with it unset it reaches it | `TestClientHonorsProxyVariables` | passing, `cmd/lux`, as a subprocess with `HTTP_PROXY`, because the standard transport reads the proxy variables once per process and never proxies loopback, so the target is a name off loopback the proxy answers for |
 | Each `create` flag form builds the manifest the table says, applies it through `PUT`, and prints it under `--dry-run` without a request; the manifest `lux keys create` builds resolves identically to the equivalent file | `TestFlagFormsBuildTheManifest`, `TestDryRunAppliesNothing` | passing, `internal/luxcli`; the built body and the equivalent file decode to equal objects, and the Budget pair resolves equally without a Lookup |
-| `lux serve` applies the Provider its flags describe, reconnects with backoff across a gateway restart, exits 1 on a close reason a retry cannot fix, and closes cleanly on `SIGTERM` | `TestServeFlags`, `TestServeReconnects`, `TestServeExitsOnACloseReason`, `TestServeTokenExpiryIsTerminalAfterOneRetry`, `TestServeSendsAFreshTokenInAHeartbeat`, [[013-tunnelled-runtimes]]'s `TestCleanDisconnectIsImmediate` | passing, `internal/luxcli`, against a gateway with the tunnel on assembled in process and a fake runtime on loopback, the listener closed and opened again at one address for the restart |
+| `lux serve` applies the Provider its flags describe, reconnects with backoff across a gateway restart, exits 1 on a close reason a retry cannot fix, and closes cleanly on `SIGTERM` | `TestServeFlags`, `TestServeReconnects`, `TestServeExitsOnACloseReason`, `TestServeTokenExpiryIsTerminalAfterOneRetry`, `TestServeSendsAFreshTokenInAHeartbeat`, [[013-tunneled-runtimes]]'s `TestCleanDisconnectIsImmediate` | passing, `internal/luxcli`, against a gateway with the tunnel on assembled in process and a fake runtime on loopback, the listener closed and opened again at one address for the restart |
 | `skills/lux/SKILL.md` parses with frontmatter of exactly `name` and `description`, and every command and flag it names is in the table above | `TestSkillFrontmatter`, `TestSkillNamesOnlyRealCommands` | passing, `internal/luxcli`; every `lux` line in the skill's shell blocks and prose resolves to a command and its flags, and every code it names is in 011's table |
 | An agent given only `skills/lux/SKILL.md` and the two variables creates a Budget, a Key under it, and sends one request through a door against the stubs of [[015-test-stubs-and-tiers]] | `TestAgentWithOnlyTheSkill` | passing, `internal/luxcli`, against the gateway assembled in process with an `httptest` stub provider; the same run against the stub binaries is owned by [[015-test-stubs-and-tiers]] |
 | `docs/cli.md` equals the binary's `-help` output for every command in the table, and `lux -help` and `lux -version` each exit 0 | `TestCLIDocIsCurrent`, `TestHelpAndVersionExitZero` | passing, `internal/luxcli` |
@@ -474,7 +474,7 @@ this command speaks to ([[018-conformance-suite]]).
 `client` for the `/v1` routes, `skills/lux/SKILL.md`,
 `docs/cli.md`, and the `./cmd/lux` row of `.lateregate.yaml`. The last
 command the table lacked, `lux serve`, is `internal/luxcli/serve.go`
-over [[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: it applies
+over [[013-tunneled-runtimes]]'s `internal/tunnel/agent`: it applies
 the tunneled Provider its flags describe, holds the session, and
 reconnects with full jitter from one second to thirty while the
 gateway can be dialed. Every acceptance row of this spec's own

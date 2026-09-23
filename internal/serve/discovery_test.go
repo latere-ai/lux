@@ -253,10 +253,10 @@ func TestRelist(t *testing.T) {
 	}
 }
 
-// TestDiscoveryFailureKeepsTheCatalogue: a failed, empty, or unparseable
+// TestDiscoveryFailureKeepsTheCatalog: a failed, empty, or unparseable
 // list changes no object, leaves status.discovered.at as it was, and
 // records the failure in status.health.lastError.
-func TestDiscoveryFailureKeepsTheCatalogue(t *testing.T) {
+func TestDiscoveryFailureKeepsTheCatalog(t *testing.T) {
 	h := newHarness(t)
 	up := &stub{pages: map[string]string{"": openaiList("gpt-5", "o3")}}
 	p := h.provider(t, "openai", v1.DialectOpenAI, serveStub(t, up), nil)
@@ -422,15 +422,15 @@ func TestDiscoverySkipsOffProvidersAndListsTunnels(t *testing.T) {
 	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
 	url := serveStub(t, up)
 	h.provider(t, "off", v1.DialectOpenAI, url, func(p *v1.Provider) { p.Spec.Discovery.Mode = v1.DiscoveryNone })
-	tunnelled := h.provider(t, "tunnelled", v1.DialectOpenAI, "", func(p *v1.Provider) { p.Spec.Tunnel = true; p.Spec.Credential = nil })
+	tunneled := h.provider(t, "tunneled", v1.DialectOpenAI, "", func(p *v1.Provider) { p.Spec.Tunnel = true; p.Spec.Credential = nil })
 	d := h.discovery("a")
 	d.acquire(t.Context())
 	d.Tick(t.Context())
 	if up.count() != 0 || len(h.models(t, "")) != 0 {
 		t.Fatalf("%d lists, %d Models", up.count(), len(h.models(t, "")))
 	}
-	if got := h.get(t, tunnelled.Status.ID).Status.Health; got == nil || !strings.Contains(got.LastError, "model list") || !strings.Contains(got.LastError, "tunnelled Provider has no client") {
-		t.Fatalf("the tunnelled Provider's failed list: %+v", got)
+	if got := h.get(t, tunneled.Status.ID).Status.Health; got == nil || !strings.Contains(got.LastError, "model list") || !strings.Contains(got.LastError, "tunneled Provider has no client") {
+		t.Fatalf("the tunneled Provider's failed list: %+v", got)
 	}
 	// A client source that answers the tunneled Provider lists it like
 	// any other, with no credential injected.
@@ -440,7 +440,7 @@ func TestDiscoverySkipsOffProvidersAndListsTunnels(t *testing.T) {
 	})
 	d.acquire(t.Context())
 	d.Tick(t.Context())
-	if up.count() != 1 || names(h.models(t, "")) != "tunnelled/gpt-5" || up.lastHeader("Authorization") != "" {
+	if up.count() != 1 || names(h.models(t, "")) != "tunneled/gpt-5" || up.lastHeader("Authorization") != "" {
 		t.Fatalf("%d lists, Models %q, Authorization %q", up.count(), names(h.models(t, "")), up.lastHeader("Authorization"))
 	}
 	// Without the lease nothing happens either.

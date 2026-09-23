@@ -281,7 +281,7 @@ rather than at the next tick; the changed paths are read from the
 event's `data` as a list of paths or as an object whose `paths` member
 is one, and a replica that takes the lease skips the journal to its
 end first so the past is not replayed as lists. A tunneled Provider
-is skipped until [[013-tunnelled-runtimes]] gives it a client. The list
+is skipped until [[013-tunneled-runtimes]] gives it a client. The list
 request is sent through the Provider's upstream client with its
 credential injected, as any request is, within the Provider's
 `timeout`.
@@ -357,7 +357,7 @@ that is not never overrides the published state upward.
 |---|---|---|---|
 | `probe` | the replica holding the `health` lease, every `LUX_HEALTH_INTERVAL` and once at start, calling the dialect's models route, first page only, through the Provider's client with a 5 second budget in place of the Provider's `timeout` (`serve.Health.Probe`) | a transport error, a timeout, or a 5xx | any other complete response, including a 4xx: the upstream answered. A 401 or 403 is a success for health, which measures reachability, and is written to `status.health.lastError` as `credential refused: <status>`, so a revoked credential is visible without a request through a door |
 | `passive` | the replica holding the `health` lease, from its own data plane outcomes through `serve.Health.Observe(providerID, failed)`, which is [[004-request-path]]'s `HealthObserver`; an outcome moves the state and `since` and leaves `lastError` and `lastProbeAt` to the probe | a transport error, a timeout, or a 5xx from the upstream | any other complete response |
-| any mode, `tunnel: true` | the tunnel registry ([[013-tunnelled-runtimes]]): a Provider with no live session is `Unreachable` whatever the mode says, and the mode's own signal applies while one is open | a missing or expired registry row | a live row |
+| any mode, `tunnel: true` | the tunnel registry ([[013-tunneled-runtimes]]): a Provider with no live session is `Unreachable` whatever the mode says, and the mode's own signal applies while one is open | a missing or expired registry row | a live row |
 | `none` | nobody; the state is `Unknown` forever | nothing | nothing |
 
 ```mermaid
@@ -448,8 +448,8 @@ and `provider_unavailable`; `gateway.ErrPrivateAddress` surfaces as the
 dial's error. `gateway.InjectCredential(http.Header, *v1.Provider,
 value []byte)` is the custody rule below in code: it strips the
 credential header and writes the value under the scheme last, and a
-tunneled Provider is `gateway.ErrTunnelled` until
-[[013-tunnelled-runtimes]] gives it a client over its carrier
+tunneled Provider is `gateway.ErrTunneled` until
+[[013-tunneled-runtimes]] gives it a client over its carrier
 transport.
 
 | Property | Value | Reason |
@@ -457,7 +457,7 @@ transport.
 | transport | `otelhttp.NewTransport` over the `*http.Transport` the rows below configure, which is what `latere.ai/x/pkg/otel.Transport` wraps, reached directly because that package also carries the SDK and its exporters, which a root package's importer sets up and which reach `os/exec` | every outbound hop is a client span carrying the trace context; the shared bar's `otel-client` gate refuses an `&http.Client{}` literal without a `Transport` and any use of `http.DefaultClient`, and this tree waives nothing under `otel_client.skip` |
 | `Proxy` | nil | a proxy variable in the environment would move a credential-bearing request to a host no manifest names, and terminate its TLS; an operator that needs an egress proxy declares it as the `baseURL` |
 | `CheckRedirect` | `http.ErrUseLastResponse` | a 3xx is an upstream asking for the credential at another location; the response is returned to the caller as `upstream_error` instead |
-| `TLSClientConfig` | minimum TLS 1.2, verification on, the system roots, no field turns it off; `TLSHandshakeTimeout` 10s | a Provider is a public host by the upstream host rule; a local runtime with its own certificate is [[013-tunnelled-runtimes]]'s case |
+| `TLSClientConfig` | minimum TLS 1.2, verification on, the system roots, no field turns it off; `TLSHandshakeTimeout` 10s | a Provider is a public host by the upstream host rule; a local runtime with its own certificate is [[013-tunneled-runtimes]]'s case |
 | `DialContext` | resolves the name, then drops every loopback, link-local, unique-local, private, unspecified, or multicast address among the answers unless `LUX_UPSTREAM_ALLOW_PRIVATE`, and refuses the dial with `ErrPrivateAddress` when none is left; connects only to the admitted addresses, in order; 10s connect timeout | the parse-time rule of [[003-manifest-contract]] is on the name; this is on the address, which is what closes a public name that resolves inward |
 | host pin | the `RoundTripper` refuses, before dialing, a request whose URL scheme, host, or port differs from the Provider's `baseURL`, with an error the door reports as `upstream_error` | invariant 2 of [[001-architecture]] in code: a bug that builds a URL wrongly cannot carry the credential to another host |
 | `ForceAttemptHTTP2` | true; `MaxIdleConnsPerHost` 32, `IdleConnTimeout` 90s | one pool per Provider, so a slow upstream cannot starve another's connections |
@@ -536,7 +536,7 @@ when one fails ([[008-routing-and-models]]); the schema of `Provider`
 ([[003-manifest-contract]]); the rows, the leases, and the file mode
 ([[010-state]]); pricing and the usage record
 ([[009-usage-and-metering]]); a runtime that attaches itself as a
-Provider ([[013-tunnelled-runtimes]]).
+Provider ([[013-tunneled-runtimes]]).
 
 ## Acceptance criteria
 
@@ -551,7 +551,7 @@ Provider ([[013-tunnelled-runtimes]]).
 | A successful list adds new discovered Models, removes those the upstream dropped, and applies `include` before `exclude`; a discovered Model has one target, `weight` 100, `priority` 0, `fallback` `never`, no pricing, default modalities, and no `contextWindow` or `maxOutputTokens` | `TestDiscoveryAddsAndRemoves`, `TestDiscoveredModelShape` | passing, `internal/serve` |
 | An `anthropic` list of three pages by `has_more` and a `gemini` list of three pages by `nextPageToken` are read whole; a list past 20 pages is a failed list | `TestDiscoveryPaginates` | passing |
 | The lease holder lists a Provider within one second of reading its `provider.created`, or a `provider.updated` naming `spec.baseURL` or `spec.credential`, from the journal | `TestDiscoveryFollowsProviderChanges` | passing |
-| A failed, empty, or unparseable list changes no object and records `lastError` | `TestDiscoveryFailureKeepsTheCatalogue` | passing |
+| A failed, empty, or unparseable list changes no object and records `lastError` | `TestDiscoveryFailureKeepsTheCatalog` | passing |
 | Discovery never writes or deletes a Model whose source is `declared`; a declared Model shadows the discovered one and deleting it lets the next run restore it | `TestDeclaredModelSurvivesDiscovery` | passing |
 | Two replicas with the lease contended run one list per interval between them | `TestDiscoveryRunsOnOneReplica` | passing |
 | Every transition in the state diagram fires at its threshold in both modes, and a 4xx is a success while a 5xx is a failure; a 401 on the probe leaves the state `Healthy` and writes `credential refused: 401` to `lastError` | `TestHealthTransitions`, table-driven, `TestProbeReportsARefusedCredential` | passing |
@@ -559,7 +559,7 @@ Provider ([[013-tunnelled-runtimes]]).
 | An `Unreachable` Provider's targets leave selection, `Degraded` and `Unknown` do not, and `health.mode: none` never makes a target unavailable | `TestUnreachableLeavesSelection` | passing for the status half: `status.available` and `status.targets[].health` follow the states; the selection that reads them is [[008-routing-and-models]]'s |
 | Every state a replica acts on is one series of `lux_provider_health` per Provider and state, `1` on that state and `0` on the other three, following the transitions and a replica's own downgrade, and the series of a deleted Provider leave the family on the next tick | `TestProviderHealthGauge`, `TestProviderHealthGaugeForgetsADeletedProvider` | passing, `internal/serve`; the metric's row and its alert are [[019-observability]]'s |
 | A caller-sent copy of the credential header and a Provider static header of the same name are both beaten by the injected credential; no `X-Forwarded-*` or `Forwarded` header reaches the upstream | `TestCredentialHeaderWins`, `TestNoForwardedHeaders` | passing for the client half, `gateway`: `InjectCredential` beats both and the transport adds no forwarded header; the door's stripping of the caller's headers is [[004-request-path]]'s |
-| With `HTTPS_PROXY` set in the environment the request still reaches the Provider's host directly | `TestNoProxyEnvironmentHonoured` | passing |
+| With `HTTPS_PROXY` set in the environment the request still reaches the Provider's host directly | `TestNoProxyEnvironmentHonored` | passing |
 | A 302 from the stub provider is not followed and reaches the caller as `upstream_error` | `TestRedirectNotFollowed` | passing at the client: the 302 is returned unfollowed; the `upstream_error` mapping is [[004-request-path]]'s |
 | A public name resolving to a private address is refused at dial without `LUX_UPSTREAM_ALLOW_PRIVATE` and admitted with it | `TestPrivateAddressRefusedAtDial` | passing |
 | A request handed to a Provider's client toward another scheme, host, or port is refused before any dial and reaches the caller as `upstream_error` | `TestHostPin` | passing at the client: `ErrHostPinned` before any dial; the `upstream_error` mapping is [[004-request-path]]'s |
@@ -597,7 +597,7 @@ the Design above beside the rule it settles:
 - The builder returns the concrete `*gateway.Clients`, which satisfies
   [[004-request-path]]'s `ClientSource`; that interface is declared
   there. The client exports `ErrHostPinned`, `ErrProviderBusy`,
-  `ErrPrivateAddress`, and `ErrTunnelled` for the door to map, and
+  `ErrPrivateAddress`, and `ErrTunneled` for the door to map, and
   `InjectCredential` for the custody rule.
 - The private-address rule at dial drops the refused answers and
   connects to the admitted ones, refusing the dial only when none is
@@ -627,7 +627,7 @@ the Design above beside the rule it settles:
   spec's, written here in `internal/serve/events.go` until its package
   lands.
 - A tunneled Provider is skipped by both jobs and refused by the client
-  until [[013-tunnelled-runtimes]] gives it a carrier transport.
+  until [[013-tunneled-runtimes]] gives it a carrier transport.
 
 Owned elsewhere, in [[004-request-path]]: the upstream body cap and the
 stream relayed whole, `TestUpstreamBodyCap`; the door halves of

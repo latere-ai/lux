@@ -277,13 +277,13 @@ func TestUsageQueryValidation(t *testing.T) {
 		{"?from=yesterday", "from"},
 		{"?to=soon", "to"},
 		{"?by=key,model,provider,owner", "by"},
-		{"?by=colour", "by"},
+		{"?by=color", "by"},
 		{"?by=key&by=key", "by"},
 		{"?by=label:", "by"},
 		{"?interval=week", "interval"},
 		{"?label=nokey", "label"},
 		{"?label=%3Dv", "label"},
-		{"?colour=red", "colour"},
+		{"?color=red", "color"},
 		{"?limit=10", "limit"},
 		{"?cursor=x", "cursor"},
 		{"?status=ok", "status"},
@@ -385,7 +385,7 @@ func TestRequestsSource(t *testing.T) {
 		{"?source=memory", "source"},
 		{"?by=key", "by"},
 		{"?interval=hour", "interval"},
-		{"?colour=red", "colour"},
+		{"?color=red", "color"},
 	} {
 		rec := h.request(http.MethodGet, "/v1/requests"+tc.query, "")
 		if d := wantCode(t, rec, CodeInvalidField); !reflect.DeepEqual(paths(d), []string{tc.path}) {

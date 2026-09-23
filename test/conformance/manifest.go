@@ -201,7 +201,7 @@ func tunnelRefused(e envelope) bool {
 // A tunneled Provider the server refuses, and the Models that target
 // it, skip by name: the tunnel is spec 013's and not built.
 func case003AcceptedCorpus(t testing.TB, c *client) {
-	tunnelled := map[string]bool{}
+	tunneled := map[string]bool{}
 	for _, name := range corpusCases(t, "accepted") {
 		tree, ok := parseYAML(corpusFile(t, name))
 		if !ok {
@@ -214,12 +214,12 @@ func case003AcceptedCorpus(t testing.TB, c *client) {
 		if kind == v1.KindModel {
 			skip := false
 			for _, tg := range arr(tree, "spec.targets") {
-				if tunnelled[str(tg, "provider")] {
+				if tunneled[str(tg, "provider")] {
 					skip = true
 				}
 			}
 			if skip {
-				t.Logf("%s: skipped, its Provider is tunnelled and the server refused the tunnel", name)
+				t.Logf("%s: skipped, its Provider is tunneled and the server refused the tunnel", name)
 				continue
 			}
 		}
@@ -227,8 +227,8 @@ func case003AcceptedCorpus(t testing.TB, c *client) {
 		resp := c.apply(t, kind, objName, tree)
 		if kind == v1.KindProvider && resp.Status == http.StatusBadRequest {
 			if e := c.envelope(t, resp); tunnelRefused(e) {
-				t.Logf("%s: skipped, the server does not enable tunnelled Providers: %s", name, e.detail)
-				tunnelled[objName] = true
+				t.Logf("%s: skipped, the server does not enable tunneled Providers: %s", name, e.detail)
+				tunneled[objName] = true
 				continue
 			}
 		}

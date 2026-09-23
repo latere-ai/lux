@@ -107,7 +107,7 @@ func TestListSelectors(t *testing.T) {
 		t.Errorf("a Provider that does not exist: %v", got)
 	}
 	for query, path := range map[string]string{
-		"?colour=red": "colour", "?source=other": "source", "?label=nokey": "label", "?label=%3Dv": "label",
+		"?color=red": "color", "?source=other": "source", "?label=nokey": "label", "?label=%3Dv": "label",
 		"?limit=0": "limit", "?limit=201": "limit", "?limit=many": "limit", "?cursor=not-a-cursor": "cursor",
 	} {
 		rec := h.request(http.MethodGet, "/v1/models"+query, "")

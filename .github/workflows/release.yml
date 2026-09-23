@@ -10,7 +10,7 @@
 # after that the release is verified from a clean runner, the install
 # document is walked against the published artifacts, and the next
 # conformance fixture is pushed as the branch conformance/fixture-<tag>
-# for the maintainer to merge, because the organisation forbids an
+# for the maintainer to merge, because the organization forbids an
 # Action from opening a pull request. Nothing here pushes
 # to the default branch, no job carries a permission another needs, and
 # the image namespace is the repository owner's, so a fork's tag
@@ -553,7 +553,7 @@ jobs:
   # and never a push to the default branch: what the conformance run
   # produced, attached to the release already as fixture-<tag>.tar.gz by
   # publish. The job pushes the branch and stops. It opens no pull
-  # request because the organisation forbids an Action from creating
+  # request because the organization forbids an Action from creating
   # one, so the call failed on every release with the branch already
   # pushed; the maintainer merges the branch by hand. A tag's workflow
   # that could write to the default branch could write anything to it,

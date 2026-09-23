@@ -476,7 +476,7 @@ apply and the rest do.
 | `TLSClientConfig` | does not apply: there is no TLS to configure, because there is no socket to the runtime from this process. This is the answer to that table's note that a local runtime with its own certificate is this spec's case: the runtime's certificate, if it has one, is the agent's problem and the agent's `--upstream` names it |
 | `DialContext` and the private-address refusal | does not apply: the gateway resolves no name and opens no socket, which is exactly why a runtime on `127.0.0.1` needs no `LUX_UPSTREAM_ALLOW_PRIVATE` and no hole in a firewall |
 | `MaxIdleConnsPerHost` | does not apply: the pool is the carrier pool above |
-| the builder | `gateway.NewClientSource` refuses a `tunnel: true` Provider with `gateway.ErrTunnelled` ([[005-providers]]); this spec's carrier transport supplies the client in its place |
+| the builder | `gateway.NewClientSource` refuses a `tunnel: true` Provider with `gateway.ErrTunneled` ([[005-providers]]); this spec's carrier transport supplies the client in its place |
 
 ### Several replicas
 

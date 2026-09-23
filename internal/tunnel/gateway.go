@@ -260,7 +260,7 @@ func (g *Gateway) Client(ctx context.Context, p *v1.Provider) (*http.Client, err
 		return g.o.Clients.Client(ctx, p)
 	}
 	if p.Status.ID == "" {
-		return nil, errors.New("tunnel: Client of a tunnelled Provider with no id")
+		return nil, errors.New("tunnel: Client of a tunneled Provider with no id")
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()

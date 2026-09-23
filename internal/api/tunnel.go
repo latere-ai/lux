@@ -49,7 +49,7 @@ func (c *call) tunnelSession(ctx context.Context, ref string) *Error {
 	if err := c.authenticate(); err != nil {
 		return err
 	}
-	p, err := c.loadTunnelled(ctx, ref)
+	p, err := c.loadTunneled(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -89,9 +89,9 @@ func (c *call) tunnelCarrier(_ context.Context, ref string) *Error {
 	return nil
 }
 
-// loadTunnelled is the Provider a tunnel route names, which must be a
+// loadTunneled is the Provider a tunnel route names, which must be a
 // tunnel: true one.
-func (c *call) loadTunnelled(ctx context.Context, ref string) (*v1.Provider, *Error) {
+func (c *call) loadTunneled(ctx context.Context, ref string) (*v1.Provider, *Error) {
 	obj, _, err := c.load(ctx, kindOf(v1.KindProvider), ref)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (c *call) loadTunnelled(ctx context.Context, ref string) (*v1.Provider, *Er
 		return nil, refuse(CodeInternal, "")
 	}
 	if !p.Spec.Tunnel {
-		return nil, refuse(CodeNotFound, "Provider "+p.Metadata.Name+" has tunnel false; the tunnel routes are a tunnelled Provider's")
+		return nil, refuse(CodeNotFound, "Provider "+p.Metadata.Name+" has tunnel false; the tunnel routes are a tunneled Provider's")
 	}
 	return p, nil
 }

@@ -3,7 +3,7 @@ title: Public tunnel client for platform CLIs
 status: complete
 track: core
 depends_on:
-  - 013-tunnelled-runtimes.md
+  - 013-tunneled-runtimes.md
   - 014-agent-client.md
 affects:
   - client/tunnel/

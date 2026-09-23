@@ -210,7 +210,7 @@ Name rules. A `Provider`, `Key`, or `Budget` name is a DNS-1123 label
 of at most 63 characters. A `Model` name is one or more segments joined
 by `/`, each segment `[a-z0-9]([a-z0-9._:-]*[a-z0-9])?`, at most 128
 characters in all, because model names carry dots (`gpt-4.1`), a local
-runtime's carry a colon tag (`llama3.1:8b`, [[013-tunnelled-runtimes]]),
+runtime's carry a colon tag (`llama3.1:8b`, [[013-tunneled-runtimes]]),
 and a discovered model is named `<provider name>/<upstream name>` with
 the upstream name taken verbatim, which may itself carry a `/`: an
 aggregator lists `anthropic/claude-sonnet-4`, and the discovered Model
@@ -233,7 +233,7 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | Field | Type | Default | Mutable | Rule |
 |---|---|---|---|---|
 | `dialect` | enum | none, required | no | `openai`, `anthropic`, `gemini`, `lux`; the wire API the upstream speaks, per the dialect table below |
-| `tunnel` | bool | `false` | no | `true` makes the upstream whichever agent connects through the tunnel rather than an address the gateway holds ([[013-tunnelled-runtimes]]); `exclusive_fields` with `baseURL` and with `credential`; `invalid_field` when `Options.TunnelEnabled` is false |
+| `tunnel` | bool | `false` | no | `true` makes the upstream whichever agent connects through the tunnel rather than an address the gateway holds ([[013-tunneled-runtimes]]); `exclusive_fields` with `baseURL` and with `credential`; `invalid_field` when `Options.TunnelEnabled` is false |
 | `baseURL` | string | none, required unless `tunnel` | yes | `https://`, a host under the upstream host rule below, an optional path, no userinfo, query, or fragment; `http://` and a loopback, link-local, or private host only when `Options.AllowPrivateUpstreams` is set, and then with a warning; the host of `Options.PublicURL` is `invalid_field`, because a provider that is this gateway is a loop |
 | `credential.value` | string | none | yes; bumps `status.credential.version` | write-only; optional: a Provider with neither `value` nor `valueFrom` injects no credential header, which is what a runtime on the operator's own network needs ([[005-providers]]); 1 to 4096 bytes when set; returned by no read, carried by no event or log |
 | `credential.valueFrom.env` | string | none | no | a POSIX variable name the file mode reads at start; `exclusive_fields` with `value`; `invalid_field` in server mode |
@@ -663,7 +663,7 @@ field whose explicit zero differs from its default is a pointer,
 object. It also holds `NewID(prefix string, now
 time.Time, random io.Reader) string`, the one generator of every
 prefixed ULID in the tree, `prv_`, `mdl_`, `key_`, `bud_`, `req_`,
-`evt_`, and [[013-tunnelled-runtimes]]'s `tun_`: 48 bits of
+`evt_`, and [[013-tunneled-runtimes]]'s `tun_`: 48 bits of
 milliseconds and 80 random bits in Crockford base32, written with the
 standard library rather than a ULID module, so the binaries' build
 lists gain nothing for an identifier. `manifest` holds `Decode`,

@@ -585,7 +585,7 @@ upstream client, credential decryption, and health
 ([[005-providers]]); the record ([[009-usage-and-metering]]); the
 control plane and the fixed sentences per code ([[011-api]]); the stub
 providers a test runs against ([[015-test-stubs-and-tiers]]); the
-tunnel that makes a local runtime a Provider ([[013-tunnelled-runtimes]]).
+tunnel that makes a local runtime a Provider ([[013-tunneled-runtimes]]).
 
 ## Acceptance criteria
 

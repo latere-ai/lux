@@ -260,11 +260,11 @@ func TestTokenCommandIsReadOnly(t *testing.T) {
 					delete(status, "health")
 				}
 			}
-			normalised, err := json.Marshal(list.Items)
+			normalized, err := json.Marshal(list.Items)
 			if err != nil {
 				t.Fatal(err)
 			}
-			parts = append(parts, string(normalised))
+			parts = append(parts, string(normalized))
 		}
 		return strings.Join(parts, "\n")
 	}

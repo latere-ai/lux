@@ -208,11 +208,11 @@ func TestPrivateAddressRefusedAtDial(t *testing.T) {
 	srv := httptest.NewServer(rec)
 	t.Cleanup(srv.Close)
 	_, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
-	var dialled []string
+	var dialed []string
 	var mu sync.Mutex
 	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		mu.Lock()
-		dialled = append(dialled, addr)
+		dialed = append(dialed, addr)
 		mu.Unlock()
 		if strings.HasPrefix(addr, "127.0.0.1:") {
 			var d net.Dialer
@@ -237,8 +237,8 @@ func TestPrivateAddressRefusedAtDial(t *testing.T) {
 	if !errors.Is(err, ErrPrivateAddress) || !strings.Contains(err.Error(), "inward.example.com resolves to 127.0.0.1") {
 		t.Fatalf("without the flag: %v", err)
 	}
-	if len(dialled) != 0 || rec.count() != 0 {
-		t.Fatalf("a refused address was dialed: %q", dialled)
+	if len(dialed) != 0 || rec.count() != 0 {
+		t.Fatalf("a refused address was dialed: %q", dialed)
 	}
 	literal := provider("http://127.0.0.1:" + port)
 	if _, err := get(t, refusing, literal, literal.Spec.BaseURL+"/v1/models", time.Second); !errors.Is(err, ErrPrivateAddress) {
@@ -261,8 +261,8 @@ func TestPrivateAddressRefusedAtDial(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(dialled) != 2 || dialled[1] != "203.0.113.9:"+port {
-		t.Fatalf("dialed %q, want the public address of the mixed answer alone", dialled)
+	if len(dialed) != 2 || dialed[1] != "203.0.113.9:"+port {
+		t.Fatalf("dialed %q, want the public address of the mixed answer alone", dialed)
 	}
 }
 
@@ -558,10 +558,10 @@ func TestClientRefusals(t *testing.T) {
 	if _, err := c.Client(t.Context(), &v1.Provider{Spec: v1.ProviderSpec{BaseURL: "https://api.example.com"}}); err == nil || !strings.Contains(err.Error(), "no id and no name") {
 		t.Fatalf("no id: %v", err)
 	}
-	tunnelled := provider("")
-	tunnelled.Spec.Tunnel = true
-	if _, err := c.Client(t.Context(), tunnelled); !errors.Is(err, ErrTunnelled) {
-		t.Fatalf("a tunnelled Provider: %v", err)
+	tunneled := provider("")
+	tunneled.Spec.Tunnel = true
+	if _, err := c.Client(t.Context(), tunneled); !errors.Is(err, ErrTunneled) {
+		t.Fatalf("a tunneled Provider: %v", err)
 	}
 	for _, bad := range []string{"", "ftp://api.example.com", "api.example.com/v1", "https://", "://nope"} {
 		p := provider(bad)
@@ -571,9 +571,9 @@ func TestClientRefusals(t *testing.T) {
 	}
 }
 
-// TestNoProxyEnvironmentHonoured: with HTTPS_PROXY and HTTP_PROXY set the
+// TestNoProxyEnvironmentHonored: with HTTPS_PROXY and HTTP_PROXY set the
 // request still reaches the Provider's host directly.
-func TestNoProxyEnvironmentHonoured(t *testing.T) {
+func TestNoProxyEnvironmentHonored(t *testing.T) {
 	proxy := &recorder{}
 	proxySrv := httptest.NewServer(proxy)
 	t.Cleanup(proxySrv.Close)

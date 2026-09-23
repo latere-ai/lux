@@ -74,10 +74,10 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 	var warnings []string
 	if s.Tunnel {
 		if s.BaseURL != "" {
-			return nil, refuse(CodeExclusiveFields, "a tunnelled Provider has no address the gateway dials", "spec.tunnel", "spec.baseURL")
+			return nil, refuse(CodeExclusiveFields, "a tunneled Provider has no address the gateway dials", "spec.tunnel", "spec.baseURL")
 		}
 		if s.Credential != nil {
-			return nil, refuse(CodeExclusiveFields, "the tunnel is the credential of a tunnelled Provider", "spec.tunnel", "spec.credential")
+			return nil, refuse(CodeExclusiveFields, "the tunnel is the credential of a tunneled Provider", "spec.tunnel", "spec.credential")
 		}
 		if !o.TunnelEnabled {
 			return nil, refuse(CodeInvalidField, "tunnel: true needs LUX_TUNNEL_ENABLED on this gateway", "spec.tunnel")
