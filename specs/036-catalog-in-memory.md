@@ -216,8 +216,8 @@ failed read (`:189-201`), which the door answers `store_unavailable`.
 So today every call is refused about `LUX_KEY_CACHE` (default `10s`)
 into an outage, whatever the snapshot holds.
 
-**The stale grace.** `LUX_KEY_CACHE_GRACE` (proposed default `5m`, the
-maintainer sets the default; `0` disables it) lets the Key cache serve
+**The stale grace.** `LUX_KEY_CACHE_GRACE` (default `5m`, decided by
+the maintainer on 2026-09-23; `0` disables it) lets the Key cache serve
 an entry past its window when, and only when, the store read that would
 replace it fails:
 
@@ -305,7 +305,7 @@ Two rows in [[002-repository-scaffold]]'s table:
 | Variable | Spec | Default | Meaning |
 |---|---|---|---|
 | `LUX_CATALOG_RELOAD` | 036 | `30s` | how often a replica re-reads the whole catalog, the backstop for writes the journal does not name (5s to 10m) |
-| `LUX_KEY_CACHE_GRACE` | 036 | `5m`, the maintainer's to confirm | how long past its window a cached Key or Budget is served while the store does not answer; `0` refuses at the window as before (0 to 1h) |
+| `LUX_KEY_CACHE_GRACE` | 036 | `5m` | how long past its window a cached Key or Budget is served while the store does not answer; `0` refuses at the window as before (0 to 1h) |
 
 The tail keeps the Key cache's one-second interval and no variable.
 
