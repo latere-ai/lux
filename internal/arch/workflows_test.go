@@ -687,3 +687,43 @@ func TestReleaseBodyCheckReadsBothSidesTheSameWay(t *testing.T) {
 		})
 	}
 }
+
+// TestInstallBlocksParse holds docs/install.md to what CI runs of it:
+// tools/docs/run-blocks.sh joins every sh block of the document into one
+// bash script, so a block that does not parse fails the whole walk, and a
+// quote left open in one block swallows the next. Inside
+// "${VAR:?message}" bash reads a single quote as quoting, so an apostrophe
+// in such a message opens a quote that another one elsewhere may or may
+// not close.
+func TestInstallBlocksParse(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not on PATH, so the document's blocks are not parsed here")
+	}
+	doc, err := os.ReadFile(filepath.Join(root(t), "docs", "install.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var script strings.Builder
+	in := false
+	for line := range strings.SplitSeq(string(doc), "\n") {
+		switch {
+		case line == "```sh":
+			in = true
+		case line == "```" && in:
+			in = false
+		case in:
+			script.WriteString(line + "\n")
+		}
+	}
+	if script.Len() == 0 {
+		t.Fatal("docs/install.md has no sh block")
+	}
+	cmd := exec.Command(bash, "-n")
+	cmd.Stdin = strings.NewReader(script.String())
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("the sh blocks of docs/install.md do not parse as one bash script: %v\n%s", err, stderr.String())
+	}
+}

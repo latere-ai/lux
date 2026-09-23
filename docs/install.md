@@ -260,13 +260,13 @@ ones without a default before you start.
 ```sh
 # The release you are installing: its image, and where you unpacked its
 # deploy archive, a path relative to this directory.
-export LUX_INSTALL_IMAGE="${LUX_INSTALL_IMAGE:?set LUX_INSTALL_IMAGE to the release's image, ghcr.io/<owner>/lux:<tag>}"
+export LUX_INSTALL_IMAGE="${LUX_INSTALL_IMAGE:?set LUX_INSTALL_IMAGE to the image of the release, ghcr.io/<owner>/lux:<tag>}"
 export LUX_INSTALL_MANIFESTS="${LUX_INSTALL_MANIFESTS:-deploy}"
 # Your issuer, a token from it, and the subject that token renders to,
 # <issuer>|<sub>, which the gateway lets declare Providers and Models.
-export LUX_INSTALL_ISSUER="${LUX_INSTALL_ISSUER:?set LUX_INSTALL_ISSUER to your OpenID Connect issuer's URL}"
+export LUX_INSTALL_ISSUER="${LUX_INSTALL_ISSUER:?set LUX_INSTALL_ISSUER to the URL of your OpenID Connect issuer}"
 export LUX_INSTALL_TOKEN="${LUX_INSTALL_TOKEN:?set LUX_INSTALL_TOKEN to a token from that issuer with the audience lux}"
-export LUX_INSTALL_ADMIN="${LUX_INSTALL_ADMIN:?set LUX_INSTALL_ADMIN to the token's subject, <issuer>|<sub>}"
+export LUX_INSTALL_ADMIN="${LUX_INSTALL_ADMIN:?set LUX_INSTALL_ADMIN to the subject of that token, <issuer>|<sub>}"
 # The first provider: its base URL, its API key, and a model it serves.
 export LUX_INSTALL_UPSTREAM="${LUX_INSTALL_UPSTREAM:-https://api.openai.com/v1}"
 export LUX_INSTALL_UPSTREAM_KEY="${LUX_INSTALL_UPSTREAM_KEY:?set LUX_INSTALL_UPSTREAM_KEY to the API key of the provider}"
