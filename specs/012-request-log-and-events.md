@@ -90,7 +90,7 @@ sink can key on it without parsing `data`.
 | `provider.created`, `.updated`, `.deleted` | the API applied or deleted a `Provider` | the changed paths on an update; `{dialect, baseURL}` on a create; empty on a delete |
 | `provider.unreachable` | health entered `Unreachable` ([[005-providers]]) | `{since, lastError, targets}`: when, the probe's error, how many targets left selection |
 | `provider.healthy` | health returned to `Healthy` from any other state | `{since, wasUnreachableFor}` |
-| `model.created`, `.updated`, `.deleted` | the API applied or deleted a declared `Model`; `.updated` also when discovery changed a discovered Model's shape, with reason `discovery` ([[036-catalog-in-memory]]) | the changed paths on an update; `{targets, priced}` on a create |
+| `model.created`, `.updated`, `.deleted` | the API applied or deleted a declared `Model`; `.updated` also when discovery changed a discovered Model's shape, with reason `discovery` ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)) | the changed paths on an update; `{targets, priced}` on a create |
 | `model.discovered` | discovery declared a Model that did not exist | `{provider, upstreamModel}` |
 | `model.removed` | discovery deleted a discovered Model the upstream dropped | `{provider, upstreamModel}` |
 | `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, expiresAt}`; `prefix` is the minted `lux_` prefix or a supplied value's `sup_` handle ([[007-keys-and-limits]]) |

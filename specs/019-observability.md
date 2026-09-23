@@ -44,7 +44,7 @@ the Recorder emits `lux_output_tokens_per_second`, the gateway's
 attempt emits the two upstream metrics of [[005-providers]]'s row, that
 spec's health job emits `lux_provider_health`, and
 `deploy/base/prometheusrule.yaml` carries the twelve alerts, the last
-two [[036-catalog-in-memory]]'s. The last
+two [036-catalog-in-memory](.archive/036-catalog-in-memory.md)'s. The last
 metric of the table that waited on its owner,
 [[013-tunneled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
 on every configuration, and the rules file's `promtool` step is the
@@ -110,9 +110,9 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_store_operations_total` | counter | `op`, `result` | [[010-state]] |
 | `lux_circuit_open` | gauge | `provider`, `model` | [[008-routing-and-models]] |
 | `lux_tunnel_sessions` | gauge | none | [[013-tunneled-runtimes]] |
-| `lux_catalog_age_seconds` | gauge | none | [[036-catalog-in-memory]] |
-| `lux_catalog_reloads_total` | counter | `trigger`, `result` | [[036-catalog-in-memory]] |
-| `lux_catalog_objects` | gauge | `kind` | [[036-catalog-in-memory]] |
+| `lux_catalog_age_seconds` | gauge | none | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
+| `lux_catalog_reloads_total` | counter | `trigger`, `result` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
+| `lux_catalog_objects` | gauge | `kind` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream
@@ -445,8 +445,8 @@ metric's row, and gives every rule a severity and a summary. The
 | `LuxStoreFailing` | `increase(lux_store_operations_total{result="error"}[5m]) > 0` | 10m | the store is failing operations |
 | `LuxEventsBacklog` | `max(lux_events_pending) > 1000` | 15m | the operator's sink is not acknowledging |
 | `LuxRequestLogDropping` | `increase(lux_requestlog_dropped_total[10m]) > 0` | 0m | the archive is unreachable and records are being lost ([[012-request-log-and-events]]) |
-| `LuxCatalogStale` | `max(lux_catalog_age_seconds) > 90` | 5m | a replica's catalog snapshot has not matched the store for three default backstop intervals ([[036-catalog-in-memory]]) |
-| `LuxKeyCacheServingStale` | `sum(rate(lux_key_cache_hits_total{result="stale"}[5m])) > 0` | 1m | a replica is serving cached Keys past their window because the store does not answer ([[036-catalog-in-memory]]) |
+| `LuxCatalogStale` | `max(lux_catalog_age_seconds) > 90` | 5m | a replica's catalog snapshot has not matched the store for three default backstop intervals ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)) |
+| `LuxKeyCacheServingStale` | `sum(rate(lux_key_cache_hits_total{result="stale"}[5m])) > 0` | 1m | a replica is serving cached Keys past their window because the store does not answer ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)) |
 
 ### Configuration and the dependency row
 

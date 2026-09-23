@@ -230,7 +230,7 @@ Unknown values are also subject to the door's unauthenticated rate
 ([[011-api]]), so guessing costs the guesser first. Every lookup counts
 once in `lux_key_cache_hits_total` with `result` `hit`, `miss`,
 `negative`, or `stale`, the last a Key served past its window while the
-store does not answer ([[036-catalog-in-memory]]'s grace,
+store does not answer ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)'s grace,
 [[019-observability]]).
 
 The cache is what makes invariant 3 of [[001-architecture]] cheap: a
