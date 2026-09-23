@@ -40,7 +40,7 @@ func (h *Handler) tunnelRoutes() {
 // tunnelSession is POST /v1/providers/{id-or-name}/tunnel: a /v1 route
 // in every respect, the bearer and the subject's bucket, the Provider
 // loaded, provider.tunnel asked with the resource carrying tunnel, then
-// the session for as long as it lives. A Provider that is not tunnelled
+// the session for as long as it lives. A Provider that is not tunneled
 // has no such route, as an installation with the tunnel off has none.
 func (c *call) tunnelSession(ctx context.Context, ref string) *Error {
 	if c.h.o.Tunnel == nil {

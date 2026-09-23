@@ -42,7 +42,7 @@ type Verifier interface {
 }
 
 // Clients is spec 005's client per Provider, for every Provider that is
-// not tunnelled: *gateway.Clients.
+// not tunneled: *gateway.Clients.
 type Clients interface {
 	gateway.ClientSource
 	Revoke(providerID string)
@@ -55,7 +55,7 @@ type Options struct {
 	Store store.Store
 	// Verifier checks the fresh bearer of a heartbeat.
 	Verifier Verifier
-	// Clients answers every Provider that is not tunnelled.
+	// Clients answers every Provider that is not tunneled.
 	Clients Clients
 	// Replica is LUX_TUNNEL_FORWARD_ADDR: the address other replicas
 	// reach this one's internal listener at, written into every

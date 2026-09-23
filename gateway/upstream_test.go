@@ -202,7 +202,7 @@ func TestRedirectNotFollowed(t *testing.T) {
 // TestPrivateAddressRefusedAtDial: a public name that resolves to a
 // private address is refused before any dial without the flag and
 // connected with it; a name with a public answer beside a private one
-// is dialled on the public address only.
+// is dialed on the public address only.
 func TestPrivateAddressRefusedAtDial(t *testing.T) {
 	rec := &recorder{}
 	srv := httptest.NewServer(rec)
@@ -238,7 +238,7 @@ func TestPrivateAddressRefusedAtDial(t *testing.T) {
 		t.Fatalf("without the flag: %v", err)
 	}
 	if len(dialled) != 0 || rec.count() != 0 {
-		t.Fatalf("a refused address was dialled: %q", dialled)
+		t.Fatalf("a refused address was dialed: %q", dialled)
 	}
 	literal := provider("http://127.0.0.1:" + port)
 	if _, err := get(t, refusing, literal, literal.Spec.BaseURL+"/v1/models", time.Second); !errors.Is(err, ErrPrivateAddress) {
@@ -257,12 +257,12 @@ func TestPrivateAddressRefusedAtDial(t *testing.T) {
 	mixed := provider("http://mixed.example.com:" + port)
 	_, err = get(t, refusing, mixed, mixed.Spec.BaseURL+"/v1/models", time.Second)
 	if err == nil || errors.Is(err, ErrPrivateAddress) {
-		t.Fatalf("a mixed answer: %v, want the public address dialled and failing", err)
+		t.Fatalf("a mixed answer: %v, want the public address dialed and failing", err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(dialled) != 2 || dialled[1] != "203.0.113.9:"+port {
-		t.Fatalf("dialled %q, want the public address of the mixed answer alone", dialled)
+		t.Fatalf("dialed %q, want the public address of the mixed answer alone", dialled)
 	}
 }
 
@@ -292,7 +292,7 @@ func TestHostPin(t *testing.T) {
 		}
 	}
 	if dials.Load() != 0 || rec.count() != 0 {
-		t.Fatalf("a pinned request was dialled: %d dials, %d requests", dials.Load(), rec.count())
+		t.Fatalf("a pinned request was dialed: %d dials, %d requests", dials.Load(), rec.count())
 	}
 	resp, err := get(t, c, p, srv.URL+"/v1/chat/completions", time.Second)
 	if err != nil || resp.StatusCode != http.StatusOK || rec.count() != 1 {
@@ -548,7 +548,7 @@ func TestClientIsCachedAndRebuilt(t *testing.T) {
 }
 
 // TestClientRefusals: a nil Provider, one with no id and no name, a
-// tunnelled one, and a baseURL the transport cannot pin are refused
+// tunneled one, and a baseURL the transport cannot pin are refused
 // with the developer's detail.
 func TestClientRefusals(t *testing.T) {
 	c := loopback(ClientOptions{})
@@ -731,7 +731,7 @@ func TestDialRefusesABadAddress(t *testing.T) {
 		t.Fatalf("no answer: %v", err)
 	}
 	// The default resolver and dialer are reached when no hook is set; a
-	// loopback literal dialled to a closed port fails at the connect.
+	// loopback literal dialed to a closed port fails at the connect.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

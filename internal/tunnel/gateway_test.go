@@ -21,8 +21,8 @@ import (
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-// TestClientDelegatesADialledProvider: a Provider that is not tunnelled
-// gets spec 005's client, a nil Provider and a tunnelled one without an
+// TestClientDelegatesADialledProvider: a Provider that is not tunneled
+// gets spec 005's client, a nil Provider and a tunneled one without an
 // id are refused, and Revoke reaches spec 005's clients too.
 func TestClientDelegatesADialledProvider(t *testing.T) {
 	st := memory.New()
@@ -30,10 +30,10 @@ func TestClientDelegatesADialledProvider(t *testing.T) {
 	dialled := &v1.Provider{Metadata: v1.ObjectMeta{Name: "openai"}, Spec: v1.ProviderSpec{Dialect: v1.DialectOpenAI, BaseURL: "https://api.example.com/v1", Concurrency: 4}, Status: v1.ProviderStatus{ID: "prv_dialled"}}
 	client, err := r.g.Client(t.Context(), dialled)
 	if err != nil || client == nil {
-		t.Fatalf("a dialled Provider: %v", err)
+		t.Fatalf("a dialed Provider: %v", err)
 	}
 	if _, ok := client.Transport.(*transport); ok {
-		t.Fatal("a dialled Provider got the carrier transport")
+		t.Fatal("a dialed Provider got the carrier transport")
 	}
 	if _, err := r.g.Client(t.Context(), nil); err == nil {
 		t.Error("a nil Provider was answered")
@@ -98,7 +98,7 @@ func TestRegisterIdleReadsZero(t *testing.T) {
 // TestTunnelDiscovery: discovery over the tunnel declares one Model per
 // upstream name under the Provider's owner, once at connect through
 // OnConnect and on the job's tick; a failed list, the agent gone, keeps
-// the catalogue and writes the failure to status.health.lastError.
+// the catalog and writes the failure to status.health.lastError.
 func TestTunnelDiscovery(t *testing.T) {
 	st := memory.New()
 	var discovery *serve.Discovery
@@ -138,7 +138,7 @@ func TestTunnelDiscovery(t *testing.T) {
 	if !names["laptop/llama3.1"] || !names["laptop/qwen2.5"] || len(names) != 2 {
 		t.Fatalf("discovered %v", names)
 	}
-	// The agent goes; a list now fails at once and keeps the catalogue.
+	// The agent goes; a list now fails at once and keeps the catalog.
 	stop()
 	<-result
 	waitFor(t, func() bool { return r.g.Sessions() == 0 }, "the session to close")
@@ -149,7 +149,7 @@ func TestTunnelDiscovery(t *testing.T) {
 	}
 	models, _, err = st.Objects().List(t.Context(), v1.KindModel, store.Filter{Provider: p.Status.ID}, store.Page{})
 	if err != nil || len(models) != 2 {
-		t.Fatalf("the catalogue after a failed list: %d %v", len(models), err)
+		t.Fatalf("the catalog after a failed list: %d %v", len(models), err)
 	}
 	obj, _, err := st.Objects().Get(t.Context(), v1.KindProvider, p.Status.ID)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestTunnelDiscovery(t *testing.T) {
 	}
 }
 
-// noCredentials is the credential source of a tunnelled Provider: none.
+// noCredentials is the credential source of a tunneled Provider: none.
 type noCredentials struct{}
 
 func (noCredentials) Credential(context.Context, string) ([]byte, error) { return nil, nil }

@@ -85,14 +85,14 @@ func TestServeTunnelsARuntime(t *testing.T) {
 	token := iss.Mint(issuertest.Claims{Sub: "alice"})
 	bearer := []string{"Authorization", "Bearer " + token}
 
-	// alice is no admin, and applies a tunnelled Provider all the same.
+	// alice is no admin, and applies a tunneled Provider all the same.
 	resp, body := do(t, http.MethodPut, srv.publicURL+"/v1/providers/laptop", `{"spec": {"dialect": "openai", "tunnel": true}}`, bearer...)
 	if resp.StatusCode != 201 || !strings.Contains(body, `"tunnel":true`) {
 		t.Fatalf("apply: %d %s", resp.StatusCode, body)
 	}
 	resp, body = do(t, http.MethodPut, srv.publicURL+"/v1/providers/openai", `{"spec": {"dialect": "openai", "baseURL": "https://api.example.com/v1", "credential": {"value": "sk-x"}}}`, bearer...)
 	if resp.StatusCode != 403 || errorCode(t, body) != "forbidden" {
-		t.Fatalf("a dialled Provider by a non-admin: %d %s", resp.StatusCode, body)
+		t.Fatalf("a dialed Provider by a non-admin: %d %s", resp.StatusCode, body)
 	}
 
 	// The agent attaches over h2c.

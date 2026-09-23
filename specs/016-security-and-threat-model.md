@@ -67,7 +67,7 @@ whose control is made at a tag.
 | the authorizer token | the process environment | the ability to impersonate the gateway to the operator's authorizer |
 | the events secret | the process environment | the ability to forge an audit event at the operator's sink |
 | the key encryption keys | the process environment, `LUX_SECRETS_KEK` | every sealed credential |
-| the forward secret | the process environment, `LUX_TUNNEL_FORWARD_SECRET` | reaching a tunnelled runtime from inside the cluster network |
+| the forward secret | the process environment, `LUX_TUNNEL_FORWARD_SECRET` | reaching a tunneled runtime from inside the cluster network |
 
 ### Actors
 

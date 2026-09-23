@@ -5,7 +5,7 @@
 // one address, resolving a request against the manifest that declares the
 // providers, models, keys, and budgets. This file is the entry point and
 // holds wiring only: configuration, the listeners, and the run group. The
-// behaviour lives in the packages under internal/ and in the exported
+// behavior lives in the packages under internal/ and in the exported
 // packages at the module root.
 package main
 
@@ -234,7 +234,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// after the listeners have drained.
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
 	// The tunnel of spec 013 stands in front of the clients when it is
-	// on: a tunnelled Provider is answered from its session and every
+	// on: a tunneled Provider is answered from its session and every
 	// other Provider is the clients' own, so the doors and the jobs reach
 	// both through one seam. A session that opens lists the Provider's
 	// models and ticks health at once, so a laptop's models are callable
@@ -516,7 +516,7 @@ func openCredentials(ctx context.Context, cfg config.Config, st store.Store, fil
 // either way the sessions gauge of spec 019 is registered at zero, so
 // the metric is in the registry whether or not the tunnel is on. The
 // returned notice is the start-up line: it names the forward address or
-// says tunnelled Providers serve on the holding replica alone, which an
+// says tunneled Providers serve on the holding replica alone, which an
 // installation past one replica reads as the cause of an intermittent
 // provider_unavailable.
 func composeTunnel(cfg config.Config, st store.Store, identity *auth.Auth, clients *gateway.Clients, reg *metrics.Registry, logger *slog.Logger, onConnect func(context.Context, *v1.Provider)) (gateway.ClientSource, api.ClientRevoker, *tunnel.Gateway, string) {

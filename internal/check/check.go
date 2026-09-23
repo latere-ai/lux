@@ -744,10 +744,10 @@ func (r *run) dialects(context.Context) Line {
 	return Line{Warn, name, fmt.Sprintf("%s; gemini Provider(s) %s are reached through the /gemini door alone, since llmdialect has no Gemini codec", detail, strings.Join(gemini, ", "))}
 }
 
-// tunnels (spec 013): the tunnel is off, or on and every tunnelled
+// tunnels (spec 013): the tunnel is off, or on and every tunneled
 // Provider has a live registry row; with LUX_TUNNEL_FORWARD_ADDR set the
 // forward route on that address accepts the configured secret; with
-// LUX_DB_URL set and the address unset, tunnelled Providers serve on one
+// LUX_DB_URL set and the address unset, tunneled Providers serve on one
 // replica, which is a warn.
 func (r *run) tunnels(ctx context.Context) Line {
 	const name = "tunnels"

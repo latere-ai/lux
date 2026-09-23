@@ -38,7 +38,7 @@ type Client struct {
 }
 
 // NewHTTPClient is this package's transport policy: the process's
-// HTTP_PROXY, HTTPS_PROXY, and NO_PROXY honoured, FirstByteTimeout to the
+// HTTP_PROXY, HTTPS_PROXY, and NO_PROXY honored, FirstByteTimeout to the
 // response headers, no deadline on the body, and no retry anywhere.
 func NewHTTPClient() *http.Client {
 	return &http.Client{Transport: &http.Transport{

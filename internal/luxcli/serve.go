@@ -117,7 +117,7 @@ func runServe(a *app, o *serveOptions, args []string) error {
 // applyTunnelled is the PUT that declares the Provider this session
 // serves: the dialect, spec.tunnel, the discovery globs, and the
 // labels, through the same route lux apply uses. It carries no base
-// URL and no credential, because a tunnelled runtime is reached over
+// URL and no credential, because a tunneled runtime is reached over
 // the session and holds its own.
 func (a *app) applyTunnelled(c *client.Client, o *serveOptions, labels map[string]string) error {
 	p := &v1.Provider{
@@ -155,7 +155,7 @@ func (a *app) sessionLogger() *slog.Logger {
 // 1 with that reason's sentence. draining reconnects at once and
 // token_expired reconnects once with whatever the token file holds
 // now; every other end of a session, a broken stream or a gateway that
-// cannot be dialled, waits out the backoff and connects again.
+// cannot be dialed, waits out the backoff and connects again.
 func (a *app) attach(opts agent.Options, refreshable bool) error {
 	delay, expired := backoffMin, 0
 	for {

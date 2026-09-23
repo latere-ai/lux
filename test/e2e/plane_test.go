@@ -357,7 +357,7 @@ func TestE2EPlatformCredentialAsKey(t *testing.T) {
 	s := planeStack(t)
 	s.fixtures(t)
 	// The platform's own credential: a token its issuer signed, whose exp
-	// has already passed, so what the door honours can only be the Key.
+	// has already passed, so what the door honors can only be the Key.
 	expired := mintClaims(t, s, issuertest.Claims{Sub: "dev-1", Exp: time.Now().Add(-time.Hour).Unix()})
 	resp := applyWith(t, s, s.token, "key", "developer", keySpec("developer", "  models: [\"*\"]\n  value: "+expired+"\n"))
 	if resp.status != http.StatusCreated {

@@ -837,7 +837,7 @@ func pendingIsOnePerObject(t *testing.T, s store.Store) {
 
 	noErr(t, s.Journal().Acknowledge(ctx, "evt_a1"), "Acknowledge a1")
 	pending, err = s.Journal().Pending(ctx, 0)
-	noErr(t, err, "Pending after the acknowledgement")
+	noErr(t, err, "Pending after the acknowledgment")
 	equal(t, ids(pending)[0]+" "+ids(pending)[1], "evt_a2 evt_b1", "the next row of a follows")
 
 	noErr(t, s.Journal().Defer(ctx, "evt_b1", 3, time.Now().Add(time.Hour)), "Defer b1")

@@ -5,7 +5,7 @@
 // flags, where the token and the Key come from, the file walk of apply,
 // the four flag forms that build a manifest, the output renderers, the
 // three exit codes, and the rendering of a refusal from the API's
-// envelope. cmd/lux is wiring around Run; every behaviour is here so a
+// envelope. cmd/lux is wiring around Run; every behavior is here so a
 // test drives the command without a process.
 //
 // The rules Run holds: output is the server's bytes unless -o asks for

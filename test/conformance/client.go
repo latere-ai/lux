@@ -76,7 +76,7 @@ type suiteKey struct {
 // client is one run against one server: the configuration, the run's
 // id and label, what the well-known document said, the OpenAPI document
 // every /v1 answer is held to, the stubs when there are any, the Key
-// once minted, and what the cases have learnt so far.
+// once minted, and what the cases have learned so far.
 type client struct {
 	cfg   Config
 	http  *http.Client

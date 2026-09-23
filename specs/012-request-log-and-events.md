@@ -191,7 +191,7 @@ Delivery is ordered per object id: a row that is failing holds the rows
 behind it for that object and no other, so a sink sees
 `key.created` before `key.rotated` for one Key while another Key's
 events continue. Across objects there is no order. Delivery is at least
-once: an acknowledgement lost after the sink committed produces a
+once: an acknowledgment lost after the sink committed produces a
 second `POST` of the same `id`, so a sink deduplicates on `id`, which
 the documentation says in those words.
 
@@ -199,7 +199,7 @@ The worker runs on the replica holding the `journal` lease of
 [[010-state]], reading `Journal.Pending`, which returns at most one due
 row per object, oldest first, so one replica delivers at a time, a
 given object's events go in order, and a restart resumes where the
-acknowledgements stopped. Without a store the journal is the process's
+acknowledgments stopped. Without a store the journal is the process's
 memory and a restart loses what was not yet acknowledged, which the
 start-up log says. `LUX_EVENTS_URL` unset is events off, and the
 journal row is still written, both because the Key cache of
@@ -229,7 +229,7 @@ author has a reference to read.
 
 One `metering.Record` per data plane request, the same value the
 counters and the aggregates are folded from ([[009-usage-and-metering]]),
-serialised as one JSON object per line: `encoding/json`'s `Encoder`
+serialized as one JSON object per line: `encoding/json`'s `Encoder`
 over the batch, which writes a trailing newline per value, with
 `Content-Type: application/x-ndjson`. (`latere.ai/x/pkg/ndjson` reads
 and appends files on disk and has no encoder over a writer, so it is
@@ -285,7 +285,7 @@ dropped to make room, `lux_requestlog_dropped_total` counts it, and one
 `WARN` line per minute says how many. The hot path never blocks on the
 archive, never fails a request because the archive failed, and never
 grows without bound; an unreachable bucket costs the operator the
-oldest records first, which are the ones already summarised in the
+oldest records first, which are the ones already summarized in the
 aggregates. The buffer is this package's own ring:
 `latere.ai/x/pkg/batch` exists and drops the newest item when full,
 which is the opposite choice, so it is not used.
@@ -295,7 +295,7 @@ exporter copies the oldest records, writes them, and removes them by
 sequence once the bucket has the object. A `PutObject` that fails after
 the policy's five attempts therefore leaves its batch at the head of the
 buffer for the next flush, a drop meanwhile takes the oldest record
-there is, the batch's own, and the acknowledgement removes the batch
+there is, the batch's own, and the acknowledgment removes the batch
 alone, which is what makes a bucket outage of a few minutes lossless
 and one of an hour lossy by the cap. At shutdown the drain of
 [[002-repository-scaffold]] writes what the buffer holds before the
@@ -342,7 +342,7 @@ required variables unset is a start-up failure naming the variable.
 The record's fields, the aggregates, and the usage API
 ([[009-usage-and-metering]]); the journal table, the leases, and what a
 restart resumes ([[010-state]]); the routes that raise the mutation
-events ([[011-api]]); the stub sink and its behaviour flags
+events ([[011-api]]); the stub sink and its behavior flags
 ([[015-test-stubs-and-tiers]]); `lux_events_pending` and
 `lux_requestlog_dropped_total` as metrics ([[019-observability]]).
 
@@ -354,7 +354,7 @@ events ([[011-api]]); the stub sink and its behaviour flags
 | No event body and no archived record contains a canary Key value, a canary Provider credential, a canary prompt, or a canary completion, over a run that exercises every type and every door | `TestEventsCarryNoSecrets`, `TestArchiveCarriesNoContent` | passing, `internal/events`, over the same run, the doors half over the openai door; the four doors' canary is [[004-request-path]]'s |
 | The signature verifies under the documented formula, a body changed by one byte does not, a wrong secret does not, and a retry carries a fresh `t` and a signature over it | `TestSignature`, `TestRetryIsResigned` | passing, `internal/events` |
 | A sink that fails three times receives the event on the fourth attempt, with the delays of the stated policy, and that object's later events after it in order, while another object's events are delivered meanwhile | `TestDeliveryIsOrderedPerObject` | passing, `internal/events`; each deferral within `(0, 1s × 2^(attempt − 1)]` of the full-jitter policy |
-| A restart with a store resumes delivery of an unacknowledged event, and a second delivery of one `id` happens when an acknowledgement is lost | `TestDeliveryResumesFromTheJournal`, `TestDeliveryIsAtLeastOnce` | passing, `internal/events`; the lost acknowledgement both as a sink answering after the deadline and as a journal refusing the acknowledgement |
+| A restart with a store resumes delivery of an unacknowledged event, and a second delivery of one `id` happens when an acknowledgment is lost | `TestDeliveryResumesFromTheJournal`, `TestDeliveryIsAtLeastOnce` | passing, `internal/events`; the lost acknowledgment both as a sink answering after the deadline and as a journal refusing the acknowledgment |
 | An event that fails for 24 hours is dropped with a log line naming its id, and `lux_events_pending` returns to zero; a `POST` that hangs is abandoned at 10 seconds | `TestDeliveryGivesUp`, `TestDeliveryDeadline`, with a fake clock | passing, `internal/events`; the 24 hours with the fake clock, the deadline with `SinkOptions.Deadline` shortened, because an HTTP client's deadline is wall time |
 | Six replicas observing one Budget crossing its amount emit exactly one `budget.exhausted`, and six observing one Provider becoming `Unreachable` emit exactly one `provider.unreachable` | `TestStateChangeEventIsRaisedOnce` | passing, `internal/serve`, six Limiters and six health jobs on one store |
 | Rows journalled before `LUX_EVENTS_URL` was first set are acknowledged unsent, and rows after it are delivered | `TestSinkNamedLaterStartsFromThen` | passing, `internal/events`, a later holder reading the moment from the counters |

@@ -34,7 +34,7 @@ var callerCredentials = []string{"Authorization", "X-Api-Key", "X-Goog-Api-Key",
 // removeHopByHop deletes the hop-by-hop set and the headers Connection
 // names.
 // connectionNamed is the set of header names a Connection header lists,
-// canonicalised, which are hop-by-hop for that one hop whatever their
+// canonicalized, which are hop-by-hop for that one hop whatever their
 // name. The same reading serves both directions.
 func connectionNamed(h http.Header) map[string]bool {
 	named := map[string]bool{}

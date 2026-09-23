@@ -416,7 +416,7 @@ func (s *stack) model(t *testing.T, name, providerName, upstream string, priced 
 	s.apply(t, "model", name, modelYAML(name, providerName, upstream, priced))
 }
 
-// fixtures is the tier's usual catalogue: the four Providers with the
+// fixtures is the tier's usual catalog: the four Providers with the
 // jobs off, one Model each named after its dialect, and a Key for all.
 func (s *stack) fixtures(t *testing.T) (keyValue string) {
 	t.Helper()

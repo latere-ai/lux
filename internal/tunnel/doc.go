@@ -9,7 +9,7 @@
 // ClientSource, answering a tunnel: true Provider with a client whose
 // transport writes onto a carrier and delegating every other Provider
 // to spec 005's clients, so the doors, discovery, and health reach a
-// tunnelled Provider through the seam they already have. The registry,
+// tunneled Provider through the seam they already have. The registry,
 // store.Tunnels, says which replica holds a session; a replica that
 // does not hold one forwards to the one that does over the internal
 // route Forward serves, with LUX_TUNNEL_FORWARD_SECRET as the bearer.

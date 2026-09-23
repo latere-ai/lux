@@ -96,7 +96,7 @@ func normalizeJSON(t *testing.T, s string) any {
 }
 
 // TestColumns is spec 014's row: every column in the table renders for
-// each kind, a tunnelled Provider shows an empty BASEURL and its tunnel
+// each kind, a tunneled Provider shows an empty BASEURL and its tunnel
 // state.
 func TestColumns(t *testing.T) {
 	f := newFake(t)

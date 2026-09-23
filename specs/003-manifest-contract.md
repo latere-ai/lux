@@ -237,7 +237,7 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | `baseURL` | string | none, required unless `tunnel` | yes | `https://`, a host under the upstream host rule below, an optional path, no userinfo, query, or fragment; `http://` and a loopback, link-local, or private host only when `Options.AllowPrivateUpstreams` is set, and then with a warning; the host of `Options.PublicURL` is `invalid_field`, because a provider that is this gateway is a loop |
 | `credential.value` | string | none | yes; bumps `status.credential.version` | write-only; optional: a Provider with neither `value` nor `valueFrom` injects no credential header, which is what a runtime on the operator's own network needs ([[005-providers]]); 1 to 4096 bytes when set; returned by no read, carried by no event or log |
 | `credential.valueFrom.env` | string | none | no | a POSIX variable name the file mode reads at start; `exclusive_fields` with `value`; `invalid_field` in server mode |
-| `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini`; defaulted with `scheme` on every Provider that is not tunnelled, a Provider with no credential included, because the gateway strips a caller's copy of that header whether or not it injects one ([[005-providers]]) |
+| `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini`; defaulted with `scheme` on every Provider that is not tunneled, a Provider with no credential included, because the gateway strips a caller's copy of that header whether or not it injects one ([[005-providers]]) |
 | `credential.scheme` | enum | per dialect | yes | `bearer` prefixes `Bearer `; `raw` writes the value verbatim; `bearer` on `Authorization`, `raw` elsewhere; the default follows the dialect, not a header the caller chose |
 | `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB of visible ASCII and space with no CR or LF (`invalid_field`); the effective `credential.header`, given or the dialect's, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix`, compared case-insensitively |
 | `discovery.mode` | enum | `auto` | yes | `auto` lists the upstream's models on the discovery interval and declares each as a discovered Model ([[005-providers]]); `none` declares nothing |
@@ -586,7 +586,7 @@ them.
 ### Schema evolution
 
 - Within `lux.latere.ai/v1beta1`, a change adds an optional field with
-  a default that preserves the previous behaviour, or adds an enum
+  a default that preserves the previous behavior, or adds an enum
   value. A field never changes type or meaning, and is never removed.
 - A manifest accepted by stages 1 and 2 of one `v1` build is accepted
   by every later `v1` build and resolves to the same object, defaults

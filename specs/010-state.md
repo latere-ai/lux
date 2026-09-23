@@ -36,7 +36,7 @@ serves.
 
 This spec is `internal/store`'s implementation contract: the interface,
 the rows, the indexes, the three modes, and the conformance suite that
-holds them to one behaviour. The layout is `internal/store` for the
+holds them to one behavior. The layout is `internal/store` for the
 contract, its errors, and the memory store; `internal/store/postgres`
 for the Postgres store with its embedded `migrations/`;
 `internal/store/filemode` for the directory loader over the memory
@@ -461,7 +461,7 @@ are not one thing and the contract's callers hand in Go times.
 | `counters` | `key` text pk, `value` bigint, `expires_at` timestamptz null | the spend windows; null is a `none` window |
 | `leases` | `name` text pk, `holder` text, `expires_at` timestamptz | the jobs |
 | `journal` | `id` text pk, `gseq` bigint assigned as the table's maximum plus one under a transaction-scoped advisory lock, `object_id` text, `seq` bigint, `type` text, `at` timestamptz, `payload` bytea, `attempts` int, `next_attempt_at` timestamptz, `acked_at` timestamptz null | the events of 012; `payload` is bytea because a delivery is signed over the exact bytes and jsonb would re-spell them, and `gseq` is not a sequence because a sequence's values commit out of order and a replica tailing `Since` past the later one would never see the earlier |
-| `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunnelled-runtimes]], one live row per tunnelled Provider |
+| `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunnelled-runtimes]], one live row per tunneled Provider |
 | `usage_hourly` | the dimensions and sums of [[009-usage-and-metering]] | the aggregates |
 
 Indexes, one per query shape:
@@ -479,7 +479,7 @@ Indexes, one per query shape:
 | `journal (object_id, seq)` | `ByObject`, and the per-object claim of `Pending` |
 | `journal (gseq)` | `Since`, the Key cache's tail and the discovery tail |
 | `journal (next_attempt_at) where acked_at is null` | `Pending` |
-| `tunnels (provider_id)` | the primary key, read per request toward a tunnelled Provider |
+| `tunnels (provider_id)` | the primary key, read per request toward a tunneled Provider |
 | `usage_hourly (bucket)` and the primary key over the dimensions | the range query and the upsert |
 
 `Add` on `counters` is one `INSERT ... ON CONFLICT (key) DO UPDATE SET
@@ -685,7 +685,7 @@ The mode's other rules:
 | Variable | Default | Rule |
 |---|---|---|
 | `LUX_MANIFEST_DIR` | none | a readable directory; sets the file mode; a configuration error with `LUX_DB_URL` |
-| `LUX_DB_URL` | none | a `postgres://` or `postgresql://` URL, the two spellings the driver takes, its `sslmode` included, which the driver honours as written and the gateway neither adds to nor relaxes; absent is the memory store; never echoed, not even inside the parser's error, because it may carry a password. A database that does not answer at start is exit 1 with one line naming the variable and the endpoint, rather than a process answering with state in memory, because an operator who asked for durability would find out at the first restart |
+| `LUX_DB_URL` | none | a `postgres://` or `postgresql://` URL, the two spellings the driver takes, its `sslmode` included, which the driver honors as written and the gateway neither adds to nor relaxes; absent is the memory store; never echoed, not even inside the parser's error, because it may carry a password. A database that does not answer at start is exit 1 with one line naming the variable and the endpoint, rather than a process answering with state in memory, because an operator who asked for durability would find out at the first restart |
 | `LUX_DB_MAX_CONNS` | `8` | an integer, at least 1, at most 100; read only with `LUX_DB_URL` |
 
 The three are in [[002-repository-scaffold]]'s table with this spec as
@@ -868,7 +868,7 @@ and carried as a row of its table of departures:
   applied yet`, which the design did not say; check applies nothing, and
   that is the state the install document runs it against.
 
-What the neighbouring specs own from here. [[009-usage-and-metering]]'s
+What the neighboring specs own from here. [[009-usage-and-metering]]'s
 Postgres half of `Usage()` is this store's and is built.
 [[013-tunnelled-runtimes]]'s registry runs on Postgres through the
 suite's tunnel group. [release and installation](.archive/017-release-and-installation.md)'s `luxd check`

@@ -30,7 +30,7 @@ const (
 	// DefaultEvents is how many content events a streamed answer carries
 	// unless an events-<n> name says otherwise.
 	DefaultEvents = 5
-	// HeaderFail is the header that selects a behaviour without a model
+	// HeaderFail is the header that selects a behavior without a model
 	// name, for a test driving the stub directly.
 	HeaderFail = "Lux-Stub-Fail"
 	// maxBody bounds one recorded request body.
@@ -184,7 +184,7 @@ func (s *Stub) routes() {
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, map[string]any{}) })
 }
 
-// handle answers one route: the request is read, the behaviour chosen
+// handle answers one route: the request is read, the behavior chosen
 // from the header or the upstream model name, and the answer rendered
 // in the route's shape.
 func (s *Stub) handle(rt routeKind) http.HandlerFunc {
@@ -207,7 +207,7 @@ func (s *Stub) handle(rt routeKind) http.HandlerFunc {
 	}
 }
 
-// answer runs the behaviour: a refusal, a wait, a hang, a broken stream,
+// answer runs the behavior: a refusal, a wait, a hang, a broken stream,
 // or the deterministic answer, whole or streamed.
 func (s *Stub) answer(w http.ResponseWriter, r *http.Request, rt routeKind, req parsed, b Behaviour) {
 	switch b.Kind {

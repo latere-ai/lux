@@ -111,7 +111,7 @@ func (s *stub) lastHeader(name string) string {
 }
 
 // tunnelClients stands in for spec 013's carrier transport in front of
-// spec 005's clients: a tunnelled Provider, which has no baseURL, gets a
+// spec 005's clients: a tunneled Provider, which has no baseURL, gets a
 // client that sends its host-less requests to the stub; every other
 // Provider is the inner source's.
 type tunnelClients struct {
@@ -139,7 +139,7 @@ func (base rewriteHost) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(out)
 }
 
-// noCredentials is the credential source of a tunnelled Provider: none.
+// noCredentials is the credential source of a tunneled Provider: none.
 type noCredentials struct{}
 
 func (noCredentials) Credential(context.Context, string) ([]byte, error) { return nil, nil }
@@ -184,7 +184,7 @@ func newHarness(t *testing.T) *harness {
 	return h
 }
 
-// syncWriter serialises the logger's writes with the test's reads.
+// syncWriter serializes the logger's writes with the test's reads.
 type syncWriter struct {
 	w  *bytes.Buffer
 	mu *sync.Mutex

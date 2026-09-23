@@ -164,7 +164,7 @@ Each row is a benchmark that exists and runs, proven by `go test -bench`.
 | The cost and window benchmarks run | `BenchmarkCost`, `BenchmarkWindow`, `BenchmarkCounterKey` under `go test -bench . -benchmem ./metering/` | passing |
 | The limiter reserve-and-settle benchmark runs in its in-memory path | `BenchmarkLimiterReserveSettle` under `go test -bench . -benchmem ./internal/serve/` | passing |
 | The latency harness reports p50/p75/p90/p95/p99, throughput, and bytes per request per route class, opt-in and off the gate, with correct percentile math | `TestGatewayAddedLatency` under `LUX_LATENCY=1 go test -run TestGatewayAddedLatency -v ./gateway/`; `TestLatencySummary` and `TestPercentileNearestRank` in the untagged run | passing |
-| `docs/performance.md` frames what the benchmarks measure, gives the exact commands, names each benchmark, shows one machine's sample labelled not a guarantee, and points at `benchmarks/compare/` for the comparison; `docs/README.md` lists it | the files, read against this spec | passing |
+| `docs/performance.md` frames what the benchmarks measure, gives the exact commands, names each benchmark, shows one machine's sample labeled not a guarantee, and points at `benchmarks/compare/` for the comparison; `docs/README.md` lists it | the files, read against this spec | passing |
 
 ## Outcome
 

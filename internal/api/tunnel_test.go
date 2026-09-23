@@ -111,8 +111,8 @@ func TestTunnelOwnerPolicyException(t *testing.T) {
 	h.h = New(o)
 	carol := h.iss.Mint(issuertest.Claims{Sub: "carol"})
 
-	// bob, no admin, applies a tunnelled Provider and is refused a
-	// dialled one.
+	// bob, no admin, applies a tunneled Provider and is refused a
+	// dialed one.
 	rec := h.request(http.MethodPut, "/v1/providers/laptop", tunnelProviderJSON, as(h.bob)...)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("bob's tunnelled Provider: %d %s", rec.Code, rec.Body.String())
@@ -122,7 +122,7 @@ func TestTunnelOwnerPolicyException(t *testing.T) {
 	}
 	rec = h.request(http.MethodPut, "/v1/providers/openai", providerJSON, as(h.bob)...)
 	if details := wantCode(t, rec, CodeForbidden); !strings.Contains(details["detail"].(string), auth.ReasonAdminOnly) {
-		t.Errorf("bob's dialled Provider: %v", details)
+		t.Errorf("bob's dialed Provider: %v", details)
 	}
 	// bob tunnels it; the session request carries the object, the
 	// subject, the bearer's exp, and the agent.
@@ -159,14 +159,14 @@ func TestTunnelOwnerPolicyException(t *testing.T) {
 	if rec := h.request(http.MethodDelete, "/v1/providers/laptop", "", as(h.bob)...); rec.Code != http.StatusNoContent {
 		t.Errorf("bob's delete: %d %s", rec.Code, rec.Body.String())
 	}
-	// A session for a Provider that is not tunnelled, or that does not
+	// A session for a Provider that is not tunneled, or that does not
 	// exist, is not_found.
 	if rec := h.request(http.MethodPut, "/v1/providers/openai", providerJSON); rec.Code != http.StatusCreated {
-		t.Fatalf("the admin's dialled Provider: %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("the admin's dialed Provider: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = h.request(http.MethodPost, "/v1/providers/openai/tunnel", "")
 	if details := wantCode(t, rec, CodeNotFound); !strings.Contains(details["detail"].(string), "has tunnel false") {
-		t.Errorf("a dialled Provider's session: %v", details)
+		t.Errorf("a dialed Provider's session: %v", details)
 	}
 	wantCode(t, h.request(http.MethodPost, "/v1/providers/nobody/tunnel", ""), CodeNotFound)
 	wantCode(t, h.request(http.MethodPost, "/v1/providers/laptop/tunnel", "", "Authorization", ""), CodeUnauthenticated)

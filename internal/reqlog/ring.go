@@ -16,7 +16,7 @@ import (
 // write succeeds, so a push that drops meanwhile drops the oldest record
 // there is, the batch's own, and a failed write has nothing to return:
 // the batch is still at the head for the next flush. Every record
-// carries a sequence so the acknowledgement after a write removes those
+// carries a sequence so the acknowledgment after a write removes those
 // records and no other, whatever was dropped in between.
 type ring struct {
 	mu   sync.Mutex

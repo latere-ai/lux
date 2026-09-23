@@ -158,7 +158,7 @@ func TestDiscoveryPaginates(t *testing.T) {
 		t.Fatal("status.discovered.count is not the pages' total")
 	}
 
-	// A list that never ends is a failed list, and the catalogue stands.
+	// A list that never ends is a failed list, and the catalog stands.
 	endless := &stub{pages: map[string]string{}}
 	endless.pages[""] = `{"data":[{"id":"m0"}],"has_more":true,"last_id":"m0"}`
 	for i := range 30 {
@@ -280,7 +280,7 @@ func TestDiscoveryFailureKeepsTheCatalogue(t *testing.T) {
 			h.advance(time.Minute)
 			d.Tick(t.Context())
 			if got := names(h.models(t, "")); got != names(before) {
-				t.Fatalf("the catalogue changed: %q", got)
+				t.Fatalf("the catalog changed: %q", got)
 			}
 			got := h.get(t, p.Status.ID)
 			if !got.Status.Discovered.At.Equal(at) {
@@ -289,7 +289,7 @@ func TestDiscoveryFailureKeepsTheCatalogue(t *testing.T) {
 			if got.Status.Health == nil || !strings.Contains(got.Status.Health.LastError, tc.want) || !strings.HasPrefix(got.Status.Health.LastError, "model list: ") {
 				t.Fatalf("lastError = %+v, want %q", got.Status.Health, tc.want)
 			}
-			if !strings.Contains(h.logged(), "the list failed, the catalogue stands") {
+			if !strings.Contains(h.logged(), "the list failed, the catalog stands") {
 				t.Fatalf("log:\n%s", h.logged())
 			}
 		})
@@ -412,9 +412,9 @@ func TestDiscoveryWarnsOnRefusedNames(t *testing.T) {
 }
 
 // TestDiscoverySkipsOffProvidersAndListsTunnels: a Provider with
-// discovery.mode none is not listed on a tick; a tunnelled one is listed
+// discovery.mode none is not listed on a tick; a tunneled one is listed
 // through whatever client its source answers, which with spec 005's
-// clients alone is a failed list that keeps the catalogue and names the
+// clients alone is a failed list that keeps the catalog and names the
 // tunnel in status.health.lastError (spec 013's wiring composes the
 // carrier client in front).
 func TestDiscoverySkipsOffProvidersAndListsTunnels(t *testing.T) {
@@ -432,7 +432,7 @@ func TestDiscoverySkipsOffProvidersAndListsTunnels(t *testing.T) {
 	if got := h.get(t, tunnelled.Status.ID).Status.Health; got == nil || !strings.Contains(got.LastError, "model list") || !strings.Contains(got.LastError, "tunnelled Provider has no client") {
 		t.Fatalf("the tunnelled Provider's failed list: %+v", got)
 	}
-	// A client source that answers the tunnelled Provider lists it like
+	// A client source that answers the tunneled Provider lists it like
 	// any other, with no credential injected.
 	d = NewDiscovery(DiscoveryOptions{
 		Store: h.st, Clients: tunnelClients{url: url, inner: h.clients}, Credentials: noCredentials{}, Interval: time.Hour,

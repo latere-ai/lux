@@ -16,7 +16,7 @@ import (
 )
 
 // The rows of spec 009 over the Limiter, named as that spec names them.
-// Spec 007's tests of the same behaviour, TestOvershootBound,
+// Spec 007's tests of the same behavior, TestOvershootBound,
 // TestRateIsPerReplica, TestSpendWindow, TestSoftBudget, and
 // TestExhaustionIsAnnouncedOnce, prove the mechanism in depth; these
 // prove the figures and the statements 009's table makes.

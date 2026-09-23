@@ -357,7 +357,7 @@ func TestNoParkedCarrierWaitsForTheDeadline(t *testing.T) {
 }
 
 // TestConcurrencyBoundsTheCarrierClient: spec.concurrency bounds the
-// requests in flight toward a tunnelled Provider as toward any other,
+// requests in flight toward a tunneled Provider as toward any other,
 // and a wait past the deadline is the busy error.
 func TestConcurrencyBoundsTheCarrierClient(t *testing.T) {
 	st := memory.New()

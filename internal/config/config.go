@@ -191,7 +191,7 @@ type Config struct {
 	// agent heartbeats at a third of it.
 	TunnelRegistryTTL time.Duration
 	// TunnelForwardAddr is the host:port other replicas reach this one's
-	// internal listener at; empty serves a tunnelled Provider on the
+	// internal listener at; empty serves a tunneled Provider on the
 	// holding replica only.
 	TunnelForwardAddr string
 	// TunnelForwardSecrets are the bearers of the forward route: the

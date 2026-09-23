@@ -116,7 +116,7 @@ catch-all that records an opaque request and answers `200 {}`. The
 `/v1/responses`, `/v1/embeddings`, and `/v1/models`, because
 [[004-request-path]] translates the first two through two different
 codecs. A door's own `GET /v1/models` never reaches a stub: the gateway
-answers it from the catalogue ([[004-request-path]]), so the stub's
+answers it from the catalog ([[004-request-path]]), so the stub's
 model list belongs to discovery and the probe alone.
 
 The answer is a function of the request, so a test asserts a value
@@ -157,7 +157,7 @@ Failure injection is by **upstream model name**, because that is the
 one string the gateway rewrites onto the wire on every route and in
 both directions ([[004-request-path]]), so one mechanism works on a
 passthrough and a translation alike. A Model whose target names one of
-these gets that behaviour:
+these gets that behavior:
 
 | Upstream model name | The stub does |
 |---|---|
@@ -479,7 +479,7 @@ The conformance suite the stubs are wired into
 ([release and installation](.archive/017-release-and-installation.md)); the s3 archive's own assertions,
 which run against `s3test` ([[012-request-log-and-events]]); what each
 stub's contract is, which is its owning spec's; the issuer's and the
-authorizer's own behaviour, which is `latere.ai/x/pkg`'s and is tested
+authorizer's own behavior, which is `latere.ai/x/pkg`'s and is tested
 there, not here.
 
 The two changes outside this tree an earlier draft named, `GET
@@ -491,12 +491,12 @@ in `pkg` v0.66.0, the version `go.mod` pins, and nothing waits on them.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Each stub package written here drives every route and every behaviour flag it offers from its own test | `TestProviderStub`, `TestProviderStubRoutes`, `TestSinkStub`, `TestIndexServesTheDocument`, `TestIndexRefusesEveryOtherRoute`; the issuer's and the authorizer's are `pkg`'s own, and the wrappers' additions are `TestAuthorizerStubNamesResourcesLuxsWay`, `TestAuthorizerStubFlags`, `TestAuthorizerStubDeniesTheProbe` | passing, `test/stubs/provider`, `test/stubs/sink`, `test/stubs/index`, `test/stubs/authorizer` |
+| Each stub package written here drives every route and every behavior flag it offers from its own test | `TestProviderStub`, `TestProviderStubRoutes`, `TestSinkStub`, `TestIndexServesTheDocument`, `TestIndexRefusesEveryOtherRoute`; the issuer's and the authorizer's are `pkg`'s own, and the wrappers' additions are `TestAuthorizerStubNamesResourcesLuxsWay`, `TestAuthorizerStubFlags`, `TestAuthorizerStubDeniesTheProbe` | passing, `test/stubs/provider`, `test/stubs/sink`, `test/stubs/index`, `test/stubs/authorizer` |
 | The index names every stub of the run at `GET /`, with the credential the providers require, so a caller handed that one address reaches each of them and guesses no port | `TestIndexServesTheDocument`, `TestLuxStubsIndexNamesEveryStub` | passing, `test/stubs/index` and `cmd/lux-stubs`, the second against the running binary |
 | A streamed chat answer is the content events the upstream model name asked for, then the final usage event, then `[DONE]`, and no frame between | `TestChatStreamFrameBudget`, over three and five events and none | passing, `test/stubs/provider` |
 | The conformance suite of [[018-conformance-suite]] runs against the stubs with no case skipped for want of them | `TestE2EConformance`, whose seam passes `StubsURL` | passing; [[018-conformance-suite]]'s assertion reads the model member now, since this spec's deterministic content carries the upstream name by construction |
 | The stub provider answers deterministically: one request twice yields byte-identical bodies, and the content names the dialect, the model, and the digest of the last user text | `TestProviderStubIsDeterministic` | passing |
-| Every row of the failure injection table produces its behaviour on each of the four dialects, by upstream model name and by header | `TestFailureInjection`, table-driven over rows and dialects | passing, 13 rows × 4 dialects × 2 channels |
+| Every row of the failure injection table produces its behavior on each of the four dialects, by upstream model name and by header | `TestFailureInjection`, table-driven over rows and dialects | passing, 13 rows × 4 dialects × 2 channels |
 | The stub provider refuses a request whose credential is not the configured one and records it | `TestProviderStubChecksTheCredential` | passing |
 | `GET /_received` returns every request in order with its headers and body, and `DELETE /_received` clears it | `TestReceivedRecording` | passing |
 | The stub issuer's discovery document and key set verify a minted token through the same verifier `luxd` uses, under RS256 and under ES256 | `TestIssuerStubMintsVerifiableTokens`, table-driven over the two algorithms | passing, `test/stubs/issuer`, through `internal/auth.NewVerifier` |
@@ -543,7 +543,7 @@ a database writes its cases where the component lives and
 
 What was built differs from the design as dispatched in the points the
 Design's table of changes carries, the usage member names of the `lux`
-dialect stub, the failure table's exact behaviours, the sink's run-time
+dialect stub, the failure table's exact behaviors, the sink's run-time
 outage switch, the stubs index beside the seven listeners, the rendered
 `out/run/examples/` directory behind `make run`, and the two extra
 `TestE2E` cases among them. Two things the tier learned about the

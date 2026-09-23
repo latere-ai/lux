@@ -190,7 +190,7 @@ func hasKindPrefix(s string) bool {
 }
 
 // tunnelRefused reports a refusal of spec.tunnel, the answer of a server
-// that does not enable tunnelled Providers, which spec 013 has yet to
+// that does not enable tunneled Providers, which spec 013 has yet to
 // build.
 func tunnelRefused(e envelope) bool {
 	return e.code == "invalid_field" && slices.Equal(e.paths, []string{"spec.tunnel"})
@@ -198,7 +198,7 @@ func tunnelRefused(e envelope) bool {
 
 // case003AcceptedCorpus applies every accepted case in kind order,
 // reads each back, and holds the read-back's metadata to the golden's.
-// A tunnelled Provider the server refuses, and the Models that target
+// A tunneled Provider the server refuses, and the Models that target
 // it, skip by name: the tunnel is spec 013's and not built.
 func case003AcceptedCorpus(t testing.TB, c *client) {
 	tunnelled := map[string]bool{}

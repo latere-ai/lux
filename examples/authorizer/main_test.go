@@ -55,7 +55,7 @@ func ask(subject, plan, action string, res authz.Resource) authz.Request {
 }
 
 // TestTheMinimalAuthorizerDecides is the policy itself, row by row: the
-// catalogue readable by everyone and declared by an administrator, an
+// catalog readable by everyone and declared by an administrator, an
 // object to its owner alone, and a ceiling and a filter on everything
 // else. The probe and an action outside the vocabulary are not rows
 // here: the scaffold answers both before the policy is called, and
@@ -79,10 +79,10 @@ func TestTheMinimalAuthorizerDecides(t *testing.T) {
 		limits  bool
 		filters bool
 	}{
-		{"the catalogue is read by everyone", ask(alice, "", authorizer.ActionProviderRead, provider(bob)), true, "", false, false},
+		{"the catalog is read by everyone", ask(alice, "", authorizer.ActionProviderRead, provider(bob)), true, "", false, false},
 		{"a Model is used by everyone", ask(alice, "", authorizer.ActionModelUse, authz.NewResource("Model", "", map[string]any{"selector": "*"})), true, "", false, false},
-		{"the catalogue is declared by an administrator", ask(alice, "admin", authorizer.ActionProviderCreate, create("Provider", "openai")), true, "", false, false},
-		{"and by nobody else", ask(alice, "team", authorizer.ActionModelCreate, create("Model", "gpt-5")), false, "the catalogue is declared by the platform", false, false},
+		{"the catalog is declared by an administrator", ask(alice, "admin", authorizer.ActionProviderCreate, create("Provider", "openai")), true, "", false, false},
+		{"and by nobody else", ask(alice, "team", authorizer.ActionModelCreate, create("Model", "gpt-5")), false, "the catalog is declared by the platform", false, false},
 		{"another subject's Key", ask(alice, "team", authorizer.ActionKeyDelete, key(bob)), false, "not yours", false, false},
 		{"a subject's own Key", ask(alice, "team", authorizer.ActionKeyDelete, key(alice)), true, "", true, true},
 		{"a create under a plan's ceiling", ask(alice, "free", authorizer.ActionKeyCreate, create("Key", "run-42")), true, "", true, true},

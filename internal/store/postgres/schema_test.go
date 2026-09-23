@@ -130,7 +130,7 @@ func TestMigrationsAreAdditive(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !strings.HasPrefix(string(data), "-- SPDX-FileCopyrightText:") {
-			t.Errorf("%s carries no licence header", e.Name())
+			t.Errorf("%s carries no license header", e.Name())
 		}
 		body := comment.ReplaceAllString(string(data), "")
 		statements := 0
@@ -163,7 +163,7 @@ func TestMigrationsAreAdditive(t *testing.T) {
 // TestPoolDefaults: LUX_DB_MAX_CONNS bounds the pool and its default is
 // 8, with the other three bounds of spec 010, the connect timeout when
 // the URL sets none, and the application name; a URL that sets its own
-// connect timeout keeps it. Nothing is dialled.
+// connect timeout keeps it. Nothing is dialed.
 func TestPoolDefaults(t *testing.T) {
 	st, err := Open(t.Context(), Options{URL: "postgres://lux:secret@127.0.0.1:1/lux?sslmode=disable"})
 	if err != nil {
@@ -258,7 +258,7 @@ func TestDatabaseDownAtStartup(t *testing.T) {
 	if _, _, err := open.ConnectionLimits(ctx); err == nil || strings.Contains(err.Error(), password) {
 		t.Errorf("ConnectionLimits against a closed port: %v", err)
 	}
-	// An ended context is answered before anything is dialled.
+	// An ended context is answered before anything is dialed.
 	ended, cancelEnded := context.WithCancel(ctx)
 	cancelEnded()
 	if _, err := open.Schema(ended); !errors.Is(err, context.Canceled) {

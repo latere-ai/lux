@@ -132,7 +132,7 @@ type DiscoveredStatus struct {
 	Warnings []string  `json:"warnings,omitempty"`
 }
 
-// TunnelStatus is the session of a tunnelled Provider.
+// TunnelStatus is the session of a tunneled Provider.
 type TunnelStatus struct {
 	State           TunnelState `json:"state"`
 	Session         string      `json:"session,omitempty"`
@@ -271,7 +271,7 @@ func (s HealthState) Valid() bool {
 	}
 }
 
-// TunnelState is whether a tunnelled Provider has a live session.
+// TunnelState is whether a tunneled Provider has a live session.
 type TunnelState string
 
 // The tunnel states.

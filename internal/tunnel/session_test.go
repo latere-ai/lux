@@ -324,7 +324,7 @@ func TestMissingHeartbeatsEndTheSession(t *testing.T) {
 	// One heartbeat is acknowledged.
 	s.heartbeat("")
 	if f, err := s.next(time.Second); err != nil || f.Type != wire.TypeHeartbeat {
-		t.Fatalf("the acknowledgement: %+v %v", f, err)
+		t.Fatalf("the acknowledgment: %+v %v", f, err)
 	}
 	// The row lapsed and was removed behind the session's back; the next
 	// heartbeat registers it again instead of closing as superseded.
@@ -333,7 +333,7 @@ func TestMissingHeartbeatsEndTheSession(t *testing.T) {
 	}
 	s.heartbeat("")
 	if f, err := s.next(time.Second); err != nil || f.Type != wire.TypeHeartbeat {
-		t.Fatalf("the acknowledgement after re-registering: %+v %v", f, err)
+		t.Fatalf("the acknowledgment after re-registering: %+v %v", f, err)
 	}
 	if row, err := st.Tunnels().Get(t.Context(), p.Status.ID); err != nil || row.Session != s.Ready.Session {
 		t.Fatalf("the row was not re-registered: %+v %v", row, err)

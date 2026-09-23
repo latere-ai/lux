@@ -14,7 +14,7 @@
 // by the route's final usage event. Failure is injected by upstream
 // model name, the one string the gateway rewrites onto the wire on every
 // route, or by the Lux-Stub-Fail header for a test that drives the stub
-// directly; Behaviours lists the table.
+// directly; Behaviors lists the table.
 //
 // The control routes sit under /_, which no dialect route uses: GET
 // /_received returns every request the instance received, in order, and

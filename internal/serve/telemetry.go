@@ -12,7 +12,7 @@ import (
 )
 
 // ServiceName is what every span, metric, and log record of the gateway
-// is labelled with.
+// is labeled with.
 const ServiceName = "luxd"
 
 // Telemetry is spec 019's start-up, the one call the serve role makes:

@@ -181,7 +181,7 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 			}
 		}
 	}
-	// The organisation refuses a pull request an Action opens, so the
+	// The organization refuses a pull request an Action opens, so the
 	// job pushes conformance/fixture-<tag> and stops; the maintainer
 	// merges the branch by hand.
 	fixture := w.Jobs["fixture"]
@@ -194,7 +194,7 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 		t.Error("the fixture job pushes no conformance/fixture-<tag> branch")
 	}
 	if opensPR {
-		t.Error("the fixture job runs gh pr create; the organisation forbids an Action from opening a pull request, so the job pushes the branch and stops")
+		t.Error("the fixture job runs gh pr create; the organization forbids an Action from opening a pull request, so the job pushes the branch and stops")
 	}
 	if len(fixture.Permissions) != 1 || fixture.Permissions["contents"] != "write" {
 		t.Errorf("fixture declares %v, want contents: write alone and no pull-requests scope", fixture.Permissions)

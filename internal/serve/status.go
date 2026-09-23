@@ -56,7 +56,7 @@ func (m *machine) step(failed bool) bool {
 }
 
 // force moves the machine to state without counting, the registry's
-// verdict on a tunnelled Provider (spec 013), and reports whether the
+// verdict on a tunneled Provider (spec 013), and reports whether the
 // state changed. Unreachable carries the count that would have reached
 // it, so the next success returns to Healthy as after any run of
 // failures.
@@ -166,7 +166,7 @@ func refreshModels(ctx context.Context, st store.Store, p *v1.Provider, stateOf 
 }
 
 // defaultHolder is the lease holder's name when none is given: the host,
-// which is what an operator reading a lease row recognises, and the
+// which is what an operator reading a lease row recognizes, and the
 // process, so two replicas on one host differ.
 func defaultHolder() string {
 	host, err := os.Hostname()

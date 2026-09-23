@@ -218,7 +218,7 @@ func TestProviderStubIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestFailureInjection: every row of the table produces its behaviour on
+// TestFailureInjection: every row of the table produces its behavior on
 // each of the four dialects, selected by upstream model name and by the
 // Lux-Stub-Fail header.
 func TestFailureInjection(t *testing.T) {
@@ -242,7 +242,7 @@ func TestFailureInjection(t *testing.T) {
 	}
 }
 
-// checkRow asserts one row's behaviour on one dialect.
+// checkRow asserts one row's behavior on one dialect.
 func checkRow(t *testing.T, srv *server, d v1.Dialect, path, body string, header http.Header, b Behaviour) {
 	t.Helper()
 	switch b.Kind {

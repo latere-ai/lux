@@ -273,7 +273,7 @@ func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (writ
 // 003's update rule says, so a manifest read back re-applies without
 // touching the secret, and a Provider that never had one reads set
 // false. Resolve fills the credential block for every Provider that is
-// not tunnelled, so the block's absence carries no meaning here.
+// not tunneled, so the block's absence carries no meaning here.
 func (c *call) prepareProvider(p *v1.Provider, existing v1.Object) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
 	old, _ := existing.(*v1.Provider)

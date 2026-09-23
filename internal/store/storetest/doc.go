@@ -4,7 +4,7 @@
 // Package storetest is the conformance suite of spec 010: Run drives
 // every method of every collection, Transact, and the tunnel registry
 // against a store the caller constructs, so the memory store and, in a
-// later phase, the Postgres store are held to one behaviour by one set
+// later phase, the Postgres store are held to one behavior by one set
 // of cases. The memory package runs it as TestStoreConformance; the
 // postgres tier runs it as TestPostgresStoreConformance under its build
 // tag. Each case is named as spec 010's acceptance table names the test

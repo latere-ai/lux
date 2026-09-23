@@ -98,7 +98,7 @@ that needs one creates a second Key and deletes the first.
 The three functions of the value are `internal/serve`'s, which the
 routes of [[011-api]] call: `MintKeyValue` draws forty bytes from
 `crypto/rand` and maps each through its low six bits onto the 64-letter
-alphabet, so no letter is favoured; `HashKeyValue` is the SHA-256 of
+alphabet, so no letter is favored; `HashKeyValue` is the SHA-256 of
 the exact bytes as 64 lower-case hex characters, the one function the
 store indexes under and the door looks up with; `KeyPrefix` renders
 `status.prefix` for a minted or a supplied value.

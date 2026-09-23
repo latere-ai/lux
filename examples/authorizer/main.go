@@ -15,7 +15,7 @@
 //
 // and point the gateway at it with LUX_AUTHORIZER_URL and
 // LUX_AUTHORIZER_TOKEN. Everything a platform decides, who declares the
-// catalogue, what a plan may put on one Key, and whose objects a list
+// catalog, what a plan may put on one Key, and whose objects a list
 // returns, is in policy.Decide below. docs/plane.md carries this file and
 // TestPlaneDocAuthorizerConforms holds the two equal and runs the
 // contract's own conformance suite against it.
@@ -45,7 +45,7 @@ import (
 // spendCap is the ceiling one Key may ask for, by the plan the
 // platform's issuer stamps into the token. An administrator is under no
 // ceiling: a ceiling refuses a Key that names no limit at all, and the
-// catalogue and the installation's own Keys are declared without one.
+// catalog and the installation's own Keys are declared without one.
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
 // policy is the half of the contract a platform writes. By the time
@@ -55,14 +55,14 @@ var spendCap = map[string]string{"free": "5", "team": "50"}
 // answers every action: none of Lux's lists returns a page, so the
 // endpoint names no page action and needs no Lister.
 //
-// Everything a platform decides, who declares the catalogue, what a plan
+// Everything a platform decides, who declares the catalog, what a plan
 // may put on one Key, and whose objects a list returns, is here.
 type policy struct{}
 
-// Decide is the whole policy: the catalogue declared by an administrator
+// Decide is the whole policy: the catalog declared by an administrator
 // and readable by everyone, an object to its owner alone, and a ceiling
 // and a filter on everything else. The kind an action acts on is
-// authorizer.Kind's answer, so the catalogue's two kinds are named once
+// authorizer.Kind's answer, so the catalog's two kinds are named once
 // and a new action arrives here as a kind this policy already decides.
 //
 // An error is never an allow. server.Unavailable is the 503 a gateway
@@ -79,11 +79,11 @@ func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, erro
 	case kind == "Provider", kind == "Model":
 		switch {
 		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):
-			return authz.Decision{Allow: true}, nil // the catalogue is the platform's and is offered to every user
+			return authz.Decision{Allow: true}, nil // the catalog is the platform's and is offered to every user
 		case plan == "admin":
 			return authz.Decision{Allow: true}, nil
 		}
-		return authz.Decision{Reason: "the catalogue is declared by the platform"}, nil
+		return authz.Decision{Reason: "the catalog is declared by the platform"}, nil
 	case owner != "" && owner != req.Subject:
 		return authz.Decision{Reason: "not yours"}, nil
 	case plan == "admin":

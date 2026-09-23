@@ -141,7 +141,7 @@ var unreachable = map[string]string{
 }
 
 // caseName is the shape of a case's name: case, the spec's number, a
-// capitalised name.
+// capitalized name.
 var caseName = regexp.MustCompile(`^case(\d{3})[A-Z][A-Za-z0-9]*$`)
 
 // specTests reads the test names of one spec's acceptance table.

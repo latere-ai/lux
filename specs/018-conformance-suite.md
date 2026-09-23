@@ -248,7 +248,7 @@ own-host case names the server's host in place of the corpus's
 admits private upstreams answers the private, loopback, link-local,
 plaintext, single-label, `.local`, and `.internal` host cases with a
 create and a warning, which the rule allows, and the suite reads the
-warning as the server's answer and deletes what it created. A tunnelled
+warning as the server's answer and deletes what it created. A tunneled
 Provider the server refuses at `spec.tunnel`, and the Models that
 target it, skip by name: the tunnel is [[013-tunnelled-runtimes]]'s and
 not built.
@@ -551,7 +551,7 @@ what was built; what diverged from the text as dispatched:
   redirect is `cmd/luxd`'s outer mux and not the table of [[011-api]],
   which says any path outside it is `not_found`; that spec owns the
   answer.
-- A tunnelled Provider and the Models over it skip, since `spec.tunnel`
+- A tunneled Provider and the Models over it skip, since `spec.tunnel`
   is refused until [[013-tunnelled-runtimes]] enables it.
 - The mutation check is `go test -tags=<tag> -json` over the reference
   server's own test rather than a build of `luxd` with one capability
@@ -575,7 +575,7 @@ what was built; what diverged from the text as dispatched:
 - The event sink case left the stub table: the sink and its stub are
   [[012-request-log-and-events]]'s and neither exists.
 
-What the neighbouring specs own from here. [[015-test-stubs-and-tiers]]
+What the neighboring specs own from here. [[015-test-stubs-and-tiers]]
 serves the stubs document, starts `luxd` for the integration and
 postgres rows above, and corrects its `lux` dialect stub's usage
 members, which the gateway and `llmdialect` read as `input_tokens` and

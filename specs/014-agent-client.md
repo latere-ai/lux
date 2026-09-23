@@ -256,7 +256,7 @@ item's scalar members as columns for a list.
 | Key | `NAME`, `PREFIX`, `STATE`, `MODELS`, `BUDGET`, `EXPIRES`, `OWNER` | `ID`, `RPM`, `TPM`, `SPEND` |
 | Budget | `NAME`, `STATE`, `AMOUNT`, `SPENT`, `REMAINING`, `RESETS`, `OWNER` | `ID`, `WINDOW`, `HARD`, `KEYS` |
 
-`BASEURL` of a tunnelled Provider is empty and `TUNNEL` carries
+`BASEURL` of a tunneled Provider is empty and `TUNNEL` carries
 `status.tunnel.state`. `CREDENTIAL` is `set` or `unset` and a version,
 never a value; there is no column, in any mode, that could carry one.
 
@@ -455,7 +455,7 @@ this command speaks to ([[018-conformance-suite]]).
 | The four codes in the extra-line table print their extra line and no other code does | `TestRefusalExtraLines` | passing, `internal/luxcli` |
 | `LUX_TOKEN`, a token file's contents, a `--credential-from-env` value, and a Key value reach no stderr byte, `-v` included; a Key value reaches stdout exactly once per create and per rotate | `TestSecretsGoOneWay` with canaries | passing, `internal/luxcli`, under every output mode and both token sources |
 | `-o json` for one object is byte-identical to the response; a two-page list is one envelope with every item's bytes unchanged and `next_cursor` empty; `-o yaml` round-trips to the same value | `TestOutputFidelity` | passing, `internal/luxcli` |
-| Every column in the table renders for each kind, a tunnelled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | passing, `internal/luxcli` |
+| Every column in the table renders for each kind, a tunneled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | passing, `internal/luxcli` |
 | A `/v1` command with only `LUX_KEY`, a door command with only `LUX_TOKEN`, and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | passing, `internal/luxcli` |
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | passing, `internal/luxcli` |
 | A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command | `TestSDKVariableFallbacks` | passing, `internal/luxcli` |
@@ -475,9 +475,9 @@ this command speaks to ([[018-conformance-suite]]).
 `docs/cli.md`, and the `./cmd/lux` row of `.lateregate.yaml`. The last
 command the table lacked, `lux serve`, is `internal/luxcli/serve.go`
 over [[013-tunnelled-runtimes]]'s `internal/tunnel/agent`: it applies
-the tunnelled Provider its flags describe, holds the session, and
+the tunneled Provider its flags describe, holds the session, and
 reconnects with full jitter from one second to thirty while the
-gateway can be dialled. Every acceptance row of this spec's own
+gateway can be dialed. Every acceptance row of this spec's own
 passes; the one row with a second half, the skill's manifests run
 against stub binaries rather than an in-process gateway, names
 [[015-test-stubs-and-tiers]] as its owner. The gate passes whole, with
@@ -501,7 +501,7 @@ carried in the Design above:
 - A refused connect is terminal whatever the status, not only
   `forbidden`. The spec's reconnect holds "while the gateway is
   reachable and the token verifies", and a refusal says one of those
-  is false; a gateway that cannot be dialled at all is the reconnect's
+  is false; a gateway that cannot be dialed at all is the reconnect's
   case. So a 503 met at the connect during a restart is exit 1 rather
   than a wait, and an installation that wants it waited out restarts
   the command.

@@ -57,7 +57,7 @@ type Ref struct {
 }
 
 // KeyRef is the record's key block: the Key's key_ id and its
-// twelve-character prefix, which is how a person recognises the Key
+// twelve-character prefix, which is how a person recognizes the Key
 // without its value.
 type KeyRef struct {
 	ID     string `json:"id"`

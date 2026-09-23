@@ -1,7 +1,7 @@
 # Building a plane on Lux
 
 For a team building a platform that sells or governs model access:
-accounts, plans, a console, a catalogue, invoices. Lux is the gateway
+accounts, plans, a console, a catalog, invoices. Lux is the gateway
 underneath it. This page says how a platform composes it, where each of
 its own concerns goes, how it gives a sandbox running untrusted code
 model access without putting a credential in the sandbox, how it proves
@@ -58,7 +58,7 @@ the tree so it stays that way.
 | accounts, organizations, teams | claims in the issuer's token, read by the authorizer; the gateway reads none of them | the platform's middleware before `Resolve` sets `Options.Actor` |
 | roles and permissions | the authorizer's `allow` per action | the platform's own check before it calls `Resolve` |
 | plans and quotas | the authorizer's `limits`, which cap what a Key may ask for, plus `Budget` objects the platform applies; a Key that names no limit under a cap is refused, so the platform's console or client fills the limits in | `Options.Limits` and the same Budgets |
-| a shared catalogue | `Provider` and `Model` objects the platform declares as an administrator; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
+| a shared catalog | `Provider` and `Model` objects the platform declares as an administrator; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
 | per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup` answers `Models` for the tenant |
 | funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person; the gateway never sees a cookie | reads the platform's own API |
@@ -101,7 +101,7 @@ endpoint that does not recognize `owner.assign` refuses the operation; upgrade
 its vocabulary before enabling provisioning. The built-in policy reserves
 assignment to administrators.
 
-A platform CLI can apply a tunnelled Provider with `client.Client`, then attach
+A platform CLI can apply a tunneled Provider with `client.Client`, then attach
 its local runtime through `client/tunnel.Run`. This public package owns one
 HTTP/2 session; the CLI supplies a concurrency-safe refreshing token source and
 its reconnect policy. It returns typed refusal and close errors and joins its
@@ -115,7 +115,7 @@ decides nothing itself: on every control plane request it asks one
 endpoint whether one subject may do one action to one resource, and an
 answer it cannot read is a refusal and never an allow. With no endpoint
 configured it applies a built-in owner policy, where every subject owns
-what it applied and `LUX_ADMIN_SUBJECTS` declares the catalogue. That
+what it applied and `LUX_ADMIN_SUBJECTS` declares the catalog. That
 policy is the shape a platform's first authorizer has, and the program
 below is it, with a plan claim added.
 
@@ -157,7 +157,7 @@ compiles and runs:
 //
 // and point the gateway at it with LUX_AUTHORIZER_URL and
 // LUX_AUTHORIZER_TOKEN. Everything a platform decides, who declares the
-// catalogue, what a plan may put on one Key, and whose objects a list
+// catalog, what a plan may put on one Key, and whose objects a list
 // returns, is in policy.Decide below. docs/plane.md carries this file and
 // TestPlaneDocAuthorizerConforms holds the two equal and runs the
 // contract's own conformance suite against it.
@@ -187,7 +187,7 @@ import (
 // spendCap is the ceiling one Key may ask for, by the plan the
 // platform's issuer stamps into the token. An administrator is under no
 // ceiling: a ceiling refuses a Key that names no limit at all, and the
-// catalogue and the installation's own Keys are declared without one.
+// catalog and the installation's own Keys are declared without one.
 var spendCap = map[string]string{"free": "5", "team": "50"}
 
 // policy is the half of the contract a platform writes. By the time
@@ -197,14 +197,14 @@ var spendCap = map[string]string{"free": "5", "team": "50"}
 // answers every action: none of Lux's lists returns a page, so the
 // endpoint names no page action and needs no Lister.
 //
-// Everything a platform decides, who declares the catalogue, what a plan
+// Everything a platform decides, who declares the catalog, what a plan
 // may put on one Key, and whose objects a list returns, is here.
 type policy struct{}
 
-// Decide is the whole policy: the catalogue declared by an administrator
+// Decide is the whole policy: the catalog declared by an administrator
 // and readable by everyone, an object to its owner alone, and a ceiling
 // and a filter on everything else. The kind an action acts on is
-// authorizer.Kind's answer, so the catalogue's two kinds are named once
+// authorizer.Kind's answer, so the catalog's two kinds are named once
 // and a new action arrives here as a kind this policy already decides.
 //
 // An error is never an allow. server.Unavailable is the 503 a gateway
@@ -221,11 +221,11 @@ func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, erro
 	case kind == "Provider", kind == "Model":
 		switch {
 		case req.Action == authorizer.ActionModelUse || strings.HasSuffix(req.Action, ".read") || strings.HasSuffix(req.Action, ".list"):
-			return authz.Decision{Allow: true}, nil // the catalogue is the platform's and is offered to every user
+			return authz.Decision{Allow: true}, nil // the catalog is the platform's and is offered to every user
 		case plan == "admin":
 			return authz.Decision{Allow: true}, nil
 		}
-		return authz.Decision{Reason: "the catalogue is declared by the platform"}, nil
+		return authz.Decision{Reason: "the catalog is declared by the platform"}, nil
 	case owner != "" && owner != req.Subject:
 		return authz.Decision{Reason: "not yours"}, nil
 	case plan == "admin":

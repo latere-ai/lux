@@ -337,7 +337,7 @@ func (w *Worker) count(ctx context.Context) {
 }
 
 // defaultHolder is the lease holder's name when none is given: the host,
-// which is what an operator reading a lease row recognises, and the
+// which is what an operator reading a lease row recognizes, and the
 // process, so two replicas on one host differ.
 func defaultHolder() string {
 	host, err := os.Hostname()

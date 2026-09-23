@@ -303,7 +303,7 @@ func TestUsageQueryValidation(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"cost":1750000,`) {
 		t.Errorf("cost is not an integer: %s", rec.Body.String())
 	}
-	// A range the query names is honoured on both sides.
+	// A range the query names is honored on both sides.
 	if rows := items(t, h.request(http.MethodGet, "/v1/usage?from=2026-09-14T00:00:00Z&to=2026-09-14T01:00:00Z", "")); len(rows) != 0 {
 		t.Errorf("a range before the rows: %v", rows)
 	}

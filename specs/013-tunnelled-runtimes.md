@@ -1,5 +1,5 @@
 ---
-title: "Tunnelled runtimes: a local model server attached as a Provider through an outbound tunnel"
+title: "Tunneled runtimes: a local model server attached as a Provider through an outbound tunnel"
 status: complete
 track: core
 depends_on:
@@ -12,7 +12,7 @@ updated: 2026-09-14
 author: changkun
 ---
 
-# Tunnelled runtimes
+# Tunneled runtimes
 
 ## Overview
 
@@ -31,7 +31,7 @@ which authenticates to the control plane with an issuer token, applies a
 outbound HTTP/2 connection to the gateway. The gateway dials the runtime
 through that connection as if it were a base URL: the same upstream
 client, the same discovery and health jobs, the same routing, the same
-metering. A `Model` on a tunnelled Provider is a Model like any other,
+metering. A `Model` on a tunneled Provider is a Model like any other,
 and a `Key` whose selectors match it reaches it through any door the
 dialect matrix allows ([[008-routing-and-models]]).
 
@@ -71,13 +71,13 @@ tables; the rows below are what that spec must carry.
 
 | Field | Type | Default | Mutable | Rule |
 |---|---|---|---|---|
-| `tunnel` | bool | `false` | no | `true` makes this Provider a tunnelled one: the upstream is whichever agent connects, not an address the gateway holds |
+| `tunnel` | bool | `false` | no | `true` makes this Provider a tunneled one: the upstream is whichever agent connects, not an address the gateway holds |
 
 The rules the field carries:
 
 - `baseURL` is required when `tunnel` is `false` and is
   `exclusive_fields` with `tunnel: true` when it is set, because a
-  tunnelled Provider has no address the gateway could dial; the address
+  tunneled Provider has no address the gateway could dial; the address
   is the agent's `--upstream` and stays on the agent's machine.
 - `credential` in any form, `value` or `valueFrom`, is
   `exclusive_fields` with `tunnel: true`. The tunnel is the credential:
@@ -209,7 +209,7 @@ reason), and a session runs for as long as the agent can obtain tokens.
 `LUX_TUNNEL_ENABLED` unset makes all three routes `not_found`, the
 answer [[011-api]] gives any path outside the route table. So is a
 session for a Provider whose `tunnel` is `false`: the tunnel routes are
-a tunnelled Provider's, and a dialled one has none, with the detail
+a tunneled Provider's, and a dialed one has none, with the detail
 saying so. The carrier route is outside the subject's request bucket of
 [[011-api]], because one carrier is spent per proxied request and the
 bucket is the control plane's; the session route is inside it like any
@@ -340,7 +340,7 @@ the upstream request holds through the tunnel.
 The open sessions a replica holds are the `lux_tunnel_sessions` gauge
 ([[019-observability]]).
 
-One row per tunnelled Provider, in the store, so every replica reads the
+One row per tunneled Provider, in the store, so every replica reads the
 same answer.
 
 ```go
@@ -387,7 +387,7 @@ dead whatever the socket says.
 ### Health and liveness
 
 The registry is a fourth source of a Provider's health, above the three
-of [[005-providers]] and only for a tunnelled Provider:
+of [[005-providers]] and only for a tunneled Provider:
 
 - no live registry row is `Unreachable`, at once, without the probe
   counter. Every target on the Provider leaves selection, which is what
@@ -418,8 +418,8 @@ folds one success into the counter when the Provider was `Unreachable`
 or `Unknown` and the mode is not `probe`: a `passive` Provider that left
 selection would otherwise never observe the success that brings it
 back, and a `none` Provider has no signal but the row, so under `none`
-a tunnelled Provider reads `Healthy` while its row is live where a
-dialled one reads `Unknown`. Under `probe` the probe alone decides, so a
+a tunneled Provider reads `Healthy` while its row is live where a
+dialed one reads `Unknown`. Under `probe` the probe alone decides, so a
 live row over a runtime that stopped stays `Unreachable` until the
 runtime answers, and one that answers and then stops is caught by the
 thresholds while `status.tunnel` stays `Connected`. [[005-providers]]'s
@@ -444,8 +444,8 @@ started appears on the next interval rather than after a reconnect. A
 runtime with no models route runs with `discovery.mode: none` and
 declared Models. Target selection, the circuit per target, fallback, and
 the dialect matrix are [[008-routing-and-models]]'s unchanged: a
-tunnelled Provider is one more provider in the order, and a Model may
-name a tunnelled target and a remote one together, which is how a laptop
+tunneled Provider is one more provider in the order, and a Model may
+name a tunneled target and a remote one together, which is how a laptop
 serves a model until it sleeps and a cloud provider serves it
 afterwards.
 
@@ -461,16 +461,16 @@ and the cost ([[009-usage-and-metering]]). Nothing marks a record as
 having crossed a tunnel; the Provider's name is what an operator groups
 by, because one Provider is one machine. The Key's rate windows apply as
 for any Provider, and the cost is the Model's pricing or unpriced, as
-above: a tunnelled call is neither free of the gates nor recorded at
+above: a tunneled call is neither free of the gates nor recorded at
 zero cost by rule.
 
-### The upstream client of a tunnelled Provider
+### The upstream client of a tunneled Provider
 
 [[005-providers]]'s client table is the contract for a Provider the
-gateway dials. A tunnelled Provider is not dialled, so three rows do not
+gateway dials. A tunneled Provider is not dialed, so three rows do not
 apply and the rest do.
 
-| Row | Tunnelled |
+| Row | Tunneled |
 |---|---|
 | `Proxy`, `CheckRedirect`, deadline, concurrency, the header set | unchanged: the same `*http.Client` shape over a transport that writes onto a carrier |
 | `TLSClientConfig` | does not apply: there is no TLS to configure, because there is no socket to the runtime from this process. This is the answer to that table's note that a local runtime with its own certificate is this spec's case: the runtime's certificate, if it has one, is the agent's problem and the agent's `--upstream` names it |
@@ -505,7 +505,7 @@ flowchart LR
   A --> R[runtime on loopback]
 ```
 
-A replica that selects a target on a tunnelled Provider reads the
+A replica that selects a target on a tunneled Provider reads the
 registry. Holding the session, it writes onto a parked carrier. Not
 holding it, it sends the same proxied request to
 `POST /internal/tunnel/{provider id}` on the holder's
@@ -552,7 +552,7 @@ The rules that keep it bounded:
 - `LUX_TUNNEL_ENABLED` set without `LUX_TUNNEL_FORWARD_ADDR` is not a
   start-up failure, because the memory store is single-replica by
   construction ([[010-state]]). It is a start-up line and a `luxd check`
-  row saying that tunnelled Providers are served by the holding replica
+  row saying that tunneled Providers are served by the holding replica
   only, so an installation that scaled past one replica without setting
   the variable is told where its intermittent `provider_unavailable`
   comes from. With `LUX_DB_URL` set and the variable unset, the line is
@@ -562,7 +562,7 @@ The rules that keep it bounded:
 
 The owner policy of [[006-identity]] lets only a subject in
 `LUX_ADMIN_SUBJECTS` create a `Provider`, because a Provider holds the
-operator's credential and the operator's prices. A tunnelled Provider
+operator's credential and the operator's prices. A tunneled Provider
 holds neither: it carries no credential, names no host, and adds a
 machine the connecting subject already controls. The owner policy
 therefore gains one exception, which that spec must carry:
@@ -583,10 +583,10 @@ every subject may `use` every Model, so the Models discovered on one
 person's laptop are callable by every subject the issuer admits, through
 any Key whose selectors match. That is the owner policy working as
 written, the catalog being the installation's. There is no per-subject
-privacy for a tunnelled model, deliberately, because the data plane
+privacy for a tunneled model, deliberately, because the data plane
 carries no subject and the owner policy is one rule for every Model
 ([[006-identity]]). The exposure is bounded: no Model an administrator
-declared routes to a tunnelled Provider unless the administrator
+declared routes to a tunneled Provider unless the administrator
 targeted it, so a caller reaches another subject's machine only by
 writing that Provider's name in the model it asks for, and only while
 `LUX_TUNNEL_ENABLED` is set, which it is not by default. An installation
@@ -595,7 +595,7 @@ Models whose Provider is `tunnel: true` to every subject but the
 Provider's owner, which is the remedy for every other case where the
 built-in policy is too open.
 
-Who may call a tunnelled Provider is otherwise the ordinary rule: a Key
+Who may call a tunneled Provider is otherwise the ordinary rule: a Key
 whose selectors match a Model on it, with `model.use` decided at the
 Key's resolve. There is no relationship between a Key's owner and a
 tunnel's subject, because a Model is a Model.
@@ -610,7 +610,7 @@ the rest of the design depends on.
   header set of [[004-request-path]], and the body. The caller's
   credential headers are already removed at that point, so the runtime
   never sees a Key, a provider credential, or an issuer token.
-- The gateway injects no credential toward a tunnelled Provider, because
+- The gateway injects no credential toward a tunneled Provider, because
   there is none to inject. Invariant 2 of [[001-architecture]] is
   satisfied vacuously here and by the `exclusive_fields` rule above,
   which makes it impossible to store one.
@@ -634,7 +634,7 @@ the rest of the design depends on.
 |---|---|---|---|
 | `LUX_TUNNEL_ENABLED` | no | unset | `1` serves the three routes and admits `spec.tunnel`; unset makes them `not_found` and the field `invalid_field` |
 | `LUX_TUNNEL_REGISTRY_TTL` | no | `30s` | the liveness window of a registry row; at least `5s`, at most `5m`; the agent heartbeats at a third of it |
-| `LUX_TUNNEL_FORWARD_ADDR` | no | unset | the address other replicas reach this one's internal listener at, `host:port`; unset serves tunnelled Providers on the holding replica only |
+| `LUX_TUNNEL_FORWARD_ADDR` | no | unset | the address other replicas reach this one's internal listener at, `host:port`; unset serves tunneled Providers on the holding replica only |
 | `LUX_TUNNEL_FORWARD_SECRET` | with the address | unset | one or more bearers for `/internal/tunnel/{id}`, comma separated, each at least 32 bytes; the first is sent, every one is accepted, so rotation is prepending; the address without it is a start-up failure |
 
 [[002-repository-scaffold]] owns the variable table and carries all
@@ -651,7 +651,7 @@ the start-up line says so.
 
 The start-up line names the mode: `tunnel: off` with the variable that
 turns it on, or `tunnel: on` with the TTL and either the forward
-address and how many secrets lock it, or the statement that tunnelled
+address and how many secrets lock it, or the statement that tunneled
 Providers are served by the holding replica only.
 
 ### `luxd check`
@@ -660,7 +660,7 @@ One row, beside the rows [[005-providers]] and [[010-state]] own:
 
 | Line | Passes when |
 |---|---|
-| `tunnels` | the tunnel is off, or on and every tunnelled Provider has a live registry row; with `LUX_TUNNEL_FORWARD_ADDR` set, this replica's address is reachable from itself and answers the forward route with the configured secret; with `LUX_DB_URL` set and the address unset, the line warns that tunnelled Providers serve on one replica |
+| `tunnels` | the tunnel is off, or on and every tunneled Provider has a live registry row; with `LUX_TUNNEL_FORWARD_ADDR` set, this replica's address is reachable from itself and answers the forward route with the configured secret; with `LUX_DB_URL` set and the address unset, the line warns that tunneled Providers serve on one replica |
 
 ### The packages
 
@@ -678,7 +678,7 @@ address and secrets, the TTL, and the registry; `ServeSession` and
 and, for the session, authorizing, each returning a refusal before its
 stream is committed and nil after; `Forward`, the handler of
 `/internal/tunnel/{id}` at `ForwardPattern`; `Client`, spec 004's
-`ClientSource` answering a tunnelled Provider with the carrier
+`ClientSource` answering a tunneled Provider with the carrier
 transport and every other from the clients; `Revoke`, which closes a
 deleted Provider's session with `provider_deleted` and tells the
 clients; `Drain`, which closes every session with `draining`; and the
@@ -741,7 +741,7 @@ authorizer payload and the owner policy the exception amends
 | A clean `lux serve` shutdown unregisters at once, so the Provider is `Unreachable` before the TTL lapses | `TestCleanDisconnectIsImmediate` | passing for the agent package's stop; `lux serve`'s signal handling is [[014-agent-client]]'s |
 | With two replicas and Postgres, a request landing on the replica without the session is forwarded to the holder and served; the holder's failure is retryable and moves to the next target; a forward to a replica that does not hold the session is `provider_unavailable` and is not forwarded again | `TestForwardingAcrossReplicas` | passing as `TestForwardingAcrossReplicas`, two Gateways over one memory store, the one hop included; the registry two replicas share over Postgres is [[010-state]]'s `TestPostgresReplicasShareOneStore` |
 | `/internal/tunnel/{id}` without the secret, with a wrong secret, and on the public listener are each refused | `TestForwardRouteNeedsTheSecret` | passing |
-| Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalogue | `TestTunnelDiscovery` | passing |
+| Discovery over the tunnel declares one Model per upstream name under the Provider's owner, and a failed list keeps the catalog | `TestTunnelDiscovery` | passing |
 | Every request through a tunnel has one usage record with the Provider, the upstream model, and the runtime's reported tokens | `TestServeTunnelsARuntime` | the counted request with the Provider and the runtime's tokens passes at the wiring in `TestServeTunnelsARuntime`; the record's fields are [[015-test-stubs-and-tiers]]'s e2e |
 | The runtime receives no Key, no issuer token, and no provider credential over a run that exercises every door, and receives the forwarded header set of [[004-request-path]] | `TestTunnelCarriesNoCredential` | passing at the wiring in `TestServeTunnelsARuntime` through the openai door, and at the carrier in `TestTunnelCarriesNoCredential`; every door is [[015-test-stubs-and-tiers]]'s |
 | Under the owner policy a non-admin applies and tunnels a Provider with `tunnel: true` and is refused one without it; with an authorizer, the `resource` of every provider action carries `tunnel` | `TestTunnelOwnerPolicyException`, `TestTunnelInTheAuthorizerResource` | passing, in `internal/api` |

@@ -25,7 +25,7 @@ import (
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-// transport is the RoundTripper of one tunnelled Provider: spec 005's
+// transport is the RoundTripper of one tunneled Provider: spec 005's
 // client shape, the concurrency semaphore and the User-Agent, over a
 // carrier instead of a socket. The request's URL has no scheme and no
 // host, because the Provider has no baseURL: its path is the dialect's

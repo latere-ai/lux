@@ -15,7 +15,7 @@ import (
 )
 
 // TestTunnelLossIsUnreachableWithinTheTTL is spec 013's liveness rule on
-// the health holder, in every mode: a tunnelled Provider with no live
+// the health holder, in every mode: a tunneled Provider with no live
 // registry row is Unreachable at once, without three failures, with
 // status.tunnel Disconnected, every target out of selection, and
 // provider.unreachable raised once; a live row is Connected with the
@@ -174,7 +174,7 @@ func TestTunnelLossIsUnreachableWithinTheTTL(t *testing.T) {
 }
 
 // TestTunnelObserveFoldsIntoHealth: a data plane outcome toward a
-// tunnelled Provider under passive mode counts on the holder as for any
+// tunneled Provider under passive mode counts on the holder as for any
 // Provider, so a runtime that fails through the tunnel degrades while
 // its session lives.
 func TestTunnelObserveFoldsIntoHealth(t *testing.T) {

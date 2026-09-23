@@ -38,7 +38,7 @@ const (
 
 // MetricCircuitOpen is the gauge of spec 019 this file owns: 1 while a
 // target's circuit is not closed, 0 otherwise, one series per target
-// this replica has routed to, labelled provider, the Provider's name,
+// this replica has routed to, labeled provider, the Provider's name,
 // and model, the target's upstream name, which are the two halves of the
 // circuit's key.
 const MetricCircuitOpen = "lux_circuit_open"

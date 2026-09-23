@@ -104,7 +104,7 @@ audience. Every claim of
 the verified token, read from the payload with `jwt.DecodePayload` after
 `Validate` accepted it, is handed to the authorizer verbatim in
 `claims`, and none is interpreted by the gateway: an issuer's
-organisation, role, or group claims mean something to the authorizer
+organization, role, or group claims mean something to the authorizer
 that reads them and nothing to `luxd`. An `http://` issuer is refused
 unless it is on a loopback address or in `LUX_OIDC_INSECURE_ISSUERS`.
 
@@ -232,7 +232,7 @@ peer's, or the forwarded one behind a proxy listed in
 | Action | `resource` |
 |---|---|
 | `provider.create` | `{"kind": "Provider", "name", "dialect", "baseURL", "tunnel", "labels"}` from the manifest; no `id` yet |
-| `provider.read`, `.update`, `.delete`, `.tunnel` | `{"kind": "Provider", "id", "name", "owner", "dialect", "baseURL", "tunnel", "labels"}`; `tunnel` is asked when an agent opens a session for a tunnelled Provider ([[013-tunnelled-runtimes]]) |
+| `provider.read`, `.update`, `.delete`, `.tunnel` | `{"kind": "Provider", "id", "name", "owner", "dialect", "baseURL", "tunnel", "labels"}`; `tunnel` is asked when an agent opens a session for a tunneled Provider ([[013-tunnelled-runtimes]]) |
 | `provider.list` | `{"kind": "Provider"}`; the response may carry `filter` |
 | `model.create` | `{"kind": "Model", "name", "targets": [{"provider", "model"}], "labels"}` |
 | `model.read`, `.update`, `.delete` | `{"kind": "Model", "id", "name", "owner", "source", "labels"}` |
@@ -428,7 +428,7 @@ decided by Lux's rows. The rows, in order, before the frame:
   `filter.owners` set to the subject alone, so a list and the usage
   surface return the subject's own objects;
 - every other action, `read`, `update`, `delete`, `draw`, and `tunnel`
-  on a Key, a Budget, or a tunnelled Provider named by id, is the
+  on a Key, a Budget, or a tunneled Provider named by id, is the
   frame's: the owner is allowed and everyone else is `not_owner`;
 - no limits are granted: `Limits` is zero, so `Defaults` and the
   manifest's own values hold.

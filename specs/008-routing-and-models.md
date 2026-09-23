@@ -149,7 +149,7 @@ The rules around the order:
   waiting, another target is available, and a delay would turn one
   upstream's slowness into every caller's. `latere.ai/x/pkg/retry` is
   therefore not on this path, and a `Retry-After` header from an
-  upstream is neither honoured nor relayed; the only `Retry-After` a
+  upstream is neither honored nor relayed; the only `Retry-After` a
   caller sees is the gateway's own on a rate, spend, or budget refusal
   ([[007-keys-and-limits]]).
 - An attempt's deadline is its target's Provider `timeout`
@@ -192,7 +192,7 @@ belongs on the Provider and no field for it exists yet.
 The breaker's state is the `lux_circuit_open` gauge
 ([[019-observability]]), `gateway.MetricCircuitOpen`, registered on
 `RouterOptions.Metrics` when one is given: one series per target this
-replica has routed to, labelled `provider`, the Provider's name, and
+replica has routed to, labeled `provider`, the Provider's name, and
 `model`, the target's upstream name, which are the two halves of the
 key, so one breaker is one series; `1` while the breaker is not closed,
 a half-open probe in flight included, and `0` once traffic closed it,
@@ -373,7 +373,7 @@ cost ([[009-usage-and-metering]]); the target schema and its defaults
 | A stream that fails after its first byte is not retried, ends, and is recorded `failed` with the tokens counted to the cut | `TestMidStreamFailureIsNotRetried` | passing, through the handler |
 | No attempt sleeps: an order of three failing targets completes within the transport failures' own duration | `TestNoBackoffBetweenAttempts` | passing |
 | Five consecutive retryable failures open a target's circuit, one half-open attempt is admitted after the open duration, a success closes it, a `4xx` resets the failure count and never opens it, an encode refusal and a caller cancellation leave the count unchanged, and two Models on one target share it | `TestCircuitPerTarget`, through the handler; `TestCircuitStates` and `TestCircuitIsSharedAcrossModels` over the router alone | passing |
-| The gauge reads `1` for a target whose circuit opened, through its half-open probe, and `0` once traffic closed it, one series per target labelled by the Provider's name and the upstream model | `TestCircuitOpenGauge` | passing |
+| The gauge reads `1` for a target whose circuit opened, through its half-open probe, and `0` once traffic closed it, one series per target labeled by the Provider's name and the upstream model | `TestCircuitOpenGauge` | passing |
 | Every cell of the dialect matrix behaves as the table says on a translated route; a model route across dialects is `dialect_unsupported` whatever the Key allows | `TestDialectMatrix`, table-driven | passing, through the handler |
 | A `gemini` door to a non-`gemini` target and another door to a `gemini`-only Model are both `dialect_unsupported`, not `model_not_found` | `TestGeminiIsDoorBound` | passing |
 | A translated request toward an `openai` target named `gpt-5`, `o3-mini`, or `GPT-6-turbo` arrives on `/responses`, and one named `gpt-4.1`, `llama3.1`, or `o-ring` on `/chat/completions`; a passthrough arrives on the route it was sent to whatever the name | `TestOpenAITargetRoute`, `TestOpenAIReasoningFamily`, table-driven | passing; the route in [[004-request-path]]'s test, the predicate in this spec's |
@@ -448,7 +448,7 @@ in the Design above beside the rule it settles:
   [[019-observability]]'s `TestCircuitAndTunnelGauges` covers the tunnel
   half beside it.
 
-What the neighbouring specs must provide or change: [[011-api]] mounts
+What the neighboring specs must provide or change: [[011-api]] mounts
 the doors with `serve.Catalog{Objects: st.Objects()}` and
 `gateway.NewTargetRouter(gateway.RouterOptions{Catalog, Health:
 healthJob.View, Metrics})`, names this spec's `Router.Targets` among

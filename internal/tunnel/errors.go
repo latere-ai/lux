@@ -86,7 +86,7 @@ func writeError(w http.ResponseWriter, id string, e *Error) {
 // attempt as failed, and moves to the next target; the developer's
 // detail names the session and the replica.
 var (
-	// ErrNoSession is a tunnelled Provider with no live session in the
+	// ErrNoSession is a tunneled Provider with no live session in the
 	// registry, or one the registry names on a replica that does not
 	// hold it.
 	ErrNoSession = errors.New("tunnel: the Provider has no live session")

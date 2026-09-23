@@ -87,7 +87,7 @@ func TestDefaultsFillOnlyAbsentFields(t *testing.T) {
 		if p.Spec.Credential.Header != "api-key" || p.Spec.Credential.Scheme != v1.SchemeBearer || p.Spec.Discovery.Mode != v1.DiscoveryNone || p.Spec.Health.Mode != v1.HealthNone || p.Spec.Timeout != "5s" || p.Spec.Concurrency != 3 {
 			t.Errorf("a set field was overwritten: %+v", p.Spec)
 		}
-		// No configured timeout leaves the field absent; a tunnelled
+		// No configured timeout leaves the field absent; a tunneled
 		// Provider gets no credential block.
 		o2 := o
 		o2.Defaults.Timeout = 0

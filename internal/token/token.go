@@ -5,7 +5,7 @@
 // binary (spec 035): it signs one control plane token with the local
 // issuer's key and returns it for the caller to print. It reads the four
 // variables config.LoadToken reads and writes nothing: no store is
-// opened, no journal row and no event is written, and nothing is dialled,
+// opened, no journal row and no event is written, and nothing is dialed,
 // so it is safe beside a serving installation, the promise the check role
 // makes. The key encryption key and the database are neither read nor
 // required, so the role runs wherever the key is.

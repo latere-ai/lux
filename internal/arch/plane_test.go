@@ -387,14 +387,14 @@ func codeBlock(t *testing.T, text, language string) string {
 }
 
 // authorizerSource is the program the document prints: the file without
-// the two licence lines, which are the repository's and not the
+// the two license lines, which are the repository's and not the
 // reader's.
 func authorizerSource(t *testing.T) string {
 	t.Helper()
 	body := readSpec(t, planeAuthorizer)
 	_, body, ok := strings.Cut(body, "// SPDX-License-Identifier: Apache-2.0\n\n")
 	if !ok {
-		t.Fatalf("%s does not begin with the two licence lines", planeAuthorizer)
+		t.Fatalf("%s does not begin with the two license lines", planeAuthorizer)
 	}
 	return body
 }

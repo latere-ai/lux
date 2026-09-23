@@ -20,7 +20,7 @@ const (
 	skipped
 )
 
-// report is what one Run learnt about the server: the outcome of every
+// report is what one Run learned about the server: the outcome of every
 // case that ran, why each skipped case skipped, and which groups were
 // dropped whole. Run prints it; the package's own tests read it.
 type report struct {

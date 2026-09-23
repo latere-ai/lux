@@ -583,7 +583,7 @@ settles:
 - `TestMetricsTable`, the other half of the metrics criterion, is
   [[019-observability]]'s.
 
-What the neighbouring specs own from here:
+What the neighboring specs own from here:
 [[012-request-log-and-events]] adds the archive, the exporter, and the
 reader that makes `source` read `archive`, and with it the durable
 record set this spec's retention rule assumes;

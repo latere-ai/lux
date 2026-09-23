@@ -48,7 +48,7 @@ const (
 	KindEvents Kind = "events"
 )
 
-// Behaviour is what one upstream model name asks of the stub: the row,
+// Behavior is what one upstream model name asks of the stub: the row,
 // and the figures the row's name carried.
 type Behaviour struct {
 	Kind Kind
@@ -60,7 +60,7 @@ type Behaviour struct {
 	Events int
 }
 
-// Behaviours lists the names of the table, one per row, as a test that
+// Behaviors lists the names of the table, one per row, as a test that
 // walks the table reads them.
 func Behaviours() []string {
 	return []string{

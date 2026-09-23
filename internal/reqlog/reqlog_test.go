@@ -187,7 +187,7 @@ func await(t *testing.T, what string, cond func() bool) {
 
 // TestBufferDropsOldest: the ring holds its cap and drops the oldest
 // record to make room, a batch stays at the head while it is written so
-// a drop meanwhile takes the batch's own oldest, the acknowledgement
+// a drop meanwhile takes the batch's own oldest, the acknowledgment
 // removes the batch alone, and the exporter counts every drop in
 // lux_requestlog_dropped_total with one WARN line a minute.
 func TestBufferDropsOldest(t *testing.T) {

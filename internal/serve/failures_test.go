@@ -120,7 +120,7 @@ func (failingCredentials) Credential(context.Context, string) ([]byte, error) {
 }
 
 // TestDiscoverySurvivesStoreFailures: every store failure inside a list
-// is logged with the catalogue untouched, and a broken journal or lease
+// is logged with the catalog untouched, and a broken journal or lease
 // is logged and does not stop the job.
 func TestDiscoverySurvivesStoreFailures(t *testing.T) {
 	for _, op := range []string{"Objects.Put", "Objects.ByName", "Objects.Delete", "Objects.PutStatus", "Objects.ListModels", "Journal.Append"} {
@@ -140,9 +140,9 @@ func TestDiscoverySurvivesStoreFailures(t *testing.T) {
 			d.acquire(t.Context())
 			d.Tick(t.Context())
 			if got := names(h.models(t, "")); got != "openai/gpt-5 openai/o3" {
-				t.Fatalf("the catalogue changed under a broken %s: %q", op, got)
+				t.Fatalf("the catalog changed under a broken %s: %q", op, got)
 			}
-			if !strings.Contains(h.logged(), "discovery: writing the catalogue") || !strings.Contains(h.logged(), errBroken.Error()) {
+			if !strings.Contains(h.logged(), "discovery: writing the catalog") || !strings.Contains(h.logged(), errBroken.Error()) {
 				t.Fatalf("log:\n%s", h.logged())
 			}
 		})

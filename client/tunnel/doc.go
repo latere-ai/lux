@@ -3,7 +3,7 @@
 
 // Package tunnel attaches a local model runtime to a Lux Provider over HTTP/2.
 //
-// Apply a tunnelled Provider with client.Client, then call Run with its name and
+// Apply a tunneled Provider with client.Client, then call Run with its name and
 // a token source such as client.StaticToken or client.FileToken. The source may
 // be called concurrently and must be safe for that use. New bearer values are
 // used on subsequent requests and sent in the next session heartbeat.

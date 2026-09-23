@@ -20,7 +20,7 @@
 //
 // The policy is a person's or a plane's rather than a server's: no
 // retry, a ten second deadline to the first response byte and none
-// after it, the process's proxy variables honoured, and a refusal
+// after it, the process's proxy variables honored, and a refusal
 // decoded from the error envelope into an *Error carrying the code, the
 // fixed sentence, the paths, the developer detail, and the request id,
 // apart. A caller that wants retries wraps a method; this package adds

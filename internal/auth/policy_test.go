@@ -58,7 +58,7 @@ func TestOwnerPolicy(t *testing.T) {
 	policy := &OwnerPolicy{Admins: []string{adminSubject}, Objects: objects}
 
 	// object builds the resource of an action on the fixture of its kind,
-	// or on the tunnelled Provider, or with an id no object has.
+	// or on the tunneled Provider, or with an id no object has.
 	type row struct {
 		name   string
 		action string

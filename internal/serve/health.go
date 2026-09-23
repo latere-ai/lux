@@ -26,7 +26,7 @@ import (
 const probeBudget = 5 * time.Second
 
 // MetricProviderHealth is the gauge of spec 019 this job owns: one
-// series per Provider and state, labelled provider, the Provider's
+// series per Provider and state, labeled provider, the Provider's
 // name, and state, one of the four states, carrying 1 on the state this
 // replica acts on and 0 on the other three, so an expression reads a
 // state by selecting it.
@@ -49,7 +49,7 @@ type HealthOptions struct {
 	// Metrics is the registry lux_provider_health is registered in; nil
 	// registers none.
 	Metrics *metrics.Registry
-	// TunnelTTL is LUX_TUNNEL_REGISTRY_TTL, which places a tunnelled
+	// TunnelTTL is LUX_TUNNEL_REGISTRY_TTL, which places a tunneled
 	// Provider's last heartbeat at its row's expiry less the window;
 	// zero is thirty seconds (spec 013).
 	TunnelTTL time.Duration
@@ -229,7 +229,7 @@ func (h *Health) Tick(ctx context.Context) {
 	}
 	for _, p := range list {
 		if p.Spec.Tunnel {
-			// The registry is a tunnelled Provider's fourth source of health
+			// The registry is a tunneled Provider's fourth source of health
 			// (spec 013): no live row is Unreachable at once, and a live
 			// row is what the mode's own signal applies over. Only the
 			// probe has a signal of its own to add on this tick.
@@ -341,7 +341,7 @@ func (h *Health) record(ctx context.Context, p *v1.Provider, failed bool, lastEr
 	h.publish(ctx, p, changed, lastError, probed)
 }
 
-// recordUnreachable is the registry's verdict on a tunnelled Provider
+// recordUnreachable is the registry's verdict on a tunneled Provider
 // with no live session: Unreachable at once, without the probe counter,
 // published exactly as a counted transition is.
 func (h *Health) recordUnreachable(ctx context.Context, p *v1.Provider, lastError string) {
@@ -407,7 +407,7 @@ func (h *Health) publish(ctx context.Context, p *v1.Provider, changed bool, last
 	}
 }
 
-// tunnelTick is the registry's reading of a tunnelled Provider on the
+// tunnelTick is the registry's reading of a tunneled Provider on the
 // holder: status.tunnel is written from the row, or Disconnected when
 // there is none; no live row is Unreachable at once, without the probe
 // counter; and a live row lets the mode's own signal apply, folding one

@@ -334,7 +334,7 @@ func TestLastFailureCode(t *testing.T) {
 				t.Fatalf("%s %q, want %s with %q", rec.Header().Get(HeaderError), rec.Header().Get(HeaderErrorDetail), c.code, c.detail)
 			}
 			if c.status == 0 && rt.openai.count() != 0 {
-				t.Errorf("openai was dialled %d times", rt.openai.count())
+				t.Errorf("openai was dialed %d times", rt.openai.count())
 			}
 			if got := rt.recorder.last(t); got.Error != c.code {
 				t.Errorf("record error %s", got.Error)

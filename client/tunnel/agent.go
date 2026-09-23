@@ -44,7 +44,7 @@ const (
 type Options struct {
 	// Gateway is the gateway's public URL, http:// or https://.
 	Gateway string
-	// Provider is the tunnelled Provider's name or id.
+	// Provider is the tunneled Provider's name or id.
 	Provider string
 	// Upstream is the runtime's base URL on this machine, the --upstream
 	// of lux serve. It is joined to every request path and is never

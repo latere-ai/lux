@@ -60,7 +60,7 @@ func TestE2ELifecycle(t *testing.T) {
 	if resp.status != http.StatusOK || !strings.HasPrefix(resp.header.Get("Content-Type"), "text/event-stream") || !strings.HasSuffix(string(resp.body), "data: [DONE]\n\n") {
 		t.Fatalf("translated stream: %d %s\n%s", resp.status, resp.header.Get("Content-Type"), resp.body)
 	}
-	// The door's own model list is served from the catalogue, once the
+	// The door's own model list is served from the catalog, once the
 	// health job has published each Model's availability.
 	eventually(t, "the door's model list carrying the declared Models", 15*time.Second, func() bool {
 		resp = do(t, http.MethodGet, s.gw.public+"/openai/v1/models", bearer(key), "")

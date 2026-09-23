@@ -13,7 +13,7 @@ import (
 
 // Store is what the serve role constructs and every consumer takes as an
 // interface. The implementations differ in durability and in how many
-// replicas may share them, never in behaviour. The store mints no id:
+// replicas may share them, never in behavior. The store mints no id:
 // every id is the caller's, the prefixed ULID of spec 001, and is the
 // primary key of its row.
 //
@@ -315,7 +315,7 @@ type Usage interface {
 const RecordsKind = "records"
 
 // Tunnels is the registry of live tunnel sessions of spec 013, one row
-// per tunnelled Provider, so every replica reads the same answer.
+// per tunneled Provider, so every replica reads the same answer.
 type Tunnels interface {
 	// Register writes the row, replacing any session that was there. The
 	// newest session wins: an agent that reconnects after a break is

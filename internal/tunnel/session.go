@@ -165,7 +165,7 @@ func (s *session) readFrames(ctx context.Context, body io.Reader) {
 // beat is one heartbeat: a fresh token, when carried, verified exactly as
 // at connect and made the session's expiry when it names the session's
 // subject; the registry row renewed; superseded when another session
-// took the row; and the acknowledgement queued.
+// took the row; and the acknowledgment queued.
 func (s *session) beat(ctx context.Context, token string) {
 	g := s.g
 	now := g.now()
@@ -210,7 +210,7 @@ func (s *session) beat(ctx context.Context, token string) {
 	select {
 	case s.outbox <- wire.Frame{Type: wire.TypeHeartbeat}:
 	default:
-		// A full outbox drops the acknowledgement; the next one answers.
+		// A full outbox drops the acknowledgment; the next one answers.
 	}
 }
 

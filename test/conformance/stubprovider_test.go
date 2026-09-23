@@ -57,7 +57,7 @@ func newStubProvider(t testing.TB, dialect, credential string) *stubProvider {
 func (s *stubProvider) URL() string { return s.srv.URL }
 
 // ServeHTTP records the request, checks the credential, and answers by
-// route and by the behaviour the upstream model name asks for.
+// route and by the behavior the upstream model name asks for.
 func (s *stubProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/_received" {
 		s.control(w, r)

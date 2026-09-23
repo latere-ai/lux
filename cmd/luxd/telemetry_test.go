@@ -157,7 +157,7 @@ func runTelemetry(t *testing.T) (*telemetryRun, string) {
 		"LUX_AUTHORIZER_URL":         authorizer.URL(),
 		"LUX_AUTHORIZER_TOKEN":       authorizer.Token(),
 		"LUX_UPSTREAM_ALLOW_PRIVATE": "1",
-		// The health job reads the catalogue on its tick, so a Provider
+		// The health job reads the catalog on its tick, so a Provider
 		// applied after the start carries a lux_provider_health series
 		// from the next one; the floor of the interval is what the scrape
 		// below waits out.

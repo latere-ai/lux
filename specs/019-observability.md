@@ -580,7 +580,7 @@ no server span on either listener, the roots being `lux.request` and
 `lux.api`; and the line's message being the span's name, so no field
 tells the planes apart.
 
-What the neighbouring specs own from here. [[004-request-path]]'s
+What the neighboring specs own from here. [[004-request-path]]'s
 Options listing owes the `Logger` field. [[005-providers]]'s Design
 owes the paragraph claiming `lux_upstream_requests_total` and
 `lux_upstream_duration_seconds`, which its row in the table above

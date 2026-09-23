@@ -143,7 +143,7 @@ func (p *OwnerPolicy) decide(ctx context.Context, req authz.Request) (authz.Deci
 		return authz.Decision{Allow: true, Filter: &authz.Filter{Owners: []string{req.Subject}}}, nil
 	}
 	// The frame: key.read, .update, .delete, budget.read, .update,
-	// .delete, .draw, provider.tunnel, and a tunnelled Provider's update
+	// .delete, .draw, provider.tunnel, and a tunneled Provider's update
 	// and delete. The object is looked up by the resource's kind and id;
 	// a resource with no id names nothing, which the frame denies.
 	obj := authz.Object{}

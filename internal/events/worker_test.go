@@ -95,7 +95,7 @@ func TestDeliveryIsOrderedPerObject(t *testing.T) {
 }
 
 // TestDeliveryResumesFromTheJournal: a restart with a store resumes an
-// unacknowledged event where the acknowledgements stopped: a second
+// unacknowledged event where the acknowledgments stopped: a second
 // worker on the same store takes the lease the first released and
 // delivers the deferred row, from the same moment the sink was set. A
 // worker that does not hold the lease delivers nothing.
@@ -130,10 +130,10 @@ func TestDeliveryResumesFromTheJournal(t *testing.T) {
 	h.sink.verified(t)
 }
 
-// TestDeliveryIsAtLeastOnce: an acknowledgement lost after the sink
+// TestDeliveryIsAtLeastOnce: an acknowledgment lost after the sink
 // committed produces a second POST of the same id, in both ways it is
 // lost: the sink answering after the deadline, and the journal refusing
-// the acknowledgement.
+// the acknowledgment.
 func TestDeliveryIsAtLeastOnce(t *testing.T) {
 	h := newHarness(t)
 	ctx := t.Context()
@@ -149,13 +149,13 @@ func TestDeliveryIsAtLeastOnce(t *testing.T) {
 	if got := h.sink.ids(); !slices.Equal(got, []string{"evt_a1", "evt_a1"}) {
 		t.Fatalf("deliveries %v", got)
 	}
-	// The journal refuses the acknowledgement once.
+	// The journal refuses the acknowledgment once.
 	fail := map[string]bool{"Journal.Acknowledge": true}
 	h.append(t, "evt_b1", "key_b")
 	flaky := h.worker("a", &broken{h.st, fail}, nil)
 	tick(ctx, flaky)
 	if !strings.Contains(h.log.String(), "acknowledging a delivered event") || len(h.sink.ids()) != 3 {
-		t.Fatalf("lost acknowledgement: %v\n%s", h.sink.ids(), h.log.String())
+		t.Fatalf("lost acknowledgment: %v\n%s", h.sink.ids(), h.log.String())
 	}
 	fail["Journal.Acknowledge"] = false
 	flaky.Tick(ctx)
@@ -332,7 +332,7 @@ func TestWorkerStoreFailures(t *testing.T) {
 	if len(h.rows(t, "key_a")) != 1 {
 		t.Fatal("a failed Drop removed the row")
 	}
-	// A row from before the sink whose acknowledgement the journal
+	// A row from before the sink whose acknowledgment the journal
 	// refuses stays for the next tick.
 	h.appendAt(t, "evt_b0", "key_b", w.since.Add(-time.Minute))
 	expectLog("Journal.Acknowledge", "acknowledging a row from before the sink was set")

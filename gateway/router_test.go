@@ -418,7 +418,7 @@ func TestCircuitIsSharedAcrossModels(t *testing.T) {
 
 // TestCircuitOpenGauge: lux_circuit_open is 1 for a target whose circuit
 // opened and 0 once traffic closed it, one series per target this
-// replica routed to, labelled by the Provider's name and the upstream
+// replica routed to, labeled by the Provider's name and the upstream
 // model; a router without a registry registers nothing.
 func TestCircuitOpenGauge(t *testing.T) {
 	f := newRouterFixture(t)

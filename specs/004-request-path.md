@@ -689,7 +689,7 @@ commit:
   written; a `408` or `429` is retried for the circuit and is a complete
   answer for health, as [[005-providers]] says.
 
-What the neighbouring specs must provide, in the shapes above:
+What the neighboring specs must provide, in the shapes above:
 [[005-providers]] the `ClientSource`, `CredentialSource`, and
 `HealthObserver`; [[007-keys-and-limits]] the `KeyLookup` and the
 `Limiter` whose `Reserve` prices `InputTokens` and `OutputTokens` apart

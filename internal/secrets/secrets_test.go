@@ -336,7 +336,7 @@ func TestCredentialStatusCarriesNoValue(t *testing.T) {
 func TestErrorsAreSentinelFree(t *testing.T) {
 	// The package raises plain errors with the developer's detail; a
 	// caller has no sentinel to compare, so a store error passes through
-	// wrapped and recognisable.
+	// wrapped and recognizable.
 	k := keyring(t, 1)
 	_, err := Check(t.Context(), refusing{}, k)
 	if !errors.Is(err, store.ErrReadOnly) {

@@ -42,7 +42,7 @@ const (
 // Options configure Open.
 type Options struct {
 	// URL is LUX_DB_URL, a postgres:// or postgresql:// URL, its sslmode
-	// included and honoured as written. It is never echoed.
+	// included and honored as written. It is never echoed.
 	URL string
 	// PoolURL optionally supplies the serving endpoint. URL stays direct for migrations.
 	PoolURL string

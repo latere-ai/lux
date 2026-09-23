@@ -6,7 +6,7 @@
 // authorizer of latere.ai/x/pkg, the stub sink, and the index, whose
 // GET / names them all for a caller handed one address. It prints one
 // line per stub with its URL and exits on SIGTERM. It is wiring only: the
-// behaviour lives in the packages under test/stubs and in pkg. It runs
+// behavior lives in the packages under test/stubs and in pkg. It runs
 // in tests, under make run, and beside the conformance suite, and never
 // in an installation.
 package main

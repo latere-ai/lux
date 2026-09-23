@@ -399,7 +399,7 @@ func afterCursor(kind, cursor string) (string, bool) {
 	return name, true
 }
 
-// The seams: the store is the gateway's Key lookup, catalogue,
+// The seams: the store is the gateway's Key lookup, catalog,
 // credential source, and counter table, and nothing in the gateway
 // knows it is a map.
 var (

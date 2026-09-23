@@ -33,7 +33,7 @@ Add `./internal/serve/...` for the limiter benchmark. Per package:
 
 A single run is a point, and a point cannot tell the code's cost from the
 scheduler's noise. For numbers worth comparing, repeat each benchmark and
-summarise with `benchstat`, which reports the mean, its variation, and — when
+summarize with `benchstat`, which reports the mean, its variation, and — when
 comparing two inputs — a p-value:
 
     GOMAXPROCS=8 go test -run '^$' -bench . -benchmem -count=10 \
@@ -105,7 +105,7 @@ passthrough, on every machine.
 ## A measured run
 
 From one machine: an Apple M4 Pro (arm64), `GOMAXPROCS=8`, otherwise
-quiescent, each benchmark repeated `-count=10` and summarised with
+quiescent, each benchmark repeated `-count=10` and summarized with
 `benchstat`. The `±` is benchstat's reported variation over the ten runs.
 These are machine-relative and do not compare across machines; run the
 commands above to get your own.

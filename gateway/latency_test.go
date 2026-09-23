@@ -86,7 +86,7 @@ func drive(tb testing.TB, h *Handler, mk func() *http.Request, concurrency, tota
 	return lat
 }
 
-// measure drives one route class and summarises it: the percentile set the
+// measure drives one route class and summarizes it: the percentile set the
 // maintainer named, throughput, and bytes allocated per request over the
 // whole sweep.
 func measure(tb testing.TB, name string, h *Handler, mk func() *http.Request, concurrency, total int) distribution {

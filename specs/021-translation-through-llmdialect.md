@@ -258,7 +258,7 @@ one byte moves.
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| The six behaviours the move is most likely to break are byte-identical after it: same-dialect passthrough, the loss report, the stream's last-value usage, the stream error frame per door, the model list shapes, and the count emulation, with the test sources and goldens unedited | `TestSameDialectSameBytes`, `TestTranslationReportsLoss`, `TestStreamUsageIsTheLastValue`, `TestStreamErrorFramePerDoor`, `TestModelsListShapes`, `TestCountTokensEmulation`, each passing unchanged | passing, unedited |
+| The six behaviors the move is most likely to break are byte-identical after it: same-dialect passthrough, the loss report, the stream's last-value usage, the stream error frame per door, the model list shapes, and the count emulation, with the test sources and goldens unedited | `TestSameDialectSameBytes`, `TestTranslationReportsLoss`, `TestStreamUsageIsTheLastValue`, `TestStreamErrorFramePerDoor`, `TestModelsListShapes`, `TestCountTokensEmulation`, each passing unchanged | passing, unedited |
 | Every other acceptance row of [[004-request-path]] still passes, the error envelope, the streaming, the model rewrite, and the refusal order among them | `gateway`'s suite, unedited but for the deletions of step 7 | passing; `TestCodecOptionsFollowTheModel` and `TestDialectsPerRouteAndTarget` added beside them |
 | The conformance suite's `doors` group is green against a `luxd` built from the commit before the swap and from the commit after it, against the same stubs and the same fixtures | [[018-conformance-suite]]'s `doors` group, run twice in the migration's CI job | passing: `TestE2EConformance` green before the swap, at `cc7ef7e`, and after it, with an identical list of passing and skipped cases; the `conformance-twice` job of `verify.yml` runs it against the base commit and the head |
 | `gateway`'s non-test line count across the six files falls by at least 700, and `models.go`, `usage.go`, and `probe.go` are gone | `TestGatewayCarriesNoCodecGlue`, which fails if any of the three files exists or the other three exceed 738 lines, in `internal/arch` | passing: the three are gone and the six fell from 1438 lines to 618 |
@@ -281,11 +281,11 @@ guards. It is proven by the whole gate and by `gateway` coverage of
 `gateway`'s six codec files fell from 1438 non-test lines to 618;
 `models.go`, `usage.go`, and `probe.go` are gone; the import list is
 `llmdialect/bridge` and `llmdialect/ir` alone. The doors answer the
-same bytes, held by the six byte-identical behaviours and by
+same bytes, held by the six byte-identical behaviors and by
 [[018-conformance-suite]]'s `doors` group run against a `luxd` built
 before the swap and after it with an identical list of passing and
 skipped cases. Two follow-ups after the merge restored the pre-swap
-behaviour the move had shifted: a translated stream's status is written
+behavior the move had shifted: a translated stream's status is written
 when the upstream answers rather than at its first event, and the
 input estimate reads the route's dialect through `bridge.CountTokensFor`
 so a Responses body is not sent to the byte heuristic. The module pins

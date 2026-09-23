@@ -185,7 +185,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_TRUSTED_PROXIES` | 011 | unset | CIDR ranges of the proxies in front of the gateway whose `X-Forwarded-For` names the client; unset trusts no header |
 | `LUX_MAX_MANIFEST_BYTES` | 011 | `65536` | the largest manifest or JSON body accepted on the control plane |
 | `LUX_TUNNEL_ENABLED`, `LUX_TUNNEL_REGISTRY_TTL` | 013 | unset, `30s` | the reverse tunnel for local runtimes, and the liveness window of a serving node in the registry |
-| `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearers on the forward route, a comma separated list of which the first is sent and every one is accepted, so a rotation is prepending; unset serves a tunnelled Provider on the holding replica only; the address without the secret is a start-up failure |
+| `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearers on the forward route, a comma separated list of which the first is sent and every one is accepted, so a rotation is prepending; unset serves a tunneled Provider on the holding replica only; the address without the secret is a start-up failure |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_*` | 019 | unset | the standard OpenTelemetry exporter variables, read by `latere.ai/x/pkg/otel`; telemetry is off without the endpoint |
 
 ### The gate
@@ -194,7 +194,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 pinned in `go.mod` with a `tool` directive, and `.lateregate.yaml`
 holds only what this repository chose: the spec vocabulary and required
 frontmatter, the empty hermetic allowance (luxd forks no binary of its
-own), the `depcheck` allow list of `./cmd/luxd`, and the licence. The
+own), the `depcheck` allow list of `./cmd/luxd`, and the license. The
 git hooks are two-line shims that call the gate. A coverage exemption
 or a waiver is a line in that file with a reason, never a tag in the
 code.

@@ -288,13 +288,13 @@ func (d *Discovery) List(ctx context.Context, p *v1.Provider) {
 		err = errors.New("the model list is empty")
 	}
 	if err != nil {
-		d.o.Logger.ErrorContext(ctx, "discovery: the list failed, the catalogue stands", "provider", p.Status.ID, "name", p.Metadata.Name, "err", err)
+		d.o.Logger.ErrorContext(ctx, "discovery: the list failed, the catalog stands", "provider", p.Status.ID, "name", p.Metadata.Name, "err", err)
 		d.recordFailure(ctx, p, err)
 		return
 	}
 	result, err := d.apply(ctx, p, filter(p, candidates))
 	if err != nil {
-		d.o.Logger.ErrorContext(ctx, "discovery: writing the catalogue", "provider", p.Status.ID, "name", p.Metadata.Name, "err", err)
+		d.o.Logger.ErrorContext(ctx, "discovery: writing the catalog", "provider", p.Status.ID, "name", p.Metadata.Name, "err", err)
 		return
 	}
 	d.o.Logger.InfoContext(ctx, "discovery: listed", "provider", p.Status.ID, "name", p.Metadata.Name, "models", result.count, "created", result.created, "removed", result.removed, "refused", len(result.warnings))

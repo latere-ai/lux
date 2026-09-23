@@ -280,7 +280,7 @@ whose changed paths include `spec.baseURL` or a path under
 rather than at the next tick; the changed paths are read from the
 event's `data` as a list of paths or as an object whose `paths` member
 is one, and a replica that takes the lease skips the journal to its
-end first so the past is not replayed as lists. A tunnelled Provider
+end first so the past is not replayed as lists. A tunneled Provider
 is skipped until [[013-tunnelled-runtimes]] gives it a client. The list
 request is sent through the Provider's upstream client with its
 credential injected, as any request is, within the Provider's
@@ -327,12 +327,12 @@ Model left at its version, and `status.discovered`. A new Model's
 Providers' published states in the same transaction, so a door's model
 list carries it before the health holder's next tick.
 
-The rules that make the catalogue safe to recompute:
+The rules that make the catalog safe to recompute:
 
 - A successful list is authoritative for that Provider's discovered
   Models and for nothing else. Discovered Models of the Provider whose
   upstream name the list no longer carries are deleted.
-- A failed or empty list changes no object. The previous catalogue
+- A failed or empty list changes no object. The previous catalog
   stands, `status.discovered.at` is unchanged, and the failure is
   `status.health.lastError`. An upstream that answers 500 must not
   empty a caller's model list.
@@ -417,7 +417,7 @@ The state a replica acts on is also what an operator scrapes.
 `HealthOptions.Metrics` takes the process's registry and `NewHealth`
 registers `lux_provider_health` of [[019-observability]]'s table in it:
 four series per Provider, read at scrape time from `View`, `1` on the
-state this replica acts on and `0` on the other three, labelled
+state this replica acts on and `0` on the other three, labeled
 `provider` with the Provider's `metadata.name` and `state` with one of
 `Healthy`, `Degraded`, `Unreachable`, and `Unknown`. The Providers are
 the last tick's, so the series of one an operator deleted leave the
@@ -426,7 +426,7 @@ Provider writes no series at all, the gauge being per Provider and
 having nothing to hold at zero. `LuxProviderUnreachable` reads it as
 `max by (provider) (lux_provider_health{state="Unreachable"}) == 1`,
 so the alert fires on the first replica that cannot reach a Provider,
-and a Provider the catalogue lost raises none.
+and a Provider the catalog lost raises none.
 
 ### The upstream client
 
@@ -448,7 +448,7 @@ and `provider_unavailable`; `gateway.ErrPrivateAddress` surfaces as the
 dial's error. `gateway.InjectCredential(http.Header, *v1.Provider,
 value []byte)` is the custody rule below in code: it strips the
 credential header and writes the value under the scheme last, and a
-tunnelled Provider is `gateway.ErrTunnelled` until
+tunneled Provider is `gateway.ErrTunnelled` until
 [[013-tunnelled-runtimes]] gives it a client over its carrier
 transport.
 
@@ -459,7 +459,7 @@ transport.
 | `CheckRedirect` | `http.ErrUseLastResponse` | a 3xx is an upstream asking for the credential at another location; the response is returned to the caller as `upstream_error` instead |
 | `TLSClientConfig` | minimum TLS 1.2, verification on, the system roots, no field turns it off; `TLSHandshakeTimeout` 10s | a Provider is a public host by the upstream host rule; a local runtime with its own certificate is [[013-tunnelled-runtimes]]'s case |
 | `DialContext` | resolves the name, then drops every loopback, link-local, unique-local, private, unspecified, or multicast address among the answers unless `LUX_UPSTREAM_ALLOW_PRIVATE`, and refuses the dial with `ErrPrivateAddress` when none is left; connects only to the admitted addresses, in order; 10s connect timeout | the parse-time rule of [[003-manifest-contract]] is on the name; this is on the address, which is what closes a public name that resolves inward |
-| host pin | the `RoundTripper` refuses, before dialling, a request whose URL scheme, host, or port differs from the Provider's `baseURL`, with an error the door reports as `upstream_error` | invariant 2 of [[001-architecture]] in code: a bug that builds a URL wrongly cannot carry the credential to another host |
+| host pin | the `RoundTripper` refuses, before dialing, a request whose URL scheme, host, or port differs from the Provider's `baseURL`, with an error the door reports as `upstream_error` | invariant 2 of [[001-architecture]] in code: a bug that builds a URL wrongly cannot carry the credential to another host |
 | `ForceAttemptHTTP2` | true; `MaxIdleConnsPerHost` 32, `IdleConnTimeout` 90s | one pool per Provider, so a slow upstream cannot starve another's connections |
 | `DisableCompression` | true | the transport adds no `Accept-Encoding` of its own and decodes nothing, so [[004-request-path]]'s rule that the header is removed on translated and model routes and kept on opaque ones holds byte for byte |
 | deadline | `Provider.spec.timeout`, defaulted from `LUX_UPSTREAM_TIMEOUT`, over the whole request including its stream, as the request context's deadline the caller sets; no `http.Client.Timeout` and no `ResponseHeaderTimeout`; the jobs use `10m` for a Provider whose `timeout` is empty, which the file mode leaves so until [[004-request-path]] wires the default | a stream that stalls is cut rather than held; there is no idle timeout between events, because the one deadline is the one knob an operator sets |
@@ -479,8 +479,8 @@ The client's own two metrics are this spec's rows in
 [[019-observability]]'s table, written by the gateway's attempt rather
 than by the builder, because the attempt is the one place that knows
 the Provider, the duration, and the outcome together:
-`lux_upstream_requests_total`, a counter labelled `provider` and
-`status`, and `lux_upstream_duration_seconds`, a histogram labelled
+`lux_upstream_requests_total`, a counter labeled `provider` and
+`status`, and `lux_upstream_duration_seconds`, a histogram labeled
 `provider` over that spec's duration buckets, one observation of each
 per target tried. `status` is a closed set of three: `timeout` for the
 Provider's own deadline, `error` for a transport failure, a 5xx, a
@@ -626,7 +626,7 @@ the Design above beside the rule it settles:
   are raised in the same transaction; the event record's shape is that
   spec's, written here in `internal/serve/events.go` until its package
   lands.
-- A tunnelled Provider is skipped by both jobs and refused by the client
+- A tunneled Provider is skipped by both jobs and refused by the client
   until [[013-tunnelled-runtimes]] gives it a carrier transport.
 
 Owned elsewhere, in [[004-request-path]]: the upstream body cap and the
