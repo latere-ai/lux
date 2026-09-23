@@ -124,3 +124,36 @@ func renderedConfig(t *testing.T, out []byte) map[string]string {
 	t.Fatal("the render carries no luxd ConfigMap")
 	return nil
 }
+
+// TestShippedOverlaysSetNoLocalIssuerKey is spec 035's criterion 9: no
+// overlay this tree ships names a local issuer key, as a value, a
+// ConfigMap entry, or a Secret reference, because a server that can mint
+// its own admin token beside an issuer puts a subject outside the issuer
+// that governs it. The render is read whole, so the variable's name
+// anywhere in it is the finding.
+func TestShippedOverlaysSetNoLocalIssuerKey(t *testing.T) {
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		t.Skip("kubectl is not on PATH, so the overlays are not rendered here")
+	}
+	for _, overlay := range []string{"kind", "generic"} {
+		t.Run(overlay, func(t *testing.T) {
+			cmd := exec.Command("kubectl", "kustomize", filepath.Join("..", "..", "deploy", "overlays", overlay))
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("kubectl kustomize: %v\n%s", err, stderr.String())
+			}
+			if bytes.Contains(out, []byte("LUX_LOCAL_ISSUER_KEY")) {
+				t.Errorf("the %s overlay's render names LUX_LOCAL_ISSUER_KEY", overlay)
+			}
+		})
+	}
+	secrets, err := os.ReadFile(filepath.Join("..", "..", "deploy", "bootstrap", "luxd-secrets.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(secrets, []byte("LUX_LOCAL_ISSUER_KEY")) {
+		t.Error("the bootstrap Secret names LUX_LOCAL_ISSUER_KEY")
+	}
+}

@@ -276,8 +276,12 @@ The rows this spec owns:
 
 The rows other specs own, printed in this order and cited rather than
 restated: `store`, `migrations`, `manifest dir`, `db conns`
-([[010-state]]); `secrets kek`, `credentials`, `providers`, `dialects`
-([[005-providers]]); `tunnels` ([[013-tunnelled-runtimes]]).
+([[010-state]]); `bootstrap`, between `manifest dir` and `db conns`
+and printed only when `LUX_BOOTSTRAP_DIR` is set, the dry run of the
+start-up apply with its counts or the first file that does not resolve
+(added 2026-09-23, [[035-running-the-core-on-your-own]]); `secrets
+kek`, `credentials`, `providers`, `dialects` ([[005-providers]]);
+`tunnels` ([[013-tunnelled-runtimes]]).
 
 `luxd check` dials the operator's endpoints and the providers. It
 changes no object, no counter, no journal row, and no cache entry; the

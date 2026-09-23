@@ -35,6 +35,7 @@ import (
 
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/internal/bootstrap"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/secrets"
@@ -78,7 +79,7 @@ func (l Line) String() string { return fmt.Sprintf("%-4s %s: %s", l.State, l.Nam
 // lines are Names in order with those rows left out.
 var Names = []string{
 	"version", "configuration", "public url", "issuers", "local issuer", "authorizer", "events", "requestlog",
-	"store", "migrations", "manifest dir", "db conns",
+	"store", "migrations", "manifest dir", "bootstrap", "db conns",
 	"secrets kek", "credentials", "providers", "dialects",
 	"tunnels",
 }
@@ -189,6 +190,11 @@ func Lines(ctx context.Context, o Options) []Line {
 				}
 				continue
 			}
+			// The bootstrap row belongs to an installation that names a
+			// directory, and is absent from one that does not.
+			if name == bootstrapName && strings.TrimSpace(o.Getenv("LUX_BOOTSTRAP_DIR")) == "" {
+				continue
+			}
 			lines = append(lines, notChecked(name, "the configuration did not load"))
 		}
 		return lines
@@ -216,7 +222,7 @@ func Lines(ctx context.Context, o Options) []Line {
 	}
 	for _, row := range []func(context.Context) Line{
 		r.publicURL, r.issuers, r.localIssuer, r.authorizer, r.events, r.requestLog,
-		r.store, r.migrations, r.manifestDir, r.dbConns,
+		r.store, r.migrations, r.manifestDir, r.bootstrap, r.dbConns,
 		r.secretsKEK, r.credentials, r.providerRow, r.dialects,
 		r.tunnels,
 	} {
@@ -548,6 +554,32 @@ func (r *run) migrations(context.Context) Line {
 
 // manifestDir (spec 010): in the file mode the directory is readable,
 // every file resolves, and the line counts what was read per kind.
+// bootstrapName is the bootstrap row's name in Names.
+const bootstrapName = "bootstrap"
+
+// bootstrap (spec 035): with LUX_BOOTSTRAP_DIR set, every manifest of the
+// directory decodes, validates, and resolves against the store the way
+// serve would apply it at start, credentials read from the variables they
+// name; nothing is written, so the row is the dry run of the apply. The
+// row is absent when the variable is unset.
+func (r *run) bootstrap(ctx context.Context) Line {
+	if r.cfg.BootstrapDir == "" {
+		return Line{}
+	}
+	if r.st == nil || r.why != "" {
+		return notChecked(bootstrapName, r.storeWhy())
+	}
+	res, err := bootstrap.Check(ctx, bootstrap.Options{
+		Dir: r.cfg.BootstrapDir, Store: r.st, Owner: r.cfg.AdminSubjects[0], Keys: r.cfg.SecretsKEK,
+		Getenv: r.o.Getenv, Defaults: manifest.Defaults{RequestsPerMinute: r.cfg.DefaultRequestsPerMinute, TokensPerMinute: r.cfg.DefaultTokensPerMinute, Timeout: r.cfg.UpstreamTimeout},
+		AllowPrivateUpstreams: r.cfg.UpstreamAllowPrivate, TunnelEnabled: r.cfg.TunnelEnabled, PublicURL: r.cfg.PublicURL,
+	})
+	if err != nil {
+		return Line{Fail, bootstrapName, err.Error()}
+	}
+	return Line{OK, bootstrapName, res.Summary()}
+}
+
 func (r *run) manifestDir(context.Context) Line {
 	const name = "manifest dir"
 	switch {

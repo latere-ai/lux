@@ -73,8 +73,9 @@ func TestCheckReportsTheLocalIssuer(t *testing.T) {
 			for _, l := range lines {
 				names = append(names, l.Name)
 			}
-			if !slices.Equal(names, Names) {
-				t.Fatalf("the lines are %v, want every row %v", names, Names)
+			want := slices.DeleteFunc(slices.Clone(Names), func(n string) bool { return n == bootstrapName })
+			if !slices.Equal(names, want) {
+				t.Fatalf("the lines are %v, want every row but the unset bootstrap %v", names, want)
 			}
 			l := byName(lines)["local issuer"]
 			if l.State != tc.state || !strings.Contains(l.Detail, tc.want) {

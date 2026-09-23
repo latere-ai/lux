@@ -70,9 +70,10 @@ func TestCheckCommand(t *testing.T) {
 			}
 		}
 	}
-	unset := slices.DeleteFunc(slices.Clone(check.Names), func(n string) bool { return n == "local issuer" })
+	unset := slices.DeleteFunc(slices.Clone(check.Names), func(n string) bool { return n == "local issuer" || n == "bootstrap" })
 	inOrder(out.String(), unset)
 
+	withIssuerKey := slices.DeleteFunc(slices.Clone(check.Names), func(n string) bool { return n == "bootstrap" })
 	key, kid := issuerKey(t)
 	local := maps.Clone(vars)
 	local["LUX_LOCAL_ISSUER_KEY"] = key
@@ -80,7 +81,7 @@ func TestCheckCommand(t *testing.T) {
 	if code := run(t.Context(), []string{"check"}, env(local), &out, &errOut); code != 0 {
 		t.Fatalf("exit %d with a local issuer key:\n%s", code, out.String())
 	}
-	inOrder(out.String(), check.Names)
+	inOrder(out.String(), withIssuerKey)
 	if want := "\nok   local issuer: ES256 key " + kid + " signs tokens issued as " + publicURL + ", and 0 further key(s) of LUX_LOCAL_ISSUER_KEYS verify\n"; !strings.Contains(out.String(), want) {
 		t.Errorf("no ok local issuer line naming the algorithm and key id:\n%s", out.String())
 	}
@@ -89,9 +90,37 @@ func TestCheckCommand(t *testing.T) {
 	if code := run(t.Context(), []string{"check"}, env(local), &out, &errOut); code != 1 {
 		t.Fatalf("exit %d with an unusable key:\n%s", code, out.String())
 	}
-	inOrder(out.String(), check.Names)
+	inOrder(out.String(), withIssuerKey)
 	if !strings.Contains(out.String(), "\nfail local issuer: LUX_LOCAL_ISSUER_KEY is not a PEM encoded private key") || strings.Contains(out.String(), "warn local issuer") {
 		t.Errorf("no failing local issuer line:\n%s", out.String())
+	}
+
+	// The bootstrap row (spec 035): the dry run of the apply, with the
+	// counts when the directory resolves and the first file when it does
+	// not; nothing is written either way.
+	booted := maps.Clone(vars)
+	booted["LUX_ADMIN_SUBJECTS"] = iss.URL() + "|alice"
+	booted["LUX_TEST_PROVIDER_KEY"] = "sk-bootstrap"
+	booted["LUX_BOOTSTRAP_DIR"] = writeDir(t, map[string]string{
+		"openai.yaml": "apiVersion: lux.latere.ai/v1beta1\nkind: Provider\nmetadata:\n  name: openai\nspec:\n  dialect: openai\n  baseURL: https://api.example.com/v1\n  credential:\n    valueFrom:\n      env: LUX_TEST_PROVIDER_KEY\n",
+	})
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(booted), &out, &errOut); code != 0 {
+		t.Fatalf("exit %d with a bootstrap directory:\n%s", code, out.String())
+	}
+	inOrder(out.String(), slices.DeleteFunc(slices.Clone(check.Names), func(n string) bool { return n == "local issuer" }))
+	if !strings.Contains(out.String(), "\nok   bootstrap: bootstrap dir "+booted["LUX_BOOTSTRAP_DIR"]+": 1 files read, 1 to create, 0 to update, 0 unchanged; nothing written\n") {
+		t.Errorf("no ok bootstrap line with the counts:\n%s", out.String())
+	}
+	booted["LUX_BOOTSTRAP_DIR"] = writeDir(t, map[string]string{
+		"orphan.yaml": "apiVersion: lux.latere.ai/v1beta1\nkind: Model\nmetadata:\n  name: orphan\nspec:\n  targets:\n    - provider: nobody\n      model: x\n",
+	})
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(booted), &out, &errOut); code != 1 {
+		t.Fatalf("exit %d with a bootstrap directory that does not resolve:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "\nfail bootstrap: ") || !strings.Contains(out.String(), "orphan.yaml: Model orphan: not_found") {
+		t.Errorf("no failing bootstrap line naming the file:\n%s", out.String())
 	}
 
 	vars["LUX_OIDC_ISSUERS"] = "http://127.0.0.1:1"

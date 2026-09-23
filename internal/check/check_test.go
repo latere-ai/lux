@@ -659,7 +659,7 @@ func TestCheckDoesNotEchoTheEnvironment(t *testing.T) {
 
 // optional are the rows of a feature an installation configures, each
 // of which prints no line when the feature is not configured.
-var optional = []string{"local issuer"}
+var optional = []string{"local issuer", "bootstrap"}
 
 // unconfigured is Names without the optional rows: the lines of an
 // installation that configures none of those features.
