@@ -1,6 +1,6 @@
 ---
 title: "The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage"
-status: in-progress
+status: complete
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -375,3 +375,58 @@ held for 5m; and
 | 13 | Under the grace, a negative entry is not served stale, a Key never cached is refused `store_unavailable`, a disabled cached Key is refused, and a cached Key past its `expiresAt` is `key_expired` | `TestKeyCacheStaleGraceLimits`, `internal/serve` |
 | 14 | Under the grace, a lookup past the window reads the store first, and a store that answers again replaces the stale entry at once | `TestKeyCacheStaleGraceRecovers`, `internal/serve` |
 | 15 | Spend counter deltas and hourly usage rows made on two replicas while the store fails every write land in the store at the first flush after it answers, summed exactly; the replica that flushed last then refuses a hard Budget the combined spend has passed, the other after at most one more request, and `budget.exhausted` is raised once | `TestLateCorrectionAfterOutage`, two Limiters and Recorders over one failing-then-healthy store in `internal/serve` |
+
+## Outcome
+
+Built and verified on 2026-09-24. Every criterion has a passing test:
+
+| # | Test |
+|---|---|
+| 1 | `TestCatalogSnapshotServesWithoutStoreReads`, `internal/serve`: twenty chats to a Model with two priced targets, a model list, and a passthrough read no `Objects` or `Credentials` row once the snapshot and the Key are loaded, and every record is priced from the snapshot |
+| 2 | `TestCatalogSnapshotFollowsTheJournal` over one memory store, and `TestPostgresCatalogSnapshotFollowsTheJournal` in the Postgres tier, two connections, the second replica's tail running at 20ms |
+| 3 | `TestCatalogSnapshotRotatedCredential`; its Postgres half in the test above |
+| 4 | `TestCatalogSnapshotBackstop`, with `Run` on a 10ms backstop |
+| 5 | `TestDiscoveryShapeUpdateIsJournaled` |
+| 6 | `TestCatalogReadiness`, `internal/serve`, over a store that answers only after the first attempts; `cmd/luxd`'s readiness tests run with the `catalog` check wired |
+| 7 | `TestCatalogSnapshotStoreDown` |
+| 8 | `TestCatalogSnapshotReopensOnce`, the plaintext searched for by a reflection walk of the snapshot |
+| 9 | `TestCatalogSnapshotSwapIsAtomic`, under the race detector |
+| 10 | `TestMetricsTable`, `internal/arch`'s alert test, `TestCatalogRules`, and the configuration reference tests |
+| 11 | `BenchmarkCatalogLookups` and `BenchmarkPostgresCatalogLookups`; `docs/performance.md` carries the figures: on Postgres over loopback, 0.40ms to 0.44ms per request from the store against 0.66µs to 0.95µs from memory |
+| 12 | `TestKeyCacheStaleGrace`, with the grace and without |
+| 13 | `TestKeyCacheStaleGraceLimits`, through the doors |
+| 14 | `TestKeyCacheStaleGraceRecovers` |
+| 15 | `TestLateCorrectionAfterOutage` |
+
+Where the build differs from the design as first written, the design
+above was corrected in the same change:
+
+- A Provider's journal row reloads the Provider, its credential row,
+  and every Model rather than only the Models with a target on it: one
+  list, and a deleted Provider's name no longer resolves a filter.
+- A tail batch that names more than 64 objects, the first walk of the
+  journal at start or a discovery pass over a large upstream, is one
+  full reload.
+- The replica that takes an apply, a delete, or a rotation tails the
+  journal as its transaction commits (`api.Options.Committed`), so it
+  serves its own write at once; the design had every replica wait for
+  its tail. Tails are serialized.
+- The paths of a `<kind>.updated` row come from one
+  `events.ChangedPaths`, which replaced the two copies the API and
+  bootstrap carried, and discovery uses it too.
+- Discovery changes a Model's labels and modalities, never its pricing,
+  so the row's value is the labels an authorizer's selectors read.
+- `LuxCatalogStale` fires at 90 seconds, three default backstop
+  intervals, since an alert expression cannot read a variable.
+- A replica learns the combined spend from its own flush of a delta, so
+  after an outage the replica that flushed last refuses at once and the
+  other after at most one more request; the late-correction paragraph
+  and criterion 15 say so.
+- The file mode holds the Models and Providers in the snapshot and
+  keeps reading credentials from the environment. The health and
+  discovery jobs keep reading credentials from the store: they are not
+  on a request's path.
+- `test/e2e`'s two-replica test waits for the second replica's
+  `lux_catalog_objects` before calling it, since a write reaches a
+  replica that did not take it within its tail.
+
