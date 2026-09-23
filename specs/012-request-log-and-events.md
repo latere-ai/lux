@@ -77,7 +77,7 @@ mutation through [[011-api]], `discovery` for the job of
 [[005-providers]], `probe` for a health transition, `limit` for a
 window reaching its amount, `check` for `luxd check`, which sends it
 through `events.Sink.Ping`, `bootstrap` for the start-up apply of
-`LUX_BOOTSTRAP_DIR` ([[035-running-the-core-on-your-own]]), which
+`LUX_BOOTSTRAP_DIR` ([035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md)), which
 raises the `<kind>.created` and `.updated` rows below with their data.
 `request_id` is set for `reason: request` and empty otherwise. `object` is the kind,
 the id, the name, the owner, and the labels, and nothing else, so a
@@ -447,7 +447,7 @@ no exporter configured, `lux_events_pending` and
 registry always carries the metric table whether or not delivery and the
 archive are on.
 
-Amended when [[035-running-the-core-on-your-own]] landed: the reason
+Amended when [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md) landed: the reason
 `bootstrap`, `events.ReasonBootstrap`, marks the rows the start-up apply
 of `LUX_BOOTSTRAP_DIR` writes. They are `<kind>.created` and
 `<kind>.updated` with the data of the API's rows, an empty subject and

@@ -86,8 +86,8 @@ later.
 | [028](.archive/028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | complete | 013, 014 |
 | [032](.archive/032-key-fence-api.md) | Authorized Key fence endpoints and atomic audit events | medium | complete | 031, 022 |
 | [033](.archive/033-exact-key-disable.md) | Exact Key disable after authority withdrawal | small | complete | 032 |
-| [034](034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | drafted | 006, 011, 017, 018 |
-| [035](035-running-the-core-on-your-own.md) | Running the core on your own: a local issuer, bootstrap manifests, and the example catalog | large | drafted | 003, 006, 010, 011, 014, 017 |
+| [034](.archive/034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | complete | 006, 011, 017, 018 |
+| [035](.archive/035-running-the-core-on-your-own.md) | Running the core on your own: a local issuer, bootstrap manifests, and the example catalog | large | complete | 003, 006, 010, 011, 014, 017 |
 
 ## Dependency graph
 
@@ -121,8 +121,6 @@ flowchart BT
   S021[021 translation through llmdialect]
   S022[022 authorizer vocabulary as a package]
   S023[023 performance + benchmarks]
-  S034[034 serving behind a shared origin]
-  S035[035 running the core on your own]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -151,11 +149,6 @@ flowchart BT
   S021 --> S018
   S022 --> S006
   S023 --> S004
-  S034 --> S006
-  S034 --> S017
-  S035 --> S006
-  S035 --> S014
-  S035 --> S017
 ```
 
 ## Build order

@@ -1,6 +1,6 @@
 ---
 title: "Serving behind a shared origin: an audience list, a base path, trusted proxies"
-status: drafted
+status: complete
 track: core
 depends_on:
   - specs/006-identity.md
@@ -10,7 +10,7 @@ depends_on:
 affects: [internal/config/, internal/auth/, internal/api/, internal/check/, cmd/luxd/, deploy/overlays/, api/openapi.yaml, docs/, README.md, Makefile, .github/workflows/, specs/002-repository-scaffold.md, specs/006-identity.md]
 effort: large
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -356,7 +356,7 @@ variables of this spec are set together or not at all.
 ### What an installation adds
 
 The core ships `deploy/base`, the `hpa` component, and the `kind` and
-`generic` overlays ([017-release-and-installation](.archive/017-release-and-installation.md)),
+`generic` overlays ([017-release-and-installation](017-release-and-installation.md)),
 and it ships no overlay for any particular deployment. An installation
 that fronts this core with a shared origin keeps its own overlay in its
 own repository, beside the routing object that claims the prefix, because
@@ -392,7 +392,7 @@ materials and provenance. It should say: the current release and its
 date; that images and binaries are published under the namespace of the
 repository owner that ran the release workflow, signed and with
 attestations, so a fork publishes under its own
-([017-release-and-installation](.archive/017-release-and-installation.md));
+([017-release-and-installation](017-release-and-installation.md));
 that the manifest schema may still change before `v1.0.0` and a minor may
 break a row of the version table with a CHANGELOG entry naming the break;
 and that `docs/install.md` is walked by CI on every push.
@@ -401,7 +401,7 @@ and that `docs/install.md` is walked by CI on every push.
 
 - The shorter path for somebody running the core for themselves: the
   local issuer, the bootstrap directory and the example catalog are
-  [[035-running-the-core-on-your-own]].
+  [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md).
 - Any overlay, routing object, certificate or namespace of a particular
   deployment. Those live with the deployment.
 - Any rename of a route, a field, an error code or an action.
@@ -424,3 +424,44 @@ and that `docs/install.md` is walked by CI on every push.
 | 10 | `luxd check` reports the whole audience list and the base path beside the address it read | `TestCheckCommand` in `cmd/luxd`, widened |
 | 11 | `docs/configuration.md` and `.env.example` carry `LUX_BASE_PATH` with its default and the audience list rule, and [[002-repository-scaffold]]'s and [[006-identity]]'s tables carry the same rows | `TestConfigurationReferenceIsCurrent` in `internal/config`, which regenerates both documents from `internal/config/reference.go`, and the two specs read against this one |
 | 12 | The README's project status names the current release, where images and binaries are published and under whose namespace, and what a version before `v1.0.0` promises | the file, read against this spec |
+
+## Outcome
+
+Implemented on 2026-09-23 for `v0.6.0`. Every criterion holds, two of
+them by a route the text did not name.
+
+- Criteria 1 to 3: `TestAudienceListIsParsed` in `internal/config`,
+  `TestBearerAcceptsAnyListedAudience` and
+  `TestVerifierRefusesAnEmptyAudienceList` in `internal/auth` (the
+  second also refuses an empty name inside a list), and
+  `TestWellKnownReportsThePrimaryAudience` in `internal/api`. A token
+  addressed to no listed name names the whole list in its developer
+  detail.
+- Criteria 4 to 7: `TestBasePathMovesThePublicListener` and
+  `TestBasePathEmptyIsTheRoot` in `cmd/luxd`, `TestBasePathRules` in
+  `internal/config`, which also refuses a base that is not a clean path,
+  since a request path is cleaned before it is routed, and
+  `TestServedDocumentCarriesTheBasePath` beside the unchanged
+  `TestOpenAPIServedMatchesCommitted`. The base is enforced at load
+  after both loaders, because the identity loader runs before the one
+  that reads `LUX_PUBLIC_URL`.
+- Criterion 8 diverged in one respect. `TestE2EConformanceUnderBasePath`
+  runs the suite under `/v1/models` with an audience list, as a third
+  step of the `conformance-twice` job and inside `make test-e2e`, which
+  runs every `TestE2E` test, so no new target was added. One case file
+  changed: `case011OpenAPIValidatesEveryResponse` listed the rooted
+  route names, and now reads them relative to the base the discovery
+  document gives. The per-request hold needed no change.
+- Criterion 9: `TestGenericOverlayServesUnderAPrefix` merges the three
+  variables into the generic overlay's configuration, renders it with
+  `kubectl kustomize`, and runs `luxd check` over the render with the
+  overlay's own endpoints replaced by loopback doubles.
+- Criteria 10 to 12: `TestCheckCommand` widened for the audience list
+  and the mount, the configuration reference and specs 002 and 006
+  amended, and the README's project status rewritten.
+
+Found on the way and fixed: `TestVersionPromise` in `tools/release`
+compared the working tree against its own `HEAD`, so any uncommitted
+change that adds a variable failed the gate before it could be
+committed. It now reads `HEAD` against itself, which still exercises
+the tag reader.

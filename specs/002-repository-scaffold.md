@@ -138,7 +138,7 @@ dependency allow list in the gate, so the binary carrying every role
 does not loosen what any one role may reach. An unknown subcommand is a
 usage error, exit 2. `check` and `rewrap` landed with their specs,
 [release and installation](.archive/017-release-and-installation.md) and [[005-providers]],
-and `token` with [[035-running-the-core-on-your-own]].
+and `token` with [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md).
 
 ### Configuration
 

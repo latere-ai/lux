@@ -1,6 +1,6 @@
 ---
 title: "Running the core on your own: a local issuer, bootstrap manifests, and the example catalog"
-status: drafted
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -12,7 +12,7 @@ depends_on:
 affects: [internal/config/, internal/auth/, internal/bootstrap/, internal/check/, cmd/luxd/, deploy/catalog/, deploy/examples/, docs/install.md, docs/configuration.md, docs/README.md, tools/docs/, .github/workflows/verify.yml, .github/workflows/release.yml, README.md, specs/002-repository-scaffold.md, specs/006-identity.md]
 effort: large
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -121,7 +121,7 @@ manifests and the first Key are both possible.
 
 | | Shape | For | Against |
 |---|---|---|---|
-| A | `deploy/catalog/` | It sits beside `deploy/examples/` and `deploy/base/`, and the deploy archive already carries that tree to an operator ([017-release-and-installation](.archive/017-release-and-installation.md)) | `deploy/` reads as Kubernetes, and these are not cluster objects |
+| A | `deploy/catalog/` | It sits beside `deploy/examples/` and `deploy/base/`, and the deploy archive already carries that tree to an operator ([017-release-and-installation](017-release-and-installation.md)) | `deploy/` reads as Kubernetes, and these are not cluster objects |
 | B | `examples/catalog/` | `examples/` exists and holds an authorizer example | `deploy/examples/` also exists and holds manifests, so two directories would hold example manifests under different roots |
 | C | A release asset, downloaded on demand | The tree stays small | A catalog nobody can read in the repository is a catalog nobody reviews, and the decode-and-resolve test would have nothing to run against |
 
@@ -208,14 +208,14 @@ luxd token [--subject <sub>] [--audience <aud>] [--ttl <duration>]
 | Flag | Default | Rule |
 |---|---|---|
 | `--subject` | the `sub` half of the single entry of `LUX_ADMIN_SUBJECTS` whose issuer half is `LUX_PUBLIC_URL` | With no such entry, or more than one, the flag is required |
-| `--audience` | the primary of `LUX_OIDC_AUDIENCE` ([[034-serving-behind-a-shared-origin]]) | Any listed audience is accepted |
+| `--audience` | the primary of `LUX_OIDC_AUDIENCE` ([034-serving-behind-a-shared-origin](034-serving-behind-a-shared-origin.md)) | Any listed audience is accepted |
 | `--ttl` | `1h` | Above zero and at most `24h`, so a minted token is never a standing credential |
 
 It prints the token on stdout and nothing else, so `LUX_TOKEN=$(luxd
 token)` is one line of an install document. It reads the configuration
 and it writes nothing: no store, no journal, no event, so it is safe
 against a serving installation, which is the same promise `luxd check`
-makes ([017-release-and-installation](.archive/017-release-and-installation.md)).
+makes ([017-release-and-installation](017-release-and-installation.md)).
 
 It does not belong in the `lux` command. That binary is a person's
 process with a deliberately small build list, no identity library and no
@@ -229,7 +229,7 @@ server, not with the client.
 | Where the key lives | In whatever the operator's platform already protects: a Kubernetes Secret mounted as a variable, or a file of mode 0600 read into the environment. Never in a manifest, never in the repository |
 | What it can do | Mint a token for any subject with any listed audience, bounded by the TTL rule. It is therefore equivalent to the strongest credential the installation has, which is why it is off by default and why the TTL is capped |
 | Rotation | `Config.LocalKeys` holds more than one key, selected by the token's `kid` (`pkg@v0.77.1/authkit/jwt/jwt.go:459-465`). `LUX_LOCAL_ISSUER_KEYS` is a comma list of further PEMs that verify but do not sign, so the new key signs while tokens from the old one expire, and the old entry is dropped after the longest TTL |
-| Not for a deployment with an issuer | An installation that already runs an OpenID Connect issuer sets `LUX_OIDC_ISSUERS` and never a local key, and its own overlay is where that is held ([[034-serving-behind-a-shared-origin]], "What an installation adds"). A server that can mint its own admin token puts a subject outside the issuer that governs it, where nothing can revoke it, so the two are set together only by an operator who is deliberately both |
+| Not for a deployment with an issuer | An installation that already runs an OpenID Connect issuer sets `LUX_OIDC_ISSUERS` and never a local key, and its own overlay is where that is held ([034-serving-behind-a-shared-origin](034-serving-behind-a-shared-origin.md), "What an installation adds"). A server that can mint its own admin token puts a subject outside the issuer that governs it, where nothing can revoke it, so the two are set together only by an operator who is deliberately both |
 | What `luxd check` says | One row, `local issuer`: `ok` with the key's algorithm and key id when one is set and parses, `fail` when the value is set and is not a usable private key, and the row is absent when the variable is unset. Never `warn`, because a key that does not parse is a server that cannot mint and an operator who thinks it can |
 
 ### Bootstrap manifests
@@ -379,14 +379,15 @@ Part 1 reads one new input and reuses three the document already defines:
 | `LUX_INSTALL_UPSTREAM_KEY` | none, required | the Provider's credential, exported as `OPENAI_API_KEY`, already an input of part 2 |
 | `LUX_INSTALL_MODEL` | `gpt-4o-mini` | the upstream model, already an input of part 2 |
 
-`tools/docs/stubs-local.sh` writes the last three for CI from a stub
-provider it starts as a local process, the way
-`tools/docs/stubs-in-cluster.sh` writes them from a Pod for part 2. Both
-jobs run it before the walk, so part 1 is hermetic in CI and reaches
-OpenAI for a reader who exports their own key. No conditional appears in
+In CI the last three are the ones `tools/docs/stubs-in-cluster.sh`
+writes for part 2, naming the stub Pod by its in-cluster name, and
+`tools/docs/stubs-local.sh` starts the same stub as a local process and
+maps that name to loopback on the runner (amended 2026-09-23, see the
+Outcome). Both jobs run it before the walk, so part 1 is hermetic in CI
+and reaches OpenAI for a reader who exports their own key. No conditional appears in
 any block: a reader and the pipeline run the same bytes with different
 inputs, which is the rule the document has followed since
-[017-release-and-installation](.archive/017-release-and-installation.md).
+[017-release-and-installation](017-release-and-installation.md).
 
 `docs/quickstart.md` is unchanged and keeps its `docker compose` path
 over the published images.
@@ -401,14 +402,14 @@ Dated 2026-09-22, landing with the implementation:
 - [[006-identity]] gains the local issuer as a verification mode: what it
   is, that `iss` is `LUX_PUBLIC_URL`, that a listed issuer may not carry
   that name, and that it is off unless a key is set.
-- [017-release-and-installation](.archive/017-release-and-installation.md)'s
+- [017-release-and-installation](017-release-and-installation.md)'s
   `luxd check` table gains the `local issuer` and `bootstrap` rows, and
   its `docs/install.md` section gains part 1 and its two inputs.
 
 ## Not in this spec
 
 - The audience list and the base path, which are
-  [[034-serving-behind-a-shared-origin]], and any installation's own
+  [034-serving-behind-a-shared-origin](034-serving-behind-a-shared-origin.md), and any installation's own
   overlay, which lives with that installation.
 - Any change to the file mode, which keeps its read-only control plane
   and its fixed owner.
@@ -432,7 +433,7 @@ Dated 2026-09-22, landing with the implementation:
 | 6 | `luxd token` prints one token the running server accepts; its subject, audience and TTL follow the flags; a TTL above the cap, a missing subject and an unset key are usage errors with exit code 2 | `TestTokenCommand` in `cmd/luxd`, table driven, with `TestTokenCommandRoundTrip` minting and then calling `/v1/self` |
 | 7 | `luxd token` writes nothing: no store row, no journal entry, no event | `TestTokenCommandIsReadOnly` in `cmd/luxd`, in the shape of `TestCheckIsReadOnly` |
 | 8 | A rotation verifies: a token signed by the previous key still verifies while it is listed in `LUX_LOCAL_ISSUER_KEYS`, and stops when it is dropped | `TestLocalIssuerRotation` in `internal/auth` |
-| 9 | No overlay this tree ships (`deploy/overlays/kind`, `deploy/overlays/generic`) sets a local issuer key in any container, as a value or a `secretKeyRef`; an installation with its own issuer holds the same rule in its own overlay ([[034-serving-behind-a-shared-origin]], "What an installation adds") | `TestShippedOverlaysSetNoLocalIssuerKey` in `cmd/luxd`, rendering each overlay |
+| 9 | No overlay this tree ships (`deploy/overlays/kind`, `deploy/overlays/generic`) sets a local issuer key in any container, as a value or a `secretKeyRef`; an installation with its own issuer holds the same rule in its own overlay ([034-serving-behind-a-shared-origin](034-serving-behind-a-shared-origin.md), "What an installation adds") | `TestShippedOverlaysSetNoLocalIssuerKey` in `cmd/luxd`, rendering each overlay |
 | 10 | `LUX_BOOTSTRAP_DIR` applies every manifest of a directory at start, resolving a Provider credential and a Key value from the environment, in kind order, and the control plane is writable afterwards | `TestBootstrapAppliesTheDirectory` in `cmd/luxd` |
 | 11 | A second start over the same directory creates nothing and updates nothing; an edited Model is updated and nothing else is; an existing Key is left as it is | `TestBootstrapIsIdempotent` in `internal/bootstrap` |
 | 12 | A document that fails to decode, to resolve, or whose credential variable is unset stops start-up with a message naming the file, the object and the code | `TestBootstrapRefusalNamesTheFile` in `cmd/luxd` |
@@ -444,3 +445,65 @@ Dated 2026-09-22, landing with the implementation:
 | 18 | Part 1 runs the same blocks against the released binary | the `install-release` job of `.github/workflows/release.yml` with `LUX_INSTALL_BIN` naming the unpacked archive |
 | 19 | `luxd check` reports the `local issuer` and `bootstrap` rows when their variables are set, and omits them when they are not | `TestCheckCommand` in `cmd/luxd`, widened |
 | 20 | `docs/configuration.md` and `.env.example` carry the three new variables with their defaults | `TestConfigurationReferenceIsCurrent` in `internal/config` |
+
+## Outcome
+
+Implemented on 2026-09-23 for `v0.6.0`.
+
+- Criteria 1 to 8, the local issuer and `luxd token`:
+  `TestLocalIssuerAloneStartsTheServer`, `TestLocalIssuerTokenIsAccepted`,
+  `TestLocalIssuerBesideAListedIssuer`, `TestLocalIssuerIsOffByDefault`,
+  `TestLocalIssuerRotation`, `TestLocalIssuerRules`, `TestTokenCommand`
+  with `TestTokenCommandRoundTrip`, and `TestTokenCommandIsReadOnly`. The
+  signer is `internal/localissuer`, the standard library alone: ES256
+  over P-256 and RS256, the key id the first sixteen hexadecimal
+  characters of the SHA-256 of the public key's PKIX encoding. `luxd
+  token` reads only its four variables, so it mints with no key
+  encryption key and no database.
+- Criterion 9: `TestShippedOverlaysSetNoLocalIssuerKey` renders the kind
+  and generic overlays and reads the bootstrap Secret.
+- Criteria 10 to 13 and 16, bootstrap: `TestBootstrapAppliesTheDirectory`,
+  `TestBootstrapIsIdempotent`, `TestBootstrapRefusalNamesTheFile`,
+  `TestBootstrapRules`, and `TestBootstrapLoadsTheCatalog`. A created or
+  updated object raises one event with the reason `bootstrap`, declared in
+  [[012-request-log-and-events]].
+- Criteria 14 and 15, the catalog: `TestCatalogResolves` and
+  `TestCatalogCarriesNoCompanyValue` over 94 Models, not 105, for the
+  reason the amendment under "The example catalog" gives.
+- Criteria 17 and 18: part 1 of `docs/install.md`, walked by the
+  `install` job from the checkout and by `install-release` from the
+  published archives. Both parts read one `LUX_INSTALL_UPSTREAM`, which
+  in CI names the in-cluster stub; `tools/docs/stubs-local.sh` starts the
+  same stub on the runner and maps that name to loopback, so part 1
+  reaches it from the host and part 2 from inside the cluster, and no
+  block carries a condition. Part 1 sets `LUX_UPSTREAM_ALLOW_PRIVATE=1`,
+  as the kind overlay does, because a local installation often points at
+  a model runtime on its own network.
+- Criteria 19 and 20: `TestCheckCommand` widened for the `local issuer`
+  and `bootstrap` rows, each absent when its variable is unset, and the
+  configuration reference regenerated.
+
+Where the build departs from the text:
+
+- The file mode is the absence of every verification path, a listed
+  issuer or a local one, rather than the presence of a manifest
+  directory: a manifest directory beside a listed issuer is a tested
+  configuration whose read-only control plane still answers verified
+  callers, and the configuration admits no issuer of either kind only
+  with `LUX_MANIFEST_DIR`.
+- The token role's dependency allow list did not exist as a gate; it is
+  `TestTokenRoleReachesNothingThatWrites` in `internal/arch`.
+- `LUX_LOCAL_ISSUER_KEYS` separates its PEM blocks by commas, white
+  space, or both. Three rules beyond the text: an RSA key below 2048 bits
+  is refused, a key id held twice is refused because a token naming it
+  would verify against neither, and further keys without a signing key
+  are refused. A minted token carries no `nbf`, since the local issuer
+  verifies with no clock skew.
+- Bootstrap reads `.yaml` and `.yml`, as this text says; the file mode
+  reads `.yaml` and `.json`. A Key value taken from a variable follows the
+  control plane's rule for a supplied value.
+
+Found on the way, not fixed here: `PUT /v1/models/{name}` over a
+discovered Model of the same name answers `already_exists`, where
+[[010-state]] says a declared apply replaces a discovered one; bootstrap
+writes a declared Model and is not affected.

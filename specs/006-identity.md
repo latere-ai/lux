@@ -93,7 +93,7 @@ issuer's key, `iss` matches, `aud` contains any name of
 `LUX_OIDC_AUDIENCE` (default `lux`), `exp` is present and in the future,
 and `nbf` if present is past. `LUX_OIDC_AUDIENCE` is a comma list whose
 first name is the primary, the one `/.well-known/lux` reports
-([[034-serving-behind-a-shared-origin]]). Amended 2026-09-23: this
+([034-serving-behind-a-shared-origin](.archive/034-serving-behind-a-shared-origin.md)). Amended 2026-09-23: this
 paragraph argued that one audience suffices because a platform's own
 developer credential never reaches `/v1` as a token. An installation
 behind a shared origin decided otherwise: a script holding a credential
@@ -157,11 +157,11 @@ to none on the public one ([[010-state]]), so there is nothing to
 authorize. The file mode is the one configuration with no issuer of
 either kind; a manifest directory beside an issuer keeps the verifier,
 and its read-only control plane answers verified callers. Amended
-2026-09-23 with the local issuer ([[035-running-the-core-on-your-own]]).
+2026-09-23 with the local issuer ([035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md)).
 
 ### The local issuer
 
-Added 2026-09-23 by [[035-running-the-core-on-your-own]]. An
+Added 2026-09-23 by [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md). An
 installation with no OpenID Connect issuer of its own sets
 `LUX_LOCAL_ISSUER_KEY`, a PEM encoded PKCS#8 private key, ECDSA on P-256
 or RSA of at least 2048 bits, and the server is then an issuer too. Its
@@ -482,15 +482,15 @@ holds.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `LUX_OIDC_ISSUERS` | yes, unless `LUX_LOCAL_ISSUER_KEY` or `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error, as is `LUX_PUBLIC_URL` while `LUX_LOCAL_ISSUER_KEY` is set (amended 2026-09-23, [[035-running-the-core-on-your-own]]) |
-| `LUX_OIDC_AUDIENCE` | no | `lux` | a comma list of distinct names a caller token may be addressed to, the first the primary; an empty entry and a repeated name are configuration errors (amended 2026-09-23, [[034-serving-behind-a-shared-origin]]) |
+| `LUX_OIDC_ISSUERS` | yes, unless `LUX_LOCAL_ISSUER_KEY` or `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error, as is `LUX_PUBLIC_URL` while `LUX_LOCAL_ISSUER_KEY` is set (amended 2026-09-23, [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md)) |
+| `LUX_OIDC_AUDIENCE` | no | `lux` | a comma list of distinct names a caller token may be addressed to, the first the primary; an empty entry and a repeated name are configuration errors (amended 2026-09-23, [034-serving-behind-a-shared-origin](.archive/034-serving-behind-a-shared-origin.md)) |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
 | `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([026-object-scoped-discovery](.archive/026-object-scoped-discovery.md)) |
 | `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included, a duration above zero; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
 | `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects, each `<iss>\|<sub>`, the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set; an entry without the separator is a configuration error |
-| `LUX_LOCAL_ISSUER_KEY` | no | unset | the local issuer's signing key, a PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits; a value that is not one is a configuration error naming the variable and echoing nothing (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
-| `LUX_LOCAL_ISSUER_KEYS` | no | unset | further keys of the local issuer, PEM blocks separated by commas or whitespace, that verify and never sign; set without `LUX_LOCAL_ISSUER_KEY`, an entry that is not a key, and a repeated key id are configuration errors (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
+| `LUX_LOCAL_ISSUER_KEY` | no | unset | the local issuer's signing key, a PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits; a value that is not one is a configuration error naming the variable and echoing nothing (added 2026-09-23, [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md)) |
+| `LUX_LOCAL_ISSUER_KEYS` | no | unset | further keys of the local issuer, PEM blocks separated by commas or whitespace, that verify and never sign; set without `LUX_LOCAL_ISSUER_KEY`, an entry that is not a key, and a repeated key id are configuration errors (added 2026-09-23, [035-running-the-core-on-your-own](.archive/035-running-the-core-on-your-own.md)) |
 
 Each problem is one clause without a semicolon, so the one sorted
 message of [[002-repository-scaffold]] reads unambiguously. `auth.Startup`

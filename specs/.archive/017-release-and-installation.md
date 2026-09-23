@@ -160,7 +160,7 @@ flowchart LR
    nothing and [[002-repository-scaffold]]'s table does not grow. The
    document's first part runs before them with `LUX_INSTALL_BIN` naming
    the `luxd` of the release's `luxd_<tag>_linux_amd64.tar.gz` (added
-   2026-09-23, [[035-running-the-core-on-your-own]]). A
+   2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)). A
    failure fails the workflow after the release exists, which the
    release notes link.
 6. `release-verify`: from a clean runner with no checkout on the path,
@@ -272,7 +272,7 @@ The rows this spec owns:
 | `configuration` | `internal/config.Load` returns without a problem |
 | `public url` | `LUX_PUBLIC_URL` is absolute, and no Provider's `baseURL` names its host, which would be a loop ([[003-manifest-contract]]) |
 | `issuers` | every `LUX_OIDC_ISSUERS` entry answers `/.well-known/openid-configuration` and its `jwks_uri` with at least one `RS256` or `ES256` key |
-| `local issuer` | printed only when `LUX_LOCAL_ISSUER_KEY` is set: `LUX_LOCAL_ISSUER_KEY` and every `LUX_LOCAL_ISSUER_KEYS` entry parse as a private key the local issuer signs with, and the line names the signing key's algorithm and key id, never the key. The line **fails** otherwise, whether or not the rest of the configuration loaded, and is never `warn`: a key that does not parse is a server that cannot mint beside an operator who thinks it can (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
+| `local issuer` | printed only when `LUX_LOCAL_ISSUER_KEY` is set: `LUX_LOCAL_ISSUER_KEY` and every `LUX_LOCAL_ISSUER_KEYS` entry parse as a private key the local issuer signs with, and the line names the signing key's algorithm and key id, never the key. The line **fails** otherwise, whether or not the rest of the configuration loaded, and is never `warn`: a key that does not parse is a server that cannot mint beside an operator who thinks it can (added 2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)) |
 | `authorizer` | the endpoint answers a probe inside `LUX_AUTHORIZER_TIMEOUT` with a body that parses as a decision, and denies it. The probe is `latere.ai/x/pkg/authz.Probe("provider.read", "Provider")`, whose resource id is `authz.ProbeID`, the reserved id every authorizer denies for every subject and action; the row is `latere.ai/x/pkg/authz.Check`, and `authz.ErrProbeAllowed` is what an allow returns. The line **fails** on an allow: an authorizer that allows an action on an object that can exist nowhere is answering without reading the request, which makes every later allow unreadable too. The deny is cached for five seconds like any deny ([[006-identity]]), which changes nothing: no object shares the probe id, and `check` is its own process |
 | `events` | with `LUX_EVENTS_URL` set, the sink answers 2xx to one signed ping whose body is a `check.ping` event and whose signature is computed exactly as [[012-request-log-and-events]] says. That type is [[012-request-log-and-events]]'s, in its table for this row's sake: it names no object, carries an empty `data`, has `reason: check`, and is never written to the journal, so a sink that keys on `type` has a row to ignore rather than an unknown body to refuse |
 | `requestlog` | with the exporter `s3`, the bucket accepts and then deletes one empty object under `LUX_S3_PREFIX` |
@@ -282,7 +282,7 @@ restated: `store`, `migrations`, `manifest dir`, `db conns`
 ([[010-state]]); `bootstrap`, between `manifest dir` and `db conns`
 and printed only when `LUX_BOOTSTRAP_DIR` is set, the dry run of the
 start-up apply with its counts or the first file that does not resolve
-(added 2026-09-23, [[035-running-the-core-on-your-own]]); `secrets
+(added 2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)); `secrets
 kek`, `credentials`, `providers`, `dialects` ([[005-providers]]);
 `tunnels` ([[013-tunnelled-runtimes]]).
 
@@ -314,7 +314,7 @@ token`, a Key from `lux keys create`, one completion through the OpenAI
 door, and the server stopped with every variable the part exported and
 part 2 does not name unset, so part 2 starts against nothing of part 1.
 Both parts run as one script in both jobs (added 2026-09-23,
-[[035-running-the-core-on-your-own]]).
+[035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)).
 
 CI runs it twice with the same script and different inputs: the
 `install` job of `verify.yml` on every push and pull request, against
@@ -340,7 +340,7 @@ the family and this is its table.
 | `LUX_INSTALL_UPSTREAM` | `https://api.openai.com/v1` | the first Provider's base URL |
 | `LUX_INSTALL_UPSTREAM_KEY` | none, required | the first Provider's credential, sent once and sealed |
 | `LUX_INSTALL_MODEL` | `gpt-4o-mini` | the upstream model the first Model routes to |
-| `LUX_INSTALL_BIN` | `out/luxd` | the `luxd` binary part 1 runs as a process: the one `make build` wrote in `install`, the one unpacked from the release archive in `install-release` (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
+| `LUX_INSTALL_BIN` | `out/luxd` | the `luxd` binary part 1 runs as a process: the one `make build` wrote in `install`, the one unpacked from the release archive in `install-release` (added 2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)) |
 
 Part 1 reads `LUX_INSTALL_BIN` and the three upstream inputs; part 2
 reads every input but `LUX_INSTALL_BIN`. The two jobs create the cluster
@@ -355,7 +355,7 @@ name to the runner's `/etc/hosts` as `127.0.0.1`, so the one
 runner and the Pod from part 2's inside the cluster. `install` passes it
 the stub binary it builds for the image; `install-release` copies the
 binary out of the published stub image, since no release archive
-carries it (added 2026-09-23, [[035-running-the-core-on-your-own]]).
+carries it (added 2026-09-23, [035-running-the-core-on-your-own](035-running-the-core-on-your-own.md)).
 
 `tools/docs/run-blocks.sh` runs every
 ` ```sh ` block as one script and first writes every block fenced
