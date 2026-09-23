@@ -93,10 +93,11 @@ type workflow struct {
 		Permissions     map[string]string `yaml:"permissions"`
 		Needs           any               `yaml:"needs"`
 		Steps           []struct {
-			ContinueOnError any    `yaml:"continue-on-error"`
-			Name            string `yaml:"name"`
-			Uses            string `yaml:"uses"`
-			Run             string `yaml:"run"`
+			ContinueOnError any               `yaml:"continue-on-error"`
+			Name            string            `yaml:"name"`
+			Uses            string            `yaml:"uses"`
+			Run             string            `yaml:"run"`
+			Env             map[string]string `yaml:"env"`
 		} `yaml:"steps"`
 	} `yaml:"jobs"`
 }
@@ -295,6 +296,68 @@ func TestRunBlocksRunsTheFencedBlocksInOrder(t *testing.T) {
 	for _, want := range []string{"LUX_INSTALL_IMAGE", "LUX_INSTALL_MANIFESTS", "luxd check", "lux providers create", "lux keys create", "/openai/v1/chat/completions"} {
 		if !strings.Contains(string(install), want) {
 			t.Errorf("docs/install.md lacks %q", want)
+		}
+	}
+}
+
+// exported matches a variable a block exports, at the start of its line.
+var exported = regexp.MustCompile(`(?m)^export ([A-Z_][A-Z0-9_]*)=`)
+
+// TestInstallPartOneStartsFromACheckout is spec 035's shape of
+// docs/install.md: part 1 comes before part 2, runs the server named by
+// LUX_INSTALL_BIN with a local issuer key and a bootstrap directory,
+// stops it, and unsets every variable it exported that part 2 does not
+// name, so part 2 starts against nothing of part 1. Both install jobs
+// start the stub provider on the runner before the walk and name the
+// server binary for the walk step.
+func TestInstallPartOneStartsFromACheckout(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(root(t), "docs", "install.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	one := strings.Index(text, "\n## Part 1: ")
+	two := strings.Index(text, "\n## Part 2: ")
+	if one < 0 || two < one {
+		t.Fatalf("docs/install.md has part 1 at %d and part 2 at %d; part 1 comes first", one, two)
+	}
+	partOne, partTwo := text[one:two], text[two:]
+	for _, want := range []string{"LUX_INSTALL_BIN", "ec_param_enc:named_curve", "LUX_LOCAL_ISSUER_KEY", "LUX_BOOTSTRAP_DIR", `"$LUX_INSTALL_BIN" serve`, `"$LUX_INSTALL_BIN" token`, "lux keys create", "/openai/v1/chat/completions", `kill "$LUXD_PID"`} {
+		if !strings.Contains(partOne, want) {
+			t.Errorf("part 1 of docs/install.md lacks %q", want)
+		}
+	}
+	var unset []string
+	for line := range strings.SplitSeq(partOne, "\n") {
+		if rest, ok := strings.CutPrefix(line, "unset "); ok {
+			unset = append(unset, strings.Fields(rest)...)
+		}
+	}
+	for _, m := range exported.FindAllStringSubmatch(partOne, -1) {
+		name := m[1]
+		if strings.Contains(partTwo, name) {
+			continue
+		}
+		if !slices.Contains(unset, name) {
+			t.Errorf("part 1 exports %s, which part 2 does not name, and does not unset it", name)
+		}
+	}
+	for file, job := range map[string]string{"verify.yml": "install", "release.yml": "install-release"} {
+		w, _ := readWorkflow(t, file)
+		stubs, walk := -1, -1
+		for i, step := range w.Jobs[job].Steps {
+			if strings.Contains(step.Run, "tools/docs/stubs-local.sh") {
+				stubs = i
+			}
+			if strings.Contains(step.Run, "run-blocks.sh ../docs/install.md") {
+				walk = i
+				if !strings.HasSuffix(step.Env["LUX_INSTALL_BIN"], "/luxd") {
+					t.Errorf("%s %s walks the document with LUX_INSTALL_BIN %q, want the luxd it built or unpacked", file, job, step.Env["LUX_INSTALL_BIN"])
+				}
+			}
+		}
+		if stubs < 0 || walk < 0 || stubs > walk {
+			t.Errorf("%s %s starts the local stub provider at step %d and walks the document at step %d; the stubs come first", file, job, stubs, walk)
 		}
 	}
 }

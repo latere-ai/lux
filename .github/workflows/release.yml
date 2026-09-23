@@ -483,11 +483,13 @@ jobs:
             echo "the release body differs from the CHANGELOG section" >&2; exit 1
           fi
 
-  # 6. The install document against the published artifacts: the image
-  # by tag, the deploy archive unpacked, the lux command from its
-  # archive, walked by the same runner the verify workflow uses against
-  # a checkout. The stubs stand in for the issuer and the provider, as a
-  # Pod applied from the job and never from the deploy tree.
+  # 6. The install document against the published artifacts: luxd from
+  # its archive for part 1, the image by tag and the deploy archive
+  # unpacked for part 2, the lux command from its archive for both,
+  # walked by the same runner the verify workflow uses against a
+  # checkout. The stubs stand in for the issuer and the provider, as a
+  # process on the runner for part 1 and as a Pod applied from the job,
+  # never from the deploy tree, for part 2.
   install-release:
     name: the install document against the published artifacts
     needs: [build, publish]
@@ -509,29 +511,43 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      # luxd and lux come from their release archives, part 1's server
+      # and both parts' command. The release archives no lux-stubs, so
+      # its binary is copied out of the published stub image the cluster
+      # runs, the same bytes, for the stub provider part 1 reaches.
       - name: The published artifacts, and nothing from the checkout but the document and its runner
         run: |
           mkdir -p work "$RUNNER_TEMP/bin" && cd work
-          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" -p "deploy-${GITHUB_REF_NAME}.tar.gz" -p "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz"
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" -p "deploy-${GITHUB_REF_NAME}.tar.gz" \
+            -p "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -p "luxd_${GITHUB_REF_NAME}_linux_amd64.tar.gz"
           tar -xzf "deploy-${GITHUB_REF_NAME}.tar.gz"
           tar -xzf "lux_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/bin"
+          tar -xzf "luxd_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/bin"
           docker pull "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}"
           docker pull "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
+          id=$(docker create "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}")
+          docker cp "$id:/usr/local/bin/lux-stubs" "$RUNNER_TEMP/lux-stubs"
+          docker rm "$id" >/dev/null
       - name: The cluster and the stubs
         run: |
           cd work
           ../tools/docs/stubs-in-cluster.sh "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}" \
             "${REGISTRY}/${OWNER}/lux:${GITHUB_REF_NAME}" "${REGISTRY}/${OWNER}/lux-stubs:${GITHUB_REF_NAME}"
+      - name: The stub provider on the runner, for part 1
+        run: |
+          cd work
+          ../tools/docs/stubs-local.sh "$RUNNER_TEMP/lux-stubs"
       - name: Walk the document
         env:
+          LUX_INSTALL_BIN: ${{ runner.temp }}/bin/luxd
           LUX_INSTALL_IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.owner }}/lux:${{ github.ref_name }}
           LUX_INSTALL_MANIFESTS: deploy
         run: |
           cd work
           PATH="$RUNNER_TEMP/bin:$PATH" ../tools/docs/run-blocks.sh ../docs/install.md
-      - name: The cluster's state, for a failed run
+      - name: The cluster's state and the local logs, for a failed run
         if: failure()
-        run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200
+        run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200; tail -n 200 work/luxd.log work/lux-stubs.log || true
 
   # 7. The next fixture directory, as the branch conformance/fixture-<tag>
   # and never a push to the default branch: what the conformance run
