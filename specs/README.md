@@ -88,6 +88,7 @@ later.
 | [033](.archive/033-exact-key-disable.md) | Exact Key disable after authority withdrawal | small | complete | 032 |
 | [034](.archive/034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | complete | 006, 011, 017, 018 |
 | [035](.archive/035-running-the-core-on-your-own.md) | Running the core on your own: a local issuer, bootstrap manifests, and the example catalog | large | complete | 003, 006, 010, 011, 014, 017 |
+| [036](036-catalog-in-memory.md) | The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot | medium | drafted | 004, 005, 007, 009, 010, 012, 019 |
 
 ## Dependency graph
 
@@ -121,6 +122,7 @@ flowchart BT
   S021[021 translation through llmdialect]
   S022[022 authorizer vocabulary as a package]
   S023[023 performance + benchmarks]
+  S036[036 catalog in memory]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -149,6 +151,8 @@ flowchart BT
   S021 --> S018
   S022 --> S006
   S023 --> S004
+  S036 --> S012
+  S036 --> S019
 ```
 
 ## Build order
@@ -165,6 +169,7 @@ flowchart BT
 | 8 | 022 | the authorizer vocabulary as an import: the actions, the resource shapes, and the `limits` names a platform's authorizer is written against |
 | 9 | 023 | the benchmarks and the performance document: the gateway's own overhead, measured in process against a stub upstream |
 | 10 | 034, 035 | the core behind a shared origin: the audience list, the base path, the served document under it; and the shorter path for a self-hoster: the local issuer, the bootstrap directory, the example catalog |
+| 11 | 036 | the catalog served from a per-replica snapshot: no store read per data plane request for a Model, a Provider, or a credential |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
