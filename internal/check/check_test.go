@@ -281,7 +281,7 @@ func TestCheckNamesEachFailure(t *testing.T) {
 			name: "configuration", env: (*stack).fileEnv,
 			edit:    func(_ *testing.T, _ *stack, m map[string]string) { m["LUX_PUBLIC_ADDR"] = "nonsense" },
 			failing: []string{"configuration"},
-			warning: Names[2:],
+			warning: unconfigured()[2:],
 		},
 		{
 			name: "public url", env: (*stack).serverEnv,
@@ -437,8 +437,8 @@ func TestCheckNamesEachFailure(t *testing.T) {
 			for _, l := range lines {
 				names = append(names, l.Name)
 			}
-			if !slices.Equal(names, Names) {
-				t.Fatalf("the lines are %v, want %v", names, Names)
+			if want := unconfigured(); !slices.Equal(names, want) {
+				t.Fatalf("the lines are %v, want %v", names, want)
 			}
 			for _, l := range lines {
 				want := OK
@@ -481,12 +481,13 @@ func TestCheckRunPrintsEveryLine(t *testing.T) {
 		t.Fatalf("exit %d:\n%s", code, out.String())
 	}
 	printed := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if len(printed) != len(Names) {
-		t.Fatalf("%d lines printed, want %d:\n%s", len(printed), len(Names), out.String())
+	names := unconfigured()
+	if len(printed) != len(names) {
+		t.Fatalf("%d lines printed, want %d:\n%s", len(printed), len(names), out.String())
 	}
 	for i, line := range printed {
-		if !strings.HasPrefix(line, "ok   "+Names[i]+": ") && !strings.HasPrefix(line, "warn "+Names[i]+": ") {
-			t.Errorf("line %d is %q, want %s", i+1, line, Names[i])
+		if !strings.HasPrefix(line, "ok   "+names[i]+": ") && !strings.HasPrefix(line, "warn "+names[i]+": ") {
+			t.Errorf("line %d is %q, want %s", i+1, line, names[i])
 		}
 	}
 	m := s.fileEnv()
@@ -651,7 +652,17 @@ func TestCheckDoesNotEchoTheEnvironment(t *testing.T) {
 	if !strings.Contains(out.String(), "fail configuration: LUX_DB_URL has scheme") {
 		t.Fatalf("stdout:\n%s", out.String())
 	}
-	if got := strings.Count(out.String(), "warn "); got != len(Names)-2 {
-		t.Fatalf("%d rows not checked, want %d:\n%s", got, len(Names)-2, out.String())
+	if got, want := strings.Count(out.String(), "warn "), len(unconfigured())-2; got != want {
+		t.Fatalf("%d rows not checked, want %d:\n%s", got, want, out.String())
 	}
+}
+
+// optional are the rows of a feature an installation configures, each
+// of which prints no line when the feature is not configured.
+var optional = []string{"local issuer"}
+
+// unconfigured is Names without the optional rows: the lines of an
+// installation that configures none of those features.
+func unconfigured() []string {
+	return slices.DeleteFunc(slices.Clone(Names), func(n string) bool { return slices.Contains(optional, n) })
 }

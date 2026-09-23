@@ -9,7 +9,7 @@ depends_on:
 affects: [.github/workflows/release.yml, .github/workflows/verify.yml, Dockerfile.release, Dockerfile.stubs, deploy/base/, deploy/components/, deploy/overlays/, deploy/bootstrap/, tools/release/, tools/docs/, internal/check/, cmd/luxd/, test/conformance/testdata/previous/, docs/install.md, docs/upgrades/, CHANGELOG.md]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-19
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -269,6 +269,7 @@ The rows this spec owns:
 | `configuration` | `internal/config.Load` returns without a problem |
 | `public url` | `LUX_PUBLIC_URL` is absolute, and no Provider's `baseURL` names its host, which would be a loop ([[003-manifest-contract]]) |
 | `issuers` | every `LUX_OIDC_ISSUERS` entry answers `/.well-known/openid-configuration` and its `jwks_uri` with at least one `RS256` or `ES256` key |
+| `local issuer` | printed only when `LUX_LOCAL_ISSUER_KEY` is set: `LUX_LOCAL_ISSUER_KEY` and every `LUX_LOCAL_ISSUER_KEYS` entry parse as a private key the local issuer signs with, and the line names the signing key's algorithm and key id, never the key. The line **fails** otherwise, whether or not the rest of the configuration loaded, and is never `warn`: a key that does not parse is a server that cannot mint beside an operator who thinks it can (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
 | `authorizer` | the endpoint answers a probe inside `LUX_AUTHORIZER_TIMEOUT` with a body that parses as a decision, and denies it. The probe is `latere.ai/x/pkg/authz.Probe("provider.read", "Provider")`, whose resource id is `authz.ProbeID`, the reserved id every authorizer denies for every subject and action; the row is `latere.ai/x/pkg/authz.Check`, and `authz.ErrProbeAllowed` is what an allow returns. The line **fails** on an allow: an authorizer that allows an action on an object that can exist nowhere is answering without reading the request, which makes every later allow unreadable too. The deny is cached for five seconds like any deny ([[006-identity]]), which changes nothing: no object shares the probe id, and `check` is its own process |
 | `events` | with `LUX_EVENTS_URL` set, the sink answers 2xx to one signed ping whose body is a `check.ping` event and whose signature is computed exactly as [[012-request-log-and-events]] says. That type is [[012-request-log-and-events]]'s, in its table for this row's sake: it names no object, carries an empty `data`, has `reason: check`, and is never written to the journal, so a sink that keys on `type` has a row to ignore rather than an unknown body to refuse |
 | `requestlog` | with the exporter `s3`, the bucket accepts and then deletes one empty object under `LUX_S3_PREFIX` |

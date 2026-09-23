@@ -9,7 +9,7 @@ depends_on:
 affects: [internal/auth/, internal/api/, internal/config/, test/stubs/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-17
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -150,10 +150,53 @@ hop, a bearer from a listed issuer, verified one way
 ([[020-building-a-plane]]).
 
 With `LUX_OIDC_ISSUERS` unset, `luxd` refuses to start unless
+`LUX_LOCAL_ISSUER_KEY` configures the local issuer below or
 `LUX_MANIFEST_DIR` is set: in file mode the control plane is read-only
 and serves the four kinds to any caller on the internal listener and
 to none on the public one ([[010-state]]), so there is nothing to
-authorize.
+authorize. The file mode is the one configuration with no issuer of
+either kind; a manifest directory beside an issuer keeps the verifier,
+and its read-only control plane answers verified callers. Amended
+2026-09-23 with the local issuer ([[035-running-the-core-on-your-own]]).
+
+### The local issuer
+
+Added 2026-09-23 by [[035-running-the-core-on-your-own]]. An
+installation with no OpenID Connect issuer of its own sets
+`LUX_LOCAL_ISSUER_KEY`, a PEM encoded PKCS#8 private key, ECDSA on P-256
+or RSA of at least 2048 bits, and the server is then an issuer too. Its
+name is `LUX_PUBLIC_URL`, the address the server answers at, and there
+is no variable for it. `luxd token` signs a token with the key: a JWS
+whose header names `alg` (`ES256` or `RS256`) and a `kid`, the first
+sixteen hexadecimal characters of the SHA-256 of the public key's PKIX
+encoding, and whose payload carries `iss`, `sub`, `aud`, `iat`, `exp`,
+and a `jti`.
+
+It is one more verification mode of the one verifier, not a second
+scheme. A token whose `iss` is `LUX_PUBLIC_URL` is verified against the
+local keys alone, selected by its `kid`, through
+`latere.ai/x/pkg/authkit/jwt`'s local issuer, with no discovery and no
+key set fetched; a token of a listed issuer takes the key set path
+unchanged, so a token is verified by exactly one path, chosen by its own
+`iss`. The audiences, the `exp` rule, and the grants apply to it exactly
+as to a listed issuer's token, and its subject renders
+`<LUX_PUBLIC_URL>|<sub>` like every other, so the owner policy, the
+authorizer envelope, and every owner field need no case for it.
+
+- It is off unless the key is set: no local issuer is configured on the
+  verifier, and a token naming `LUX_PUBLIC_URL` as its issuer is
+  `unauthenticated` like any unlisted issuer's.
+- `LUX_OIDC_ISSUERS` may not list `LUX_PUBLIC_URL` while the key is
+  set, compared as issuers are rendered, without the trailing slash.
+  That is a configuration problem naming both variables, and it is what
+  keeps a listed issuer from signing subjects the local issuer owns.
+- `LUX_LOCAL_ISSUER_KEYS` holds the previous keys of a rotation, which
+  verify and never sign; a key id repeated across the two variables is a
+  configuration problem, since a `kid` naming two keys verifies against
+  neither.
+- `/.well-known/lux` lists the local issuer after the listed ones in
+  `issuers`, and the start-up line and `luxd check` name it with each
+  key's algorithm and key id, never the key.
 
 ### The authorizer
 
@@ -439,13 +482,15 @@ holds.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `LUX_OIDC_ISSUERS` | yes, unless `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error |
+| `LUX_OIDC_ISSUERS` | yes, unless `LUX_LOCAL_ISSUER_KEY` or `LUX_MANIFEST_DIR` | none | comma separated issuer URLs whose tokens are accepted on the control plane; each is an `http://` or `https://` URL with a host, rendered without its trailing slash, and one listed twice is a configuration error, as is `LUX_PUBLIC_URL` while `LUX_LOCAL_ISSUER_KEY` is set (amended 2026-09-23, [[035-running-the-core-on-your-own]]) |
 | `LUX_OIDC_AUDIENCE` | no | `lux` | a comma list of distinct names a caller token may be addressed to, the first the primary; an empty entry and a repeated name are configuration errors (amended 2026-09-23, [[034-serving-behind-a-shared-origin]]) |
 | `LUX_OIDC_INSECURE_ISSUERS` | no | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production; an entry that is not in `LUX_OIDC_ISSUERS` is a configuration error, since it permits nothing |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | no | unset | the operator's authorization endpoint and the bearer `luxd` sends it; unset selects the owner policy; the URL without the token is a start-up failure, and the token without the URL is read and unused |
 | `LUX_AUTHORIZE_LIST_ITEMS` | no | unset | `1` intersects a list with each candidate's read permission ([026-object-scoped-discovery](.archive/026-object-scoped-discovery.md)) |
 | `LUX_AUTHORIZER_TIMEOUT` | no | `5s` | one decision's deadline, the retry included, a duration above zero; the cache times are the contract's, an allow for its `ttl` or `60s`, capped at `600s`, a deny `5s`, and are not settings |
 | `LUX_ADMIN_SUBJECTS` | no | unset | comma separated rendered subjects, each `<iss>\|<sub>`, the owner policy lets act on every object and declare Providers and Models; read and unused when an authorizer is set; an entry without the separator is a configuration error |
+| `LUX_LOCAL_ISSUER_KEY` | no | unset | the local issuer's signing key, a PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits; a value that is not one is a configuration error naming the variable and echoing nothing (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
+| `LUX_LOCAL_ISSUER_KEYS` | no | unset | further keys of the local issuer, PEM blocks separated by commas or whitespace, that verify and never sign; set without `LUX_LOCAL_ISSUER_KEY`, an entry that is not a key, and a repeated key id are configuration errors (added 2026-09-23, [[035-running-the-core-on-your-own]]) |
 
 Each problem is one clause without a semicolon, so the one sorted
 message of [[002-repository-scaffold]] reads unambiguously. `auth.Startup`

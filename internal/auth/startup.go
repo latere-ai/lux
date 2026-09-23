@@ -11,11 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"latere.ai/x/pkg/authkit/jwt"
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/otel"
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/config"
+	"latere.ai/x/lux/internal/localissuer"
 )
 
 // Policy names who decides permission on the control plane, the value
@@ -28,8 +30,9 @@ const (
 	PolicyAuthorizer Policy = "authorizer"
 	// PolicyOwner is the built-in owner policy, with LUX_ADMIN_SUBJECTS.
 	PolicyOwner Policy = "owner"
-	// PolicyFile is the file mode: no issuer, no bearer, and nothing to
-	// authorize, because the directory is the desired state.
+	// PolicyFile is the file mode: no issuer, listed or local, no bearer,
+	// and nothing to authorize, because the directory is the desired
+	// state.
 	PolicyFile Policy = "file"
 )
 
@@ -38,9 +41,18 @@ const (
 type Options struct {
 	// Issuers, Audiences, AuthorizerURL, AuthorizerToken,
 	// AuthorizerTimeout, and AdminSubjects are the configuration rows of
-	// spec 006. No issuer is the file mode.
-	Issuers           []string
-	Audiences         []string
+	// spec 006.
+	Issuers   []string
+	Audiences []string
+	// LocalIssuer and LocalKeys are the local issuer of spec 035: its
+	// name, LUX_PUBLIC_URL, and the public halves of LUX_LOCAL_ISSUER_KEY
+	// and LUX_LOCAL_ISSUER_KEYS, the signing key first. No listed issuer
+	// and no local one is the file mode, which the configuration admits
+	// only with LUX_MANIFEST_DIR; a manifest directory with an issuer of
+	// either kind keeps its verifier, and its read-only control plane
+	// answers verified callers.
+	LocalIssuer       string
+	LocalKeys         []jwt.LocalKey
 	AuthorizerURL     string
 	AuthorizerToken   string
 	AuthorizerTimeout time.Duration
@@ -78,7 +90,7 @@ type Auth struct {
 // authorizer call's result and duration for spec 019's metric; nil
 // records none.
 func Startup(ctx context.Context, cfg config.Config, client *http.Client, observe func(result string, seconds float64)) (*Auth, error) {
-	return New(ctx, Options{
+	o := Options{
 		Issuers:           cfg.OIDCIssuers,
 		Audiences:         cfg.OIDCAudiences,
 		AuthorizerURL:     cfg.AuthorizerURL,
@@ -87,7 +99,14 @@ func Startup(ctx context.Context, cfg config.Config, client *http.Client, observ
 		AdminSubjects:     cfg.AdminSubjects,
 		HTTP:              client,
 		Observe:           observe,
-	})
+	}
+	if cfg.LocalIssuerKey != nil {
+		o.LocalIssuer = cfg.PublicURL.String()
+		for _, k := range append([]*localissuer.Key{cfg.LocalIssuerKey}, cfg.LocalIssuerKeys...) {
+			o.LocalKeys = append(o.LocalKeys, jwt.LocalKey{KeyID: k.ID(), Key: k.Public()})
+		}
+	}
+	return New(ctx, o)
 }
 
 // New builds the identity from options.
@@ -97,10 +116,13 @@ func New(ctx context.Context, o Options) (*Auth, error) {
 		client = &http.Client{Timeout: 10 * time.Second, Transport: otel.Transport(nil)}
 	}
 	a := &Auth{Admins: o.AdminSubjects, Policy: PolicyFile}
-	if len(o.Issuers) == 0 {
+	// The file mode is the absence of every verification path, not the
+	// absence of a listed issuer: a local key alone is a server with a
+	// control plane to authenticate.
+	if len(o.Issuers) == 0 && o.LocalIssuer == "" && len(o.LocalKeys) == 0 {
 		return a, nil
 	}
-	v, err := NewVerifier(ctx, VerifierOptions{Issuers: o.Issuers, Audiences: o.Audiences, HTTP: client})
+	v, err := NewVerifier(ctx, VerifierOptions{Issuers: o.Issuers, LocalIssuer: o.LocalIssuer, LocalKeys: o.LocalKeys, Audiences: o.Audiences, HTTP: client})
 	if err != nil {
 		return nil, err
 	}
@@ -142,15 +164,24 @@ func (a *Auth) Authorizer(objects ObjectLookup) *Authorizer {
 }
 
 // String is the one line the start-up log says about identity: the
-// issuers, the audience, and who decides; under an authorizer it reports
-// LUX_ADMIN_SUBJECTS as read and unused, and never the token.
+// issuers, the local issuer with the algorithm and key id of each key,
+// the audience, and who decides; under an authorizer it reports
+// LUX_ADMIN_SUBJECTS as read and unused, and never the token or a key.
 func (a *Auth) String() string {
 	if a.Policy == PolicyFile {
 		return "identity: file mode, no issuer and no control plane to authenticate"
 	}
 	var b strings.Builder
-	b.WriteString("identity: issuers ")
-	b.WriteString(strings.Join(a.Verifier.Issuers(), ", "))
+	if issuers := a.Verifier.Issuers(); len(issuers) > 0 {
+		b.WriteString("identity: issuers ")
+		b.WriteString(strings.Join(issuers, ", "))
+	} else {
+		b.WriteString("identity: no listed issuer")
+	}
+	if local := a.Verifier.DescribeLocal(); local != "" {
+		b.WriteString("; local issuer ")
+		b.WriteString(local)
+	}
 	b.WriteString("; audience ")
 	b.WriteString(strings.Join(a.Verifier.Audiences(), ", "))
 	admins := strconv.Itoa(len(a.Admins)) + " admin subject(s)"

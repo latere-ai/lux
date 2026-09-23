@@ -14,11 +14,13 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"latere.ai/x/lux/internal/localissuer"
 	"latere.ai/x/lux/internal/secrets"
 )
 
@@ -90,6 +92,14 @@ type Config struct {
 	// AdminSubjects are the rendered subjects the owner policy lets act on
 	// every object; read and unused when an authorizer is set.
 	AdminSubjects []string
+	// LocalIssuerKey is the parsed LUX_LOCAL_ISSUER_KEY of spec 035: the
+	// key luxd token signs with and the verifier checks, for the issuer
+	// named PublicURL. Nil is the local issuer off. It renders as its
+	// algorithm and key id, never its material.
+	LocalIssuerKey *localissuer.Key
+	// LocalIssuerKeys are the parsed LUX_LOCAL_ISSUER_KEYS: further keys
+	// of the local issuer that verify and never sign, for a rotation.
+	LocalIssuerKeys []*localissuer.Key
 
 	// The provider variables of spec 005.
 
@@ -276,6 +286,13 @@ func Load(getenv Getenv) (Config, error) {
 	// The rule reads both loaders' results, so it runs after both.
 	if c.BasePath != "" && c.PublicURL != nil && c.PublicURL.Path != c.BasePath {
 		problems = append(problems, "LUX_BASE_PATH is "+c.BasePath+" and the path of LUX_PUBLIC_URL is "+strconv.Quote(c.PublicURL.Path)+"; the listener's prefix and the advertised address are one prefix")
+	}
+	// The local issuer's name is the public address, so a listed issuer
+	// carrying that name could sign subjects the local issuer owns. The
+	// rule reads the identity and the API loaders' results, so it runs
+	// after both; both render an address without its trailing slash.
+	if c.LocalIssuerKey != nil && c.PublicURL != nil && slices.Contains(c.OIDCIssuers, c.PublicURL.String()) {
+		problems = append(problems, "LUX_OIDC_ISSUERS lists LUX_PUBLIC_URL "+c.PublicURL.String()+" while LUX_LOCAL_ISSUER_KEY is set, and that address is the local issuer's name, which no listed issuer may carry")
 	}
 	if len(problems) > 0 {
 		sort.Strings(problems)

@@ -75,7 +75,9 @@ func (c *call) self(context.Context) *Error {
 
 // WellKnown is GET /.well-known/lux: the one document a client reads
 // before it has a token. Every URL is built from LUX_PUBLIC_URL; Mode is
-// server or file.
+// server or file. Issuers is every issuer whose tokens the control plane
+// accepts: the listed ones in order, then the local issuer of spec 035
+// when a key is configured, whose name is LUX_PUBLIC_URL.
 type WellKnown struct {
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
@@ -112,6 +114,9 @@ func (c *call) wellKnown(context.Context) *Error {
 		doc.Mode = "file"
 	} else {
 		doc.Issuers = c.h.o.Auth.Verifier.Issuers()
+		if local := c.h.o.Auth.Verifier.LocalIssuer(); local != "" {
+			doc.Issuers = append(doc.Issuers, local)
+		}
 		doc.Audience = c.h.o.Auth.Verifier.Audience()
 	}
 	return c.writeJSON(http.StatusOK, doc, 0)

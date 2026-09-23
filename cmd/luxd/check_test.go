@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,10 @@ import (
 // TestCheckCommand is spec 017's check role at the process: luxd check
 // prints one line per requirement on stdout in the fixed order and exits
 // 0 when every line is ok or warn, exits 1 with the failing line named
-// when one is not, and a bad flag is a usage error.
+// when one is not, and a bad flag is a usage error. The local issuer row
+// of spec 035 is absent with LUX_LOCAL_ISSUER_KEY unset, ok with the
+// key's algorithm and key id when it is set, fail when it does not parse,
+// and never warn.
 func TestCheckCommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if code := run(t.Context(), []string{"check", "-no-such-flag"}, env(nil), &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "-no-such-flag") {
@@ -54,15 +58,42 @@ func TestCheckCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "https://api.example.com/v1/models is absolute, the public listener answers under base path /v1/models") {
 		t.Errorf("the public url line does not report the base path:\n%s", out.String())
 	}
-	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if len(lines) != len(check.Names) {
-		t.Fatalf("%d lines, want %d:\n%s", len(lines), len(check.Names), out.String())
-	}
-	for i, l := range lines {
-		if !strings.Contains(l, " "+check.Names[i]+": ") {
-			t.Errorf("line %d is %q, want the %s requirement", i+1, l, check.Names[i])
+	inOrder := func(out string, names []string) {
+		t.Helper()
+		lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+		if len(lines) != len(names) {
+			t.Fatalf("%d lines, want %d:\n%s", len(lines), len(names), out)
+		}
+		for i, l := range lines {
+			if !strings.Contains(l, " "+names[i]+": ") {
+				t.Errorf("line %d is %q, want the %s requirement", i+1, l, names[i])
+			}
 		}
 	}
+	unset := slices.DeleteFunc(slices.Clone(check.Names), func(n string) bool { return n == "local issuer" })
+	inOrder(out.String(), unset)
+
+	key, kid := issuerKey(t)
+	local := maps.Clone(vars)
+	local["LUX_LOCAL_ISSUER_KEY"] = key
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(local), &out, &errOut); code != 0 {
+		t.Fatalf("exit %d with a local issuer key:\n%s", code, out.String())
+	}
+	inOrder(out.String(), check.Names)
+	if want := "\nok   local issuer: ES256 key " + kid + " signs tokens issued as " + publicURL + ", and 0 further key(s) of LUX_LOCAL_ISSUER_KEYS verify\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("no ok local issuer line naming the algorithm and key id:\n%s", out.String())
+	}
+	local["LUX_LOCAL_ISSUER_KEY"] = "sk-not-a-key"
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(local), &out, &errOut); code != 1 {
+		t.Fatalf("exit %d with an unusable key:\n%s", code, out.String())
+	}
+	inOrder(out.String(), check.Names)
+	if !strings.Contains(out.String(), "\nfail local issuer: LUX_LOCAL_ISSUER_KEY is not a PEM encoded private key") || strings.Contains(out.String(), "warn local issuer") {
+		t.Errorf("no failing local issuer line:\n%s", out.String())
+	}
+
 	vars["LUX_OIDC_ISSUERS"] = "http://127.0.0.1:1"
 	out.Reset()
 	if code := run(t.Context(), []string{"check"}, env(vars), &out, &errOut); code != 1 {

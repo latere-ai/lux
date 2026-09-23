@@ -73,9 +73,11 @@ func (l Line) String() string { return fmt.Sprintf("%-4s %s: %s", l.State, l.Nam
 
 // Names lists every requirement in the order the lines print: the rows
 // spec 017 owns, then the rows of specs 010, 005, and 013, as that spec
-// orders them.
+// orders them, with spec 035's local issuer after the issuers. A row of a
+// feature the installation has not configured prints no line, so the
+// lines are Names in order with those rows left out.
 var Names = []string{
-	"version", "configuration", "public url", "issuers", "authorizer", "events", "requestlog",
+	"version", "configuration", "public url", "issuers", "local issuer", "authorizer", "events", "requestlog",
 	"store", "migrations", "manifest dir", "db conns",
 	"secrets kek", "credentials", "providers", "dialects",
 	"tunnels",
@@ -178,6 +180,15 @@ func Lines(ctx context.Context, o Options) []Line {
 	if err != nil {
 		lines = append(lines, Line{Fail, "configuration", strings.TrimPrefix(err.Error(), "configuration: ")})
 		for _, name := range Names[2:] {
+			// The local issuer's keys are read on their own, so the row
+			// is the verdict on them and never a warn: a key that does
+			// not parse is a server that cannot mint.
+			if name == localIssuerName {
+				if l, ok := localIssuerLine(o.Getenv, ""); ok {
+					lines = append(lines, l)
+				}
+				continue
+			}
 			lines = append(lines, notChecked(name, "the configuration did not load"))
 		}
 		return lines
@@ -204,12 +215,16 @@ func Lines(ctx context.Context, o Options) []Line {
 		}
 	}
 	for _, row := range []func(context.Context) Line{
-		r.publicURL, r.issuers, r.authorizer, r.events, r.requestLog,
+		r.publicURL, r.issuers, r.localIssuer, r.authorizer, r.events, r.requestLog,
 		r.store, r.migrations, r.manifestDir, r.dbConns,
 		r.secretsKEK, r.credentials, r.providerRow, r.dialects,
 		r.tunnels,
 	} {
-		lines = append(lines, row(ctx))
+		// A row of a feature this installation does not configure
+		// answers a Line with no name and prints nothing.
+		if l := row(ctx); l.Name != "" {
+			lines = append(lines, l)
+		}
 	}
 	return lines
 }
@@ -355,6 +370,9 @@ func (r *run) publicURL(context.Context) Line {
 func (r *run) issuers(ctx context.Context) Line {
 	const name = "issuers"
 	if len(r.cfg.OIDCIssuers) == 0 {
+		if r.cfg.LocalIssuerKey != nil {
+			return Line{OK, name, "none listed; the local issuer " + r.cfg.PublicURL.String() + " is the one issuer"}
+		}
 		return Line{OK, name, "none; the file mode has no control plane bearer to verify"}
 	}
 	v, err := auth.NewVerifier(ctx, auth.VerifierOptions{Issuers: r.cfg.OIDCIssuers, Audiences: r.cfg.OIDCAudiences, HTTP: r.o.HTTP})
@@ -362,6 +380,38 @@ func (r *run) issuers(ctx context.Context) Line {
 		return Line{Fail, name, strings.TrimPrefix(err.Error(), "LUX_OIDC_ISSUERS: ")}
 	}
 	return Line{OK, name, fmt.Sprintf("%d issuer(s) answer discovery and a key set with an RS256 or ES256 key: %s; audience %s", len(v.Issuers()), strings.Join(v.Issuers(), ", "), strings.Join(v.Audiences(), ", "))}
+}
+
+// localIssuerName is the local issuer row's name in Names.
+const localIssuerName = "local issuer"
+
+// localIssuer (spec 035): with LUX_LOCAL_ISSUER_KEY set, the key parses
+// as one the local issuer signs with, the algorithm and key id named and
+// the key never printed; absent when the variable is unset.
+func (r *run) localIssuer(context.Context) Line {
+	l, _ := localIssuerLine(r.o.Getenv, r.cfg.PublicURL.String())
+	return l
+}
+
+// localIssuerLine reads the local issuer's two variables through the
+// parser Load uses, so the row is decided whether or not the rest of the
+// configuration loaded, and reports ok false when LUX_LOCAL_ISSUER_KEY
+// is unset and the row prints nothing. It is ok or fail and never warn:
+// a key that does not parse is a server that cannot mint beside an
+// operator who thinks it can. issuer is LUX_PUBLIC_URL when it was read.
+func localIssuerLine(getenv config.Getenv, issuer string) (Line, bool) {
+	key, more, problems := config.LocalIssuerKeys(getenv)
+	switch {
+	case len(problems) > 0:
+		return Line{Fail, localIssuerName, strings.Join(problems, "; ")}, true
+	case key == nil:
+		return Line{}, false
+	}
+	as := ""
+	if issuer != "" {
+		as = " tokens issued as " + issuer
+	}
+	return Line{OK, localIssuerName, fmt.Sprintf("%s signs%s, and %d further key(s) of LUX_LOCAL_ISSUER_KEYS verify", key, as, len(more))}, true
 }
 
 // authorizerClient builds the client serve would, over the check's own
@@ -396,7 +446,7 @@ func probe(ctx context.Context, a authz.Authorizer, where string) Line {
 func (r *run) authorizer(ctx context.Context) Line {
 	const name = "authorizer"
 	switch {
-	case len(r.cfg.OIDCIssuers) == 0:
+	case len(r.cfg.OIDCIssuers) == 0 && r.cfg.LocalIssuerKey == nil:
 		return Line{OK, name, "none; the file mode authorizes nothing, since the directory is the desired state"}
 	case r.cfg.AuthorizerURL == "":
 		l := probe(ctx, &auth.OwnerPolicy{Admins: r.cfg.AdminSubjects}, fmt.Sprintf("the built-in owner policy with %d admin subject(s)", len(r.cfg.AdminSubjects)))

@@ -44,6 +44,7 @@ import (
 	"latere.ai/x/lux/internal/store/filemode"
 	"latere.ai/x/lux/internal/store/memory"
 	"latere.ai/x/lux/internal/store/postgres"
+	"latere.ai/x/lux/internal/token"
 	"latere.ai/x/lux/internal/tunnel"
 	"latere.ai/x/lux/internal/version"
 	"latere.ai/x/lux/manifest"
@@ -66,8 +67,9 @@ func main() {
 
 // run dispatches the subcommand and returns the process exit code, so
 // tests drive it without a subprocess: 0 on a clean stop, 1 on a start-up
-// or runtime failure, 2 on a usage error. serve, check, and rewrap are
-// the three roles of spec 002's table, one package each under internal/.
+// or runtime failure, 2 on a usage error. serve, check, rewrap, and token
+// are the four roles of spec 002's table, one package each under
+// internal/.
 func run(ctx context.Context, args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
 	name, rest := subcommand(args)
 	switch name {
@@ -77,8 +79,10 @@ func run(ctx context.Context, args []string, getenv config.Getenv, stdout, stder
 		return checkCmd(ctx, rest, getenv, stdout, stderr)
 	case "rewrap":
 		return rewrapCmd(ctx, rest, getenv, stdout, stderr)
+	case "token":
+		return tokenCmd(rest, getenv, stdout, stderr)
 	default:
-		_, _ = fmt.Fprintf(stderr, "luxd: unknown subcommand %q; serve is the default, and check and rewrap are the others\n", name)
+		_, _ = fmt.Fprintf(stderr, "luxd: unknown subcommand %q; serve is the default, and check, rewrap, and token are the others\n", name)
 		return 2
 	}
 }
@@ -603,6 +607,39 @@ func rewrapCmd(ctx context.Context, args []string, getenv config.Getenv, stdout,
 	if sum.Failed() {
 		return 1
 	}
+	return 0
+}
+
+// tokenCmd is the token role of spec 035: it signs one control plane
+// token with LUX_LOCAL_ISSUER_KEY and prints it on stdout followed by a
+// newline and nothing else, so LUX_TOKEN=$(luxd token) is one line of a
+// script. It reads LUX_PUBLIC_URL, LUX_LOCAL_ISSUER_KEY,
+// LUX_OIDC_AUDIENCE, and LUX_ADMIN_SUBJECTS and nothing else of the
+// table, and writes nothing. A bad flag, a TTL out of its range, a
+// missing subject, an unlisted audience, and an unset key are usage
+// errors, exit 2; a variable it reads that does not parse is exit 1.
+func tokenCmd(args []string, getenv config.Getenv, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("luxd token", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	subject := fs.String("subject", "", "the token's sub; the default is the sub of the one LUX_ADMIN_SUBJECTS entry whose issuer is LUX_PUBLIC_URL")
+	audience := fs.String("audience", "", "a name of LUX_OIDC_AUDIENCE; the default is the first")
+	ttl := fs.Duration("ttl", token.DefaultTTL, "the token's lifetime, above zero and at most "+token.MaxTTL.String())
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 0 {
+		_, _ = fmt.Fprintf(stderr, "luxd token: unexpected argument %q; the token role takes --subject, --audience, and --ttl\n", fs.Arg(0))
+		return 2
+	}
+	minted, err := token.Mint(token.Options{Getenv: getenv, Subject: *subject, Audience: *audience, TTL: *ttl})
+	switch {
+	case token.IsUsage(err):
+		_, _ = fmt.Fprintf(stderr, "luxd token: %v\n", err)
+		return 2
+	case err != nil:
+		return fail(stderr, err)
+	}
+	_, _ = fmt.Fprintln(stdout, minted)
 	return 0
 }
 

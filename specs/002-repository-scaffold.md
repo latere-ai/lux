@@ -7,7 +7,7 @@ depends_on:
 affects: [cmd/luxd/, internal/config/, internal/version/, Makefile, .lateregate.yaml, Dockerfile, .github/workflows/, .githooks/, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-09-23
 author: changkun
 ---
 
@@ -66,6 +66,8 @@ internal/store/         manifests, key material, budgets, usage, and the journal
 internal/serve/         the serve role of luxd: wiring of the API, the gateway, the store, and the webhook clients (011)
 internal/check/         the check role of luxd (017)
 internal/rewrap/        the rewrap role of luxd (005)
+internal/token/         the token role of luxd (035)
+internal/localissuer/   the local issuer's key: reading it, naming it, signing with it (035)
 internal/tunnel/        the reverse tunnel a local runtime connects out over, and the registry of serving nodes (013)
 internal/luxcli/        the lux command: flags, defaults, exit codes (014)
 internal/bootstrap/     the start-up apply of LUX_BOOTSTRAP_DIR into the store (035)
@@ -128,13 +130,15 @@ start with `-` selects a subcommand; without one the binary serves.
 | `serve` (default) | the whole table | the gateway: the listeners, the dialect doors, the control plane API, the metering flush | this spec |
 | `check` | the whole table | one line per requirement of the installation, exit 1 on any failure | 017 |
 | `rewrap` | `LUX_SECRETS_KEK`, `LUX_DB_URL`, `LUX_DB_POOL_URL` | re-wraps every stored credential's data key under the first key of the list, then exits; a no-op when nothing is wrapped under another key | 005 |
+| `token` | `LUX_PUBLIC_URL`, `LUX_LOCAL_ISSUER_KEY`, `LUX_OIDC_AUDIENCE`, `LUX_ADMIN_SUBJECTS` | signs one control plane token with the local issuer's key, prints it, then exits; opens no store and writes nothing (added 2026-09-23) | 035 |
 
 One binary, one image, one role per process: a Deployment selects the
 role by its args. Each role is a package under `internal/` with its own
 dependency allow list in the gate, so the binary carrying every role
 does not loosen what any one role may reach. An unknown subcommand is a
 usage error, exit 2. `check` and `rewrap` landed with their specs,
-[release and installation](.archive/017-release-and-installation.md) and [[005-providers]].
+[release and installation](.archive/017-release-and-installation.md) and [[005-providers]],
+and `token` with [[035-running-the-core-on-your-own]].
 
 ### Configuration
 
@@ -158,9 +162,11 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | the variables a file-mode manifest names in `credential.valueFrom.env` or `Key.spec.valueFrom.env` | 003, 010 | none | the operator's own names, outside the `LUX_` namespace, read once at start in file mode and refused in server mode |
 | `LUX_DB_URL`, `LUX_DB_POOL_URL`, `LUX_DB_MAX_CONNS` | 010, 024 | unset, unset, `8` | a Postgres URL and the pool size; the URL unset keeps every state in memory, and a set URL selects the Postgres store, whose migrations `luxd serve` applies directly at start; the optional pool URL carries serving queries ([[010-state]]) |
 | `LUX_SECRETS_KEK` | yes for `serve` and `rewrap`, except in file mode, from 005 | none | one to eight 32-byte keys, standard base64, comma separated; the first wraps every new data key, every key is tried to open one, so rotation is prepending a key and running `luxd rewrap` |
-| `LUX_OIDC_ISSUERS` | yes, from 006 | none | comma separated issuer URLs whose tokens are accepted on the control plane |
+| `LUX_OIDC_ISSUERS` | yes, from 006, unless `LUX_LOCAL_ISSUER_KEY` or the file mode (amended 2026-09-23, 035) | none | comma separated issuer URLs whose tokens are accepted on the control plane |
 | `LUX_OIDC_AUDIENCE` | 006 | `lux` | a comma list of names a caller token may be addressed to, the first the primary (amended 2026-09-23, 034) |
 | `LUX_OIDC_INSECURE_ISSUERS` | 006 | unset | issuers from the list that may use `http://` on a host other than loopback; set by the test stubs, never in production |
+| `LUX_LOCAL_ISSUER_KEY` | 035 | unset | a PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits; set, the control plane accepts the tokens `luxd token` signs with it, issued as `LUX_PUBLIC_URL`, and no listed issuer may carry that name (added 2026-09-23) |
+| `LUX_LOCAL_ISSUER_KEYS` | 035 | unset | further PKCS#8 private keys of the local issuer, PEM blocks separated by commas or whitespace, that verify and never sign, for a rotation; requires `LUX_LOCAL_ISSUER_KEY`, and no key id repeats (added 2026-09-23) |
 | `LUX_AUTHORIZER_URL`, `LUX_AUTHORIZER_TOKEN` | 006 | unset | the operator's authorization endpoint and the bearer luxd sends it; unset selects the built-in owner policy; the URL without the token is a start-up failure |
 | `LUX_AUTHORIZE_LIST_ITEMS` | 026 | unset | `1` checks each candidate's read permission after the list filter; denials skip, failures fail the list |
 | `LUX_AUTHORIZER_TIMEOUT` | 006 | `5s` | one decision's deadline, the retry included; the cache times are the shared contract's (`latere.ai/x/pkg/authz`): an allow for the answer's `ttl`, default 60 s and at most 600 s, a deny for 5 s, and no variable changes them |

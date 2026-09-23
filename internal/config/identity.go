@@ -4,6 +4,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/authz"
+
+	"latere.ai/x/lux/internal/localissuer"
 )
 
 // Defaults for the identity variables of spec 006.
@@ -22,14 +25,19 @@ const (
 
 // loadIdentity reads the variables of spec 006 into c and returns every
 // problem found, each naming its variable. The issuers are required
-// unless LUX_MANIFEST_DIR selects the file mode, which has no control
-// plane to authenticate; that variable is spec 010's, read by Load before
-// this runs.
+// unless LUX_LOCAL_ISSUER_KEY configures the local issuer of spec 035 or
+// LUX_MANIFEST_DIR selects the file mode, which has no control plane to
+// authenticate; that variable is spec 010's, read by Load before this
+// runs. A local key that is set and unusable is its own problem, so the
+// issuer rule reads whether the variable is set, not whether it parsed.
 func (c *Config) loadIdentity(getenv Getenv) []string {
 	var problems []string
 	c.OIDCIssuers = c.issuers(getenv("LUX_OIDC_ISSUERS"), &problems)
-	if len(c.OIDCIssuers) == 0 && c.ManifestDir == "" {
-		problems = append(problems, "LUX_OIDC_ISSUERS is unset, and the control plane needs at least one issuer unless LUX_MANIFEST_DIR selects the file mode")
+	var local []string
+	c.LocalIssuerKey, c.LocalIssuerKeys, local = LocalIssuerKeys(getenv)
+	problems = append(problems, local...)
+	if len(c.OIDCIssuers) == 0 && strings.TrimSpace(getenv("LUX_LOCAL_ISSUER_KEY")) == "" && c.ManifestDir == "" {
+		problems = append(problems, "LUX_OIDC_ISSUERS is unset, and the control plane needs an issuer to verify a bearer against unless LUX_LOCAL_ISSUER_KEY sets a local one or LUX_MANIFEST_DIR selects the file mode")
 	}
 	c.OIDCAudiences = audiences(getenv("LUX_OIDC_AUDIENCE"), &problems)
 	c.OIDCInsecureIssuers = c.insecureIssuers(getenv("LUX_OIDC_INSECURE_ISSUERS"), &problems)
@@ -68,13 +76,75 @@ func (c *Config) loadIdentity(getenv Getenv) []string {
 		}
 	}
 
-	c.AdminSubjects = authz.ParseSubjects(getenv("LUX_ADMIN_SUBJECTS"))
-	for _, s := range c.AdminSubjects {
+	c.AdminSubjects = adminSubjects(getenv("LUX_ADMIN_SUBJECTS"), &problems)
+	return problems
+}
+
+// adminSubjects reads LUX_ADMIN_SUBJECTS: a comma separated list of
+// rendered subjects, an entry without the separator a problem.
+func adminSubjects(raw string, problems *[]string) []string {
+	out := authz.ParseSubjects(raw)
+	for _, s := range out {
 		if _, _, ok := authz.SplitSubject(s); !ok {
-			problems = append(problems, "LUX_ADMIN_SUBJECTS entry "+strconv.Quote(s)+" is not a rendered subject of the form <issuer>|<sub>")
+			*problems = append(*problems, "LUX_ADMIN_SUBJECTS entry "+strconv.Quote(s)+" is not a rendered subject of the form <issuer>|<sub>")
 		}
 	}
-	return problems
+	return out
+}
+
+// LocalIssuerKeys reads the two variables of spec 035's local issuer:
+// LUX_LOCAL_ISSUER_KEY, the key it signs with and verifies against, nil
+// when unset, and LUX_LOCAL_ISSUER_KEYS, further keys that verify and
+// never sign, for a rotation. It returns every problem found, each naming
+// its variable and none echoing a value. Load reads the pair through it,
+// and so does luxd check, whose local issuer row reports the keys whether
+// or not the rest of the configuration loaded.
+//
+// Two keys with one key id are a problem, the same key listed twice
+// included: a token's kid then names two keys and the verifier refuses
+// it rather than choose, so leaving the signing key in the rotation list
+// would refuse every token the installation mints.
+func LocalIssuerKeys(getenv Getenv) (*localissuer.Key, []*localissuer.Key, []string) {
+	key, problems := localIssuerKey(getenv("LUX_LOCAL_ISSUER_KEY"), nil)
+	raw := getenv("LUX_LOCAL_ISSUER_KEYS")
+	if strings.TrimSpace(raw) == "" {
+		return key, nil, problems
+	}
+	if strings.TrimSpace(getenv("LUX_LOCAL_ISSUER_KEY")) == "" {
+		return nil, nil, append(problems, "LUX_LOCAL_ISSUER_KEYS is set while LUX_LOCAL_ISSUER_KEY is unset, and the further keys verify beside the key the local issuer signs with")
+	}
+	more, err := localissuer.ParseList(raw)
+	if err != nil {
+		return key, nil, append(problems, "LUX_LOCAL_ISSUER_KEYS "+err.Error())
+	}
+	seen := map[string]bool{}
+	if key != nil {
+		seen[key.ID()] = true
+	}
+	for i, k := range more {
+		switch {
+		case key != nil && k.ID() == key.ID():
+			problems = append(problems, fmt.Sprintf("LUX_LOCAL_ISSUER_KEYS entry %d is the key LUX_LOCAL_ISSUER_KEY holds, key id %s, and a token naming a key id held twice verifies against neither", i+1, k.ID()))
+		case seen[k.ID()]:
+			problems = append(problems, "LUX_LOCAL_ISSUER_KEYS lists key id "+k.ID()+" twice, and a token naming a key id held twice verifies against neither")
+		}
+		seen[k.ID()] = true
+	}
+	return key, more, problems
+}
+
+// localIssuerKey reads LUX_LOCAL_ISSUER_KEY: blank is the local issuer
+// off, and a set value is one PEM encoded PKCS #8 private key or a
+// problem that does not echo it.
+func localIssuerKey(raw string, problems []string) (*localissuer.Key, []string) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, problems
+	}
+	k, err := localissuer.Parse(raw)
+	if err != nil {
+		return nil, append(problems, "LUX_LOCAL_ISSUER_KEY "+err.Error())
+	}
+	return k, problems
 }
 
 // issuers reads a comma separated list of issuer URLs, each trimmed and

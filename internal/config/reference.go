@@ -76,9 +76,9 @@ var referenceGroups = []referenceGroup{
 	{title: "Identity", vars: []referenceVar{
 		{
 			name:        "LUX_OIDC_ISSUERS",
-			meaning:     "Comma-separated issuer URLs whose tokens the control plane accepts.",
+			meaning:     "Comma-separated issuer URLs whose tokens the control plane accepts; none may be `LUX_PUBLIC_URL` while `LUX_LOCAL_ISSUER_KEY` is set.",
 			def:         "none",
-			required:    "Yes, unless file mode",
+			required:    "Yes, unless a local issuer key or file mode",
 			envValue:    "https://issuer.example.com",
 			envRequired: true,
 		},
@@ -92,6 +92,19 @@ var referenceGroups = []referenceGroup{
 		{
 			name:     "LUX_OIDC_INSECURE_ISSUERS",
 			meaning:  "Issuers from the list allowed to use `http://` off loopback; the test stubs set it, never production.",
+			def:      "unset",
+			required: "No",
+		},
+		{
+			name:     "LUX_LOCAL_ISSUER_KEY",
+			meaning:  "A PEM encoded PKCS#8 private key, ECDSA on P-256 or RSA of at least 2048 bits, for an installation without an issuer: `luxd token` signs control plane tokens with it, issued as `LUX_PUBLIC_URL`, and the control plane accepts them. Unset turns the local issuer off. Never echoed.",
+			def:      "unset",
+			required: "No",
+			envNote:  "generate a key: openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256",
+		},
+		{
+			name:     "LUX_LOCAL_ISSUER_KEYS",
+			meaning:  "Further PKCS#8 private keys of the local issuer, PEM blocks separated by commas or whitespace, whose tokens still verify and which never sign, so a rotation keeps the previous key here until its tokens expire; requires `LUX_LOCAL_ISSUER_KEY`, and no key may repeat. Never echoed.",
 			def:      "unset",
 			required: "No",
 		},

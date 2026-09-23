@@ -5,6 +5,8 @@ package auth
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,8 +42,17 @@ type Caller struct {
 // VerifierOptions configures a Verifier.
 type VerifierOptions struct {
 	// Issuers are the issuer URLs whose tokens are accepted, each fetched
-	// at start. At least one is required.
+	// at start. At least one issuer, listed here or local, is required.
 	Issuers []string
+	// LocalIssuer is the name of the local issuer of spec 035,
+	// LUX_PUBLIC_URL, and LocalKeys are the public halves of its keys, the
+	// one luxd token signs with first and the rotation's after it, each
+	// under its key id. A token whose iss is LocalIssuer is verified
+	// against these keys alone, selected by its kid, with no discovery and
+	// no key set fetched; a token of a listed issuer never reaches them.
+	// Empty is no local issuer, and no listed issuer may carry its name.
+	LocalIssuer string
+	LocalKeys   []jwt.LocalKey
 	// Audiences are the names a token's aud may contain, a token accepted
 	// when it contains any of them; the first is the primary. At least one
 	// is required, and none is empty.
@@ -58,11 +69,15 @@ type VerifierOptions struct {
 // Verifier accepts a bearer signed by any listed issuer: one validator per
 // issuer, each holding that issuer's key set and refreshing it on its own
 // schedule, so a request path never waits on an issuer that is up and
-// keeps working against one that has gone away.
+// keeps working against one that has gone away. The local issuer, when
+// one is configured, is one more validator under its own name, holding
+// the keys it was given and fetching nothing.
 type Verifier struct {
 	audiences  []string
 	issuers    []string
 	validators map[string]*jwt.Validator
+	local      string
+	localKeys  []jwt.LocalKey
 }
 
 // The bound of one discovery document or key set.
@@ -110,8 +125,14 @@ func (k jwk) usable() bool {
 // verify against, so the fetch is paid for at start-up and not by the
 // first request.
 func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
-	if len(o.Issuers) == 0 {
-		return nil, errors.New("LUX_OIDC_ISSUERS: no issuer to verify against")
+	local := strings.TrimRight(o.LocalIssuer, "/")
+	switch {
+	case len(o.Issuers) == 0 && local == "":
+		return nil, errors.New("LUX_OIDC_ISSUERS: no issuer to verify against, and LUX_LOCAL_ISSUER_KEY sets no local one")
+	case local == "" && len(o.LocalKeys) > 0:
+		return nil, errors.New("LUX_PUBLIC_URL: the local issuer has keys and no name to verify its tokens under")
+	case local != "" && len(o.LocalKeys) == 0:
+		return nil, errors.New("LUX_LOCAL_ISSUER_KEY: the local issuer " + local + " has no key to verify against")
 	}
 	if len(o.Audiences) == 0 {
 		return nil, errors.New("LUX_OIDC_AUDIENCE: no audience to verify")
@@ -128,6 +149,9 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 		iss := strings.TrimRight(raw, "/")
 		if _, dup := v.validators[iss]; dup {
 			return nil, fmt.Errorf("LUX_OIDC_ISSUERS: issuer %s is listed twice", iss)
+		}
+		if iss == local {
+			return nil, fmt.Errorf("LUX_OIDC_ISSUERS: issuer %s is LUX_PUBLIC_URL, the local issuer's name, which no listed issuer may carry", iss)
 		}
 		doc, err := fetchIssuer(ctx, client, iss)
 		if err != nil {
@@ -160,6 +184,19 @@ func NewVerifier(ctx context.Context, o VerifierOptions) (*Verifier, error) {
 			return nil, fmt.Errorf("LUX_OIDC_ISSUERS: issuer %s: key set: %w", iss, err)
 		}
 		v.validators[iss] = validator
+	}
+	if local != "" {
+		// The local validator verifies against the keys it holds and
+		// fetches nothing, and it reads the audiences and the grants
+		// exactly as a listed issuer's does, so a local token proves what
+		// any token proves.
+		v.local, v.localKeys = local, slices.Clone(o.LocalKeys)
+		v.validators[local] = jwt.New(jwt.Config{
+			LocalIssuer: local,
+			LocalKeys:   slices.Clone(o.LocalKeys),
+			Audiences:   slices.Clone(o.Audiences),
+			ReadsGrants: true,
+		})
 	}
 	return v, nil
 }
@@ -221,12 +258,41 @@ func fetchJSON(ctx context.Context, client *http.Client, url string, v any) erro
 	return nil
 }
 
-// Issuers lists the issuers in the order they were given, each without
-// its trailing slash.
+// Issuers lists the listed issuers in the order they were given, each
+// without its trailing slash. The local issuer is not among them: it
+// answers no discovery, and LocalIssuer names it.
 func (v *Verifier) Issuers() []string {
 	out := make([]string, len(v.issuers))
 	copy(out, v.issuers)
 	return out
+}
+
+// LocalIssuer is the local issuer's name, LUX_PUBLIC_URL, or "" when no
+// local key is configured.
+func (v *Verifier) LocalIssuer() string { return v.local }
+
+// DescribeLocal is the local issuer as a line may name it: its name, and
+// the algorithm and key id of each key, the signing key first, never the
+// key material. It is "" when no local key is configured.
+func (v *Verifier) DescribeLocal() string {
+	if v.local == "" {
+		return ""
+	}
+	keys := make([]string, len(v.localKeys))
+	for i, k := range v.localKeys {
+		keys[i] = algorithm(k.Key) + " key " + k.KeyID
+	}
+	return v.local + " (" + strings.Join(keys, ", ") + ")"
+}
+
+// algorithm is the JWS alg a local public key verifies: ES256 for an
+// ECDSA key and RS256 for an RSA key, the two jwt.Config.LocalKeys
+// accepts.
+func algorithm(key crypto.PublicKey) string {
+	if _, ok := key.(*ecdsa.PublicKey); ok {
+		return "ES256"
+	}
+	return "RS256"
 }
 
 // Audience is the primary audience: the name this installation's own
@@ -259,7 +325,11 @@ func (v *Verifier) Verify(token string) (Caller, error) {
 	iss, _ := claims["iss"].(string)
 	validator, ok := v.validators[strings.TrimRight(iss, "/")]
 	if !ok {
-		return Caller{}, refuse(CodeUnauthenticated, "the token's issuer "+strconv.Quote(iss)+" is not in LUX_OIDC_ISSUERS")
+		detail := "the token's issuer " + strconv.Quote(iss) + " is not in LUX_OIDC_ISSUERS"
+		if v.local != "" {
+			detail += " and is not the local issuer " + v.local
+		}
+		return Caller{}, refuse(CodeUnauthenticated, detail)
 	}
 	if _, has := claims["exp"]; !has {
 		return Caller{}, refuse(CodeUnauthenticated, "the token has no exp claim, and a token without an expiry is not accepted")
