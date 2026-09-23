@@ -89,6 +89,7 @@ later.
 | [034](.archive/034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | complete | 006, 011, 017, 018 |
 | [035](.archive/035-running-the-core-on-your-own.md) | Running the core on your own: a local issuer, bootstrap manifests, and the example catalog | large | complete | 003, 006, 010, 011, 014, 017 |
 | [036](.archive/036-catalog-in-memory.md) | The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage | medium | complete | 004, 005, 007, 009, 010, 012, 019 |
+| [037](037-several-budgets-per-key.md) | Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart | large | drafted | 003, 006, 007, 009, 010, 011, 018 |
 
 ## Dependency graph
 
@@ -123,6 +124,7 @@ flowchart BT
   S022[022 authorizer vocabulary as a package]
   S023[023 performance + benchmarks]
   S036[036 catalog in memory]
+  S037[037 several budgets per key]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -153,6 +155,9 @@ flowchart BT
   S023 --> S004
   S036 --> S012
   S036 --> S019
+  S037 --> S009
+  S037 --> S011
+  S037 --> S018
 ```
 
 ## Build order
@@ -170,6 +175,7 @@ flowchart BT
 | 9 | 023 | the benchmarks and the performance document: the gateway's own overhead, measured in process against a stub upstream |
 | 10 | 034, 035 | the core behind a shared origin: the audience list, the base path, the served document under it; and the shorter path for a self-hoster: the local issuer, the bootstrap directory, the example catalog |
 | 11 | 036 | the catalog served from a per-replica snapshot: no store read per data plane request for a Model, a Provider, or a credential; a bounded grace to keep serving through a store outage, and the spend made during it corrected afterward |
+| 12 | 037 | several Budgets per Key, each a hard gate at the door; a Budget's window anchored to a chosen instant; a restart of the current window |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
