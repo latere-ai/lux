@@ -6,6 +6,43 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.6.0 - 2026-09-23
+
+- `LUX_OIDC_AUDIENCE` takes a comma list of names. A token is accepted when
+  its `aud` contains any of them; the first is the primary, the one
+  `/.well-known/lux` reports. An empty entry and a repeated name refuse to
+  start. A single name is read as before.
+- `LUX_BASE_PATH` moves the whole public listener under one prefix, such as
+  `/v1/models` behind an origin shared with other services: the doors, the
+  control plane, `/.well-known/lux`, the probes and the build identity. Set,
+  it must equal the path of `LUX_PUBLIC_URL`. `GET /v1/openapi.json` then
+  names every path under the prefix and the public URL as its server; unset,
+  nothing changes.
+- A local issuer: with `LUX_LOCAL_ISSUER_KEY`, a PKCS#8 ECDSA P-256 or RSA
+  private key, the server verifies tokens it signs itself, issued as
+  `LUX_PUBLIC_URL`, and `luxd token` mints one for the control plane. No
+  OpenID Connect issuer is needed to run the core on your own.
+  `LUX_LOCAL_ISSUER_KEYS` holds further keys that verify during a rotation.
+  `LUX_OIDC_ISSUERS` may not list `LUX_PUBLIC_URL` while a local key is set.
+- `LUX_BOOTSTRAP_DIR` applies a directory of manifests into the store at
+  start, reading Provider credentials and Key values from the variables the
+  manifests name. Objects already as written are left alone, an existing Key
+  is never touched, and the control plane stays writable. Each created or
+  updated object raises one event with the new reason `bootstrap`; a sink
+  that checks reasons against a list should add it. It needs
+  `LUX_ADMIN_SUBJECTS`, whose first entry owns what it creates, and is
+  refused beside `LUX_MANIFEST_DIR`.
+- `deploy/catalog/` is a priced example catalog: 94 Models over seven
+  Providers, each Provider reading its API key from the conventional
+  variable, with a dated price snapshot.
+- `luxd check`: the `issuers` row names the whole audience list, the
+  `public url` row names where the listener is mounted, and two rows appear
+  when their variables are set: `local issuer` and `bootstrap`, the dry run
+  of the start-up apply.
+- `docs/install.md` starts from a checkout: one provider key, a local
+  issuer key and a bootstrap directory reach a first completion with no
+  issuer and no cluster. The cluster walk follows as before.
+
 ## v0.5.0 - 2026-09-19
 
 - Permanent Key fences close names to delayed creates, rotations and policy
