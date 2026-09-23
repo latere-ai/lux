@@ -1,5 +1,5 @@
 ---
-title: "The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot"
+title: "The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage"
 status: drafted
 track: core
 depends_on:
@@ -10,7 +10,7 @@ depends_on:
   - specs/010-state.md
   - specs/012-request-log-and-events.md
   - specs/019-observability.md
-affects: [internal/serve/, internal/config/, cmd/luxd/, docs/configuration.md, docs/observability.md, docs/performance.md, specs/002-repository-scaffold.md, specs/019-observability.md]
+affects: [internal/serve/, internal/config/, cmd/luxd/, docs/configuration.md, docs/observability.md, docs/performance.md, docs/security.md, specs/002-repository-scaffold.md, specs/007-keys-and-limits.md, specs/019-observability.md]
 effort: medium
 created: 2026-09-23
 updated: 2026-09-23
@@ -33,6 +33,9 @@ hold all of it in memory and serve the doors with no store read at all.
 This spec replaces the per-request catalog reads with one snapshot per
 replica, kept current by the journal tail the Key cache already runs and
 by a periodic full reload for the few writes the journal does not name.
+It also lets a replica keep serving through a store outage for a bounded
+grace, and states how the spend made during the outage reaches the
+store once it answers again.
 
 ## Current state
 
@@ -162,16 +165,15 @@ replica reads every live Model and Provider and every credential row,
 builds a new snapshot, and swaps it. This is what brings in the writes
 of the table in "Current state" that no row names.
 
-**Decision 1: discovery's shape updates.** A discovered Model whose
-shape changed is updated without a row today.
-
-| | Shape | For | Against |
-|---|---|---|---|
-| (i) | Discovery journals `model.updated` with reason `discovery` beside the update, in the same transaction | the change reaches every replica within the tail, like every other catalog change; an operator's sink learns that a discovered Model changed | the sink receives a row it did not receive before |
-| (ii) | Leave it to the backstop | no change to the events | a changed target or price serves up to `LUX_CATALOG_RELOAD` late |
-
-**Recommendation: (i).** A changed price that bills for thirty seconds
-at the old one is a metering error, and the row is true.
+**Discovery's shape updates are journaled** (decided on 2026-09-23). A
+discovered Model whose shape changed is updated without a row today
+(`internal/serve/discovery.go:388-392`). Discovery now journals
+`model.updated` with reason `discovery` beside the update, in the same
+transaction, so the change reaches every replica within the tail like
+every other catalog change, and an operator's sink learns that a
+discovered Model changed. Leaving it to the backstop was the
+alternative: no new row at the sink, but a changed price billed at the
+old one for up to `LUX_CATALOG_RELOAD`, which is a metering error.
 
 **The file mode.** The `SIGHUP` re-read swaps the file mode's snapshot
 and `luxd` rebuilds the catalog snapshot from it, beside the Key cache's
@@ -183,7 +185,7 @@ and `luxd` rebuilds the catalog snapshot from it, beside the Key cache's
 |---|---|
 | an apply or delete of a Provider or a Model, its credential included, through `/v1` or a bootstrap | the tail interval, one second, plus one reload |
 | a discovered Model created or removed | the tail interval plus one reload |
-| a discovered Model's shape changed | the tail interval under decision 1 (i); `LUX_CATALOG_RELOAD` under (ii) |
+| a discovered Model's shape changed | the tail interval plus one reload |
 | a Provider's health state change, and the `status.available` of its Models | the tail interval plus one reload |
 | `status.available` of a Model the health job filled or reset | `LUX_CATALOG_RELOAD` |
 | a credential re-wrapped by `luxd rewrap` | `LUX_CATALOG_RELOAD`; until then the replica opens the old wrap with the key list it started with, or re-reads the row on a failed open |
@@ -198,20 +200,94 @@ succeeded and stays passed. A failed first load is retried every
 tail interval, and the replica stays not ready until one succeeds.
 
 When the store stops answering, the replica keeps serving from the last
-snapshot and its age grows. This does not extend how long a replica
-serves without its store: the Key cache answers a lookup for at most
-`LUX_KEY_CACHE` after its last store read and caches no failure
-([[007-keys-and-limits]]), so a request whose Key entry lapsed is
-refused with `store_unavailable` as today.
+snapshot and its age grows. The age is a metric and an alert and never a
+readiness failure (decided on 2026-09-23): failing readiness on age
+would take every replica out of the load balancer together in a full
+store outage, turning a degraded gateway into none. The cost is that a
+replica cut off from the store while its peers reach it serves an older
+catalog than they do, for as long as the section below lets it serve.
 
-**Decision 2: readiness on an old snapshot.**
+### Serving through a store outage, and the late correction
+
+The catalog snapshot alone does not keep a replica serving. The Key
+cache drops an entry once its window has passed
+(`internal/serve/keys.go:278-291`) and returns the store's error on a
+failed read (`:189-201`), which the door answers `store_unavailable`.
+So today every call is refused about `LUX_KEY_CACHE` (default `10s`)
+into an outage, whatever the snapshot holds.
+
+**The stale grace.** `LUX_KEY_CACHE_GRACE` (proposed default `5m`, the
+maintainer sets the default; `0` disables it) lets the Key cache serve
+an entry past its window when, and only when, the store read that would
+replace it fails:
+
+- A positive Key or Budget entry whose window has passed is kept, not
+  dropped, until its window plus the grace. A lookup that finds it
+  reads the store as today; on a store answer the entry is replaced, and
+  on a store error the expired entry is served and counted as `stale`
+  in `lux_key_cache_hits_total` ([[007-keys-and-limits]] owns the
+  metric; this spec adds the value).
+- Past the window plus the grace, a failed read is `store_unavailable`,
+  as today.
+- A negative entry, an unknown value, is never served stale: a Key
+  created just before the outage is refused `store_unavailable`, not
+  `unauthenticated`.
+- A Key first seen during the outage has no entry and is refused
+  `store_unavailable`.
+- The door's own checks still run on the cached Key: a disabled Key is
+  refused, and a Key past its `expiresAt` is `key_expired`
+  (`gateway/key.go:55`), so the grace never extends a Key past its own
+  expiry.
+- A failure is still cached nowhere: the grace serves the last good
+  answer, and every lookup past the window tries the store first.
+
+Together with the catalog snapshot, the Limiter's local counters and
+the recorder's local rows, a replica serves a Key it has seen for up to
+`LUX_KEY_CACHE + LUX_KEY_CACHE_GRACE` after its last successful read of
+that Key.
+
+What the grace costs:
+
+| Cost | Bound |
+|---|---|
+| A revocation, disable, or rotation this replica has not consumed from the journal is not seen until the store answers again | at most the window plus the grace; a revocation cannot commit while the store is down for everyone, so this is the replica that is cut off while its peers are not, or a row written just before the outage |
+| A hard Budget is passed | each replica sees only its own spend since its last successful flush, so the overshoot is the other replicas' spend over that time: `(R - 1) × D × T × C + C`, the bound of [[009-usage-and-metering]] with the flush interval replaced by `D`, the time since the last successful flush, at most `LUX_KEY_CACHE + LUX_KEY_CACHE_GRACE`; and never more than `(R - 1)` times what the Budget had left at that flush, plus one request per replica |
+
+An operator who needs a revocation to hold within `LUX_KEY_CACHE`
+whatever the store does sets the grace to `0`.
+
+**The late correction.** It already exists, and the grace relies on it:
+
+- The Limiter's counters keep an unflushed delta in `pending` when the
+  store's add fails, and the next flush retries it
+  (`metering/counters.go:140-147`, `:163-166`). A replica's own `Total`
+  counts that delta throughout, so its own hard checks stay right.
+- The Recorder puts its hourly rows back when `AddRows` fails, merged
+  with any rows recorded since (`internal/serve/recorder.go:269-276`),
+  and `lux_metering_flush_lag_seconds` grows meanwhile.
+
+So the spend made during the outage lands on the Budgets' counters and
+in the usage rows at the first flush after the store returns, and a
+Budget that the combined spend has passed refuses its next call on
+every replica from then on. `budget.exhausted` is raised by that first
+refusal: the marker claim during the outage fails and is logged
+(`internal/serve/limits.go:285-303`). The overshoot is therefore
+visible, not lost: `GET /v1/usage` and the counters carry the true
+spend, and the operator's ledger, reading usage, sees the true spend
+and reconciles it.
+
+What the correction does not cover is a replica that stops during the
+outage: its last flush on stop (`metering/counters.go` `Run`) fails as
+well, and its unflushed deltas and rows are lost with the process.
 
 | | Shape | For | Against |
 |---|---|---|---|
-| (i) | Ready once loaded; the age is a metric and an alert, never a readiness failure | a store outage does not also take every replica out of the load balancer; the Key cache already bounds serving without the store | a replica cut off from the store while the others reach it serves a catalog older than its peers, for as long as its Keys stay cached |
-| (ii) | Not ready once the snapshot is older than a bound | a partitioned replica leaves the load balancer | in a full store outage every replica fails readiness together, which turns a degraded gateway into none |
+| A | Accept the loss; the metric and the alert say how long the flush lagged | nothing new | the spend of a replica that crashes or is rolled during an outage is never recorded |
+| B | A local disk spool: a replica appends each unflushed delta and row to a file on its volume and replays it at start | no loss across a restart on the same volume | a writable volume per replica, a replay format and its tests; a replica rescheduled onto another node still loses the spool unless the volume follows it |
 
-**Recommendation: (i).**
+**Recommendation: A** as the default. B is an option for an operator
+whose outages are long enough, and whose replicas restart often enough
+during them, for the loss to matter; it is not built by this spec.
 
 ### Memory
 
@@ -224,11 +300,12 @@ an operator's to see. `lux_catalog_objects` reports it.
 
 ### Configuration
 
-One row in [[002-repository-scaffold]]'s table:
+Two rows in [[002-repository-scaffold]]'s table:
 
 | Variable | Spec | Default | Meaning |
 |---|---|---|---|
 | `LUX_CATALOG_RELOAD` | 036 | `30s` | how often a replica re-reads the whole catalog, the backstop for writes the journal does not name (5s to 10m) |
+| `LUX_KEY_CACHE_GRACE` | 036 | `5m`, the maintainer's to confirm | how long past its window a cached Key or Budget is served while the store does not answer; `0` refuses at the window as before (0 to 1h) |
 
 The tail keeps the Key cache's one-second interval and no variable.
 
@@ -242,14 +319,22 @@ Three rows in [[019-observability]]'s table, owned by this spec:
 | `lux_catalog_reloads_total` | counter | `trigger` (`start`, `tail`, `backstop`, `sighup`), `result` (`ok`, `error`) | snapshot reloads |
 | `lux_catalog_objects` | gauge | `kind` (`Model`, `Provider`, `credential`) | objects the snapshot holds |
 
-And one alert beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
-`max(lux_catalog_age_seconds) > 3 * LUX_CATALOG_RELOAD` held for 5m.
+`lux_key_cache_hits_total` ([[007-keys-and-limits]]) gains the
+`result` value `stale`, a lookup served past its window under the grace.
+
+Two alerts beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
+`max(lux_catalog_age_seconds) > 3 * LUX_CATALOG_RELOAD` held for 5m; and
+`LuxKeyCacheServingStale`,
+`sum(rate(lux_key_cache_hits_total{result="stale"}[5m])) > 0` held for
+1m, a replica serving through a store outage.
 
 ## Not in this spec
 
-- Keys and Budgets. They stay in the Key cache: their number grows with
-  callers, not with the catalog, and the cache's bound is the right
-  shape for them.
+- Keys and Budgets as snapshot contents. They stay in the Key cache:
+  their number grows with callers, not with the catalog, and the
+  cache's bound is the right shape for them. This spec adds only the
+  stale grace to it.
+- The disk spool of option B under the late correction.
 - The control plane's reads, which stay on the store.
 - The router's health, which is already per replica.
 - A shared cache across replicas (option C).
@@ -264,10 +349,14 @@ And one alert beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
 | 2 | An apply of a Model through `/v1` on one replica is served by a second replica sharing the store within two tail intervals, and a delete is refused there as `model_not_found` in the same bound | `TestCatalogSnapshotFollowsTheJournal`, two servers over one Postgres store in the Postgres tier |
 | 3 | A Provider credential replaced through `/v1` is the one injected on the second replica's next request after the tail consumes the row | `TestCatalogSnapshotRotatedCredential`, stub provider asserting the header |
 | 4 | A `status.available` written by `PutStatus` alone appears in the model list within `LUX_CATALOG_RELOAD` and not before the backstop runs | `TestCatalogSnapshotBackstop`, fake clock |
-| 5 | Under decision 1 (i), a discovered Model whose price changed upstream is journaled `model.updated` with reason `discovery` and priced at the new price on every replica within the tail interval | `TestDiscoveryShapeUpdateIsJournaled`, `internal/serve` |
+| 5 | A discovered Model whose price changed upstream is journaled `model.updated` with reason `discovery` in the update's transaction, and is priced at the new price on every replica within two tail intervals | `TestDiscoveryShapeUpdateIsJournaled`, `internal/serve` |
 | 6 | `/readyz` answers not ready until the first full load succeeds, and a store that fails the first load keeps it not ready | `TestCatalogReadiness`, `cmd/luxd` |
-| 7 | With the store failing after the load, requests whose Keys are cached are served from the snapshot, `lux_catalog_age_seconds` grows, and a request whose Key entry lapsed is refused `store_unavailable` | `TestCatalogSnapshotStoreDown`, `internal/serve` |
+| 7 | With the store failing after the load, requests whose Keys are cached are served from the snapshot, `lux_catalog_age_seconds` grows, and `/readyz` stays ready | `TestCatalogSnapshotStoreDown`, `internal/serve`; readiness in `cmd/luxd` |
 | 8 | A sealed credential that fails to open is re-read from the store once and opened; a second failure is the error the door answers today; no plaintext credential is held in the snapshot | `TestCatalogSnapshotReopensOnce`, and a reflection check that the snapshot's types carry no plaintext field |
 | 9 | Lookups racing a stream of swaps each return objects of one whole snapshot, under the race detector | `TestCatalogSnapshotSwapIsAtomic`, `internal/serve` |
-| 10 | The three metrics and the alert are in [[019-observability]]'s table and on `/metrics`, and `LUX_CATALOG_RELOAD` is in [[002-repository-scaffold]]'s table and `docs/configuration.md` | `TestMetricsTable`; `TestConfigurationReferenceIsCurrent` and `TestConfigurationReferenceMatchesCode`, `internal/config` |
+| 10 | The three metrics, the `stale` result, and the two alerts are in [[019-observability]]'s table and on `/metrics`, and `LUX_CATALOG_RELOAD` and `LUX_KEY_CACHE_GRACE` are in [[002-repository-scaffold]]'s table and `docs/configuration.md` | `TestMetricsTable`; `TestConfigurationReferenceIsCurrent` and `TestConfigurationReferenceMatchesCode`, `internal/config` |
 | 11 | A benchmark of the catalog lookups a request makes, over the snapshot and over the Postgres store, is added beside those of [[023-performance-and-benchmarks]], and its numbers are written into `docs/performance.md` | `BenchmarkCatalogLookups`, `internal/serve`, the Postgres half in the Postgres tier |
+| 12 | With a store that fails every read after a Key was cached, the Key is served past `LUX_KEY_CACHE` and until `LUX_KEY_CACHE + LUX_KEY_CACHE_GRACE`, each such lookup counted `stale`, and refused `store_unavailable` after it; with the grace `0` it is refused at `LUX_KEY_CACHE` as today | `TestKeyCacheStaleGrace`, `internal/serve`, fake clock over a failing store wrapper |
+| 13 | Under the grace, a negative entry is not served stale, a Key never cached is refused `store_unavailable`, a disabled cached Key is refused, and a cached Key past its `expiresAt` is `key_expired` | `TestKeyCacheStaleGraceLimits`, `internal/serve` |
+| 14 | Under the grace, a lookup past the window reads the store first, and a store that answers again replaces the stale entry at once | `TestKeyCacheStaleGraceRecovers`, `internal/serve` |
+| 15 | Spend counter deltas and hourly usage rows made on two replicas while the store fails every write land in the store at the first flush after it answers, summed exactly, and a hard Budget the combined spend has passed refuses the next call on both replicas and raises `budget.exhausted` once | `TestLateCorrectionAfterOutage`, two Limiters and Recorders over one failing-then-healthy store in `internal/serve` |
