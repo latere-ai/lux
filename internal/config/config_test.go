@@ -365,3 +365,42 @@ func TestDBMaxConnsIsBoundedAndReadOnlyWithADatabase(t *testing.T) {
 		t.Fatalf("without LUX_DB_URL the pool size is not read: %+v, %v", c, err)
 	}
 }
+
+// TestBootstrapRules is spec 035's LUX_BOOTSTRAP_DIR at load: a
+// directory that exists, never beside the file mode's directory, and
+// never without an admin subject to own what it applies; each problem
+// names the variables.
+func TestBootstrapRules(t *testing.T) {
+	dir := t.TempDir()
+	admin := issuer + "|alice"
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		fail string // a fragment of the problem, or "" for a configuration that loads
+	}{
+		{"unset", map[string]string{"LUX_OIDC_ISSUERS": issuer}, ""},
+		{"a directory with an admin subject", map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_BOOTSTRAP_DIR": dir, "LUX_ADMIN_SUBJECTS": admin}, ""},
+		{"no admin subject", map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_BOOTSTRAP_DIR": dir},
+			"LUX_BOOTSTRAP_DIR is set and LUX_ADMIN_SUBJECTS is empty"},
+		{"beside the file mode", map[string]string{"LUX_MANIFEST_DIR": dir, "LUX_BOOTSTRAP_DIR": dir, "LUX_ADMIN_SUBJECTS": admin},
+			"LUX_BOOTSTRAP_DIR and LUX_MANIFEST_DIR are both set"},
+		{"a directory that does not exist", map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_BOOTSTRAP_DIR": filepath.Join(dir, "absent"), "LUX_ADMIN_SUBJECTS": admin},
+			"LUX_BOOTSTRAP_DIR "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Load(env(withKEK(tc.env)))
+			if tc.fail != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.fail) {
+					t.Fatalf("Load() = %v, want a problem with %q", err, tc.fail)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if c.BootstrapDir != tc.env["LUX_BOOTSTRAP_DIR"] {
+				t.Fatalf("BootstrapDir = %q", c.BootstrapDir)
+			}
+		})
+	}
+}

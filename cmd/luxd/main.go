@@ -32,6 +32,7 @@ import (
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/api"
 	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/internal/bootstrap"
 	"latere.ai/x/lux/internal/check"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
@@ -163,6 +164,30 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", identity.String())
 
+	// The resolver's defaults are spec 007's two rates and spec 004's
+	// upstream timeout, shared by bootstrap, the Limiter, and the API's
+	// Resolve.
+	defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
+
+	// Bootstrap of spec 035: the operator's own desired state, applied into
+	// the store before the credentials are opened and before any listener,
+	// so a gateway that starts serves what it was told to hold. A refusal
+	// names the file, the object, and the code, and stops the start.
+	if cfg.BootstrapDir != "" {
+		res, err := bootstrap.Apply(ctx, bootstrap.Options{
+			Dir: cfg.BootstrapDir, Store: st, Owner: cfg.AdminSubjects[0], Keys: cfg.SecretsKEK,
+			Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate,
+			TunnelEnabled: cfg.TunnelEnabled, PublicURL: cfg.PublicURL,
+		})
+		if err != nil {
+			return fail(stderr, fmt.Errorf("LUX_BOOTSTRAP_DIR: %w", err))
+		}
+		for _, line := range res.Lines() {
+			_, _ = fmt.Fprintf(stdout, "luxd: %s\n", line)
+		}
+		_, _ = fmt.Fprintf(stdout, "luxd: %s\n", res.Summary())
+	}
+
 	// Credential custody of spec 005: in server mode every stored row's
 	// wrapped data key is opened here, so a deployment carrying the wrong
 	// key fails at start and not at the first request through a door.
@@ -174,10 +199,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 
 	// The Limiter of spec 007 and the Recorder of spec 009 are the doors'
 	// stage 7 and their record; both flush this replica's deltas to the
-	// store every LUX_METERING_FLUSH, and once more at stop. The resolver's
-	// defaults are spec 007's two rates and spec 004's upstream timeout,
-	// shared by the Limiter and the API's Resolve.
-	defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
+	// store every LUX_METERING_FLUSH, and once more at stop.
 	limiter := serve.NewLimiter(serve.LimiterOptions{Store: st, Budgets: keys, Defaults: defaults, Flush: cfg.MeteringFlush, Logger: logger})
 
 	// The request log of spec 012: with the exporter s3 every priced

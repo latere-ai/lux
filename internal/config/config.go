@@ -52,6 +52,10 @@ type Config struct {
 	// ManifestDir is the directory of manifests that is desired state in
 	// the file mode of spec 010; empty is not the file mode.
 	ManifestDir string
+	// BootstrapDir is the directory of manifests applied once into the
+	// store at start in server mode (spec 035); empty applies nothing. The
+	// control plane stays writable afterwards, unlike the file mode's.
+	BootstrapDir string
 	// DBURL is the postgres:// URL of the Postgres store of spec 010;
 	// empty is the memory store. It is never echoed, because it may carry
 	// a password.
@@ -192,6 +196,7 @@ func Load(getenv Getenv) (Config, error) {
 		PublicAddr:   withDefault(getenv("LUX_PUBLIC_ADDR"), DefaultPublicAddr),
 		InternalAddr: withDefault(getenv("LUX_INTERNAL_ADDR"), DefaultInternalAddr),
 		ManifestDir:  strings.TrimSpace(getenv("LUX_MANIFEST_DIR")),
+		BootstrapDir: strings.TrimSpace(getenv("LUX_BOOTSTRAP_DIR")),
 		DBURL:        strings.TrimSpace(getenv("LUX_DB_URL")),
 		DBPoolURL:    strings.TrimSpace(getenv("LUX_DB_POOL_URL")),
 		DBMaxConns:   DefaultDBMaxConns,
@@ -209,6 +214,11 @@ func Load(getenv Getenv) (Config, error) {
 	if c.ManifestDir != "" {
 		if err := checkDir(c.ManifestDir); err != nil {
 			problems = append(problems, "LUX_MANIFEST_DIR "+err.Error())
+		}
+	}
+	if c.BootstrapDir != "" {
+		if err := checkDir(c.BootstrapDir); err != nil {
+			problems = append(problems, "LUX_BOOTSTRAP_DIR "+err.Error())
 		}
 	}
 	if c.DBPoolURL != "" {
@@ -249,6 +259,18 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadAPI(getenv)...)
 	problems = append(problems, c.loadEvents(getenv)...)
 	problems = append(problems, c.loadTunnel(getenv)...)
+	// The file mode's directory is desired state already, so a second
+	// directory claiming the same state is a contradiction, not a
+	// composition; and bootstrapped objects belong to the first admin
+	// subject, so without one the owner policy would lock the installation
+	// out of its own catalog. The second rule reads the identity loader's
+	// result, so both run after the loaders.
+	if c.BootstrapDir != "" && c.ManifestDir != "" {
+		problems = append(problems, "LUX_BOOTSTRAP_DIR and LUX_MANIFEST_DIR are both set; the file mode's directory is its desired state, and a bootstrap directory is applied into a server's store")
+	}
+	if c.BootstrapDir != "" && c.ManifestDir == "" && len(c.AdminSubjects) == 0 {
+		problems = append(problems, "LUX_BOOTSTRAP_DIR is set and LUX_ADMIN_SUBJECTS is empty; the objects it applies belong to the first admin subject")
+	}
 	// One fact, two spellings: an installation that serves under a prefix
 	// and advertises an address without it would publish links that 404.
 	// The rule reads both loaders' results, so it runs after both.

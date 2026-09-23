@@ -133,6 +133,12 @@ var referenceGroups = []referenceGroup{
 			required: "No",
 		},
 		{
+			name:     "LUX_BOOTSTRAP_DIR",
+			meaning:  "A directory of manifests applied once into the store at start in server mode, credentials read from the variables they name; objects already as written are left alone, and the control plane stays writable. Requires `LUX_ADMIN_SUBJECTS`, whose first entry owns what it creates.",
+			def:      "unset",
+			required: "No",
+		},
+		{
 			name:     "LUX_DB_URL",
 			meaning:  "A `postgres://` URL selecting the Postgres store; unset keeps every state in memory. Never echoed.",
 			def:      "unset",

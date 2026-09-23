@@ -53,6 +53,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | Variable | Meaning | Default | When required |
 |---|---|---|---|
 | `LUX_MANIFEST_DIR` | A directory of manifests read at start: file mode, where desired state comes from disk and its kinds are read-only through the API. | `unset` | No |
+| `LUX_BOOTSTRAP_DIR` | A directory of manifests applied once into the store at start in server mode, credentials read from the variables they name; objects already as written are left alone, and the control plane stays writable. Requires `LUX_ADMIN_SUBJECTS`, whose first entry owns what it creates. | `unset` | No |
 | `LUX_DB_URL` | A `postgres://` URL selecting the Postgres store; unset keeps every state in memory. Never echoed. | `unset` | No |
 | `LUX_DB_POOL_URL` | Optional transaction-pooler URL for serving queries. Requires `LUX_DB_URL`, which remains the direct migration connection. Both must reach the same database. Never echoed. | `unset` | No |
 | `LUX_DB_MAX_CONNS` | The Postgres pool size; read only with `LUX_DB_URL`, between 1 and 100. | `8` | No |
