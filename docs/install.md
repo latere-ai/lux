@@ -269,7 +269,7 @@ export LUX_INSTALL_TOKEN="${LUX_INSTALL_TOKEN:?set LUX_INSTALL_TOKEN to a token 
 export LUX_INSTALL_ADMIN="${LUX_INSTALL_ADMIN:?set LUX_INSTALL_ADMIN to the token's subject, <issuer>|<sub>}"
 # The first provider: its base URL, its API key, and a model it serves.
 export LUX_INSTALL_UPSTREAM="${LUX_INSTALL_UPSTREAM:-https://api.openai.com/v1}"
-export LUX_INSTALL_UPSTREAM_KEY="${LUX_INSTALL_UPSTREAM_KEY:?set LUX_INSTALL_UPSTREAM_KEY to the provider's API key}"
+export LUX_INSTALL_UPSTREAM_KEY="${LUX_INSTALL_UPSTREAM_KEY:?set LUX_INSTALL_UPSTREAM_KEY to the API key of the provider}"
 export LUX_INSTALL_MODEL="${LUX_INSTALL_MODEL:-gpt-4o-mini}"
 command -v lux >/dev/null || { echo "lux is not on PATH; unpack lux_<tag>_<os>_<arch>.tar.gz from the release" >&2; exit 1; }
 ```

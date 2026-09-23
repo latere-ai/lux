@@ -142,8 +142,7 @@ Without a checkout, [`compose.yaml`](compose.yaml) runs the published
 `luxd` and stub images the same way: `docker compose up`, then the
 requests in [the quick start](docs/quickstart.md) to mint a token,
 declare a provider, a model, and a key, and open a door. The images are
-cut by the release pipeline, so until the first tag they are built from a
-checkout, which the quick start shows.
+cut by the release pipeline at every tag.
 
 `make` runs the quality gate and `make run-down` stops the stack. To
 run a build against a real provider with no issuer, or install a release
@@ -201,7 +200,7 @@ For running Lux and building on it:
 ## Contributing
 
 Lux's design, and the reasoning behind each decision, lives in
-[`specs/`](specs/README.md) — one document per component, with the build
+[`specs/`](specs/README.md), one document per component, with the build
 order. The specs are written for people who change Lux, not for people
 who run it. [`CONTRIBUTING.md`](CONTRIBUTING.md) is how to build, the bar
 a change meets, and where a package belongs; [`SECURITY.md`](SECURITY.md)
@@ -209,12 +208,22 @@ is how to report a vulnerability.
 
 ## Project status
 
-Pre-release, built in the open. Every capability above is implemented and
-covered by tests, and `main` passes the full quality gate on every
-commit. What remains before `v1` is the first tagged release, so there is
-no published image or binary to pull yet, and the manifest schema may
-still change; the [CHANGELOG](CHANGELOG.md) records every change to it.
-Until then, run it from a checkout as [Try it](#try-it) shows.
+Pre-release, built in the open. The current release is `v0.6.0`, of
+2026-09-23; the [CHANGELOG](CHANGELOG.md) has one section per release.
+Every capability above is implemented and covered by tests, and `main`
+passes the full quality gate on every commit.
+
+Each release publishes the `lux` and `lux-stubs` images and the `lux`
+command's binaries under the namespace of the repository owner that ran
+the release workflow, so a fork publishes under its own: images at
+`ghcr.io/<owner>/lux`, signed with cosign, each with a bill of materials
+and a provenance attestation, and the binaries with their checksums on
+the release page. [`SECURITY.md`](SECURITY.md) says how to verify one.
+
+Until `v1.0.0` the manifest schema may still change: a minor release may
+break a row of the version table, and its CHANGELOG entry names the
+break. [`docs/install.md`](docs/install.md) is walked by CI on every
+push, from a checkout and against a cluster.
 
 ## License
 
