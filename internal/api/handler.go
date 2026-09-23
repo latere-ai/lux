@@ -98,6 +98,12 @@ type Options struct {
 	// /v1/requests, whose source is then archive; nil answers the
 	// replica's own ring, source memory.
 	Archive RecordLister
+	// Committed runs after an apply, a delete, or a rotation commits, so
+	// this replica's Key cache and catalog snapshot read the journal at
+	// once instead of at their next tail, and a caller that applies an
+	// object and calls it through this replica is served the change; nil
+	// runs nothing, and every replica still sees it within the tail.
+	Committed func(ctx context.Context)
 	// Metrics receives MetricRefusals; nil records none.
 	Metrics *metrics.Registry
 	// Logger receives the developer's lines, a handler panic among

@@ -150,12 +150,30 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	slog.SetDefault(logger)
 	defer func() { _ = stopTelemetry(context.WithoutCancel(ctx)) }()
 
-	// The Key cache of spec 007: the doors' lookup, invalidated by the
-	// journal tail below, and emptied after a file-mode re-read, which
-	// swaps the snapshot without a journal row.
-	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: cfg.KeyCache, Metrics: reg, Logger: logger})
+	// The catalog snapshot of spec 036: every Model, Provider, and sealed
+	// credential row held in memory for the doors, kept current by the Key
+	// cache's journal tail and re-read whole every LUX_CATALOG_RELOAD. The
+	// file mode's values are read from the environment and never sealed,
+	// so there it holds the Models and Providers alone.
+	sealing := cfg.SecretsKEK
 	if files != nil {
-		stopHUP := reloadOnHUP(ctx, files, stdout, stderr, keys.Reset)
+		sealing = nil
+	}
+	catalog := serve.NewCatalogSnapshot(serve.CatalogSnapshotOptions{Store: st, Keys: sealing, Reload: cfg.CatalogReload, Metrics: reg, Logger: logger})
+
+	// The Key cache of spec 007: the doors' lookup, invalidated by the
+	// journal tail below, whose every batch the catalog snapshot follows,
+	// served past its window for LUX_KEY_CACHE_GRACE while the store does
+	// not answer, and emptied after a file-mode re-read, which swaps the
+	// snapshot without a journal row.
+	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: cfg.KeyCache, Grace: cfg.KeyCacheGrace, Follower: catalog, Metrics: reg, Logger: logger})
+	if files != nil {
+		stopHUP := reloadOnHUP(ctx, files, stdout, stderr, func() {
+			keys.Reset()
+			if err := catalog.Reload(ctx); err != nil {
+				_, _ = fmt.Fprintf(stderr, "luxd: the catalog snapshot kept its previous copy after the reload: %v\n", err)
+			}
+		})
 		defer stopHUP()
 	}
 
@@ -201,6 +219,16 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 
+	// The first load of the snapshot, after bootstrap so it holds what
+	// bootstrap wrote. A failure is retried by the snapshot's own loop and
+	// holds /readyz at not ready until a load succeeds; until then the
+	// doors read the store.
+	if err := catalog.Load(ctx, "start"); err != nil {
+		_, _ = fmt.Fprintf(stderr, "luxd: catalog: the first load failed and is retried; not ready until it succeeds: %v\n", err)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "luxd: catalog: held in memory, re-read whole every %s; a cached Key serves up to %s past its window while the store does not answer\n", cfg.CatalogReload, cfg.KeyCacheGrace)
+	}
+
 	// The Limiter of spec 007 and the Recorder of spec 009 are the doors'
 	// stage 7 and their record; both flush this replica's deltas to the
 	// store every LUX_METERING_FLUSH, and once more at stop.
@@ -210,7 +238,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// record also goes to the archive's ring, written to the bucket in
 	// NDJSON batches by the exporter's worker; with none nothing leaves
 	// the process and GET /v1/requests reads this replica's memory.
-	recorderOptions := serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger}
+	recorderOptions := serve.RecorderOptions{Store: st, Catalog: catalog, Limiter: limiter, Metrics: reg, Flush: cfg.MeteringFlush, Logger: logger}
 	var exporter *reqlog.Exporter
 	var archive api.RecordLister
 	if cfg.RequestLogExporter == config.ExporterS3 {
@@ -255,6 +283,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	jobs.Go(func() { discovery.Run(jobsCtx) })
 	jobs.Go(func() { healthJob.Run(jobsCtx) })
 	jobs.Go(func() { keys.Run(jobsCtx) })
+	jobs.Go(func() { catalog.Run(jobsCtx) })
 	jobs.Go(func() { limiter.Run(jobsCtx) })
 	jobs.Go(func() { recorder.Run(jobsCtx) })
 	if exporter != nil {
@@ -285,12 +314,16 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}()
 
 	// The doors of spec 004 over the seams of specs 005, 007, 008, and
-	// 009: the Recorder prices every record and writes it.
-	catalog := &serve.Catalog{Objects: st.Objects()}
+	// 009: the Recorder prices every record and writes it. The catalog and,
+	// outside the file mode, the credentials are the snapshot's.
+	var doorCredentials gateway.CredentialSource = catalog
+	if files != nil {
+		doorCredentials = credentials
+	}
 	doors := gateway.New(gateway.Options{
 		Keys:         keys,
 		Catalog:      catalog,
-		Credentials:  credentials,
+		Credentials:  doorCredentials,
 		Router:       gateway.NewTargetRouter(gateway.RouterOptions{Catalog: catalog, Health: healthJob.View, Metrics: reg}),
 		Limiter:      limiter,
 		Recorder:     recorder,
@@ -323,6 +356,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Tunnel:                tunnelRoutes(tun),
 		ReadOnlyDir:           cfg.ManifestDir,
 		Archive:               archive,
+		Committed:             keys.Tail,
 		Metrics:               reg,
 		Logger:                logger,
 	})
@@ -332,6 +366,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Ready: health.Checks(
 			health.Check{Name: "draining", Run: notDraining(draining)},
 			health.Check{Name: "store", Run: st.Ready},
+			health.Check{Name: "catalog", Run: catalog.Ready},
 		),
 		Timeout:   2 * time.Second,
 		Version:   version.Version,

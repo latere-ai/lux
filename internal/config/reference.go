@@ -180,6 +180,20 @@ var referenceGroups = []referenceGroup{
 			envValue: "10s",
 		},
 		{
+			name:     "LUX_KEY_CACHE_GRACE",
+			meaning:  "How long past its `LUX_KEY_CACHE` window a cached Key or Budget is served while the store does not answer; `0` refuses at the window (0 to 1h).",
+			def:      "5m",
+			required: "No",
+			envValue: "5m",
+		},
+		{
+			name:     "LUX_CATALOG_RELOAD",
+			meaning:  "How often a replica re-reads the whole catalog of Models, Providers, and sealed credentials, the backstop for writes the journal does not name (5s to 10m).",
+			def:      "30s",
+			required: "No",
+			envValue: "30s",
+		},
+		{
 			name:     "LUX_DEFAULT_REQUESTS_PER_MINUTE",
 			meaning:  "The requests-per-minute a Key gets when it names none; 0 is no limit.",
 			def:      "0",

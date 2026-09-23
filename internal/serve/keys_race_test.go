@@ -232,7 +232,7 @@ func TestCacheRetryUsesConcurrentAnswer(t *testing.T) {
 		}
 		return &entry{id: "stale"}, nil
 	})
-	if err != nil || hit || got.id != "current" || calls != 1 {
+	if err != nil || hit != fromStore || got.id != "current" || calls != 1 {
 		t.Fatal(got, hit, err, calls)
 	}
 }

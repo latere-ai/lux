@@ -41,11 +41,14 @@ Scrape `/metrics` on the internal listener. The metrics worth watching:
 | `lux_authorizer_requests_total` | counter | `decision` | control-plane decisions; `decision` is `allow`, `deny`, `unavailable` |
 | `lux_authorizer_duration_seconds` | histogram | `decision` | authorizer latency |
 | `lux_store_operations_total` | counter | `op`, `result` | store calls; `result` is `ok`, `conflict`, `error` |
-| `lux_key_cache_hits_total` | counter | `result` | Key lookups; `result` is `hit`, `miss`, `negative` |
+| `lux_key_cache_hits_total` | counter | `result` | Key lookups; `result` is `hit`, `miss`, `negative`, `stale` (served past its window while the store does not answer) |
 | `lux_circuit_open` | gauge | `provider`, `model` | `1` while a target's circuit is open |
 | `lux_events_pending` | gauge | none | events waiting for the sink |
 | `lux_requestlog_dropped_total` | counter | none | request-log records lost when the archive is unreachable |
 | `lux_tunnel_sessions` | gauge | none | tunnel sessions this replica holds |
+| `lux_catalog_age_seconds` | gauge | none | seconds since this replica's in-memory catalog last matched the store |
+| `lux_catalog_reloads_total` | counter | `trigger`, `result` | catalog reloads; `trigger` is `start`, `tail`, `backstop`, `sighup`; `result` is `ok`, `error` |
+| `lux_catalog_objects` | gauge | `kind` | what the in-memory catalog holds; `kind` is `Model`, `Provider`, `credential` |
 
 `model` and `provider` are the resolved object's `metadata.name`, empty
 when none was resolved; they are never a caller-controlled string, so a
@@ -57,7 +60,7 @@ is `GET /v1/usage`'s.
 
 ## Alerts
 
-`deploy/base/prometheusrule.yaml` ships ten alerts as a `PrometheusRule`
+`deploy/base/prometheusrule.yaml` ships twelve alerts as a `PrometheusRule`
 the Prometheus Operator reads. Copy and tune them; nothing here is
 required for the gateway to run. What each fires on:
 
@@ -73,6 +76,8 @@ required for the gateway to run. What each fires on:
 | `LuxStoreFailing` | store operations have returned errors for 10m |
 | `LuxEventsBacklog` | more than a thousand events have waited for the sink for 15m |
 | `LuxRequestLogDropping` | a batch of request-log records was dropped |
+| `LuxCatalogStale` | a replica's in-memory catalog has not matched the store for 90s, held 5m |
+| `LuxKeyCacheServingStale` | a replica is serving cached Keys past their window because the store does not answer |
 
 ## Logs
 

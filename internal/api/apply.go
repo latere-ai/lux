@@ -15,6 +15,7 @@ import (
 	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/lux/authorizer"
+	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/manifest"
@@ -151,13 +152,14 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		}
 		typ, data := eventPrefix(k.name)+".created", createdData(obj)
 		if existing != nil {
-			typ, data = eventPrefix(k.name)+".updated", updatedData(existing, obj)
+			typ, data = eventPrefix(k.name)+".updated", map[string]any{"paths": events.ChangedPaths(existing, obj)}
 		}
 		return c.journal(ctx, tx, typ, obj, data)
 	})
 	if terr != nil {
 		return 0, nil, 0, mapError(terr)
 	}
+	c.committed(ctx)
 	if err := c.render(ctx, obj); err != nil {
 		return 0, nil, 0, err
 	}

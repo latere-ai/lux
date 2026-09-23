@@ -1,6 +1,6 @@
 ---
 title: "The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage"
-status: drafted
+status: in-progress
 track: core
 depends_on:
   - specs/004-request-path.md
@@ -171,9 +171,21 @@ discovered Model whose shape changed is updated without a row today
 `model.updated` with reason `discovery` beside the update, in the same
 transaction, so the change reaches every replica within the tail like
 every other catalog change, and an operator's sink learns that a
-discovered Model changed. Leaving it to the backstop was the
-alternative: no new row at the sink, but a changed price billed at the
-old one for up to `LUX_CATALOG_RELOAD`, which is a metering error.
+discovered Model changed. What discovery changes on a Model it
+declared is its labels, which follow the Provider's, and its modalities;
+leaving that to the backstop was the alternative, with no new row at the
+sink but a Model served under its old labels, which an authorizer's
+selectors read, for up to `LUX_CATALOG_RELOAD`. The row's data is the
+changed paths, as an API update's is, from one `events.ChangedPaths`
+that the API, bootstrap, and discovery share.
+
+**The replica that took the write.** An apply, a delete, or a rotation
+through `/v1` runs the Key cache's tail on its own replica as soon as its
+transaction commits (`api.Options.Committed`), so a caller that applies
+a Model and calls it through the same replica is served at once, and a
+Key deleted there is refused there at once; every other replica sees
+either within its tail. Tails are serialized, so the commit's and the
+loop's never interleave.
 
 **The file mode.** The `SIGHUP` re-read swaps the file mode's snapshot
 and `luxd` rebuilds the catalog snapshot from it, beside the Key cache's
@@ -267,10 +279,12 @@ whatever the store does sets the grace to `0`.
   and `lux_metering_flush_lag_seconds` grows meanwhile.
 
 So the spend made during the outage lands on the Budgets' counters and
-in the usage rows at the first flush after the store returns, and a
-Budget that the combined spend has passed refuses its next call on
-every replica from then on. `budget.exhausted` is raised by that first
-refusal: the marker claim during the outage fails and is logged
+in the usage rows at the first flush after the store returns. A replica
+learns the combined total from its own flush of a delta, whose add
+returns it, so the replica that flushed last refuses at once and every
+other replica refuses after at most one more request, the one-request
+term of [[009-usage-and-metering]]'s bound. `budget.exhausted` is raised
+by the first refusal: the marker claim during the outage fails and is logged
 (`internal/serve/limits.go:285-303`). The overshoot is therefore
 visible, not lost: `GET /v1/usage` and the counters carry the true
 spend, and the operator's ledger, reading usage, sees the true spend
@@ -323,7 +337,8 @@ Three rows in [[019-observability]]'s table, owned by this spec:
 `result` value `stale`, a lookup served past its window under the grace.
 
 Two alerts beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
-`max(lux_catalog_age_seconds) > 3 * LUX_CATALOG_RELOAD` held for 5m; and
+`max(lux_catalog_age_seconds) > 90`, three default backstop intervals,
+held for 5m; and
 `LuxKeyCacheServingStale`,
 `sum(rate(lux_key_cache_hits_total{result="stale"}[5m])) > 0` held for
 1m, a replica serving through a store outage.
@@ -349,7 +364,7 @@ Two alerts beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
 | 2 | An apply of a Model through `/v1` on one replica is served by a second replica sharing the store within two tail intervals, and a delete is refused there as `model_not_found` in the same bound | `TestCatalogSnapshotFollowsTheJournal`, two servers over one Postgres store in the Postgres tier |
 | 3 | A Provider credential replaced through `/v1` is the one injected on the second replica's next request after the tail consumes the row | `TestCatalogSnapshotRotatedCredential`, stub provider asserting the header |
 | 4 | A `status.available` written by `PutStatus` alone appears in the model list within `LUX_CATALOG_RELOAD` and not before the backstop runs | `TestCatalogSnapshotBackstop`, fake clock |
-| 5 | A discovered Model whose price changed upstream is journaled `model.updated` with reason `discovery` in the update's transaction, and is priced at the new price on every replica within two tail intervals | `TestDiscoveryShapeUpdateIsJournaled`, `internal/serve` |
+| 5 | A discovered Model whose shape changed, its Provider's labels here, is journaled `model.updated` with reason `discovery` and its changed paths in the update's transaction, and is served in its new shape by a replica after one tail | `TestDiscoveryShapeUpdateIsJournaled`, `internal/serve` |
 | 6 | `/readyz` answers not ready until the first full load succeeds, and a store that fails the first load keeps it not ready | `TestCatalogReadiness`, `cmd/luxd` |
 | 7 | With the store failing after the load, requests whose Keys are cached are served from the snapshot, `lux_catalog_age_seconds` grows, and `/readyz` stays ready | `TestCatalogSnapshotStoreDown`, `internal/serve`; readiness in `cmd/luxd` |
 | 8 | A sealed credential that fails to open is re-read from the store once and opened; a second failure is the error the door answers today; no plaintext credential is held in the snapshot | `TestCatalogSnapshotReopensOnce`, and a reflection check that the snapshot's types carry no plaintext field |
@@ -359,4 +374,4 @@ Two alerts beside `LuxMeteringFlushLagging`: `LuxCatalogStale`,
 | 12 | With a store that fails every read after a Key was cached, the Key is served past `LUX_KEY_CACHE` and until `LUX_KEY_CACHE + LUX_KEY_CACHE_GRACE`, each such lookup counted `stale`, and refused `store_unavailable` after it; with the grace `0` it is refused at `LUX_KEY_CACHE` as today | `TestKeyCacheStaleGrace`, `internal/serve`, fake clock over a failing store wrapper |
 | 13 | Under the grace, a negative entry is not served stale, a Key never cached is refused `store_unavailable`, a disabled cached Key is refused, and a cached Key past its `expiresAt` is `key_expired` | `TestKeyCacheStaleGraceLimits`, `internal/serve` |
 | 14 | Under the grace, a lookup past the window reads the store first, and a store that answers again replaces the stale entry at once | `TestKeyCacheStaleGraceRecovers`, `internal/serve` |
-| 15 | Spend counter deltas and hourly usage rows made on two replicas while the store fails every write land in the store at the first flush after it answers, summed exactly, and a hard Budget the combined spend has passed refuses the next call on both replicas and raises `budget.exhausted` once | `TestLateCorrectionAfterOutage`, two Limiters and Recorders over one failing-then-healthy store in `internal/serve` |
+| 15 | Spend counter deltas and hourly usage rows made on two replicas while the store fails every write land in the store at the first flush after it answers, summed exactly; the replica that flushed last then refuses a hard Budget the combined spend has passed, the other after at most one more request, and `budget.exhausted` is raised once | `TestLateCorrectionAfterOutage`, two Limiters and Recorders over one failing-then-healthy store in `internal/serve` |

@@ -65,6 +65,8 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | Variable | Meaning | Default | When required |
 |---|---|---|---|
 | `LUX_KEY_CACHE` | How long a Key lookup, positive or negative, is cached per replica on the data plane (1s to 10m). | `10s` | No |
+| `LUX_KEY_CACHE_GRACE` | How long past its `LUX_KEY_CACHE` window a cached Key or Budget is served while the store does not answer; `0` refuses at the window (0 to 1h). | `5m` | No |
+| `LUX_CATALOG_RELOAD` | How often a replica re-reads the whole catalog of Models, Providers, and sealed credentials, the backstop for writes the journal does not name (5s to 10m). | `30s` | No |
 | `LUX_DEFAULT_REQUESTS_PER_MINUTE` | The requests-per-minute a Key gets when it names none; 0 is no limit. | `0` | No |
 | `LUX_DEFAULT_TOKENS_PER_MINUTE` | The tokens-per-minute a Key gets when it names none; 0 is no limit. | `0` | No |
 | `LUX_REQUESTS_PER_MINUTE` | Control-plane requests one subject may send in a minute; 0 is no limit. | `600` | No |

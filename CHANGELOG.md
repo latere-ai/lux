@@ -10,6 +10,23 @@ refused before it is pushed.
   `gateway.ErrTunneled`, and the provider stub's `Behaviour`, `Behaviours` and
   `ParseBehaviour` are `Behavior`, `Behaviors` and `ParseBehavior`. Code that
   names them needs the new spelling; error codes and the wire are unchanged.
+- The catalog is held in memory on every replica: the doors resolve a
+  Model, its Providers, and a Provider's credential without a store read.
+  The credential stays sealed in memory and is opened per request. A change
+  through `/v1` is served at once by the replica that took it and within a
+  second by every other; a status no event names is picked up by a full
+  re-read every `LUX_CATALOG_RELOAD` (default `30s`). `/readyz` waits for
+  the first load. New metrics `lux_catalog_age_seconds`,
+  `lux_catalog_reloads_total` and `lux_catalog_objects`, and the alert
+  `LuxCatalogStale`.
+- A replica keeps serving through a store outage: a cached Key or Budget is
+  served for `LUX_KEY_CACHE_GRACE` (default `5m`) past its window while the
+  store does not answer, and refused `store_unavailable` after. `0` turns
+  this off. Such a lookup counts as `stale` in `lux_key_cache_hits_total`,
+  and the alert `LuxKeyCacheServingStale` fires on it. Spend made during
+  the outage reaches the Budgets and the usage rows once the store answers.
+- Discovery raises `model.updated` with reason `discovery` when a
+  discovered Model's labels or modalities change.
 
 ## v0.6.0 - 2026-09-23
 

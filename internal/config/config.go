@@ -125,6 +125,15 @@ type Config struct {
 	DefaultRequestsPerMinute int
 	DefaultTokensPerMinute   int
 
+	// The catalog variables of spec 036.
+
+	// CatalogReload is how often a replica re-reads the whole catalog, the
+	// backstop for writes the journal does not name.
+	CatalogReload time.Duration
+	// KeyCacheGrace is how long past its window a cached Key or Budget is
+	// served while the store does not answer; zero refuses at the window.
+	KeyCacheGrace time.Duration
+
 	// The metering variable of spec 009.
 
 	// MeteringFlush is how often a replica writes its spend deltas and
@@ -265,6 +274,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadIdentity(getenv)...)
 	problems = append(problems, c.loadProviders(getenv)...)
 	problems = append(problems, c.loadKeys(getenv)...)
+	problems = append(problems, c.loadCatalog(getenv)...)
 	problems = append(problems, c.loadMetering(getenv)...)
 	problems = append(problems, c.loadAPI(getenv)...)
 	problems = append(problems, c.loadEvents(getenv)...)

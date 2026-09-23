@@ -56,6 +56,7 @@ func (c *call) delete(ctx context.Context, k kind, ref string) *Error {
 	if terr != nil {
 		return mapError(terr)
 	}
+	c.committed(ctx)
 	if p, ok := obj.(*v1.Provider); ok && c.h.o.Clients != nil {
 		c.h.o.Clients.Revoke(p.Status.ID)
 	}

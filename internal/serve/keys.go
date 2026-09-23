@@ -27,7 +27,9 @@ const (
 	KeyCacheEntries = 100_000
 	// MetricKeyCacheHits counts every lookup by result: hit for a Key
 	// served from the cache, miss for one read from the store, negative
-	// for an unknown value answered from a negative entry.
+	// for an unknown value answered from a negative entry, and stale for
+	// a Key served past its window under the grace of spec 036 because
+	// the store read that would replace it failed.
 	MetricKeyCacheHits = "lux_key_cache_hits_total"
 	// DefaultKeyCache is LUX_KEY_CACHE's default.
 	DefaultKeyCache = 10 * time.Second
@@ -50,8 +52,17 @@ type KeyCacheOptions struct {
 	// TTL is LUX_KEY_CACHE: how long a positive or negative entry is
 	// served, measured from the start of its store read; zero is DefaultKeyCache.
 	TTL time.Duration
+	// Grace is LUX_KEY_CACHE_GRACE: how long past its window a positive
+	// entry is kept and served when, and only when, the store read that
+	// would replace it fails. Zero drops an entry at its window, and a
+	// failed read is then the store's error.
+	Grace time.Duration
 	// Tail is how often Run reads the journal; zero is one second.
 	Tail time.Duration
+	// Follower receives every batch the tail reads, after the cache has
+	// acted on it, so one journal read per replica serves both the cache
+	// and the catalog snapshot of spec 036; nil passes nothing on.
+	Follower JournalFollower
 	// Metrics receives MetricKeyCacheHits; nil records none.
 	Metrics *metrics.Registry
 	// Logger receives the developer's lines; nil is slog.Default.
@@ -79,9 +90,10 @@ type KeyCache struct {
 	entries    map[string]*entry // by cache key
 	lru        lru               // most recently used at the front
 	byObject   map[string]map[string]bool
-	after      int64  // the journal sequence Tail has read up to
-	generation uint64 // invalidates reads whose object is not yet known
-	sequence   uint64 // orders concurrent reads even when Now is unchanged
+	tailing    sync.Mutex // one Tail at a time: the loop's and a commit's
+	after      int64      // the journal sequence Tail has read up to
+	generation uint64     // invalidates reads whose object is not yet known
+	sequence   uint64     // orders concurrent reads even when Now is unchanged
 }
 
 // entry is one cached answer: a Key, a Budget, or neither for a value no
@@ -161,7 +173,7 @@ func NewKeyCache(o KeyCacheOptions) *KeyCache {
 	}
 	c := &KeyCache{o: o, entries: map[string]*entry{}, byObject: map[string]map[string]bool{}}
 	if o.Metrics != nil {
-		c.hits = o.Metrics.Counter(MetricKeyCacheHits, "Key lookups by result: hit, miss, or negative.")
+		c.hits = o.Metrics.Counter(MetricKeyCacheHits, "Key lookups by result: hit, miss, negative, or stale.")
 	}
 	return c
 }
@@ -171,13 +183,16 @@ func NewKeyCache(o KeyCacheOptions) *KeyCache {
 // failure otherwise, which is never cached. The Key returned is the
 // cache's copy and is read, never changed, by the caller.
 func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
-	e, hit, err := c.lookup(ctx, cacheKeyHash+hash, func() (*entry, error) { return c.readKey(ctx, hash) })
+	e, from, err := c.lookup(ctx, cacheKeyHash+hash, func() (*entry, error) { return c.readKey(ctx, hash) })
 	result := "miss"
-	if hit {
+	switch from {
+	case fromCache:
 		result = "hit"
 		if e.k == nil {
 			result = "negative"
 		}
+	case fromStale:
+		result = "stale"
 	}
 	c.count(result)
 	if err != nil {
@@ -236,16 +251,28 @@ func (c *KeyCache) readBudget(ctx context.Context, id string) (*entry, error) {
 	return &entry{id: id, b: b}, nil
 }
 
+// Where a lookup's answer came from.
+const (
+	fromStore = iota
+	fromCache
+	fromStale
+)
+
 // lookup never returns a store answer invalidated while it was in flight.
 // TTL starts before the read, so a delayed result cannot extend authority.
 // Sustained invalidation or a store slower than TTL fails closed after three reads.
-func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, error)) (*entry, bool, error) {
+// A read that fails returns the stale positive entry the grace still
+// keeps, when there is one, and the store's error otherwise.
+func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, error)) (*entry, int, error) {
 	for attempt := range 3 {
 		if err := ctx.Err(); err != nil {
-			return nil, false, err
+			return nil, fromStore, err
 		}
 		if e, ok := c.get(key); ok {
-			return e, attempt == 0, nil
+			if attempt == 0 {
+				return e, fromCache, nil
+			}
+			return e, fromStore, nil
 		}
 		c.mu.Lock()
 		generation := c.generation
@@ -255,17 +282,43 @@ func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, 
 		c.mu.Unlock()
 		e, err := read()
 		if err != nil {
-			return nil, false, err
+			if ctx.Err() == nil {
+				if stale, ok := c.stale(key); ok {
+					return stale, fromStale, nil
+				}
+			}
+			return nil, fromStore, err
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, false, err
+			return nil, fromStore, err
 		}
 		e.key, e.expires, e.sequence = key, expires, sequence
 		if current, ok := c.publish(e, generation); ok {
-			return current, false, nil
+			return current, fromStore, nil
 		}
 	}
-	return nil, false, errors.New("reading cached authority: concurrent invalidation or expired lookup")
+	return nil, fromStore, errors.New("reading cached authority: concurrent invalidation or expired lookup")
+}
+
+// stale is the positive entry under key whose window has passed and
+// whose grace has not, moved to the front, or nothing. A negative entry
+// is never served past its window: an unknown value during an outage is
+// the store's error, not an answer the store gave before it.
+func (c *KeyCache) stale(key string) (*entry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	if !ok || !c.graced(e, c.o.Now()) {
+		return nil, false
+	}
+	c.lru.moveToFront(e)
+	return e, true
+}
+
+// graced reports whether e is a positive entry past its window and
+// inside the grace. The caller holds the lock.
+func (c *KeyCache) graced(e *entry, now time.Time) bool {
+	return c.o.Grace > 0 && (e.k != nil || e.b != nil) && !now.Before(e.expires) && now.Before(e.expires.Add(c.o.Grace))
 }
 
 // count records one lookup's result.
@@ -275,8 +328,9 @@ func (c *KeyCache) count(result string) {
 	}
 }
 
-// get is a fresh entry, moved to the front, or nothing; a stale entry
-// is dropped on the way.
+// get is a fresh entry, moved to the front, or nothing; an entry past
+// its window is dropped on the way unless the grace still keeps it for
+// a failed read to fall back on.
 func (c *KeyCache) get(key string) (*entry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -284,8 +338,10 @@ func (c *KeyCache) get(key string) (*entry, bool) {
 	if !ok {
 		return nil, false
 	}
-	if !c.o.Now().Before(e.expires) {
-		c.remove(e)
+	if now := c.o.Now(); !now.Before(e.expires) {
+		if !c.graced(e, now) {
+			c.remove(e)
+		}
 		return nil, false
 	}
 	c.lru.moveToFront(e)
@@ -371,6 +427,8 @@ func (c *KeyCache) Len() int {
 // cannot answer is logged and the entries lapse with the window.
 func (c *KeyCache) Tail(ctx context.Context) {
 	const batch = 500
+	c.tailing.Lock()
+	defer c.tailing.Unlock()
 	c.mu.Lock()
 	after := c.after
 	c.mu.Unlock()
@@ -390,6 +448,9 @@ func (c *KeyCache) Tail(ctx context.Context) {
 		c.mu.Lock()
 		c.after = after
 		c.mu.Unlock()
+		if c.o.Follower != nil {
+			c.o.Follower.Follow(ctx, events)
+		}
 		if len(events) < batch {
 			return
 		}

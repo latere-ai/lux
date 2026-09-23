@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"latere.ai/x/lux/gateway"
+	"latere.ai/x/lux/internal/secrets"
+	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/store/memory"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -51,4 +53,84 @@ func BenchmarkLimiterReserveSettle(b *testing.B) {
 		}
 		lease.Settle(ctx, gateway.Tokens{Input: 100, Output: 150})
 	}
+}
+
+// BenchmarkCatalogLookups measures what one request resolves from the
+// catalog, the Model by name, its Provider, and the Provider's
+// credential opened, read from the store as before spec 036 and from the
+// snapshot. On the memory store both are in process, so the difference
+// is the store's own locking and copying; the Postgres half,
+// BenchmarkPostgresCatalogLookups, is the round trips the snapshot
+// removes.
+func BenchmarkCatalogLookups(b *testing.B) {
+	benchCatalogLookups(b, memory.New())
+}
+
+// benchCatalogLookups stores one Provider with a sealed credential and
+// one Model on st and times the two ways of resolving them.
+func benchCatalogLookups(b *testing.B, st store.Store) {
+	ctx := context.Background()
+	keys, err := secrets.Parse("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
+	if err != nil {
+		b.Fatal(err)
+	}
+	now := time.Now()
+	p := &v1.Provider{
+		Metadata: v1.ObjectMeta{Name: "oai"},
+		Spec: v1.ProviderSpec{Dialect: v1.DialectOpenAI, BaseURL: "https://api.example.com/v1", Timeout: "10s",
+			Credential: &v1.Credential{Header: "Authorization", Scheme: "Bearer"}},
+		Status: v1.ProviderStatus{ID: v1.NewID(v1.PrefixProvider, now, nil), Owner: "bench", Warnings: []string{},
+			Credential: &v1.CredentialStatus{Set: true, Version: 1}},
+	}
+	if _, err := st.Objects().Put(ctx, p, 0); err != nil {
+		b.Fatal(err)
+	}
+	row, err := keys.Seal(p.Status.ID, 1, []byte("sk-bench"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	if err := st.Credentials().Put(ctx, p.Status.ID, row); err != nil {
+		b.Fatal(err)
+	}
+	w := 100
+	m := &v1.Model{
+		Metadata: v1.ObjectMeta{Name: "bench"},
+		Spec:     v1.ModelSpec{Targets: []v1.Target{{Provider: "oai", Model: "x", Weight: &w}}, Fallback: v1.FallbackOnError},
+		Status:   v1.ModelStatus{ID: v1.NewID(v1.PrefixModel, now, nil), Owner: "bench", Source: v1.SourceDeclared, Warnings: []string{}},
+	}
+	if _, err := st.Objects().Put(ctx, m, 0); err != nil {
+		b.Fatal(err)
+	}
+	type catalog interface {
+		gateway.Catalog
+		gateway.CredentialSource
+	}
+	resolve := func(b *testing.B, c catalog) {
+		for b.Loop() {
+			got, err := c.Model(ctx, "bench")
+			if err != nil || got == nil {
+				b.Fatal(got, err)
+			}
+			prov, err := c.Provider(ctx, got.Spec.Targets[0].Provider)
+			if err != nil || prov == nil {
+				b.Fatal(prov, err)
+			}
+			if v, err := c.Credential(ctx, prov.Status.ID); err != nil || len(v) == 0 {
+				b.Fatal(v, err)
+			}
+		}
+	}
+	b.Run("store", func(b *testing.B) {
+		resolve(b, struct {
+			*Catalog
+			*StoreCredentials
+		}{&Catalog{Objects: st.Objects()}, &StoreCredentials{Credentials: st.Credentials(), Keys: keys}})
+	})
+	b.Run("snapshot", func(b *testing.B) {
+		snap := NewCatalogSnapshot(CatalogSnapshotOptions{Store: st, Keys: keys})
+		if err := snap.Load(ctx, triggerStart); err != nil {
+			b.Fatal(err)
+		}
+		resolve(b, snap)
+	})
 }

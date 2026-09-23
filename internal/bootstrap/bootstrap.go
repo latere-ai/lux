@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -269,7 +268,7 @@ func (o Options) plan(ctx context.Context, cat *catalog, d *document) (*step, er
 	}
 	setIdentity(obj, id, owner, createdAt)
 	s.obj, s.existing, s.version = obj, existing, version
-	changed := existing != nil && !reflect.DeepEqual(shape(existing), shape(obj))
+	changed := existing != nil && len(events.ChangedPaths(existing, obj)) > 0
 	switch x := obj.(type) {
 	case *v1.Provider:
 		sealed, err := o.prepareProvider(ctx, s, x)
@@ -549,7 +548,7 @@ func (o Options) write(ctx context.Context, s *step) error {
 		}
 		data := createdData(s.obj)
 		if s.existing != nil {
-			data = updatedData(s.existing, s.obj)
+			data = map[string]any{"paths": events.ChangedPaths(s.existing, s.obj)}
 		}
 		return events.Append(ctx, tx.Journal(), events.Event{
 			ID: o.newID(v1.PrefixEvent), Type: eventType(s.doc.kind, s.existing == nil), At: s.at,

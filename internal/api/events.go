@@ -5,11 +5,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"reflect"
-	"slices"
-	"sort"
-	"strconv"
 
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
@@ -72,79 +67,9 @@ func createdData(obj v1.Object) map[string]any {
 	return map[string]any{}
 }
 
-// updatedData is the data of a <kind>.updated row: the changed paths.
-func updatedData(old, obj v1.Object) map[string]any {
-	return map[string]any{"paths": changedPaths(old, obj)}
-}
-
-// changedPaths lists the JSON paths of metadata and spec that differ
-// between two objects, dotted for a struct member and [n] for a list
-// entry, in path order; the comparison is over each object's JSON, so
-// the write-only members, which no encoding carries, never appear.
-func changedPaths(old, obj v1.Object) []string {
-	a, b := controlTree(old), controlTree(obj)
-	var out []string
-	diff("", a, b, &out)
-	sort.Strings(out)
-	return out
-}
-
-// controlTree is the object's metadata and spec as a JSON tree.
-func controlTree(obj v1.Object) map[string]any {
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return nil
+// committed tells this replica's caches that a mutation committed.
+func (c *call) committed(ctx context.Context) {
+	if c.h.o.Committed != nil {
+		c.h.o.Committed(ctx)
 	}
-	var tree map[string]any
-	if err := json.Unmarshal(data, &tree); err != nil {
-		return nil
-	}
-	return map[string]any{"metadata": tree["metadata"], "spec": tree["spec"]}
-}
-
-// diff appends the paths at which a and b differ.
-func diff(path string, a, b any, out *[]string) {
-	am, aok := a.(map[string]any)
-	bm, bok := b.(map[string]any)
-	if aok && bok {
-		keys := make([]string, 0, len(am)+len(bm))
-		for k := range am {
-			keys = append(keys, k)
-		}
-		for k := range bm {
-			if _, in := am[k]; !in {
-				keys = append(keys, k)
-			}
-		}
-		slices.Sort(keys)
-		for _, k := range keys {
-			diff(join(path, k), am[k], bm[k], out)
-		}
-		return
-	}
-	al, alok := a.([]any)
-	bl, blok := b.([]any)
-	if alok && blok {
-		for i := range max(len(al), len(bl)) {
-			var x, y any
-			if i < len(al) {
-				x = al[i]
-			}
-			if i < len(bl) {
-				y = bl[i]
-			}
-			diff(path+"["+strconv.Itoa(i)+"]", x, y, out)
-		}
-		return
-	}
-	if !reflect.DeepEqual(a, b) {
-		*out = append(*out, path)
-	}
-}
-
-func join(path, key string) string {
-	if path == "" {
-		return key
-	}
-	return path + "." + key
 }

@@ -75,6 +75,8 @@ The latency distribution is a separate, opt-in test (below).
 | Benchmark | Isolates |
 |---|---|
 | `BenchmarkLimiterReserveSettle` | stage 7 on one replica in its in-memory path: the two rate buckets, the pricing and spend projection, admit, and settle, with no store I/O on the timed path |
+| `BenchmarkCatalogLookups/store`, `/snapshot` | what one request resolves from the catalog, the Model by name, its Provider, and the Provider's credential opened, read from the memory store and from the in-memory catalog every replica holds |
+| `BenchmarkPostgresCatalogLookups/store`, `/snapshot` | the same over the Postgres store, built with `-tags=postgres` and `LUX_DB_URL` set: the store half is the three round trips per request the in-memory catalog removes |
 
 ## Added latency distribution and throughput
 
@@ -101,6 +103,25 @@ serial CPU cost of translation shows in `BenchmarkGatewayTranslated` minus
 `BenchmarkGatewayPassthrough` above. The steadiest cross-cutting isolation
 is memory: translation allocates about 8 KB more per request than a
 passthrough, on every machine.
+
+## The catalog in memory
+
+Every replica holds the catalog, every Model, Provider, and sealed
+credential, in memory, kept current by the journal and re-read whole every
+`LUX_CATALOG_RELOAD`, so a request resolves its Model, Provider, and
+credential without a store round trip. The credential stays sealed in
+memory and is opened per request. On an Apple M5 Pro, five runs each, with
+Postgres 17 on the same machine over loopback:
+
+| Benchmark | store | in memory |
+|---|---|---|
+| `CatalogLookups` (memory store) | 6.5µs to 7.3µs, 31 allocs | 0.65µs to 0.72µs, 8 allocs |
+| `PostgresCatalogLookups` | 398µs to 443µs, 68 allocs | 0.66µs to 0.95µs, 8 allocs |
+
+The Postgres figure is on loopback; across a network each of the three
+round trips adds the network's latency, and each held one of the pool's
+connections for its length. With the catalog in memory the data plane
+reads the store for a Key once per `LUX_KEY_CACHE` and for nothing else.
 
 ## A measured run
 

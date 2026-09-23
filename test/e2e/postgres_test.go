@@ -94,7 +94,8 @@ func (s *stack) eventsOfType(t *testing.T, typ string) int {
 
 // TestPostgresTwoReplicas runs two luxd processes against one database
 // and proves what a shared store gives: desired state applied through
-// one replica serves on the other at once, a spend counter both replicas
+// one replica serves on the other once its journal tail has read the
+// row, which its catalog snapshot follows, a spend counter both replicas
 // add to sums on both within a flush, the journal lease has one holder
 // so two replicas deliver one event per mutation, a Key deleted through
 // one replica is refused by the other through the journal tail well
@@ -116,10 +117,16 @@ func TestPostgresTwoReplicas(t *testing.T) {
 		}
 	}
 
-	// Desired state is shared: applied through a, served by b at once.
+	// Desired state is shared: applied through a, served by b once b's
+	// tail has read the row. b's catalog is watched on its internal
+	// listener, so no request of the Key is spent waiting.
 	sa.provider(t, "openai", "openai", false, "")
 	sa.model(t, "chat", "openai", "gpt-stub", true)
 	key := sa.key(t, "dev", "*")
+	eventually(t, "b's catalog holding the Model", 5*time.Second, func() bool {
+		body := string(do(t, http.MethodGet, b.internal+"/metrics", nil, "").body)
+		return strings.Contains(body, `lux_catalog_objects{kind="Model"}`) && !strings.Contains(body, `lux_catalog_objects{kind="Model"} 0`)
+	})
 	for i := range 3 {
 		if resp := sa.chat(t, key, "chat", "hi", false); resp.status != http.StatusOK {
 			t.Fatalf("request %d through a: %d %s %s", i, resp.status, resp.code(), resp.body)

@@ -74,6 +74,7 @@ func (c *call) rotate(ctx context.Context, ref string) *Error {
 	if terr != nil {
 		return mapError(terr)
 	}
+	c.committed(ctx)
 	if err := c.render(ctx, key); err != nil {
 		return err
 	}

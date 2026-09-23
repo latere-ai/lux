@@ -64,6 +64,22 @@ spec:
           annotations:
             summary: spend counters are stale
             description: "A replica has not flushed its spend counters for thirty seconds, so hard limits overshoot further than the stated bound."
+        - alert: LuxCatalogStale
+          expr: max(lux_catalog_age_seconds) > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: the catalog in memory is stale
+            description: "A replica's catalog snapshot has not matched the store for ninety seconds; Model, Provider, and credential changes are not reaching it."
+        - alert: LuxKeyCacheServingStale
+          expr: sum(rate(lux_key_cache_hits_total{result="stale"}[5m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: serving through a store outage
+            description: "A replica is serving cached Keys past their window because the store does not answer; revocations are not seen and hard budgets can overshoot until it does."
         - alert: LuxAuthorizerUnavailable
           expr: increase(lux_authorizer_requests_total{decision="unavailable"}[5m]) > 0
           for: 5m

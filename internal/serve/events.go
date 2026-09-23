@@ -33,6 +33,7 @@ const (
 	eventProviderHealthy     = events.ProviderHealthy
 	eventModelDiscovered     = events.ModelDiscovered
 	eventModelRemoved        = events.ModelRemoved
+	eventModelUpdated        = events.ModelUpdated
 	eventKeyExhausted        = events.KeyExhausted
 	eventBudgetExhausted     = events.BudgetExhausted
 )

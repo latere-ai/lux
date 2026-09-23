@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -297,7 +298,7 @@ func (d *Discovery) List(ctx context.Context, p *v1.Provider) {
 		d.o.Logger.ErrorContext(ctx, "discovery: writing the catalog", "provider", p.Status.ID, "name", p.Metadata.Name, "err", err)
 		return
 	}
-	d.o.Logger.InfoContext(ctx, "discovery: listed", "provider", p.Status.ID, "name", p.Metadata.Name, "models", result.count, "created", result.created, "removed", result.removed, "refused", len(result.warnings))
+	d.o.Logger.InfoContext(ctx, "discovery: listed", "provider", p.Status.ID, "name", p.Metadata.Name, "models", result.count, "created", result.created, "updated", result.updated, "removed", result.removed, "refused", len(result.warnings))
 }
 
 // filter applies include, then exclude, to the candidates.
@@ -326,8 +327,8 @@ func matchesAny(globs []string, name string) bool {
 
 // listResult is what one successful list did.
 type listResult struct {
-	count, created, removed int
-	warnings                []string
+	count, created, updated, removed int
+	warnings                         []string
 }
 
 // apply writes the surviving candidates as the Provider's discovered
@@ -393,6 +394,12 @@ func (d *Discovery) apply(ctx context.Context, p *v1.Provider, candidates []cand
 				if _, err := tx.Objects().Put(ctx, m, old.Status.Version); err != nil {
 					return fmt.Errorf("updating Model %s: %w", name, err)
 				}
+				// The row is what carries a changed target or price to every
+				// replica's catalog snapshot within the tail (spec 036).
+				if err := appendEvent(ctx, tx.Journal(), eventModelUpdated, reasonDiscovery, m, map[string]any{"paths": events.ChangedPaths(old, m)}, now, func() string { return d.o.NewID(v1.PrefixEvent) }); err != nil {
+					return err
+				}
+				result.updated++
 			}
 		}
 		for upstreamName, old := range byUpstream {
