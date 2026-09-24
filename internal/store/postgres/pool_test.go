@@ -26,8 +26,8 @@ func TestServingPoolKeepsMigrationsDirect(t *testing.T) {
 	if cfg.MinConns != 0 || cfg.MaxConns != 2 {
 		t.Fatal("pool bounds ignored")
 	}
-	if cfg.ConnConfig.DefaultQueryExecMode != pgx.QueryExecModeExec || cfg.ConnConfig.StatementCacheCapacity != 0 || cfg.ConnConfig.DescriptionCacheCapacity != 0 {
-		t.Fatal("pooler mode retains prepared statement caches")
+	if cfg.ConnConfig.DefaultQueryExecMode != pgx.QueryExecModeCacheDescribe || cfg.ConnConfig.StatementCacheCapacity != 0 || cfg.ConnConfig.DescriptionCacheCapacity == 0 {
+		t.Fatal("pooler mode prepares named statements or asks no parameter types")
 	}
 	if s.Endpoint() != "pool.example:6432/lux-pool" {
 		t.Fatalf("endpoint %q", s.Endpoint())

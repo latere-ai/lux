@@ -6,6 +6,14 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A store behind `LUX_DB_POOL_URL` now writes objects that carry labels. Over the
+  pooler the driver inferred each statement's parameter types from Go
+  types and could not encode a manifest's labels or its JSON columns, so
+  every Provider, Model, Key and Budget write with labels answered 503
+  `store_unavailable`. It now asks the server the types once per statement
+  and still prepares no named statement, and the Postgres conformance suite
+  runs through that mode as well.
+
 ## v0.7.1 - 2026-09-24
 
 - `docker compose up` with no `LUX_VERSION` set pulls the newest release.

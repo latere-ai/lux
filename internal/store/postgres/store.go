@@ -111,10 +111,15 @@ func poolConfig(o Options) (*pgxpool.Config, error) {
 	if err != nil {
 		return nil, errors.New("LUX_DB_URL does not parse as a connection URL; the value is not echoed because it may carry a password")
 	}
+	// A transaction pooler hands each transaction whichever server
+	// connection is free, so a named prepared statement does not survive
+	// past it: the pool prepares none. It still asks the server each
+	// statement's parameter types once and keeps them, which the labels map
+	// and the JSON columns need; a mode that infers them from Go types
+	// cannot encode either.
 	if o.PoolURL != "" {
-		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 		cfg.ConnConfig.StatementCacheCapacity = 0
-		cfg.ConnConfig.DescriptionCacheCapacity = 0
 	}
 	cfg.MaxConns = int32(o.MaxConns) //nolint:gosec // bounded by config to at most 100
 	cfg.MinConns = minConns

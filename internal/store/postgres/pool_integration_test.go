@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"latere.ai/x/lux/internal/store/postgres/pgtest"
+	v1 "latere.ai/x/lux/manifest/v1"
 )
 
 // A serving role without CREATE privileges proves migrations use the direct
@@ -48,5 +49,35 @@ func TestPostgresPooledServingRoleDoesNotRunMigrations(t *testing.T) {
 	var current string
 	if err := s.pool.QueryRow(t.Context(), `SELECT current_user`).Scan(&current); err != nil || current != role {
 		t.Fatalf("serving role = %q: %v", current, err)
+	}
+}
+
+// TestPostgresPooledStoreWritesLabeledObjects writes and reads back a
+// labeled Provider and a Model through the serving pool's connection mode.
+// A mode that infers parameter types from Go types cannot encode the labels
+// map or the JSON columns, so every write with labels failed there.
+func TestPostgresPooledStoreWritesLabeledObjects(t *testing.T) {
+	db := pgtest.URL(t)
+	s, warning, err := Connect(t.Context(), Options{URL: db, PoolURL: db, MaxConns: 1})
+	if err != nil || warning != "" {
+		t.Fatalf("connect: %s %v", warning, err)
+	}
+	defer func() { _ = s.Close() }()
+	now := time.Now()
+	labels := map[string]string{"example.com/tier": "catalog"}
+	provider := &v1.Provider{Metadata: v1.ObjectMeta{Name: "pooled", Labels: labels}, Spec: v1.ProviderSpec{Dialect: v1.DialectOpenAI, BaseURL: "https://upstream.example/v1"},
+		Status: v1.ProviderStatus{ID: v1.NewID(v1.PrefixProvider, now, nil), Owner: "issuer|owner"}}
+	if _, err := s.Objects().Put(t.Context(), provider, 0); err != nil {
+		t.Fatalf("put a labeled Provider through the pool: %v", err)
+	}
+	model := &v1.Model{Metadata: v1.ObjectMeta{Name: "pooled/model", Labels: labels}, Spec: v1.ModelSpec{Targets: []v1.Target{{Provider: "pooled", Model: "m"}}},
+		Status: v1.ModelStatus{ID: v1.NewID(v1.PrefixModel, now, nil), Owner: "issuer|owner"}}
+	if _, err := s.Objects().Put(t.Context(), model, 0); err != nil {
+		t.Fatalf("put a labeled Model through the pool: %v", err)
+	}
+	obj, _, err := s.Objects().ByName(t.Context(), v1.KindProvider, "pooled")
+	got, ok := obj.(*v1.Provider)
+	if err != nil || !ok || got.Metadata.Labels["example.com/tier"] != "catalog" || got.Spec.BaseURL != "https://upstream.example/v1" {
+		t.Fatalf("read back %+v: %v", obj, err)
 	}
 }

@@ -159,7 +159,7 @@ var referenceGroups = []referenceGroup{
 		},
 		{
 			name:     "LUX_DB_POOL_URL",
-			meaning:  "Optional transaction-pooler URL for serving queries. Requires `LUX_DB_URL`, which remains the direct migration connection. Both must reach the same database. Never echoed.",
+			meaning:  "Optional transaction-pooler URL for serving queries, such as PgBouncer in transaction mode. Requires `LUX_DB_URL`, which remains the direct migration connection. Both must reach the same database. No named statement is prepared over it. Never echoed.",
 			def:      "unset",
 			required: "No",
 		},

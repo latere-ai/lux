@@ -427,7 +427,11 @@ loaded from a directory.
 
 Selected by `LUX_DB_URL`, a `postgres://` URL. Optional `LUX_DB_POOL_URL`
 selects a transaction pooler for serving while migrations keep the direct
-URL (spec 024). The driver is
+URL (spec 024). Over the pooler the driver prepares no named statement,
+which would not survive past the transaction that made it, and asks the
+server each statement's parameter types once (pgx's describe-cached mode):
+the labels map and the JSON columns cannot be encoded from Go types alone.
+The driver is
 `github.com/jackc/pgx/v5`, one `pgxpool.Pool` for the process with
 `MaxConns` `LUX_DB_MAX_CONNS`, default 8, `MinConns` 0,
 `MaxConnIdleTime` 60s, and `MaxConnLifetime` 30m: a managed cluster
