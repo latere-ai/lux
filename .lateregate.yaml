@@ -4,14 +4,19 @@
 
 # The files that name the release. `lateregate release` rewrites each
 # pattern's version to the tag it cuts, in the same commit as the changelog,
-# so the image tag of the quick start and the release SECURITY.md verifies
-# never lag the newest release.
+# so the image tag of the quick start, the image compose.yaml runs with no
+# LUX_VERSION set, and the release SECURITY.md verifies never lag the newest
+# release. compose.yaml names the release once per image, and one pattern
+# spans both: the cut rewrites each entry's file as read, so a second entry
+# for the same file would discard the first one's rewrite.
 release:
   stamp:
     - file: docs/quickstart.md
       pattern: 'export LUX_VERSION=v\d+\.\d+\.\d+'
     - file: SECURITY.md
       pattern: 'TAG=v\d+\.\d+\.\d+'
+    - file: compose.yaml
+      pattern: '(?s)lux-stubs:\$\{LUX_VERSION:-v\d+\.\d+\.\d+\}.*?/lux:\$\{LUX_VERSION:-v\d+\.\d+\.\d+\}'
 
 cover:
   trim_prefix: latere.ai/x/lux/

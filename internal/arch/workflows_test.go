@@ -470,8 +470,108 @@ func TestGatewayImageIsLux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(compose), "/lux:${LUX_VERSION:-latest}") {
+	if !strings.Contains(string(compose), "/lux:${LUX_VERSION:-") {
 		t.Error("compose.yaml does not run the gateway image as <owner>/lux")
+	}
+}
+
+// composeImage matches an image of compose.yaml and captures the
+// repository and the tag it falls back to when LUX_VERSION is unset.
+var composeImage = regexp.MustCompile(`ghcr\.io/\$\{LUX_OWNER:-[^}]+\}/(lux|lux-stubs):\$\{LUX_VERSION:-([^}]*)\}`)
+
+// releaseVersion is a release tag, the only tag a release publishes an
+// image under, and what a release stamp moves.
+var releaseVersion = regexp.MustCompile(`v\d+\.\d+\.\d+`)
+
+// composeDefaults maps each image of compose.yaml to its default tag.
+func composeDefaults(compose []byte) map[string]string {
+	tags := map[string]string{}
+	for _, m := range composeImage.FindAllSubmatch(compose, -1) {
+		tags[string(m[1])] = string(m[2])
+	}
+	return tags
+}
+
+// TestComposeDefaultsToARelease: a release publishes both images under its
+// vX.Y.Z tag and never under `latest`, so `docker compose up` with no
+// variable set pulls only when both images default to a release tag. The
+// default is the release the quick start names, and a stamp of
+// .lateregate.yaml moves both at the cut, so it never lags the newest tag.
+func TestComposeDefaultsToARelease(t *testing.T) {
+	dir := root(t)
+	compose, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := composeDefaults(compose)
+	for _, repo := range []string{"lux", "lux-stubs"} {
+		tag, ok := tags[repo]
+		if !ok {
+			t.Errorf("compose.yaml runs no %s image with a LUX_VERSION default", repo)
+			continue
+		}
+		if tag == "" || releaseVersion.FindString(tag) != tag {
+			t.Errorf("compose.yaml defaults the %s image to %q, a tag no release publishes; want a vX.Y.Z release tag", repo, tag)
+		}
+	}
+	if tags["lux"] != tags["lux-stubs"] {
+		t.Errorf("compose.yaml defaults lux to %q and lux-stubs to %q; a release publishes both under one tag", tags["lux"], tags["lux-stubs"])
+	}
+
+	quickstart, err := os.ReadFile(filepath.Join(dir, "docs", "quickstart.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := regexp.MustCompile(`export LUX_VERSION=(v\d+\.\d+\.\d+)`).FindSubmatch(quickstart); m == nil || string(m[1]) != tags["lux"] {
+		t.Errorf("compose.yaml defaults to %q, not the release docs/quickstart.md names", tags["lux"])
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".lateregate.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Release struct {
+			Stamp []struct {
+				File    string `yaml:"file"`
+				Pattern string `yaml:"pattern"`
+			} `yaml:"stamp"`
+		} `yaml:"release"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	// Apply the stamps the way `lateregate release` does: each entry must
+	// match its file once, the versions inside the match move, and each
+	// entry rewrites the file as read, not as an earlier entry left it, so
+	// the last entry naming a file is the one that lands.
+	const cut = "v999.0.0"
+	stamped := compose
+	for _, s := range cfg.Release.Stamp {
+		if s.File != "compose.yaml" {
+			continue
+		}
+		re, err := regexp.Compile(s.Pattern)
+		if err != nil {
+			t.Fatalf(".lateregate.yaml stamps compose.yaml with %q: %v", s.Pattern, err)
+		}
+		locs := re.FindAllIndex(compose, -1)
+		if len(locs) != 1 {
+			t.Fatalf(".lateregate.yaml stamps compose.yaml with %q, which matches %d times; the cut refuses anything but one", s.Pattern, len(locs))
+		}
+		lo, hi := locs[0][0], locs[0][1]
+		stamped = slices.Concat(compose[:lo], releaseVersion.ReplaceAll(compose[lo:hi], []byte(cut)), compose[hi:])
+	}
+	moved := true
+	for repo, tag := range composeDefaults(stamped) {
+		if tag != cut {
+			moved = false
+			t.Errorf("a release cut leaves compose.yaml's %s image at %q; .lateregate.yaml's release.stamp must move it", repo, tag)
+		}
+	}
+	want := bytes.ReplaceAll(compose, []byte("${LUX_VERSION:-"+tags["lux"]+"}"), []byte("${LUX_VERSION:-"+cut+"}"))
+	if moved && !bytes.Equal(stamped, want) {
+		t.Error("a release cut rewrites more of compose.yaml than its two image defaults")
 	}
 }
 
