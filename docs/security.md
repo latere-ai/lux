@@ -1,9 +1,10 @@
 # Security
 
 What you do to run `luxd` safely, and what it does for you without your
-help. The full threat model, for contributors, is
-[`specs/016-security-and-threat-model.md`](../specs/016-security-and-threat-model.md).
-To report a vulnerability, see [`SECURITY.md`](../SECURITY.md).
+help. The full [threat model](../specs/016-security-and-threat-model.md),
+one row per threat with the mechanism and the test that answers it, is
+written for contributors. To report a vulnerability, see
+[`SECURITY.md`](../SECURITY.md).
 
 ## What the gateway protects
 
@@ -83,10 +84,11 @@ what a leak can cost before you notice.
 
 ### Verify released artifacts
 
-Every release is signed. Verify the image and the archives before you run
-them, with `cosign verify`, `cosign verify-blob`, and `gh attestation
-verify` against the build provenance, as [`SECURITY.md`](../SECURITY.md)
-and [`install.md`](install.md) describe.
+Every release is signed by the release workflow's own identity. Verify
+the image and the archives before you run them, with `cosign verify`,
+`cosign verify-blob`, and `gh attestation verify` against the build
+provenance; [`SECURITY.md`](../SECURITY.md#verifying-a-release) has the
+commands.
 
 ## Reporting a vulnerability
 

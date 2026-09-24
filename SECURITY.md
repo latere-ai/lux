@@ -7,8 +7,8 @@ vulnerability. You will hear back within three business days, and a fix
 for a high severity issue ships within thirty days. Credit in the
 release notes on request.
 
-Fixes go to the two most recent minor release series. There is no
-release yet; the first one is `v0.1.0`.
+Fixes go to the two most recent minor release series. The
+[releases page](https://github.com/latere-ai/lux/releases) lists them.
 
 ## What the design commits to
 
@@ -36,15 +36,42 @@ unless it says which spec owes that test.
 - An installation with no authorizer and no listed administrator
   declares no upstream, so a fresh one holds no credential to take.
 
-Not every property is proven yet. The State column of the threat table
-says which rows the tree carries and which wait on the spec that owns
-them, and the properties above are each a row there.
+Each property above is a row of the threat table, which names the test
+that proves it.
 
 ## The supply chain
 
 Dependencies are checked for known vulnerabilities on every push, and a
-new one is a reviewed row in the gate's allow list. A release will carry
-an SPDX bill of materials for the module graph and one per image, cosign
-signatures over the images and the checksums, and a build provenance
-attestation per image, so `gh attestation verify` answers for the image
-you are about to run.
+new one is a reviewed row in the gate's allow list. Every release
+carries an SPDX bill of materials for the module graph and one per
+image (`sbom-module.spdx.json`, `sbom-luxd.spdx.json`,
+`sbom-lux-stubs.spdx.json`), cosign signatures over both images and over
+`checksums.txt`, and an SBOM attestation and a build provenance
+attestation per image. Nothing is signed with a key anyone holds: the
+signer is the release workflow's own identity.
+
+## Verifying a release
+
+Set the tag you are about to run and the account that published it, then
+check the archives and the image. The same checks run in the release
+workflow before a release is published.
+
+```sh
+TAG=v0.7.0
+OWNER=latere-ai   # a fork's release: the fork's owner
+IDENTITY="https://github.com/$OWNER/lux/.github/workflows/release.yml@refs/tags/$TAG"
+ISSUER=https://token.actions.githubusercontent.com
+
+# The archives: checksums.txt is signed, and lists every archive's SHA-256.
+gh release download "$TAG" -R "$OWNER/lux" -p 'checksums.txt*' -p '*.tar.gz'
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" checksums.txt
+sha256sum -c checksums.txt
+
+# The images: the signature, then the provenance and SBOM attestations.
+cosign verify --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" \
+  "ghcr.io/$OWNER/lux:$TAG"
+gh attestation verify "oci://ghcr.io/$OWNER/lux:$TAG" --repo "$OWNER/lux"
+```
+
+`lux-stubs` verifies the same way under its own image name.
