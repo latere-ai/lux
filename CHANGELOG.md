@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.7.0 - 2026-09-24
+
 - Exported names spell in American English: `gateway.ErrTunnelled` is now
   `gateway.ErrTunneled`, and the provider stub's `Behaviour`, `Behaviours` and
   `ParseBehaviour` are `Behavior`, `Behaviors` and `ParseBehavior`. Code that
