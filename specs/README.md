@@ -89,7 +89,7 @@ later.
 | [034](.archive/034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | complete | 006, 011, 017, 018 |
 | [035](.archive/035-running-the-core-on-your-own.md) | Running the core on your own: a local issuer, bootstrap manifests, and the example catalog | large | complete | 003, 006, 010, 011, 014, 017 |
 | [036](.archive/036-catalog-in-memory.md) | The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage | medium | complete | 004, 005, 007, 009, 010, 012, 019 |
-| [037](037-several-budgets-per-key.md) | Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart | large | in-progress | 003, 006, 007, 009, 010, 011, 018 |
+| [037](.archive/037-several-budgets-per-key.md) | Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart | large | complete | 003, 006, 007, 009, 010, 011, 018 |
 
 ## Dependency graph
 

@@ -238,7 +238,7 @@ peer's, or the forwarded one behind a proxy listed in
 | `model.read`, `.update`, `.delete` | `{"kind": "Model", "id", "name", "owner", "source", "labels"}` |
 | `model.list` | `{"kind": "Model"}`; `filter` applies |
 | `model.use` | `{"kind": "Model", "selector": "anthropic/*", "matched": [{"id", "name", "owner", "labels"}]}`; asked once per selector at Key resolve through `Lookup.Models` ([[003-manifest-contract]]); the decision binds the selector, and the data plane matches it at request time against the catalog then |
-| `key.create` | `{"kind": "Key", "name", "labels", "models", "budget", "budgets"}`, `budgets` the list as written, empty when the Key names one or none ([[037-several-budgets-per-key]]) |
+| `key.create` | `{"kind": "Key", "name", "labels", "models", "budget", "budgets"}`, `budgets` the list as written, empty when the Key names one or none ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)) |
 | `key.read`, `.update`, `.delete` | `{"kind": "Key", "id", "name", "owner", "prefix", "labels"}` |
 | `key.list` | `{"kind": "Key"}`; `filter` applies |
 | `key.fence` | `{"kind": "KeyFence", "id": "<name>", "name", "owner", "labels"}`; requested assertion, verified transactionally by the store after authorization |

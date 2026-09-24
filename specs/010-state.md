@@ -473,7 +473,7 @@ Indexes, one per query shape:
 | `objects (kind, owner) where deleted_at is null` | the owner-filtered list |
 | GIN on `objects (providers) where deleted_at is null` | `Filter.Provider`: discovery's sweep over one Provider's Models, `provider_in_use`, and `?provider=` |
 | `objects (kind, source) where deleted_at is null` | `?source=` |
-| `objects ((status->'budget'->>'id')) where kind = 'Key' and deleted_at is null`, and GIN on `objects ((status->'budgets') jsonb_path_ops)` under the same predicate | `Filter.Budget`: a Budget's `status.keys` and `budget_in_use` ([[037-several-budgets-per-key]]) |
+| `objects ((status->'budget'->>'id')) where kind = 'Key' and deleted_at is null`, and GIN on `objects ((status->'budgets') jsonb_path_ops)` under the same predicate | `Filter.Budget`: a Budget's `status.keys` and `budget_in_use` ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)) |
 | GIN on `objects (labels)` | the label selector |
 | `objects (deleted_at) where deleted_at is not null` | `Prune` |
 | `key_hashes (hash)` | the primary key, which is the hot path's one lookup |

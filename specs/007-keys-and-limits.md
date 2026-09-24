@@ -446,7 +446,7 @@ adds to none of these.
 
 At stage 7, for each of the Key's spend window and every Budget it
 draws from, one in `spec.budget` or up to four in `spec.budgets`
-([[037-several-budgets-per-key]]), any one of which refuses the request:
+([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)), any one of which refuses the request:
 
 ```
 known     = the store's counter as of the last flush
@@ -464,7 +464,7 @@ a Budget that is gone, which `budget_in_use` forbids and a delete in
 flight can leave for a moment, is drawn from by no Key. When several
 Budgets refuse at once, the detail names each, each announces its own
 exhaustion, and `Retry-After` is the latest reset among them, absent
-when one never resets ([[037-several-budgets-per-key]]). The bound this
+when one never resets ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)). The bound this
 gives, stated once here and once in the metering spec in the same
 symbols: with `R` replicas, a flush interval `F` in seconds, `T`
 requests per second per replica against the counter, and `C` the
@@ -538,10 +538,10 @@ once, at the Key's resolve ([[006-identity]]); after that the draw is
 arithmetic. Its `status` is rendered at read time like a Key's, by
 `serve.RenderBudget`: `status.keys` counts the live Keys that draw on
 it now, through `status.budget` or `status.budgets`, read through the
-store's Budget filter rather than every Key ([[037-several-budgets-per-key]]); `status.spent` is the
+store's Budget filter rather than every Key ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)); `status.spent` is the
 current window's counter as a money string, the window aligned to
 `spec.anchor` and started at `spec.restartedAt` when that lies inside
-it ([[037-several-budgets-per-key]]), `status.remaining` is
+it ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)), `status.remaining` is
 `amount` less that, floored at zero, and `status.resetsAt` is the
 window's reset, or absent for `none`; `status.state` is `Exhausted`
 while `spent` is at or over `amount` and `Open` otherwise. Deleting a

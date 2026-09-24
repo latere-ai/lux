@@ -190,7 +190,11 @@ func TestEveryCriterionHasACase(t *testing.T) {
 			t.Errorf("%s is not case<NNN><Name>", tc.name)
 			continue
 		}
-		if matches, _ := filepath.Glob(filepath.Join(specs, m[1]+"-*.md")); len(matches) != 1 {
+		// A spec keeps its number when it is archived, so a case names a
+		// live spec or an archived one.
+		live, _ := filepath.Glob(filepath.Join(specs, m[1]+"-*.md"))
+		archived, _ := filepath.Glob(filepath.Join(specs, ".archive", m[1]+"-*.md"))
+		if len(live)+len(archived) != 1 {
 			t.Errorf("%s names spec %s, which is not in the deck", tc.name, m[1])
 		}
 		if itoa(tc.spec) != strings.TrimLeft(m[1], "0") {

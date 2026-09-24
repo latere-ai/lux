@@ -93,7 +93,7 @@ sink can key on it without parsing `data`.
 | `model.created`, `.updated`, `.deleted` | the API applied or deleted a declared `Model`; `.updated` also when discovery changed a discovered Model's shape, with reason `discovery` ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)) | the changed paths on an update; `{targets, priced}` on a create |
 | `model.discovered` | discovery declared a Model that did not exist | `{provider, upstreamModel}` |
 | `model.removed` | discovery deleted a discovered Model the upstream dropped | `{provider, upstreamModel}` |
-| `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, budgets, expiresAt}`, `budgets` present when the Key lists them ([[037-several-budgets-per-key]]); `prefix` is the minted `lux_` prefix or a supplied value's `sup_` handle ([[007-keys-and-limits]]) |
+| `key.created` | a `Key` was applied for the first time | `{prefix, models, budget, budgets, expiresAt}`, `budgets` present when the Key lists them ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)); `prefix` is the minted `lux_` prefix or a supplied value's `sup_` handle ([[007-keys-and-limits]]) |
 | `key.updated` | a `Key`'s spec changed | the changed paths |
 | `key.fenced` | `POST /v1/keys/{name}/fence`, first installation only | `{}`; object kind `KeyFence`, id `key-fence/<name>`, asserted owner and labels |
 | `key.rotated` | `POST /v1/keys/{id}/rotate` | `{prefix, previousPrefix}` |

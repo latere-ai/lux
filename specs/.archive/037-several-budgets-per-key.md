@@ -1,6 +1,6 @@
 ---
 title: "Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart"
-status: in-progress
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -188,3 +188,40 @@ A Key's own spend window is unchanged.
 | 7 | A Budget raised inside a window and exhausted again announces a second time | `internal/serve` Limiter test |
 | 8 | `RenderBudget` and `budget_in_use` read the Keys of one Budget through the filter, on every store, both forms of reference counted | `internal/store/storetest` case for `Filter.Budget`; `internal/serve` render test over a counting store; Postgres tier |
 | 9 | The manifest tables of [[003-manifest-contract]], the rules of [[007-keys-and-limits]], and the counter keys of [[009-usage-and-metering]] carry the new fields and keys, and the API reference and the `lux` command show `budgets` | spec-lint and the docs freshness checks; `internal/luxcli` test |
+
+## Outcome
+
+Built and verified on 2026-09-24, with recommendation A of each choice:
+`spec.budget` kept as the one-Budget form beside `spec.budgets`, and the
+restart a field.
+
+| # | Test |
+|---|---|
+| 1 | the corpus entries `accepted/key/org-member`, `refused/exclusive_fields/key-budget-and-budgets`, `refused/invalid_field/key-budgets-duplicate` and `key-budgets-five`; `TestKeyListsBudgets`, `internal/api` |
+| 2 | `TestLookupBudgetsAskEachEntry`, `internal/auth` |
+| 3 | `TestSeveralBudgets`, `TestSeveralBudgetsRetryAfter`, `internal/serve`; `case037SeveralBudgets` |
+| 4 | `TestSeveralBudgetsRetryAfter` |
+| 5 | `TestAnchoredBounds`, `manifest/v1`; `TestBudgetWindow`, `metering`; `TestAnchoredBudget`, `internal/serve`; `refused/invalid_field/budget-anchor-under-none`; the immutable anchor in `TestKeyListsBudgets`; `case037AnchoredWindow` |
+| 6 | `TestBudgetRestart`, `internal/serve`; `TestBudgetWindow`; `case037Restart` |
+| 7 | `TestBudgetAmountRaisedRearms` |
+| 8 | `TestFilterByBudget` in the store suite, memory and Postgres; `TestPostgresQueriesUseIndexes` over a table seeded with Keys in both forms; `status.keys` and `budget_in_use` through the API in `TestKeyListsBudgets` |
+| 9 | this change's edits to specs 003, 006, 007, 009, 010, and 012; `api/openapi.yaml` regenerated; `TestFlagFormsBuildTheManifest` and `TestCLIDocIsCurrent`, `internal/luxcli` |
+
+Notes on the build:
+
+- The example plane (`examples/plane`) draws on every listed Budget and
+  renders anchored and restarted windows too, since it runs the same
+  conformance suite as the core.
+- The exhaustion marker of a Key's own spend limit carries the amount
+  as well, by the same function as a Budget's, so a raised spend limit
+  re-arms it too. A window that announced before the upgrade announces
+  once more after it, which the changelog says.
+- Postgres plans the Budget filter through the two partial indexes when
+  the list is read whole, as `RenderBudget` and `budget_in_use` read it;
+  a limited page over few Keys may scan the name index instead, which
+  costs nothing at that size.
+- The refusal's detail, which names every refusing Budget, is on the
+  error the doors log and record; the doors' envelope carries the fixed
+  message, so the conformance cases hold `Retry-After` and the Budgets'
+  status instead.
+
