@@ -13,8 +13,9 @@ You need Docker or Podman with Compose, `curl`, and
 
 Every release publishes both images under the tag it was cut at, and the
 [releases page](https://github.com/latere-ai/lux/releases) lists them. No
-`latest` tag is published, so name the release you want; the line below
-names the newest:
+`latest` tag is published, so `compose.yaml` runs the newest release unless
+`LUX_VERSION` names another. The line below names the newest; change it to
+run an older one:
 
 ```sh
 export LUX_VERSION=v0.7.0
