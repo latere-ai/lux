@@ -5,15 +5,15 @@
 # the published stub image, wired the way `make run` wires the two
 # binaries. `docker compose up`, then the curls in docs/quickstart.md.
 #
-# The images are published by the release pipeline of spec 017, under the
-# repository owner's namespace (a fork publishes under the fork's), so the
-# reference derives from ${LUX_OWNER}, defaulting to the maintainer's.
-# Until the first tag is cut they do not exist in the registry yet; build
-# them from a checkout first, as docs/quickstart.md shows, and this file
-# runs them unchanged.
+# Every release publishes both images under the repository owner's
+# namespace (a fork publishes under the fork's), so the reference derives
+# from ${LUX_OWNER}, defaulting to the maintainer's. Only release tags are
+# published, never `latest`, so set LUX_VERSION to one, such as the newest
+# on the releases page, or to the tag of images you built from a checkout
+# as docs/quickstart.md shows.
 
 services:
-  # Every stub of spec 015 from one image: a provider per dialect, the
+  # Every test stub from one image: a provider per dialect, the
   # OpenID Connect issuer, the authorizer, and the event sink. Each binds
   # 0.0.0.0 (the binary defaults to loopback, which no other container
   # could reach) so luxd dials them by this service's name over the
@@ -51,9 +51,9 @@ services:
     restart: on-failure
     environment:
       # The address callers reach the public door at, from the host. Its
-      # host must differ from every Provider's baseURL host, or the loop
-      # check of spec 003 refuses the Provider; the stubs are "lux-stubs",
-      # this is "localhost".
+      # host must differ from every Provider's baseURL host, or the gateway
+      # refuses the Provider as a loop back to itself; the stubs are
+      # "lux-stubs", this is "localhost".
       LUX_PUBLIC_URL: "http://localhost:8080"
       # The memory store: no LUX_DB_URL, so nothing survives `down`.
       # A throwaway key encryption key. Generate your own for anything

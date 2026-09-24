@@ -1,30 +1,42 @@
 # Quick start
 
 `docker compose up` and a handful of `curl`s: the published `luxd` image
-and the published stub image of the
-[test stubs spec](../specs/015-test-stubs-and-tiers.md), no checkout and
-no build. It is `make run` without the toolchain — the memory store, the
-stub issuer, and a stub provider per dialect — so nothing here outlives
+and the published image of the test stubs, with no checkout and no build.
+It is `make run` without the toolchain: the memory store, a stub issuer,
+and a stub provider per dialect, so nothing here outlives
 `docker compose down`. For a real cluster, read [`install.md`](install.md).
 
-The images are published by the release pipeline of the
-[release and installation spec](../specs/.archive/017-release-and-installation.md),
-and no tag has been cut yet. **Until the first release the images do not
-exist in the registry**, so build them from a checkout first;
-[`compose.yaml`](../compose.yaml) then runs them unchanged, tagged
-`latest`:
+You need Docker or Podman with Compose, `curl`, and
+[`compose.yaml`](../compose.yaml), which you can download on its own.
+
+## Pick a release
+
+Every release publishes both images under the tag it was cut at, and the
+[releases page](https://github.com/latere-ai/lux/releases) lists them. No
+`latest` tag is published, so name the release you want; the line below
+names the newest:
 
 ```sh
+export LUX_VERSION=v0.7.0
+```
+
+`LUX_OWNER` selects the registry namespace, `latere-ai` unless you run
+images a fork published under its own.
+
+To run a build of your own instead, build both images from a checkout
+under a tag no release uses, so a local image never shadows a published
+one:
+
+```sh
+export LUX_VERSION=local
 tools/release/build.sh v0.0.0-local dist
-docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.release -t "ghcr.io/${LUX_OWNER:-latere-ai}/lux:${LUX_VERSION:-latest}" .
-docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.stubs -t "ghcr.io/${LUX_OWNER:-latere-ai}/lux-stubs:${LUX_VERSION:-latest}" .
+docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.release -t "ghcr.io/${LUX_OWNER:-latere-ai}/lux:$LUX_VERSION" .
+docker build --build-arg TARGETARCH="$(go env GOARCH)" -f Dockerfile.stubs -t "ghcr.io/${LUX_OWNER:-latere-ai}/lux-stubs:$LUX_VERSION" .
 ```
 
 `build.sh` writes the Linux binaries under `dist/`, the same bytes the
 release archives carry, and each `docker build` copies one into the
-distroless runtime stage. Once a release is cut, skip this step and set
-`LUX_VERSION` to the tag you want (`latest` by default); `LUX_OWNER`
-selects the namespace, the maintainer's unless a fork published its own.
+distroless runtime stage.
 
 ## Run it
 
@@ -133,8 +145,8 @@ curl -sS "$LUX_URL/openai/v1/chat/completions" -H "Authorization: Bearer $LUX_KE
   -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-`GET /v1/requests` shows the record that request produced — the key, the
-model, the provider, the tokens, the cost, and never the content:
+`GET /v1/requests` shows the record that request produced, with the key,
+the model, the provider, the tokens, the cost, and never the content:
 
 ```sh
 curl -fsS "$LUX_URL/v1/requests" -H "Authorization: Bearer $LUX_TOKEN"
@@ -155,10 +167,9 @@ docker compose down
 - Permission is the built-in owner policy: `LUX_ADMIN_SUBJECTS` names the
   subject `http://lux-stubs:9105|dev` a stub token renders to. `luxd`
   accepts an authorizer only over `https://` or on loopback, so a compose
-  peer cannot serve one; a cluster wires `LUX_AUTHORIZER_URL` instead, as
-  [`install.md`](install.md) shows.
+  peer cannot serve one. On a cluster, `LUX_AUTHORIZER_URL` points at an
+  endpoint you write, as the end of [`install.md`](install.md) says.
 - A Provider's `baseURL` names a private compose address, so
   `LUX_UPSTREAM_ALLOW_PRIVATE=1` admits it, and `LUX_PUBLIC_URL`'s host
-  differs from it, or the loop check of the
-  [manifest contract spec](../specs/003-manifest-contract.md) would refuse
-  the Provider.
+  differs from it, or the gateway would refuse the Provider as a loop back
+  to itself.

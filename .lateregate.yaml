@@ -2,6 +2,17 @@
 # latere.ai/x/ci-gate, pinned in go.mod; only repository-specific values are
 # here.
 
+# The files that name the release. `lateregate release` rewrites each
+# pattern's version to the tag it cuts, in the same commit as the changelog,
+# so the image tag of the quick start and the release SECURITY.md verifies
+# never lag the newest release.
+release:
+  stamp:
+    - file: docs/quickstart.md
+      pattern: 'export LUX_VERSION=v\d+\.\d+\.\d+'
+    - file: SECURITY.md
+      pattern: 'TAG=v\d+\.\d+\.\d+'
+
 cover:
   trim_prefix: latere.ai/x/lux/
   exempt:
