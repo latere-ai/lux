@@ -45,9 +45,13 @@ reasoning attached.
 linter, modernization, known vulnerabilities, the suite with and without
 the race detector, per-package coverage at 90% or more, the suite with
 only the toolchain on `PATH`, the suite against an empty temporary
-directory, the license notice, the dependency allow list, and the spec
-tree. `go tool lateregate list` names the gates and
-`go tool lateregate <name>` runs one.
+directory, the license notice, the dependency allow list, the spec tree,
+no cgo, a tracing transport on every outbound HTTP client, the identity
+conventions the open cores share, and the Postgres connection rules.
+`go tool lateregate list` names the gates and `go tool lateregate <name>`
+runs one. `make test-postgres` runs the store's suite against the
+Postgres that `LUX_DB_URL` names, which the gate does not start; run it
+before a change to the Postgres store.
 
 A bug fix carries a test that fails without it. A change that lowers a
 threshold or adds a waiver records the reason in `.lateregate.yaml`, so
