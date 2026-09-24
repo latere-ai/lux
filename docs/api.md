@@ -118,20 +118,12 @@ that version, and a stale one is `conflict`, 409. Without a precondition a
 `PUT` is a read-modify-write that retries a concurrent change for you;
 `If-None-Match: *` creates only when the name is free.
 
-## The full reference
+## What an authorizer is asked
 
-The authoritative, machine-readable reference is the OpenAPI document. It
-is committed at [`api/openapi.yaml`](../api/openapi.yaml) and served live,
-generated from the code, at `GET /v1/openapi.json`:
-
-```sh
-curl -s "$LUX_URL/v1/openapi.json" | less
-```
-
-Open either in an OpenAPI viewer (Swagger UI, Redoc, or an editor plugin)
-for the full schema of every kind, every route, and every error code.
-`GET /.well-known/lux` names the served document's URL, so a client finds
-it before it holds a token.
+With `LUX_AUTHORIZER_URL` set, every `/v1` request is one or more
+decisions your endpoint answers; [`plane.md`](plane.md) has a minimal
+endpoint and the rules it keeps. A mutation carries what it would write,
+so a policy can decide on the result rather than on the route.
 
 Reference decisions during apply (`provider.read`, `model.use`, `budget.draw`)
 include `resource.binding: {kind, proposed}` for the enclosing mutation. This is
@@ -156,3 +148,18 @@ but does not require model/budget reference access or satisfy new issuance
 ceilings. This lets a controller disable expired Keys or Keys whose references
 were removed. Read the current Key, keep its metadata and spec, set `disabled`,
 and PUT with that read's ETag. Stored budget identity and expiry remain unchanged.
+
+## The full reference
+
+The authoritative, machine-readable reference is the OpenAPI document. It
+is committed at [`api/openapi.yaml`](../api/openapi.yaml) and served live,
+generated from the code, at `GET /v1/openapi.json`:
+
+```sh
+curl -s "$LUX_URL/v1/openapi.json" | less
+```
+
+Open either in an OpenAPI viewer (Swagger UI, Redoc, or an editor plugin)
+for the full schema of every kind, every route, and every error code.
+`GET /.well-known/lux` names the served document's URL, so a client finds
+it before it holds a token.
