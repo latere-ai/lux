@@ -17,6 +17,7 @@ Run `luxd` on its own, or import its Go packages and drive them from
 your own control plane instead of forking it.
 
 [![CI](https://github.com/latere-ai/lux/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/lux/actions/workflows/verify.yml)
+[![Release](https://img.shields.io/github/v/release/latere-ai/lux)](https://github.com/latere-ai/lux/releases)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange.svg)](#project-status)
@@ -68,7 +69,7 @@ limits, expiry, and budget.
   so a spend window is a limit rather than a monthly surprise.
 
 A small deployment as a manifest: a model that fails over between two
-regions, a monthly budget, and a key an agent holds.
+provider accounts, a monthly budget, and a key an agent holds.
 
 ```yaml
 apiVersion: lux.latere.ai/v1beta1
@@ -77,7 +78,15 @@ metadata:
   name: anthropic
 spec:
   dialect: anthropic
-  baseURL: https://api.anthropic.com
+  baseURL: https://api.anthropic.com/v1
+---
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic-backup
+spec:
+  dialect: anthropic
+  baseURL: https://api.anthropic.com/v1
 ---
 apiVersion: lux.latere.ai/v1beta1
 kind: Model
@@ -86,7 +95,7 @@ metadata:
 spec:
   targets:
     - { provider: anthropic, model: claude-sonnet-4-5, weight: 100 }
-    - { provider: anthropic-eu, model: claude-sonnet-4-5, weight: 0, priority: 1 }
+    - { provider: anthropic-backup, model: claude-sonnet-4-5, weight: 100, priority: 1 }
   fallback: onError
   pricing: { input: "3", output: "15" }   # per million tokens, USD
 ---
@@ -110,10 +119,13 @@ spec:
 ```
 
 Apply it with the `lux` command, then call the gateway with the SDK you
-already use.
+already use. A credential never goes in a file: `-credential-from-env`
+sends each Provider's key from a variable.
 
 ```sh
-lux apply -f anthropic.yaml --credential-from-env ANTHROPIC_API_KEY
+lux apply -f providers.yaml \
+  -credential-from-env anthropic=ANTHROPIC_API_KEY \
+  -credential-from-env anthropic-backup=ANTHROPIC_BACKUP_API_KEY
 lux apply -f models.yaml -f budget.yaml
 lux apply -f research-agent.yaml          # prints the key value once
 
@@ -127,10 +139,13 @@ curl https://lux.example.com/anthropic/v1/messages \
 
 ## Try it
 
-From a checkout, `make run` builds `luxd` and a set of stubs, starts them
-on loopback with all state in memory, applies the manifest above, and
-prints `LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The key
-opens any door in the dialect that door's SDK speaks:
+From a checkout, with Go 1.27 or newer, `make run` builds `luxd` and the
+test stubs: a fake provider per dialect, an OpenID Connect issuer, an
+authorizer, and an event sink. It starts them on loopback with all state
+in memory, applies one Provider and one Model per dialect from
+[`deploy/examples`](deploy/examples), a Budget, and a Key, and prints
+`LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The Key opens
+any door in the dialect that door's SDK speaks:
 
 ```sh
 curl -sS "$LUX_URL/openai/v1/chat/completions" \
@@ -138,15 +153,16 @@ curl -sS "$LUX_URL/openai/v1/chat/completions" \
   -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Without a checkout, [`compose.yaml`](compose.yaml) runs the published
-`luxd` and stub images the same way: `docker compose up`, then the
-requests in [the quick start](docs/quickstart.md) to mint a token,
-declare a provider, a model, and a key, and open a door. The images are
-cut by the release pipeline at every tag.
+`make run-down` stops it. `make run-file` runs the same stack with the
+manifests read from a directory instead of applied through the API.
 
-`make` runs the quality gate and `make run-down` stops the stack. To
-run a build against a real provider with no issuer, or install a release
-on a cluster, see [Install](docs/install.md).
+Without a checkout, [`compose.yaml`](compose.yaml) runs the published
+`luxd` and stub images the same way. [The quick start](docs/quickstart.md)
+starts it for a release tag, mints a token, declares a Provider, a Model,
+and a Key, and sends a request through a door.
+
+To run a build against a real provider with no issuer, or install a
+release on a cluster, see [Install](docs/install.md).
 
 ## What you get
 
@@ -158,7 +174,9 @@ on a cluster, see [Install](docs/install.md).
   before the first byte, and a per-provider health probe that takes a
   target out of rotation.
 - Keys with model selectors, per-minute request and token limits, an
-  expiry, and a value shown once; budgets several keys draw from.
+  expiry, and a value shown once; budgets several keys draw from, with
+  windows anchored where you choose, and up to four budgets on one key
+  that a call must fit together.
 - Streaming in every dialect, translated as it arrives rather than
   buffered.
 - Usage records and per-key, per-model, per-target metering, costed from
@@ -193,6 +211,9 @@ For running Lux and building on it:
 | [Install](docs/install.md) | from a checkout to a first completion on your machine, and from an empty cluster to a request through a door |
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
 | [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |
+| [API](docs/api.md) | the `/v1` control plane, the dialect doors, authentication, errors, and the OpenAPI document |
+| [Security](docs/security.md) | what the gateway protects, what you must do to run it safely, and how to verify a release |
+| [Observability](docs/observability.md) | probes, metrics, alerts, logs, and traces |
 | [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |
 | [Performance](docs/performance.md) | what the gateway's own overhead costs per request, and how to measure it |
 | [All documentation](docs/README.md) | the full index for operators and platform builders |
@@ -208,21 +229,24 @@ is how to report a vulnerability.
 
 ## Project status
 
-Pre-release, built in the open. The current release is `v0.6.0`, of
-2026-09-23; the [CHANGELOG](CHANGELOG.md) has one section per release.
+Pre-release, built in the open. The
+[releases page](https://github.com/latere-ai/lux/releases) lists every
+version, and the [CHANGELOG](CHANGELOG.md) has one section per release.
 Every capability above is implemented and covered by tests, and `main`
 passes the full quality gate on every commit.
 
-Each release publishes the `lux` and `lux-stubs` images and the `lux`
-command's binaries under the namespace of the repository owner that ran
-the release workflow, so a fork publishes under its own: images at
-`ghcr.io/<owner>/lux`, signed with cosign, each with a bill of materials
-and a provenance attestation, and the binaries with their checksums on
-the release page. [`SECURITY.md`](SECURITY.md) says how to verify one.
+Each release publishes the `lux` and `lux-stubs` images, the `luxd` and
+`lux` binaries for Linux and macOS, and the deploy manifests, under the
+namespace of the repository owner that ran the release workflow, so a
+fork publishes under its own. The images are `ghcr.io/<owner>/lux:<tag>`
+and `ghcr.io/<owner>/lux-stubs:<tag>`, signed with cosign, each with a
+bill of materials and a provenance attestation; the archives are listed
+in a signed `checksums.txt`. [`SECURITY.md`](SECURITY.md) says how to
+verify them.
 
 Until `v1.0.0` the manifest schema may still change: a minor release may
-break a row of the version table, and its CHANGELOG entry names the
-break. [`docs/install.md`](docs/install.md) is walked by CI on every
+break a row of the [version table](docs/upgrades/README.md#what-a-version-number-promises),
+and its CHANGELOG entry names the break. [`docs/install.md`](docs/install.md) is walked by CI on every
 push, from a checkout and against a cluster.
 
 ## License
