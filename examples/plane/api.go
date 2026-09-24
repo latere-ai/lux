@@ -777,8 +777,13 @@ func (c *call) fillStatus(obj, existing v1.Object, refs *lookup) (string, *apiEr
 // write one row. The value leaves the object here and returns on the
 // create response alone.
 func (c *call) fillKey(k *v1.Key, existing v1.Object, refs *lookup) (string, *apiError) {
-	if k.Spec.Budget != "" && refs.budget != nil {
-		k.Status.Budget = &v1.BudgetRef{Name: refs.budget.Metadata.Name, ID: refs.budget.Status.ID}
+	if b := refs.budgets[k.Spec.Budget]; k.Spec.Budget != "" && b != nil {
+		k.Status.Budget = &v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID}
+	}
+	for _, ref := range k.Spec.Budgets {
+		if b := refs.budgets[ref]; b != nil {
+			k.Status.Budgets = append(k.Status.Budgets, v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID})
+		}
 	}
 	if old, ok := existing.(*v1.Key); ok {
 		k.Status.Prefix = old.Status.Prefix
@@ -928,7 +933,7 @@ func (c *call) inUse(obj v1.Object) *apiError {
 	switch x := obj.(type) {
 	case *v1.Budget:
 		for _, o := range c.p.store.list(v1.KindKey) {
-			if k, ok := o.(*v1.Key); ok && k.Status.Budget != nil && k.Status.Budget.ID == x.Status.ID {
+			if k, ok := o.(*v1.Key); ok && slices.ContainsFunc(v1.KeyBudgets(k), func(r v1.BudgetRef) bool { return r.ID == x.Status.ID }) {
 				return refuse(codeBudgetInUse, "Key "+k.Status.ID+" draws from Budget "+x.Status.ID)
 			}
 		}

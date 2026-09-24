@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,7 @@ type budgetSource interface {
 // LimiterOptions is what the Limiter runs under.
 type LimiterOptions struct {
 	Store store.Store
-	// Budgets answers the Budget a Key draws from; nil reads the store
+	// Budgets answers the Budgets a Key draws from; nil reads the store
 	// on every request, which a test may want and a replica does not.
 	Budgets budgetSource
 	// Defaults are LUX_DEFAULT_REQUESTS_PER_MINUTE and
@@ -170,16 +171,35 @@ func spendLimit(k *v1.Key) *v1.Spend {
 	return nil
 }
 
-// budgetOf is the Budget the Key draws from, nil when it names none or
-// the Budget is gone.
-func (l *Limiter) budgetOf(ctx context.Context, k *v1.Key) (*v1.Budget, error) {
-	if k.Status.Budget == nil || k.Status.Budget.ID == "" {
+// budgetsOf is every Budget the Key draws from that still exists, in
+// the order the Key lists them (spec 037).
+func (l *Limiter) budgetsOf(ctx context.Context, k *v1.Key) ([]*v1.Budget, error) {
+	refs := v1.KeyBudgets(k)
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out := make([]*v1.Budget, 0, len(refs))
+	for _, ref := range refs {
+		b, err := l.budget(ctx, ref.ID)
+		if err != nil {
+			return nil, err
+		}
+		if b != nil {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+// budget is the Budget with id, nil when it is gone.
+func (l *Limiter) budget(ctx context.Context, id string) (*v1.Budget, error) {
+	if id == "" {
 		return nil, nil
 	}
 	if l.o.Budgets != nil {
-		return l.o.Budgets.Budget(ctx, k.Status.Budget.ID)
+		return l.o.Budgets.Budget(ctx, id)
 	}
-	obj, _, err := l.o.Store.Objects().Get(ctx, v1.KindBudget, k.Status.Budget.ID)
+	obj, _, err := l.o.Store.Objects().Get(ctx, v1.KindBudget, id)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, nil
 	}
@@ -188,7 +208,7 @@ func (l *Limiter) budgetOf(ctx context.Context, k *v1.Key) (*v1.Budget, error) {
 	}
 	b, ok := obj.(*v1.Budget)
 	if !ok {
-		return nil, fmt.Errorf("reading Budget %s: the store returned a %T", k.Status.Budget.ID, obj)
+		return nil, fmt.Errorf("reading Budget %s: the store returned a %T", id, obj)
 	}
 	return b, nil
 }
@@ -203,15 +223,15 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 	k := r.Key
 	id := k.Status.ID
 	spend := spendLimit(k)
-	budget, err := l.budgetOf(ctx, k)
+	budgets, err := l.budgetsOf(ctx, k)
 	if err != nil {
-		return fmt.Errorf("reading the Budget of Key %s: %w", id, err)
+		return fmt.Errorf("reading the Budgets of Key %s: %w", id, err)
 	}
 	var pricing *v1.Pricing
 	if !r.Opaque && r.Model != nil {
 		pricing = r.Model.Spec.Pricing
 	}
-	if (spend != nil || budget != nil) && pricing == nil && !k.Spec.AllowUnpriced {
+	if (spend != nil || len(budgets) > 0) && pricing == nil && !k.Spec.AllowUnpriced {
 		what := "an opaque route is unpriced"
 		if r.Model != nil {
 			what = "Model " + r.Model.Metadata.Name + " has no pricing"
@@ -224,8 +244,10 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		if spend != nil && spend.Currency != "" && spend.Currency != pricing.Currency {
 			return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Key " + id + " limits its spend in " + spend.Currency + " and Model " + r.Model.Metadata.Name + " is priced in " + pricing.Currency}
 		}
-		if budget != nil && budget.Spec.Currency != pricing.Currency {
-			return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Budget " + budget.Metadata.Name + " is in " + budget.Spec.Currency + " and Model " + r.Model.Metadata.Name + " is priced in " + pricing.Currency}
+		for _, b := range budgets {
+			if b.Spec.Currency != pricing.Currency {
+				return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Budget " + b.Metadata.Name + " is in " + b.Spec.Currency + " and Model " + r.Model.Metadata.Name + " is priced in " + pricing.Currency}
+			}
 		}
 	}
 	le.pricing, le.estimate = pricing, estimate
@@ -240,19 +262,44 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		}
 		le.window = &counterWindow{w: spend.Window, at: now, resetsAt: resetsAt}
 	}
-	if budget != nil {
-		_, resetsAt := metering.Window(budget.Spec.Window, now, budget.Status.CreatedAt)
-		key := metering.CounterKey(metering.ScopeBudgetSpend, budget.Status.ID, budget.Spec.Window, now, budget.Status.CreatedAt)
+	// Every listed Budget is a gate of its own: the request is refused
+	// when any hard one would pass its amount, the detail names each that
+	// would, each announces its own exhaustion, and Retry-After is the
+	// latest reset among them, absent when one never resets, since
+	// waiting for one window does not reopen another (spec 037).
+	windows := make([]budgetWindow, 0, len(budgets))
+	var refusing []string
+	var retry time.Time
+	never := false
+	for _, b := range budgets {
+		_, resetsAt := metering.BudgetWindow(b, now)
+		key := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if isHard(budget) && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*budget.Spec.Amount)) {
-			l.announceBudget(ctx, budget, now, resetsAt, v1.Money(known+pending), now)
-			return &gateway.Refusal{Code: gateway.CodeBudgetExhausted, RetryAfter: metering.RetryAfter(now, resetsAt),
-				Detail: "Budget " + budget.Metadata.Name + " has spent " + v1.Money(known+pending).String() + " of " + budget.Spec.Amount.String() + " " + budget.Spec.Currency + " in its " + string(budget.Spec.Window) + " window, and this request is estimated at " + estimate.String()}
+		if isHard(b) && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
+			l.announceBudget(ctx, b, now, resetsAt, v1.Money(known+pending), now)
+			refusing = append(refusing, "Budget "+b.Metadata.Name+" has spent "+v1.Money(known+pending).String()+" of "+b.Spec.Amount.String()+" "+b.Spec.Currency+" in its "+string(b.Spec.Window)+" window")
+			if resetsAt.IsZero() {
+				never = true
+			} else if resetsAt.After(retry) {
+				retry = resetsAt
+			}
+			continue
 		}
-		le.budget = &budgetWindow{key: key, resetsAt: resetsAt}
-		if !isHard(budget) {
+		windows = append(windows, budgetWindow{key: key, resetsAt: resetsAt, budget: b})
+	}
+	if len(refusing) > 0 {
+		wait := metering.RetryAfter(now, retry)
+		if never {
+			wait = 0
+		}
+		return &gateway.Refusal{Code: gateway.CodeBudgetExhausted, RetryAfter: wait,
+			Detail: strings.Join(refusing, "; ") + ", and this request is estimated at " + estimate.String()}
+	}
+	le.budgets = windows
+	for _, w := range windows {
+		if !isHard(w.budget) {
 			l.mu.Lock()
-			l.soft[key] = softWindow{budget: budget, at: now, resetsAt: resetsAt}
+			l.soft[w.key] = softWindow{budget: w.budget, at: now, resetsAt: w.resetsAt}
 			l.mu.Unlock()
 		}
 	}
@@ -262,7 +309,7 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 
 // announceKey claims the window's marker and, first, raises key.exhausted.
 func (l *Limiter) announceKey(ctx context.Context, k *v1.Key, spend *v1.Spend, resetsAt time.Time, spent v1.Money, now time.Time) {
-	marker := metering.CounterKey(metering.ScopeKeyExhausted, k.Status.ID, spend.Window, now, k.Status.CreatedAt)
+	marker := metering.MarkerKey(metering.CounterKey(metering.ScopeKeyExhausted, k.Status.ID, spend.Window, now, k.Status.CreatedAt), *spend.Amount)
 	first, err := metering.Claim(ctx, l.o.Store.Counters(), marker, resetsAt)
 	if err != nil {
 		l.o.Logger.ErrorContext(ctx, "limits: claiming the exhaustion marker", "key", k.Status.ID, "err", err)
@@ -283,7 +330,7 @@ func (l *Limiter) announceKey(ctx context.Context, k *v1.Key, spend *v1.Spend, r
 // announceBudget claims the window's marker and, first, raises
 // budget.exhausted. at is an instant inside the window announced.
 func (l *Limiter) announceBudget(ctx context.Context, b *v1.Budget, at, resetsAt time.Time, spent v1.Money, now time.Time) {
-	marker := metering.CounterKey(metering.ScopeBudgetExhausted, b.Status.ID, b.Spec.Window, at, b.Status.CreatedAt)
+	marker := metering.MarkerKey(metering.BudgetCounterKey(metering.ScopeBudgetExhausted, b, at), *b.Spec.Amount)
 	first, err := metering.Claim(ctx, l.o.Store.Counters(), marker, resetsAt)
 	if err != nil {
 		l.o.Logger.ErrorContext(ctx, "limits: claiming the exhaustion marker", "budget", b.Status.ID, "err", err)
@@ -411,10 +458,12 @@ type counterWindow struct {
 	at, resetsAt time.Time
 }
 
-// budgetWindow is the Budget's current window.
+// budgetWindow is one listed Budget's current window, which the lease
+// adds to at admission and settles into.
 type budgetWindow struct {
 	key      string
 	resetsAt time.Time
+	budget   *v1.Budget
 }
 
 // row is one counter this lease adds to, with the expiry of its window.
@@ -447,7 +496,7 @@ type lease struct {
 	pricing  *v1.Pricing
 	estimate v1.Money
 	window   *counterWindow // the Key's spend window, nil without a spend limit
-	budget   *budgetWindow  // the Budget's window, nil without a Budget
+	budgets  []budgetWindow // the window of every Budget the Key draws from
 	once     sync.Once
 }
 
@@ -464,7 +513,7 @@ func (le *lease) refund() {
 
 // admit adds the reservation to the deltas: one request and the
 // estimate under the Key's totals, under its spend window when it has
-// one, and under the Budget's window when it draws from one.
+// one, and under the window of every Budget it draws from.
 func (le *lease) admit() {
 	c := le.l.counters
 	for _, r := range le.rows(metering.ScopeKeyRequests) {
@@ -473,7 +522,7 @@ func (le *lease) admit() {
 	for _, r := range le.rows(metering.ScopeKeySpend) {
 		c.Add(r.key, int64(le.estimate), r.expiresAt)
 	}
-	if b := le.budget; b != nil {
+	for _, b := range le.budgets {
 		c.Add(b.key, int64(le.estimate), b.resetsAt)
 	}
 }
@@ -497,7 +546,7 @@ func (le *lease) Settle(_ context.Context, t gateway.Tokens) {
 		for _, r := range le.rows(metering.ScopeKeySpend) {
 			c.Add(r.key, delta, r.expiresAt)
 		}
-		if b := le.budget; b != nil {
+		for _, b := range le.budgets {
 			c.Add(b.key, delta, b.resetsAt)
 		}
 	})

@@ -359,6 +359,22 @@ func checkKey(k *v1.Key, o Options, now time.Time) error {
 			return refuse(CodeInvalidField, err.Error(), "spec.budget")
 		}
 	}
+	if s.Budget != "" && len(s.Budgets) > 0 {
+		return refuse(CodeExclusiveFields, "a Key names one Budget in budget or several in budgets, not both", "spec.budget", "spec.budgets")
+	}
+	if len(s.Budgets) > v1.MaxKeyBudgets {
+		return refuse(CodeInvalidField, "at most "+strconv.Itoa(v1.MaxKeyBudgets)+" Budgets; "+strconv.Itoa(len(s.Budgets))+" given", "spec.budgets")
+	}
+	listed := map[string]bool{}
+	for i, ref := range s.Budgets {
+		if err := checkReference(ref, budgetRef, "Budget"); err != nil {
+			return refuse(CodeInvalidField, err.Error(), indexPath("spec.budgets", i))
+		}
+		if listed[ref] {
+			return refuse(CodeInvalidField, strconv.Quote(ref)+" appears twice", indexPath("spec.budgets", i))
+		}
+		listed[ref] = true
+	}
 	if s.TTL != "" && !s.ExpiresAt.IsZero() {
 		return refuse(CodeExclusiveFields, "an expiry is a ttl or an instant, not both", "spec.ttl", "spec.expiresAt")
 	}
@@ -395,6 +411,9 @@ func checkBudget(b *v1.Budget) error {
 		if err := s.Window.Validate(); err != nil {
 			return refuse(CodeInvalidField, err.Error(), "spec.window")
 		}
+	}
+	if !s.Anchor.IsZero() && s.Window == v1.WindowNone {
+		return refuse(CodeInvalidField, "an anchor aligns a period, and window none has none", "spec.anchor")
 	}
 	return nil
 }

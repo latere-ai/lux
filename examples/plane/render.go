@@ -4,6 +4,8 @@
 package main
 
 import (
+	"slices"
+
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
 )
@@ -48,8 +50,8 @@ func (p *Plane) renderKey(k *v1.Key) {
 		usage.Window = &window
 		exhausted = int64(window.Spend) >= int64(*spend.Amount)
 	}
-	if b := p.hardBudgetOf(k); b != nil {
-		spent := p.limiter.counters.Total(metering.CounterKey(metering.ScopeBudgetSpend, b.Status.ID, b.Spec.Window, now, b.Status.CreatedAt))
+	for _, b := range p.hardBudgetsOf(k) {
+		spent := p.limiter.counters.Total(metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now))
 		if b.Spec.Amount != nil && spent >= int64(*b.Spec.Amount) {
 			exhausted = true
 		}
@@ -71,8 +73,8 @@ func (p *Plane) renderKey(k *v1.Key) {
 // left, how many Keys draw from it, and its state.
 func (p *Plane) renderBudget(b *v1.Budget) {
 	now := p.now()
-	_, resetsAt := metering.Window(b.Spec.Window, now, b.Status.CreatedAt)
-	spent := v1.Money(p.limiter.counters.Total(metering.CounterKey(metering.ScopeBudgetSpend, b.Status.ID, b.Spec.Window, now, b.Status.CreatedAt)))
+	_, resetsAt := metering.BudgetWindow(b, now)
+	spent := v1.Money(p.limiter.counters.Total(metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)))
 	amount := v1.Money(0)
 	if b.Spec.Amount != nil {
 		amount = *b.Spec.Amount
@@ -80,7 +82,7 @@ func (p *Plane) renderBudget(b *v1.Budget) {
 	remaining := max(amount-spent, 0)
 	keys := 0
 	for _, obj := range p.store.list(v1.KindKey) {
-		if k, ok := obj.(*v1.Key); ok && k.Status.Budget != nil && k.Status.Budget.ID == b.Status.ID {
+		if k, ok := obj.(*v1.Key); ok && slices.ContainsFunc(v1.KeyBudgets(k), func(r v1.BudgetRef) bool { return r.ID == b.Status.ID }) {
 			keys++
 		}
 	}
@@ -100,19 +102,18 @@ func spendOf(k *v1.Key) *v1.Spend {
 	return nil
 }
 
-// hardBudgetOf is the hard Budget the Key draws from, nil for none and
-// for a soft one, which never exhausts a Key.
-func (p *Plane) hardBudgetOf(k *v1.Key) *v1.Budget {
-	if k.Status.Budget == nil || k.Status.Budget.ID == "" {
-		return nil
+// hardBudgetsOf is every hard Budget the Key draws from; a soft one
+// never exhausts a Key.
+func (p *Plane) hardBudgetsOf(k *v1.Key) []*v1.Budget {
+	var out []*v1.Budget
+	for _, ref := range v1.KeyBudgets(k) {
+		obj, _, err := p.store.get(v1.KindBudget, ref.ID)
+		if err != nil {
+			continue
+		}
+		if b, ok := obj.(*v1.Budget); ok && (b.Spec.Hard == nil || *b.Spec.Hard) {
+			out = append(out, b)
+		}
 	}
-	obj, _, err := p.store.get(v1.KindBudget, k.Status.Budget.ID)
-	if err != nil {
-		return nil
-	}
-	b, ok := obj.(*v1.Budget)
-	if !ok || (b.Spec.Hard != nil && !*b.Spec.Hard) {
-		return nil
-	}
-	return b
+	return out
 }

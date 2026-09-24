@@ -455,3 +455,54 @@ func TestEventsAreJournalled(t *testing.T) {
 		t.Errorf("model.updated paths %v", p)
 	}
 }
+
+// TestKeyListsBudgets is spec 037 through the API: a Key listing two
+// Budgets carries each name and id in status.budgets in order, its
+// key.created row carries the list, each Budget counts it in
+// status.keys, and each is budget_in_use while it lives.
+func TestKeyListsBudgets(t *testing.T) {
+	h := newHarness(t, nil)
+	h.seed()
+	if rec := h.request(http.MethodPut, "/v1/budgets/week", `{"spec": {"amount": "5", "window": "168h", "anchor": "2026-09-14T00:00:00Z"}}`); rec.Code != http.StatusCreated {
+		t.Fatalf("PUT week: %d %s", rec.Code, rec.Body.String())
+	}
+	created := h.request(http.MethodPut, "/v1/keys/member", `{"spec": {"models": ["gpt-5"], "budgets": ["team", "week"]}}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("PUT member: %d %s", created.Code, created.Body.String())
+	}
+	list, _ := status(t, created)["budgets"].([]any)
+	if len(list) != 2 {
+		t.Fatalf("status.budgets %v", status(t, created)["budgets"])
+	}
+	for i, name := range []string{"team", "week"} {
+		ref := list[i].(map[string]any)
+		if ref["name"] != name || !strings.HasPrefix(ref["id"].(string), "bud_") {
+			t.Errorf("status.budgets[%d] = %v", i, ref)
+		}
+	}
+	for _, name := range []string{"team", "week"} {
+		if read := h.request(http.MethodGet, "/v1/budgets/"+name, ""); status(t, read)["keys"] != float64(1) {
+			t.Errorf("%s status.keys %v", name, status(t, read)["keys"])
+		}
+		wantCode(t, h.request(http.MethodDelete, "/v1/budgets/"+name, ""), CodeBudgetInUse)
+	}
+	rows, _ := h.st.Journal().Since(bg(), 0, 100)
+	for _, r := range rows {
+		var rec map[string]any
+		if err := json.Unmarshal(r.Payload, &rec); err != nil {
+			t.Fatal(err)
+		}
+		if rec["type"] == "key.created" {
+			if got := rec["data"].(map[string]any)["budgets"]; !reflect.DeepEqual(got, []any{"team", "week"}) {
+				t.Errorf("key.created budgets %v", got)
+			}
+		}
+	}
+	both := h.request(http.MethodPut, "/v1/keys/both", `{"spec": {"models": ["gpt-5"], "budget": "team", "budgets": ["week"]}}`)
+	wantCode(t, both, "exclusive_fields")
+	// The anchor is immutable; restartedAt is not.
+	wantCode(t, h.request(http.MethodPut, "/v1/budgets/week", `{"spec": {"amount": "5", "window": "168h", "anchor": "2026-09-15T00:00:00Z"}}`), "immutable_field")
+	if rec := h.request(http.MethodPut, "/v1/budgets/week", `{"spec": {"amount": "5", "window": "168h", "anchor": "2026-09-14T00:00:00Z", "restartedAt": "2026-09-14T10:00:00Z"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("a restart: %d %s", rec.Code, rec.Body.String())
+	}
+}

@@ -6,6 +6,7 @@ package metering
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -350,5 +351,54 @@ func TestFlushKeepsOwnSpendVisibleMidRoundTrip(t *testing.T) {
 	}
 	if got, pending := c.Total("k"), c.Pending("k"); got != 100 || pending != 0 {
 		t.Fatalf("after the flush: total %d, pending %d, want 100 and 0", got, pending)
+	}
+}
+
+// TestBudgetWindow is spec 037's Budget window: without an anchor or a
+// restart the keys are CounterKey's, so counters keep their rows across
+// the upgrade; a restart inside the window and not after now moves the
+// start and keeps the reset; one before the window, or in the future,
+// has no effect; under none a restart renders the lifetime key with the
+// instant; and the marker carries the amount.
+func TestBudgetWindow(t *testing.T) {
+	amount := v1.Money(10_000_000)
+	b := func(w v1.Window, anchor, restart time.Time) *v1.Budget {
+		return &v1.Budget{Spec: v1.BudgetSpec{Amount: &amount, Window: w, Anchor: anchor, RestartedAt: restart},
+			Status: v1.BudgetStatus{ID: "bud_1", CreatedAt: created}}
+	}
+	for _, w := range []v1.Window{"1h", "168h", v1.WindowMonth, v1.WindowNone} {
+		if got, want := BudgetCounterKey(ScopeBudgetSpend, b(w, time.Time{}, time.Time{}), at), CounterKey(ScopeBudgetSpend, "bud_1", w, at, created); got != want {
+			t.Errorf("%s: BudgetCounterKey = %s, CounterKey = %s", w, got, want)
+		}
+	}
+	natural, resets := v1.WindowMonth.Bounds(at, created)
+	restart := at.Add(-time.Hour)
+	start, r := BudgetWindow(b(v1.WindowMonth, time.Time{}, restart), at)
+	if !start.Equal(restart) || !r.Equal(resets) {
+		t.Fatalf("a restart inside the window = %s, %s", start, r)
+	}
+	if BudgetCounterKey(ScopeBudgetSpend, b(v1.WindowMonth, time.Time{}, restart), at) == CounterKey(ScopeBudgetSpend, "bud_1", v1.WindowMonth, at, created) {
+		t.Fatal("a restart kept the natural window's counter")
+	}
+	for name, instant := range map[string]time.Time{"before the window": natural.Add(-time.Hour), "in the future": at.Add(time.Minute)} {
+		if start, _ := BudgetWindow(b(v1.WindowMonth, time.Time{}, instant), at); !start.Equal(natural) {
+			t.Errorf("a restart %s moved the start to %s", name, start)
+		}
+	}
+	if start, _ := BudgetWindow(b(v1.WindowMonth, time.Time{}, at.Add(time.Minute)), at.Add(2*time.Minute)); !start.Equal(at.Add(time.Minute)) {
+		t.Errorf("a future restart did not take effect once the clock passed it: %s", start)
+	}
+	if got := BudgetCounterKey(ScopeBudgetSpend, b(v1.WindowNone, time.Time{}, restart), at); got != "budget:bud_1:spend:none@"+strconv.FormatInt(restart.Unix(), 10) {
+		t.Errorf("a restart under none = %s", got)
+	}
+	if got := BudgetCounterKey(ScopeBudgetSpend, b(v1.WindowNone, time.Time{}, created), at); got != TotalKey(ScopeBudgetSpend, "bud_1") {
+		t.Errorf("a restart at createdAt under none = %s", got)
+	}
+	monday := time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)
+	if start, r := BudgetWindow(b("168h", monday, time.Time{}), at); !start.Equal(monday) || !r.Equal(monday.Add(168*time.Hour)) {
+		t.Errorf("an anchored week = %s, %s", start, r)
+	}
+	if got := MarkerKey("budget:bud_1:exhausted:1", amount); got != "budget:bud_1:exhausted:1:10000000" {
+		t.Errorf("MarkerKey = %s", got)
 	}
 }

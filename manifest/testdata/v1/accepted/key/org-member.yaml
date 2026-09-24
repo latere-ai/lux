@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: org-member
+spec:
+  models: ["gpt-5"]
+  budgets: [team-research, member-weekly]   # every call must fit each of them

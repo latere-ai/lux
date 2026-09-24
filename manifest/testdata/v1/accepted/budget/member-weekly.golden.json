@@ -1,0 +1,18 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "member-weekly"
+  },
+  "spec": {
+    "amount": "10",
+    "currency": "USD",
+    "window": "168h",
+    "anchor": "2026-09-14T00:00:00Z",
+    "restartedAt": "2026-09-16T12:00:00Z",
+    "hard": true
+  },
+  "status": {
+    "warnings": []
+  }
+}

@@ -198,3 +198,43 @@ func (w Window) Bounds(at, createdAt time.Time) (start, resetsAt time.Time) {
 	start = time.Unix(0, n*int64(d)).UTC()
 	return start, start.Add(d)
 }
+
+// AnchoredBounds is Bounds with the window aligned to anchor instead of
+// the epoch or the first of the month: a duration window starts at the
+// anchor plus a whole number of periods, before the anchor as after it;
+// month starts on the anchor's day of month at its time of day, on the
+// month's last day when the month is shorter. A zero anchor, and none,
+// whose window starts at createdAt, are Bounds.
+func (w Window) AnchoredBounds(at, createdAt, anchor time.Time) (start, resetsAt time.Time) {
+	if anchor.IsZero() || w == WindowNone {
+		return w.Bounds(at, createdAt)
+	}
+	anchor, at = anchor.UTC(), at.UTC()
+	if w == WindowMonth {
+		start = anchoredMonth(at.Year(), at.Month(), anchor)
+		if start.After(at) {
+			start = anchoredMonth(at.Year(), at.Month()-1, anchor)
+		}
+		return start, anchoredMonth(start.Year(), start.Month()+1, anchor)
+	}
+	d, ok := w.Duration()
+	if !ok {
+		return time.Time{}, time.Time{}
+	}
+	offset := at.Sub(anchor)
+	periods := int64(offset / d)
+	if offset%d < 0 {
+		periods--
+	}
+	start = anchor.Add(time.Duration(periods * int64(d)))
+	return start, start.Add(d)
+}
+
+// anchoredMonth is the start of month m of year y, normalized as
+// time.Date normalizes it, on the anchor's day and time of day, clamped
+// to the month's last day.
+func anchoredMonth(y int, m time.Month, anchor time.Time) time.Time {
+	first := time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, -1).Day()
+	return time.Date(first.Year(), first.Month(), min(anchor.Day(), last), anchor.Hour(), anchor.Minute(), anchor.Second(), anchor.Nanosecond(), time.UTC)
+}

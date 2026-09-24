@@ -1514,6 +1514,10 @@ components:
           $ref: "#/components/schemas/KeyLimits"
         budget:
           type: string
+        budgets:
+          type: array
+          items:
+            type: string
         ttl:
           type: string
           description: A Go duration, such as 10m or 168h.
@@ -1575,6 +1579,10 @@ components:
             $ref: "#/components/schemas/SelectorStatus"
         budget:
           $ref: "#/components/schemas/BudgetRef"
+        budgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/BudgetRef"
         usage:
           $ref: "#/components/schemas/KeyUsage"
         lastUsedAt:
@@ -1702,6 +1710,12 @@ components:
         window:
           type: string
           description: "A spend window: a Go duration from 1m to 8760h, month, or none."
+        anchor:
+          type: string
+          format: date-time
+        restartedAt:
+          type: string
+          format: date-time
         hard:
           type: boolean
     BudgetStatus:

@@ -1,6 +1,6 @@
 ---
 title: "Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart"
-status: drafted
+status: in-progress
 track: core
 depends_on:
   - specs/003-manifest-contract.md

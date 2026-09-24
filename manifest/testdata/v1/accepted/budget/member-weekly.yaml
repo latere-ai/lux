@@ -1,0 +1,10 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: member-weekly
+spec:
+  amount: "10"
+  currency: USD
+  window: 168h                         # a week
+  anchor: 2026-09-14T00:00:00Z         # aligned to Mondays at 00:00 UTC instead of the epoch's Thursday
+  restartedAt: 2026-09-16T12:00:00Z    # the current week restarted from here: spend counts from this instant

@@ -318,7 +318,7 @@ func TestLimiterRunAndFailures(t *testing.T) {
 	fail["Objects.Get"] = true
 	_, err := l.Reserve(ctx, gateway.Reservation{Key: drawing, Model: p, InputTokens: 1})
 	var ref *gateway.Refusal
-	if !errors.Is(err, errBroken) || errors.As(err, &ref) || !strings.Contains(err.Error(), "Budget of Key "+drawing.Status.ID) {
+	if !errors.Is(err, errBroken) || errors.As(err, &ref) || !strings.Contains(err.Error(), "Budgets of Key "+drawing.Status.ID) {
 		t.Fatalf("a broken Budget read = %v", err)
 	}
 	fail["Objects.Get"] = false
@@ -354,7 +354,7 @@ func TestLimiterRunAndFailures(t *testing.T) {
 	}
 	fail["Objects.List"] = false
 	fail["Objects.Get"] = true
-	if err := RenderKey(ctx, st, softly, h.clock()); !errors.Is(err, errBroken) || !strings.Contains(err.Error(), "Budget of Key") {
+	if err := RenderKey(ctx, st, softly, h.clock()); !errors.Is(err, errBroken) || !strings.Contains(err.Error(), "of Key "+softly.Status.ID) {
 		t.Fatalf("RenderKey with a broken Budget read = %v", err)
 	}
 	fail["Objects.Get"] = false

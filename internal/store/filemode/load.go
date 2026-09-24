@@ -264,6 +264,11 @@ func (s *snapshot) add(obj v1.Object, path string, existing v1.Object, now time.
 				x.Status.Budget = &v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID}
 			}
 		}
+		for _, ref := range x.Spec.Budgets {
+			if b, ok := s.budgets[ref]; ok {
+				x.Status.Budgets = append(x.Status.Budgets, v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID})
+			}
+		}
 	}
 	s.objects = append(s.objects, obj)
 	s.summary.Kinds[kind]++

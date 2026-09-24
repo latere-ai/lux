@@ -265,3 +265,40 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// TestLookupBudgetsAskEachEntry is spec 037's resolve of a Key listing
+// several Budgets: budget.draw is asked once per entry, in order, as the
+// caller, and a refusal of the second names spec.budgets[1].
+func TestLookupBudgetsAskEachEntry(t *testing.T) {
+	second := &v1.Budget{
+		Metadata: v1.ObjectMeta{Name: "member-weekly"},
+		Spec:     v1.BudgetSpec{Amount: money(t, "10"), Currency: "USD", Window: "168h"},
+		Status:   v1.BudgetStatus{ID: "bud_01J9TESTBUDGETWEEK000000000", Owner: fixtureSubject},
+	}
+	cat := func() *catalog { return catalogOf(fixtureProvider(), fixtureModel(), fixtureBudget(t), second) }
+	key := &v1.Key{Metadata: v1.ObjectMeta{Name: "run-42"}, Spec: v1.KeySpec{Models: []string{"gpt-5"}, Budgets: []string{"team-research", "member-weekly"}}}
+
+	s, z := newStubAuthorizer(t)
+	opts := manifest.Options{Actor: manifest.Actor{Subject: fixtureSubject}, Lookup: z.Lookup(alice, info, cat())}
+	if _, err := manifest.Resolve(t.Context(), key, opts); err != nil {
+		t.Fatalf("allowed: %v", err)
+	}
+	var draws []string
+	for _, r := range s.Requests() {
+		if r.Action == authorizer.ActionBudgetDraw {
+			if r.Subject != fixtureSubject {
+				t.Errorf("budget.draw asked as %q", r.Subject)
+			}
+			draws = append(draws, r.Resource.ID)
+		}
+	}
+	if !reflect.DeepEqual(draws, []string{"bud_01J9TESTBUDGET00000000000000", "bud_01J9TESTBUDGETWEEK000000000"}) {
+		t.Fatalf("budget.draw was asked for %v", draws)
+	}
+
+	s, z = newStubAuthorizer(t)
+	s.Deny(stub.Rule{Action: authorizer.ActionBudgetDraw, Resource: "bud_01J9TESTBUDGETWEEK000000000"}, "not yours")
+	opts.Lookup = z.Lookup(alice, info, cat())
+	_, err := manifest.Resolve(t.Context(), key, opts)
+	wantManifestCode(t, err, manifest.CodeNotFound, "spec.budgets[1]")
+}

@@ -60,7 +60,7 @@ the tree so it stays that way.
 | plans and quotas | the authorizer's `limits`, which cap what a Key may ask for, plus `Budget` objects the platform applies; a Key that names no limit under a cap is refused, so the platform's console or client fills the limits in | `Options.Limits` and the same Budgets |
 | a shared catalog | `Provider` and `Model` objects the platform declares as an administrator; callers see them through `provider.read` and `model.use` | the same objects through the store the platform constructs |
 | per-tenant models | `model.use` per selector at a Key's resolve, plus label selectors on the Models; a tenant's Key names only what its authorizer allows. One name resolves to one Model for the installation, a tenant's own Provider's models carry that Provider's name as their first segment, and a platform that wants one bare name to mean a different Model per tenant answers that in its own front, never in the gateway | `Options.Lookup` answers `Models` for the tenant |
-| funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage` | the same Budgets and `metering.Fold` over the records |
+| funded credits | a `Budget` per grant, `hard` chosen by whether an overspend is refused or invoiced, plus the platform's own ledger fed by the event sink and `GET /v1/usage`; a Key lists up to four Budgets in `spec.budgets` and every call must fit each, so an organization's balance and a member's weekly and monthly limits hold together, each refused `budget_exhausted` at the door; `spec.anchor` starts a Budget's weeks or months on the day the platform chooses, and `spec.restartedAt` restarts its current window | the same Budgets and `metering.Fold` over the records |
 | a console | its backend holds the session and calls `/v1` with an actor token minted for the signed-in person, the audience `LUX_OIDC_AUDIENCE`, so the object's `owner` is the person; the gateway never sees a cookie | reads the platform's own API |
 | unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the default `owner`; use the Lux-Owner header and an explicit `owner.assign` authorization to provision for another principal | the platform's own service identity in `Options.Actor` |
 | one developer credential | a Key created with `spec.value` set to the platform's own credential, under the Models and the Budget the platform attaches; the gateway matches it by hash and decodes nothing; a platform whose credential store kept only hashes supplies `spec.valueSHA256` instead and re-issues nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
@@ -302,7 +302,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 Four properties to keep as it grows into the platform's real policy.
 
 - **A refusal on a reference reads as `not_found`.** The gateway asks
-  `model.use` for every selector a Key names, `budget.draw` for the
+  `model.use` for every selector a Key names, `budget.draw` for every
   Budget it draws from, and `provider.read` for every target of a Model,
   and a deny on one of those is answered to the caller as `not_found`
   and not as `forbidden`, with a detail that names the reference and not

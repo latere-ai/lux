@@ -278,6 +278,15 @@ func resolveKey(ctx context.Context, in *v1.Key, o Options, now time.Time) (*v1.
 			return nil, nil, refuse(CodeNotFound, "the Lookup returned no Budget for "+strconv.Quote(k.Spec.Budget), "spec.budget")
 		}
 	}
+	for i, ref := range k.Spec.Budgets {
+		b, err := o.Lookup.Budget(ctx, ref)
+		if err != nil {
+			return nil, nil, lookupError(err, indexPath("spec.budgets", i))
+		}
+		if b == nil {
+			return nil, nil, refuse(CodeNotFound, "the Lookup returned no Budget for "+strconv.Quote(ref), indexPath("spec.budgets", i))
+		}
+	}
 	var warnings []string
 	k.Status.Selectors = make([]v1.SelectorStatus, 0, len(k.Spec.Models))
 	for i, sel := range k.Spec.Models {
@@ -392,6 +401,7 @@ func resolveBudget(in *v1.Budget, o Options) (*v1.Budget, []string, error) {
 		return nil, nil, err
 	}
 	defaultBudget(b)
+	b.Spec.Anchor, b.Spec.RestartedAt = utc(b.Spec.Anchor), utc(b.Spec.RestartedAt)
 	old, err := existing[*v1.Budget](o)
 	if err != nil {
 		return nil, nil, err
@@ -401,6 +411,7 @@ func resolveBudget(in *v1.Budget, o Options) (*v1.Budget, []string, error) {
 		paths = appendIf(paths, old.Metadata.Name != b.Metadata.Name, "metadata.name")
 		paths = appendIf(paths, old.Spec.Currency != b.Spec.Currency, "spec.currency")
 		paths = appendIf(paths, !sameWindow(old.Spec.Window, b.Spec.Window), "spec.window")
+		paths = appendIf(paths, !old.Spec.Anchor.Equal(b.Spec.Anchor), "spec.anchor")
 		if err := immutable(paths); err != nil {
 			return nil, nil, err
 		}
@@ -518,4 +529,12 @@ func setWarnings(obj v1.Object, warnings []string) {
 	case *v1.Budget:
 		x.Status.Warnings = warnings
 	}
+}
+
+// utc is t in UTC, and the zero time left zero.
+func utc(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	return t.UTC()
 }

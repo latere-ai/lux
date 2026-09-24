@@ -105,19 +105,21 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 	if s := k.Spec.Limits.Spend; s != nil && s.Amount != nil {
 		spend = s
 	}
-	var budget *v1.Budget
-	if k.Status.Budget != nil && k.Status.Budget.ID != "" {
-		b, err := l.store.Budget(ctx, k.Status.Budget.ID)
+	var budgets []*v1.Budget
+	for _, ref := range v1.KeyBudgets(k) {
+		b, err := l.store.Budget(ctx, ref.ID)
 		if err != nil {
 			return err
 		}
-		budget = b
+		if b != nil {
+			budgets = append(budgets, b)
+		}
 	}
 	var pricing *v1.Pricing
 	if !r.Opaque && r.Model != nil {
 		pricing = r.Model.Spec.Pricing
 	}
-	if (spend != nil || budget != nil) && pricing == nil && !k.Spec.AllowUnpriced {
+	if (spend != nil || len(budgets) > 0) && pricing == nil && !k.Spec.AllowUnpriced {
 		what := "an opaque route is unpriced"
 		if r.Model != nil {
 			what = "Model " + r.Model.Metadata.Name + " has no pricing"
@@ -130,8 +132,10 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		if spend != nil && spend.Currency != "" && spend.Currency != pricing.Currency {
 			return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Key " + id + " limits its spend in " + spend.Currency + " and the Model is priced in " + pricing.Currency}
 		}
-		if budget != nil && budget.Spec.Currency != pricing.Currency {
-			return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Budget " + budget.Metadata.Name + " is in " + budget.Spec.Currency + " and the Model is priced in " + pricing.Currency}
+		for _, b := range budgets {
+			if b.Spec.Currency != pricing.Currency {
+				return &gateway.Refusal{Code: gateway.CodeCurrencyMismatch, Detail: "Budget " + b.Metadata.Name + " is in " + b.Spec.Currency + " and the Model is priced in " + pricing.Currency}
+			}
 		}
 	}
 	le.pricing, le.estimate = pricing, estimate
@@ -150,17 +154,41 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		le.tokenRows = append(le.tokenRows, row{key: metering.CounterKey(metering.ScopeKeyTokens, id, spend.Window, now, k.Status.CreatedAt), resetsAt: resetsAt})
 		le.spendRows = append(le.spendRows, row{key: key, resetsAt: resetsAt})
 	}
-	if budget != nil {
-		hard := budget.Spec.Hard == nil || *budget.Spec.Hard
-		_, resetsAt := metering.Window(budget.Spec.Window, now, budget.Status.CreatedAt)
-		key := metering.CounterKey(metering.ScopeBudgetSpend, budget.Status.ID, budget.Spec.Window, now, budget.Status.CreatedAt)
+	// Every Budget the Key lists is a gate: any hard one the request
+	// would pass refuses it, and Retry-After is the latest reset among
+	// those, none when one never resets.
+	var refusing *gateway.Refusal
+	var retry time.Time
+	never := false
+	var rows []row
+	for _, b := range budgets {
+		hard := b.Spec.Hard == nil || *b.Spec.Hard
+		_, resetsAt := metering.BudgetWindow(b, now)
+		key := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if hard && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*budget.Spec.Amount)) {
-			return &gateway.Refusal{Code: gateway.CodeBudgetExhausted, RetryAfter: metering.RetryAfter(now, resetsAt),
-				Detail: "Budget " + budget.Metadata.Name + " has spent " + v1.Money(known+pending).String() + " of " + budget.Spec.Amount.String() + " " + budget.Spec.Currency + " in its " + string(budget.Spec.Window) + " window"}
+		if hard && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
+			detail := "Budget " + b.Metadata.Name + " has spent " + v1.Money(known+pending).String() + " of " + b.Spec.Amount.String() + " " + b.Spec.Currency + " in its " + string(b.Spec.Window) + " window"
+			if refusing == nil {
+				refusing = &gateway.Refusal{Code: gateway.CodeBudgetExhausted, Detail: detail}
+			} else {
+				refusing.Detail += "; " + detail
+			}
+			if resetsAt.IsZero() {
+				never = true
+			} else if resetsAt.After(retry) {
+				retry = resetsAt
+			}
+			continue
 		}
-		le.spendRows = append(le.spendRows, row{key: key, resetsAt: resetsAt})
+		rows = append(rows, row{key: key, resetsAt: resetsAt})
 	}
+	if refusing != nil {
+		if !never {
+			refusing.RetryAfter = metering.RetryAfter(now, retry)
+		}
+		return refusing
+	}
+	le.spendRows = append(le.spendRows, rows...)
 	le.admit()
 	return nil
 }

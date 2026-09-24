@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: five
+spec:
+  models: ["gpt-5"]
+  budgets: [a, b, c, d, e]

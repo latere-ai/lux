@@ -110,6 +110,10 @@ type Filter struct {
 	// id, or names by name the live Provider that has it.
 	Provider string
 	IDs      []string
+	// Budget is a bud_ id; a Key matches when it draws on that Budget,
+	// through spec.budget or spec.budgets (spec 037), so a Budget's Keys
+	// are read without reading every Key.
+	Budget string
 }
 
 // Page is the API's limit and cursor, clamped by the API before it gets

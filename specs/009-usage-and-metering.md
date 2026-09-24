@@ -230,8 +230,8 @@ a window began.
 | key requests | `key:<key id>:requests:<start>` | `limits.spend.window` | one per admitted request | the store |
 | key tokens | `key:<key id>:tokens:<start>` | `limits.spend.window` | input plus output | the store |
 | key totals | the three above with the word `none` in place of `<start>`, `key:<key id>:spend:none` | `none` | the same three over the Key's lifetime | the store |
-| budget spend | `budget:<budget id>:spend:<start>` | `Budget.spec.window` | cost in micro-units | the store |
-| exhausted marker | `key:<key id>:exhausted:<start>`, `budget:<budget id>:exhausted:<start>` | the object's spend window | `1`, added by a replica that observes the window at or over its amount; the add that returns `1` is the one that emits the event ([[007-keys-and-limits]], [[012-request-log-and-events]]) | the store |
+| budget spend | `budget:<budget id>:spend:<start>`, with `<start>` the window's start after `spec.anchor` and `spec.restartedAt`, and `none@<unix>` for a lifetime restarted ([[037-several-budgets-per-key]]) | `Budget.spec.window` | cost in micro-units | the store |
+| exhausted marker | `key:<key id>:exhausted:<start>:<amount>`, `budget:<budget id>:exhausted:<start>:<amount>`, the amount in micro-units so a raised amount re-arms it ([[037-several-budgets-per-key]]) | the object's spend window | `1`, added by a replica that observes the window at or over its amount; the add that returns `1` is the one that emits the event ([[007-keys-and-limits]], [[012-request-log-and-events]]) | the store |
 
 `<start>` is the window start as Unix seconds, so a key names exactly
 one window and a finished window's row is prunable by its own name.

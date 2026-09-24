@@ -22,9 +22,10 @@ import (
 // be made comes back as an error, which Resolve passes through.
 type lookup struct {
 	c *call
-	// budget is the Budget a Key resolved through, kept so the Key's
-	// status.budget names it by id beside its name.
-	budget *v1.Budget
+	// budgets are the Budgets a Key resolved through, by the reference
+	// the manifest wrote, kept so the Key's status.budget and
+	// status.budgets name each by id beside its name.
+	budgets map[string]*v1.Budget
 }
 
 func (c *call) lookup() *lookup { return &lookup{c: c} }
@@ -58,7 +59,10 @@ func (l *lookup) Budget(ctx context.Context, nameOrID string) (*v1.Budget, error
 	if err != nil || !allow {
 		return nil, err
 	}
-	l.budget = b
+	if l.budgets == nil {
+		l.budgets = map[string]*v1.Budget{}
+	}
+	l.budgets[nameOrID] = b
 	return b, nil
 }
 

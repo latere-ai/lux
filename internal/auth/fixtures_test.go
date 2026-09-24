@@ -93,7 +93,7 @@ func shapes(t *testing.T) map[string]map[string]any {
 		authorizer.ActionModelList:   {"kind": "Model"},
 		authorizer.ActionModelUse: {"kind": "Model", "selector": "anthropic/*",
 			"matched": []any{map[string]any{"id": "mdl_01J9TESTMODEL00000000000000", "name": "gpt-5", "owner": fixtureSubject, "labels": map[string]any{}}}},
-		authorizer.ActionKeyCreate:    {"kind": "Key", "name": "run-42", "labels": labels("run", "r_42"), "models": []any{"gpt-5", "anthropic/*"}, "budget": "team-research"},
+		authorizer.ActionKeyCreate:    {"kind": "Key", "name": "run-42", "labels": labels("run", "r_42"), "models": []any{"gpt-5", "anthropic/*"}, "budget": "team-research", "budgets": []any{}},
 		authorizer.ActionKeyRead:      key,
 		authorizer.ActionKeyUpdate:    key,
 		authorizer.ActionKeyDelete:    key,

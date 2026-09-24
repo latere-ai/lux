@@ -162,6 +162,13 @@ func (c *client) renameUnder(tree map[string]any, kind, prefix string) {
 		if b, ok := spec["budget"].(string); ok && b != "" && !hasKindPrefix(b) {
 			spec["budget"] = prefix + b
 		}
+		if list, ok := spec["budgets"].([]any); ok {
+			for i, e := range list {
+				if b, ok := e.(string); ok && b != "" && !hasKindPrefix(b) {
+					list[i] = prefix + b
+				}
+			}
+		}
 		// A supplied value is unique across the installation, so a valid
 		// one is this run's; a short one stays short, since its case is
 		// about the length.

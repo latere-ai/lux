@@ -61,7 +61,8 @@ func (f Filter) canonical() []byte {
 		Source   string            `json:"source,omitempty"`
 		Provider string            `json:"provider,omitempty"`
 		IDs      []string          `json:"ids,omitempty"`
-	}{f.Owner, f.Labels, f.Source, f.Provider, ids})
+		Budget   string            `json:"budget,omitempty"`
+	}{f.Owner, f.Labels, f.Source, f.Provider, ids, f.Budget})
 	if err != nil {
 		panic("store: a Filter of strings does not encode: " + err.Error())
 	}

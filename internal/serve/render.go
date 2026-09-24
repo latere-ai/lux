@@ -46,17 +46,20 @@ func RenderKey(ctx context.Context, st store.Store, k *v1.Key, now time.Time) er
 		}
 		keys = append(keys, windowKeys[:]...)
 	}
-	var budget *v1.Budget
-	var budgetKey string
-	if k.Status.Budget != nil && k.Status.Budget.ID != "" {
-		obj, _, err := st.Objects().Get(ctx, v1.KindBudget, k.Status.Budget.ID)
+	type hardBudget struct {
+		key    string
+		amount v1.Money
+	}
+	var hard []hardBudget
+	for _, ref := range v1.KeyBudgets(k) {
+		obj, _, err := st.Objects().Get(ctx, v1.KindBudget, ref.ID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("reading the Budget of Key %s: %w", id, err)
+			return fmt.Errorf("reading Budget %s of Key %s: %w", ref.ID, id, err)
 		}
 		if b, ok := obj.(*v1.Budget); ok && isHard(b) {
-			budget = b
-			budgetKey = metering.CounterKey(metering.ScopeBudgetSpend, b.Status.ID, b.Spec.Window, now, b.Status.CreatedAt)
-			keys = append(keys, budgetKey)
+			key := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
+			hard = append(hard, hardBudget{key: key, amount: *b.Spec.Amount})
+			keys = append(keys, key)
 		}
 	}
 	m, err := st.Counters().Read(ctx, keys)
@@ -69,8 +72,10 @@ func RenderKey(ctx context.Context, st store.Store, k *v1.Key, now time.Time) er
 		usage.Window = &v1.UsageWindow{Requests: m[windowKeys[0]], Tokens: m[windowKeys[1]], Spend: v1.Money(m[windowKeys[2]]), ResetsAt: resetsAt}
 		exhausted = m[windowKeys[2]] >= int64(*spend.Amount)
 	}
-	if budget != nil && m[budgetKey] >= int64(*budget.Spec.Amount) {
-		exhausted = true
+	for _, b := range hard {
+		if m[b.key] >= int64(b.amount) {
+			exhausted = true
+		}
 	}
 	k.Status.Usage = usage
 	switch {
@@ -86,29 +91,27 @@ func RenderKey(ctx context.Context, st store.Store, k *v1.Key, now time.Time) er
 	return nil
 }
 
-// RenderBudget fills b's read-time status: keys, the live Keys naming
-// it now; spent, the current window's counter; remaining, the amount
+// RenderBudget fills b's read-time status: keys, the live Keys that
+// draw on it now, read through the store's Budget filter rather than
+// every Key; spent, the current window's counter; remaining, the amount
 // less that floored at zero; resetsAt, the window's reset or absent
 // for none; and state, Exhausted while spent is at or over the amount
 // and Open otherwise, so raising the amount opens it at the next read.
+// The window is spec 037's: aligned to spec.anchor and started at
+// spec.restartedAt when that lies inside it.
 func RenderBudget(ctx context.Context, st store.Store, b *v1.Budget, now time.Time) error {
 	id := b.Status.ID
-	_, resetsAt := metering.Window(b.Spec.Window, now, b.Status.CreatedAt)
-	spendKey := metering.CounterKey(metering.ScopeBudgetSpend, id, b.Spec.Window, now, b.Status.CreatedAt)
+	_, resetsAt := metering.BudgetWindow(b, now)
+	spendKey := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
 	m, err := st.Counters().Read(ctx, []string{spendKey})
 	if err != nil {
 		return fmt.Errorf("reading the counters of Budget %s: %w", id, err)
 	}
-	keys, _, err := st.Objects().List(ctx, v1.KindKey, store.Filter{}, store.Page{})
+	keys, _, err := st.Objects().List(ctx, v1.KindKey, store.Filter{Budget: id}, store.Page{})
 	if err != nil {
 		return fmt.Errorf("listing the Keys of Budget %s: %w", id, err)
 	}
-	n := 0
-	for _, obj := range keys {
-		if k, ok := obj.(*v1.Key); ok && k.Status.Budget != nil && k.Status.Budget.ID == id {
-			n++
-		}
-	}
+	n := len(keys)
 	spent := v1.Money(m[spendKey])
 	amount := v1.Money(0)
 	if b.Spec.Amount != nil {

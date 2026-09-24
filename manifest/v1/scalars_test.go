@@ -185,3 +185,59 @@ func TestWindows(t *testing.T) {
 		}
 	})
 }
+
+// TestAnchoredBounds is spec 037's window rule: a duration window starts
+// at the anchor plus whole periods, before the anchor as after it; month
+// starts on the anchor's day and time of day, on the month's last day
+// when the month is shorter; a zero anchor and none are Bounds.
+func TestAnchoredBounds(t *testing.T) {
+	d := func(s string) time.Time {
+		t.Helper()
+		v, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	created := d("2026-01-05T08:00:00Z")
+	monday := d("2026-09-14T00:00:00Z")
+	cases := []struct {
+		name          string
+		w             Window
+		at, anchor    string
+		start, resets string
+	}{
+		{"a week from a Monday, inside the anchored week", "168h", "2026-09-17T12:00:00Z", "2026-09-14T00:00:00Z", "2026-09-14T00:00:00Z", "2026-09-21T00:00:00Z"},
+		{"a week from a Monday, weeks later", "168h", "2026-10-05T00:00:00Z", "2026-09-14T00:00:00Z", "2026-10-05T00:00:00Z", "2026-10-12T00:00:00Z"},
+		{"a week from a Monday, before the anchor", "168h", "2026-09-10T00:00:00Z", "2026-09-14T00:00:00Z", "2026-09-07T00:00:00Z", "2026-09-14T00:00:00Z"},
+		{"every ten days from a date", "240h", "2026-10-25T00:00:00Z", "2026-10-01T00:00:00Z", "2026-10-21T00:00:00Z", "2026-10-31T00:00:00Z"},
+		{"a month from the 15th at noon", "month", "2026-09-20T00:00:00Z", "2026-01-15T12:00:00Z", "2026-09-15T12:00:00Z", "2026-10-15T12:00:00Z"},
+		{"a month from the 15th at noon, before this month's", "month", "2026-09-15T11:59:59Z", "2026-01-15T12:00:00Z", "2026-08-15T12:00:00Z", "2026-09-15T12:00:00Z"},
+		{"a month from the 31st, in February", "month", "2027-02-28T10:00:00Z", "2026-01-31T00:00:00Z", "2027-02-28T00:00:00Z", "2027-03-31T00:00:00Z"},
+		{"a month from the 31st, before February's", "month", "2027-02-27T10:00:00Z", "2026-01-31T00:00:00Z", "2027-01-31T00:00:00Z", "2027-02-28T00:00:00Z"},
+		{"a month from the 31st, in a leap February", "month", "2028-02-29T00:00:00Z", "2026-01-31T00:00:00Z", "2028-02-29T00:00:00Z", "2028-03-31T00:00:00Z"},
+		{"a month from the 30th across a year", "month", "2027-01-02T00:00:00Z", "2026-01-30T00:00:00Z", "2026-12-30T00:00:00Z", "2027-01-30T00:00:00Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			start, resets := tc.w.AnchoredBounds(d(tc.at), created, d(tc.anchor))
+			if !start.Equal(d(tc.start)) || !resets.Equal(d(tc.resets)) {
+				t.Fatalf("AnchoredBounds = %s, %s, want %s, %s", start.Format(time.RFC3339), resets.Format(time.RFC3339), tc.start, tc.resets)
+			}
+		})
+	}
+	at := d("2026-09-17T12:00:00Z")
+	for _, w := range []Window{"168h", WindowMonth, WindowNone} {
+		s1, r1 := w.AnchoredBounds(at, created, time.Time{})
+		s2, r2 := w.Bounds(at, created)
+		if !s1.Equal(s2) || !r1.Equal(r2) {
+			t.Errorf("%s with no anchor = %s, %s, want Bounds %s, %s", w, s1, r1, s2, r2)
+		}
+	}
+	if s, r := WindowNone.AnchoredBounds(at, created, monday); !s.Equal(created) || !r.IsZero() {
+		t.Errorf("none with an anchor = %s, %s", s, r)
+	}
+	if s, r := Window("bad").AnchoredBounds(at, created, monday); !s.IsZero() || !r.IsZero() {
+		t.Errorf("an invalid window with an anchor = %s, %s", s, r)
+	}
+}

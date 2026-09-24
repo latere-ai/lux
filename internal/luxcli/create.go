@@ -9,6 +9,7 @@ import (
 	"flag"
 	"strconv"
 	"strings"
+	"time"
 
 	"latere.ai/x/lux/manifest"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -31,7 +32,7 @@ func keysCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	fs.IntVar(&o.rpm, "rpm", 0, "requests a minute; 0 is no limit")
 	fs.IntVar(&o.tpm, "tpm", 0, "tokens a minute; 0 is no limit")
 	fs.StringVar(&o.spend, "spend", "", "a spend limit, amount[/window]")
-	fs.StringVar(&o.budget, "budget", "", "the Budget the Key draws from")
+	fs.StringVar(&o.budget, "budget", "", "the Budget the Key draws from, or several, comma separated, each of which every call must fit")
 	fs.StringVar(&o.ttl, "ttl", "", "how long the Key lives, a duration such as 720h")
 	fs.Var(&o.labels, "label", "a label, k=v; repeatable")
 	fs.BoolVar(&o.passthrough, "passthrough", false, "let the Key call any route the dialect has, translated or not")
@@ -70,7 +71,17 @@ func runKeysCreate(a *app, o *keysCreateOptions, args []string) error {
 		}
 		k.Spec.Limits.Spend = &v1.Spend{Amount: &m, Window: v1.Window(window)}
 	}
-	k.Spec.Budget = o.budget
+	var budgets []string
+	for b := range strings.SplitSeq(o.budget, ",") {
+		if b = strings.TrimSpace(b); b != "" {
+			budgets = append(budgets, b)
+		}
+	}
+	if len(budgets) == 1 {
+		k.Spec.Budget = budgets[0]
+	} else {
+		k.Spec.Budgets = budgets
+	}
 	if o.ttl != "" {
 		if _, err := v1.Duration(o.ttl).Parse(); err != nil {
 			return &usageError{msg: "-ttl takes a duration such as 720h, not " + quote(o.ttl) + "."}
@@ -192,8 +203,8 @@ func parseTarget(s string) (v1.Target, error) {
 }
 
 type budgetsCreateOptions struct {
-	amount, currency, window string
-	soft, dryRun             bool
+	amount, currency, window, anchor string
+	soft, dryRun                     bool
 }
 
 func budgetsCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
@@ -201,6 +212,7 @@ func budgetsCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	fs.StringVar(&o.amount, "amount", "", "the amount per window; required")
 	fs.StringVar(&o.currency, "currency", "", "the currency; USD when unset")
 	fs.StringVar(&o.window, "window", "", "the window: month, none, or a duration; month when unset")
+	fs.StringVar(&o.anchor, "anchor", "", "an RFC 3339 instant the window is aligned to, such as 2026-09-14T00:00:00Z for weeks from a Monday")
 	fs.BoolVar(&o.soft, "soft", false, "warn past the amount instead of refusing")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
 	return func(args []string) error { return runBudgetsCreate(a, o, args) }
@@ -218,6 +230,13 @@ func runBudgetsCreate(a *app, o *budgetsCreateOptions, args []string) error {
 		return &usageError{msg: "-amount takes a decimal amount such as 500 or 12.50, not " + quote(o.amount) + "."}
 	}
 	b := &v1.Budget{Metadata: v1.ObjectMeta{Name: args[0]}, Spec: v1.BudgetSpec{Amount: &amount, Currency: o.currency, Window: v1.Window(o.window)}}
+	if o.anchor != "" {
+		at, err := time.Parse(time.RFC3339, o.anchor)
+		if err != nil {
+			return &usageError{msg: "-anchor takes an RFC 3339 instant such as 2026-09-14T00:00:00Z, not " + quote(o.anchor) + "."}
+		}
+		b.Spec.Anchor = at
+	}
 	if o.soft {
 		hard := false
 		b.Spec.Hard = &hard

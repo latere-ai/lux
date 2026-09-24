@@ -53,6 +53,9 @@ func createdData(obj v1.Object) map[string]any {
 		return map[string]any{"targets": targets, "priced": x.Spec.Pricing != nil}
 	case *v1.Key:
 		data := map[string]any{"prefix": x.Status.Prefix, "models": x.Spec.Models, "budget": x.Spec.Budget}
+		if len(x.Spec.Budgets) > 0 {
+			data["budgets"] = x.Spec.Budgets
+		}
 		if !x.Status.ExpiresAt.IsZero() {
 			data["expiresAt"] = x.Status.ExpiresAt
 		}

@@ -330,6 +330,16 @@ func TestPostgresQueriesUseIndexes(t *testing.T) {
 		SELECT 'Model', 'mdl_bulk' || n, 'bulk-' || n, 'https://login.example.com|bulk', 'declared', 1,
 			'{"metadata":{"name":"bulk"},"spec":{}}', '{}', '{"tier":"bulk"}', '{bulk}', now(), now()
 		FROM generate_series(1, 3000) AS n`)
+	// And a few thousand live Keys drawing on other Budgets, half in each
+	// form of spec 037, so reading one Budget's Keys has rows to leave out.
+	pgtest.Exec(t, dbURL, `
+		INSERT INTO objects (kind, id, name, owner, source, version, spec, status, labels, providers, created_at, updated_at)
+		SELECT 'Key', 'key_bulk' || n, 'bulk-' || n, 'https://login.example.com|bulk', '', 1,
+			'{"metadata":{"name":"bulk"},"spec":{}}',
+			CASE WHEN n % 2 = 0 THEN jsonb_build_object('budget', jsonb_build_object('name', 'b', 'id', 'bud_bulk' || (n % 300)))
+			ELSE jsonb_build_object('budgets', jsonb_build_array(jsonb_build_object('name', 'b', 'id', 'bud_bulk' || (n % 300)))) END,
+			'{}', '{}', now(), now()
+		FROM generate_series(1, 3000) AS n`)
 	pgtest.Exec(t, dbURL, `ANALYZE objects`)
 	pgtest.Exec(t, dbURL, `SELECT pg_stat_reset()`)
 
@@ -355,6 +365,10 @@ func TestPostgresQueriesUseIndexes(t *testing.T) {
 		_, _, err = st.Objects().List(ctx, v1.KindModel, f, store.Page{Limit: 10})
 		must("List", err)
 	}
+	// The Keys of one Budget, in either form (spec 037), read whole as
+	// RenderBudget and the budget_in_use check read them.
+	_, _, err = st.Objects().List(ctx, v1.KindKey, store.Filter{Budget: "bud_01J9ZK2P7Q8R9S0T1U2V3W4X5A"}, store.Page{})
+	must("List by budget", err)
 	must("PutStatus", st.Objects().PutStatus(ctx, v1.KindModel, m.Status.ID, store.ModelObserved{Available: new(true)}))
 	must("Delete", st.Objects().Delete(ctx, v1.KindModel, m.Status.ID))
 	_, err = st.Objects().Prune(ctx, time.Now().Add(time.Hour))

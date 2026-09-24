@@ -38,6 +38,7 @@ func Run(t *testing.T, newStore Factory) {
 		{"TestTransactRefusesNesting", transactRefusesNesting},
 		{"TestListOrderAndCursor", listOrderAndCursor},
 		{"TestFilterByProvider", filterByProvider},
+		{"TestFilterByBudget", filterByBudget},
 		{"TestDeleteAndPrune", deleteAndPrune},
 		{"TestPutKeepsNoValue", putKeepsNoValue},
 		{"TestCountersAreAtomic", countersAreAtomic},
@@ -579,6 +580,44 @@ func filterByProvider(t *testing.T, s store.Store) {
 	noErr(t, s.Objects().Delete(ctx, v1.KindProvider, azure.Status.ID), "delete azure")
 	got, _, err = s.Objects().List(ctx, v1.KindModel, store.Filter{Provider: azure.Status.ID}, store.Page{})
 	noErr(t, err, "List by a deleted provider")
+	sameNames(t, got)
+}
+
+// filterByBudget is spec 037's filter: the live Keys that draw on one
+// Budget, whether they name it in status.budget or list it in
+// status.budgets, and no other kind and no deleted Key.
+func filterByBudget(t *testing.T, s store.Store) {
+	ctx := t.Context()
+	team, week := "bud_01J9ZK2P7Q8R9S0T1U2V3W4X5A", "bud_01J9ZK2P7Q8R9S0T1U2V3W4X5B"
+	one := key("one")
+	one.Status.Budget = &v1.BudgetRef{Name: "team", ID: team}
+	both := key("both")
+	both.Status.ID = "key_01J9ZK2P7Q8R9S0T1U2V3W4X5C"
+	both.Status.Budgets = []v1.BudgetRef{{Name: "team", ID: team}, {Name: "week", ID: week}}
+	gone := key("gone")
+	gone.Status.ID = "key_01J9ZK2P7Q8R9S0T1U2V3W4X5D"
+	gone.Status.Budgets = []v1.BudgetRef{{Name: "week", ID: week}}
+	none := key("none")
+	none.Status.ID = "key_01J9ZK2P7Q8R9S0T1U2V3W4X5E"
+	for _, k := range []*v1.Key{one, both, gone, none} {
+		_, err := s.Objects().Put(ctx, k, 0)
+		noErr(t, err, "Put "+k.Metadata.Name)
+	}
+	noErr(t, s.Objects().Delete(ctx, v1.KindKey, gone.Status.ID), "delete gone")
+	for _, tc := range []struct {
+		budget string
+		want   []string
+	}{
+		{team, []string{"both", "one"}},
+		{week, []string{"both"}},
+		{"bud_unknown", nil},
+	} {
+		got, _, err := s.Objects().List(ctx, v1.KindKey, store.Filter{Budget: tc.budget}, store.Page{})
+		noErr(t, err, "List by budget "+tc.budget)
+		sameNames(t, got, tc.want...)
+	}
+	got, _, err := s.Objects().List(ctx, v1.KindBudget, store.Filter{Budget: team}, store.Page{})
+	noErr(t, err, "budget filter on Budgets")
 	sameNames(t, got)
 }
 

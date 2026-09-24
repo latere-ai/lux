@@ -570,7 +570,7 @@ func TestExhaustionIsAnnouncedOnce(t *testing.T) {
 	// claimed the marker; one whose last flush left it under has no
 	// delta to flush and does not look again, and one of the claimants
 	// was first.
-	if n := h.counter(t, metering.CounterKey(metering.ScopeBudgetExhausted, soft.Status.ID, "1h", h.clock(), soft.Status.CreatedAt)); n < 1 || n > 6 {
+	if n := h.counter(t, metering.MarkerKey(metering.BudgetCounterKey(metering.ScopeBudgetExhausted, soft, h.clock()), *soft.Spec.Amount)); n < 1 || n > 6 {
 		t.Fatalf("the soft marker was claimed %d times", n)
 	}
 	// The next window announces again, once.

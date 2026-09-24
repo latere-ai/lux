@@ -368,7 +368,7 @@ file gets written.
 
 Flags:
   -budget string
-    	the Budget the Key draws from
+    	the Budget the Key draws from, or several, comma separated, each of which every call must fit
   -dry-run
     	print the manifest and send nothing
   -key string
@@ -474,6 +474,8 @@ is given.
 Flags:
   -amount string
     	the amount per window; required
+  -anchor string
+    	an RFC 3339 instant the window is aligned to, such as 2026-09-14T00:00:00Z for weeks from a Monday
   -currency string
     	the currency; USD when unset
   -dry-run

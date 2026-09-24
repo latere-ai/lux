@@ -278,6 +278,12 @@ func (o objects) List(ctx context.Context, kind string, f store.Filter, p store.
 		if len(f.IDs) > 0 {
 			where = append(where, "id = ANY("+arg(f.IDs)+"::text[])")
 		}
+		if f.Budget != "" {
+			// The two forms of a Key's Budgets, each served by a partial
+			// index of migration 1000004.
+			n := arg(f.Budget)
+			where = append(where, "(status->'budget'->>'id' = "+n+" OR status->'budgets' @> jsonb_build_array(jsonb_build_object('id', "+n+"::text)))")
+		}
 		rows, err := q.Query(ctx, `SELECT `+objectColumns+` FROM objects WHERE `+strings.Join(where, " AND ")+` ORDER BY name LIMIT `+arg(nullLimit(pageLimit(p.Limit))), args...)
 		if err != nil {
 			return err

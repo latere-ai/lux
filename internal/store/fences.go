@@ -59,6 +59,6 @@ func DisableOnly(old, next *v1.Key) bool {
 	before.Disabled = true
 	return old.ID() == next.ID() && old.Status.Owner == next.Status.Owner &&
 		old.Status.Prefix == next.Status.Prefix && old.Status.ExpiresAt.Equal(next.Status.ExpiresAt) &&
-		reflect.DeepEqual(old.Status.Budget, next.Status.Budget) &&
+		reflect.DeepEqual(old.Status.Budget, next.Status.Budget) && reflect.DeepEqual(old.Status.Budgets, next.Status.Budgets) &&
 		reflect.DeepEqual(old.Metadata, next.Metadata) && reflect.DeepEqual(before, next.Spec)
 }

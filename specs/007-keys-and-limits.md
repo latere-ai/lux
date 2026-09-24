@@ -444,7 +444,9 @@ key. A Budget's spend counter takes the same two adds. The Recorder of
 [[009-usage-and-metering]] folds the aggregates from the records and
 adds to none of these.
 
-At stage 7, for each of the Key's spend window and the Budget's:
+At stage 7, for each of the Key's spend window and every Budget it
+draws from, one in `spec.budget` or up to four in `spec.budgets`
+([[037-several-budgets-per-key]]), any one of which refuses the request:
 
 ```
 known     = the store's counter as of the last flush
@@ -457,9 +459,12 @@ The estimated cost is the reservation's tokens priced by the Model's
 `pricing` through `metering.Cost` ([[009-usage-and-metering]]), whose
 arithmetic the Limiter holds as `costOf` until that package lands and
 replaces it; after the response the measured cost replaces it in the
-delta. The Budget a Key draws from is read through the Key cache, and
-a Key whose Budget is gone, which `budget_in_use` forbids and a delete
-in flight can leave for a moment, draws from none. The bound this
+delta. The Budgets a Key draws from are read through the Key cache, and
+a Budget that is gone, which `budget_in_use` forbids and a delete in
+flight can leave for a moment, is drawn from by no Key. When several
+Budgets refuse at once, the detail names each, each announces its own
+exhaustion, and `Retry-After` is the latest reset among them, absent
+when one never resets ([[037-several-budgets-per-key]]). The bound this
 gives, stated once here and once in the metering spec in the same
 symbols: with `R` replicas, a flush interval `F` in seconds, `T`
 requests per second per replica against the counter, and `C` the
@@ -531,9 +536,12 @@ Pricing rules at this stage:
 A Budget is drawn by every Key that names it. `budget.draw` is decided
 once, at the Key's resolve ([[006-identity]]); after that the draw is
 arithmetic. Its `status` is rendered at read time like a Key's, by
-`serve.RenderBudget`: `status.keys` counts the live Keys whose
-`status.budget` names it now; `status.spent` is the
-current window's counter as a money string, `status.remaining` is
+`serve.RenderBudget`: `status.keys` counts the live Keys that draw on
+it now, through `status.budget` or `status.budgets`, read through the
+store's Budget filter rather than every Key ([[037-several-budgets-per-key]]); `status.spent` is the
+current window's counter as a money string, the window aligned to
+`spec.anchor` and started at `spec.restartedAt` when that lies inside
+it ([[037-several-budgets-per-key]]), `status.remaining` is
 `amount` less that, floored at zero, and `status.resetsAt` is the
 window's reset, or absent for `none`; `status.state` is `Exhausted`
 while `spent` is at or over `amount` and `Open` otherwise. Deleting a

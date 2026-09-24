@@ -33,6 +33,9 @@ var keysCases = []testCase{
 	{group: "keys", name: "case007HashSuppliedValue", spec: 7, bearer: true, key: true, fn: case007HashSuppliedValue},
 	{group: "keys", name: "case007SpendWindow", spec: 7, bearer: true, key: true, stubs: true, fn: case007SpendWindow},
 	{group: "keys", name: "case007BudgetExhausted", spec: 7, bearer: true, key: true, stubs: true, fn: case007BudgetExhausted},
+	{group: "keys", name: "case037SeveralBudgets", spec: 37, bearer: true, key: true, stubs: true, fn: case037SeveralBudgets},
+	{group: "keys", name: "case037AnchoredWindow", spec: 37, bearer: true, key: true, fn: case037AnchoredWindow},
+	{group: "keys", name: "case037Restart", spec: 37, bearer: true, key: true, stubs: true, fn: case037Restart},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -300,5 +303,92 @@ func case007BudgetExhausted(t testing.TB, c *client) {
 	c.eventually(t, 15*time.Second, "the Budget's status.spent carries the spend", func() (bool, string) {
 		read := c.read(t, v1.KindBudget, str(b, "status.id")).json(t)
 		return str(read, "status.spent") == "0.0015", "status.spent is " + strconv.Quote(str(read, "status.spent"))
+	})
+}
+
+// case037SeveralBudgets: a Key listing a wide monthly Budget and a tight
+// daily one is refused budget_exhausted when the tight one would pass
+// its amount, with the tight one's reset as Retry-After, and the one
+// request it served counts in both Budgets' status.spent and keys.
+func case037SeveralBudgets(t testing.TB, c *client) {
+	wide := c.object(t, v1.KindBudget, "wide", map[string]any{"amount": "1", "currency": "USD", "window": "month"})
+	defer c.mustDelete(t, v1.KindBudget, str(wide, "status.id"))
+	tight := c.object(t, v1.KindBudget, "tight", map[string]any{"amount": "0.002", "currency": "USD", "window": "24h"})
+	defer c.mustDelete(t, v1.KindBudget, str(tight, "status.id"))
+	k := c.object(t, v1.KindKey, "layered", c.keySpec(map[string]any{"budgets": []string{c.name("wide"), c.name("tight")}}))
+	defer c.mustDelete(t, v1.KindKey, str(k, "status.id"))
+	if refs := arr(k, "status.budgets"); len(refs) != 2 {
+		t.Fatalf("status.budgets %v", refs)
+	}
+	value := str(k, "status.value")
+	if first := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value); first.Status != http.StatusOK {
+		t.Fatalf("the first request: %d %s", first.Status, excerpt(first.Body))
+	}
+	second := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value)
+	c.expectDoor(t, "openai", second, "budget_exhausted")
+	if retry, err := strconv.Atoi(second.Header.Get("Retry-After")); err != nil || retry < 1 || retry > 24*3600 {
+		t.Errorf("Retry-After %q is not the daily Budget's reset", second.Header.Get("Retry-After"))
+	}
+	for _, b := range []map[string]any{wide, tight} {
+		id := str(b, "status.id")
+		c.eventually(t, 15*time.Second, "status.spent of "+id+" carries the one request", func() (bool, string) {
+			read := c.read(t, v1.KindBudget, id).json(t)
+			return str(read, "status.spent") == "0.0015" && num(read, "status.keys") == 1, "status.spent is " + strconv.Quote(str(read, "status.spent"))
+		})
+	}
+}
+
+// case037AnchoredWindow: a Budget whose window is anchored resets on the
+// anchor's grid, a daily one at the anchor's time of day and a monthly
+// one on the anchor's day, and an anchor under window none is refused.
+func case037AnchoredWindow(t testing.TB, c *client) {
+	daily := c.object(t, v1.KindBudget, "daily-at-noon", map[string]any{"amount": "1", "currency": "USD", "window": "24h", "anchor": "2026-01-01T12:30:00Z"})
+	defer c.mustDelete(t, v1.KindBudget, str(daily, "status.id"))
+	monthly := c.object(t, v1.KindBudget, "monthly-on-15th", map[string]any{"amount": "1", "currency": "USD", "window": "month", "anchor": "2026-01-15T06:00:00Z"})
+	defer c.mustDelete(t, v1.KindBudget, str(monthly, "status.id"))
+	for _, tc := range []struct {
+		obj   map[string]any
+		check func(time.Time) bool
+		want  string
+	}{
+		{daily, func(r time.Time) bool { return r.Hour() == 12 && r.Minute() == 30 && r.Second() == 0 }, "12:30:00 on some day"},
+		{monthly, func(r time.Time) bool { return r.Day() == 15 && r.Hour() == 6 && r.Minute() == 0 }, "the 15th at 06:00"},
+	} {
+		read := c.read(t, v1.KindBudget, str(tc.obj, "status.id")).json(t)
+		resets, err := time.Parse(time.RFC3339, str(read, "status.resetsAt"))
+		if err != nil || !tc.check(resets.UTC()) || !resets.After(time.Now().Add(-time.Minute)) {
+			t.Errorf("Budget %s resets at %q, want %s", str(tc.obj, "metadata.name"), str(read, "status.resetsAt"), tc.want)
+		}
+	}
+	resp := c.apply(t, v1.KindBudget, c.name("lifetime-anchored"), map[string]any{"metadata": c.meta(c.name("lifetime-anchored")), "spec": map[string]any{"amount": "1", "window": "none", "anchor": "2026-01-01T00:00:00Z"}})
+	c.expect(t, resp, "invalid_field")
+}
+
+// case037Restart: a Budget refusing budget_exhausted serves again once
+// spec.restartedAt restarts its window, with status.spent counting from
+// the restart and status.resetsAt unchanged.
+func case037Restart(t testing.TB, c *client) {
+	spec := map[string]any{"amount": "0.002", "currency": "USD", "window": "24h"}
+	b := c.object(t, v1.KindBudget, "restartable", spec)
+	id := str(b, "status.id")
+	defer c.mustDelete(t, v1.KindBudget, id)
+	k := c.object(t, v1.KindKey, "restarted", c.keySpec(map[string]any{"budgets": []string{c.name("restartable")}}))
+	defer c.mustDelete(t, v1.KindKey, str(k, "status.id"))
+	value := str(k, "status.value")
+	if first := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value); first.Status != http.StatusOK {
+		t.Fatalf("the first request: %d %s", first.Status, excerpt(first.Body))
+	}
+	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value), "budget_exhausted")
+	before := str(c.read(t, v1.KindBudget, id).json(t), "status.resetsAt")
+	spec["restartedAt"] = time.Now().UTC().Add(-2 * time.Second).Truncate(time.Second).Format(time.RFC3339)
+	c.object(t, v1.KindBudget, "restartable", spec)
+	c.eventually(t, revocationTimeout, "the restarted Budget serves", func() (bool, string) {
+		resp := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value)
+		return resp.Status == http.StatusOK, "the door answers " + strconv.Itoa(resp.Status)
+	})
+	c.eventually(t, 15*time.Second, "status.spent counts from the restart", func() (bool, string) {
+		read := c.read(t, v1.KindBudget, id).json(t)
+		return str(read, "status.spent") == "0.0015" && str(read, "status.resetsAt") == before,
+			"status.spent is " + strconv.Quote(str(read, "status.spent")) + ", status.resetsAt " + str(read, "status.resetsAt") + " was " + before
 	})
 }

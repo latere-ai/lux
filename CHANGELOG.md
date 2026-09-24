@@ -27,6 +27,29 @@ refused before it is pushed.
   the outage reaches the Budgets and the usage rows once the store answers.
 - Discovery raises `model.updated` with reason `discovery` when a
   discovered Model's labels or modalities change.
+- A Key can list up to four Budgets in `spec.budgets`, and every call must
+  fit each of them: an organization's balance, a member's weekly limit and
+  their monthly limit hold together. When several refuse at once, each
+  raises its own `budget.exhausted` and `Retry-After` is the latest reset
+  among them, absent when one never resets. `spec.budget` still names one
+  Budget and cannot be set beside `spec.budgets`. `budget.draw` is asked
+  per entry, and `key.create`'s resource and `key.created`'s data carry
+  `budgets`. `lux keys create -budget a,b` writes the list.
+- A Budget's window can start where you choose: `spec.anchor`, an RFC 3339
+  instant, aligns a duration window to it instead of the epoch (so `168h`
+  can reset on Mondays) and starts `month` on its day and time of day,
+  clamped to the month's last day. It is immutable and refused under
+  `none`. `lux budgets create -anchor` sets it.
+- `Budget.spec.restartedAt` restarts the current window from that instant:
+  spend counts from zero, the reset stays where it was, and the exhaustion
+  announcement re-arms.
+- A Budget or Key spend window that is exhausted, raised and exhausted
+  again in one window announces again: the marker now carries the amount.
+  After the upgrade, a window that had already announced announces once
+  more.
+- `status.keys` of a Budget and the `budget_in_use` check read that Budget's
+  Keys alone. The Postgres schema gains two indexes for it (migration
+  1000004).
 
 ## v0.6.0 - 2026-09-23
 

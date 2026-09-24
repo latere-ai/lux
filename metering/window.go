@@ -55,6 +55,41 @@ func CounterKey(s Scope, id string, w v1.Window, at, createdAt time.Time) string
 	return keyOf(s, id, strconv.FormatInt(start.Unix(), 10))
 }
 
+// BudgetWindow is the Budget's current window at at: spec.window aligned
+// to spec.anchor, started instead at spec.restartedAt when that instant
+// lies inside the natural window and is not after at. The reset is the
+// natural window's, zero under none.
+func BudgetWindow(b *v1.Budget, at time.Time) (start, resetsAt time.Time) {
+	start, resetsAt = b.Spec.Window.AnchoredBounds(at, b.Status.CreatedAt, b.Spec.Anchor)
+	if r := b.Spec.RestartedAt; !r.IsZero() && !r.Before(start) && !r.After(at) && (resetsAt.IsZero() || r.Before(resetsAt)) {
+		start = r.UTC()
+	}
+	return start, resetsAt
+}
+
+// BudgetCounterKey is the key of the Budget's counter of scope s in the
+// window BudgetWindow finds at at. Without an anchor or a restart it is
+// CounterKey's key, so a Budget's counters keep their rows across an
+// upgrade; a restart under none renders the lifetime key with the
+// instant, none@<unix>, so the lifetime counts from the restart.
+func BudgetCounterKey(s Scope, b *v1.Budget, at time.Time) string {
+	start, _ := BudgetWindow(b, at)
+	if b.Spec.Window == v1.WindowNone {
+		if start.Equal(b.Status.CreatedAt.UTC()) {
+			return TotalKey(s, b.Status.ID)
+		}
+		return keyOf(s, b.Status.ID, "none@"+strconv.FormatInt(start.Unix(), 10))
+	}
+	return keyOf(s, b.Status.ID, strconv.FormatInt(start.Unix(), 10))
+}
+
+// MarkerKey is the exhaustion marker of a window claimed at an amount:
+// the window's key and the amount in micro-units, so an amount raised
+// inside a window re-arms its announcement.
+func MarkerKey(window string, amount v1.Money) string {
+	return window + ":" + strconv.FormatInt(int64(amount), 10)
+}
+
 // TotalKey is the key of the lifetime counter for scope s of the object
 // id, which is CounterKey under window none.
 func TotalKey(s Scope, id string) string { return keyOf(s, id, "none") }

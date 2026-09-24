@@ -299,6 +299,7 @@ the discovered one.
 | `limits.spend.currency` | string | `USD` | yes | ISO 4217; a request for a Model priced in another currency is `currency_mismatch` ([[007-keys-and-limits]]) |
 | `limits.spend.window` | window | none | yes | the window rule below; `none` is the key's lifetime |
 | `budget` | string | absent | yes | a `Budget` the caller may draw from, by name or `bud_` id; `Lookup.Budget` answers `not_found` otherwise; a spend limit and a budget may both be set and both hold |
+| `budgets[]` | []string | absent | yes | one to four Budgets, each by name or `bud_` id, every one of which a call must fit ([[037-several-budgets-per-key]]); a fifth or a duplicate is `invalid_field`, a missing or refused entry `not_found` at `spec.budgets[i]`; `exclusive_fields` with `budget`; `status.budgets` carries each name and id in order |
 | `ttl` | duration | absent | no | Go syntax, at least `1m`; `status.expiresAt` is `createdAt` plus `ttl`, `createdAt` being the existing object's on an update and `Now` on a create; `exclusive_fields` with `expiresAt`; above `Limits.MaxTTL` is `ceiling_exceeded`, and so is a Key that never expires under a `MaxTTL` |
 | `expiresAt` | timestamp | absent | yes | RFC 3339, in the future at resolve; copied to `status.expiresAt`, the one field the data plane reads for expiry; absent and no `ttl` is never |
 | `allowUnpriced` | bool | `false` | yes | with a spend limit or a budget, a request for a Model with no pricing is `model_unpriced` unless this is true ([[007-keys-and-limits]]) |
@@ -315,6 +316,8 @@ the discovered one.
 | `amount` | money | none, required | yes | positive |
 | `currency` | string | `USD` | no | ISO 4217; a Key whose Models price in another currency is refused at request time with `currency_mismatch` ([[007-keys-and-limits]]) |
 | `window` | window | `month` | no | the window rule below |
+| `anchor` | timestamp | absent | no | RFC 3339, stored in UTC: a duration window starts at the anchor plus whole periods instead of the epoch, and `month` on the anchor's day and time of day, clamped to the month's last day ([[037-several-budgets-per-key]]); `invalid_field` under `none` |
+| `restartedAt` | timestamp | absent | yes | RFC 3339: when it lies inside the current window and not after now, the window starts there instead and its reset is unchanged, so the spend counts from the restart ([[037-several-budgets-per-key]]) |
 | `hard` | bool | `true` | yes | `true` refuses with `budget_exhausted` at the limit; `false` emits `budget.exhausted` once per window and continues |
 
 Shared rules:

@@ -38,11 +38,19 @@ func (b Budget) MarshalJSON() ([]byte, error) {
 
 // BudgetSpec is the desired state of a Budget. Hard is a pointer because an
 // explicit false differs from an absent field, which defaults to true.
+//
+// Anchor is the instant a duration or month window is aligned to in
+// place of the epoch or the first of the month, immutable like the
+// window. RestartedAt, when it lies inside the current window and not
+// after now, is where that window starts instead, so an operator can
+// restart a window without waiting for its reset.
 type BudgetSpec struct {
-	Amount   *Money `json:"amount,omitempty"`
-	Currency string `json:"currency,omitempty"`
-	Window   Window `json:"window,omitempty"`
-	Hard     *bool  `json:"hard,omitempty"`
+	Amount      *Money    `json:"amount,omitempty"`
+	Currency    string    `json:"currency,omitempty"`
+	Window      Window    `json:"window,omitempty"`
+	Anchor      time.Time `json:"anchor,omitzero"`
+	RestartedAt time.Time `json:"restartedAt,omitzero"`
+	Hard        *bool     `json:"hard,omitempty"`
 }
 
 // BudgetStatus is written by the server and ignored on apply. Resolve

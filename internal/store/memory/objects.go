@@ -230,6 +230,12 @@ func matches(row objectRow, f store.Filter, providerName string) bool {
 	if len(f.IDs) > 0 && !slices.Contains(f.IDs, row.id) {
 		return false
 	}
+	if f.Budget != "" {
+		k, ok := row.obj.(*v1.Key)
+		if !ok || !slices.ContainsFunc(v1.KeyBudgets(k), func(r v1.BudgetRef) bool { return r.ID == f.Budget }) {
+			return false
+		}
+	}
 	return true
 }
 

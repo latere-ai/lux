@@ -70,17 +70,11 @@ func (c *call) checkInUse(ctx context.Context, obj v1.Object) *Error {
 	objects := c.h.o.Store.Objects()
 	switch x := obj.(type) {
 	case *v1.Budget:
-		keys, _, err := objects.List(ctx, v1.KindKey, store.Filter{}, store.Page{})
+		keys, _, err := objects.List(ctx, v1.KindKey, store.Filter{Budget: x.Status.ID}, store.Page{})
 		if err != nil {
 			return mapError(err)
 		}
-		n := 0
-		for _, o := range keys {
-			if k, ok := o.(*v1.Key); ok && k.Status.Budget != nil && k.Status.Budget.ID == x.Status.ID {
-				n++
-			}
-		}
-		if n > 0 {
+		if n := len(keys); n > 0 {
 			return refuse(CodeBudgetInUse, strconv.Itoa(n)+" live Key(s) draw from Budget "+x.Status.ID+"; move or delete them first")
 		}
 	case *v1.Provider:

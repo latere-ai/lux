@@ -25,7 +25,7 @@ var Table = map[string]Row{
 	ModelDeleted:        {Reason: ReasonRequest},
 	ModelDiscovered:     {Reason: ReasonDiscovery, Members: []string{"provider", "upstreamModel"}},
 	ModelRemoved:        {Reason: ReasonDiscovery, Members: []string{"provider", "upstreamModel"}},
-	KeyCreated:          {Reason: ReasonRequest, Members: []string{"prefix", "models", "budget"}, Optional: []string{"expiresAt"}},
+	KeyCreated:          {Reason: ReasonRequest, Members: []string{"prefix", "models", "budget"}, Optional: []string{"expiresAt", "budgets"}},
 	KeyUpdated:          {Reason: ReasonRequest, Members: []string{"paths"}},
 	KeyFenced:           {Reason: ReasonRequest},
 	KeyRotated:          {Reason: ReasonRequest, Members: []string{"prefix", "previousPrefix"}},

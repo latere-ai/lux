@@ -220,8 +220,13 @@ func (c *call) prepareWrite(obj, existing v1.Object, refs *references, owner str
 // so the three forms write one row and the door has one lookup.
 func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
-	if k.Spec.Budget != "" && refs.budget != nil {
-		k.Status.Budget = &v1.BudgetRef{Name: refs.budget.Metadata.Name, ID: refs.budget.Status.ID}
+	if b := refs.budgets[k.Spec.Budget]; k.Spec.Budget != "" && b != nil {
+		k.Status.Budget = &v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID}
+	}
+	for _, ref := range k.Spec.Budgets {
+		if b := refs.budgets[ref]; b != nil {
+			k.Status.Budgets = append(k.Status.Budgets, v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID})
+		}
 	}
 	if old, ok := existing.(*v1.Key); ok {
 		k.Status.Prefix = old.Status.Prefix

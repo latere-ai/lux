@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: missing-second
+spec:
+  models: ["gpt-5"]
+  budgets: [team-research, no-such-budget]

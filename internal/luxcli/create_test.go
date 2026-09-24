@@ -56,6 +56,16 @@ func TestFlagFormsBuildTheManifest(t *testing.T) {
 			"apiVersion: lux.latere.ai/v1beta1\nkind: Budget\nmetadata:\n  name: q4\nspec:\n  amount: \"500\"\n  currency: EUR\n  window: month\n  hard: false\n",
 		},
 		{
+			[]string{"keys", "create", "agent", "--models", "sonnet", "--budget", "q4, member-weekly"},
+			"/v1/keys/agent",
+			"apiVersion: lux.latere.ai/v1beta1\nkind: Key\nmetadata:\n  name: agent\nspec:\n  models: [sonnet]\n  budgets: [q4, member-weekly]\n",
+		},
+		{
+			[]string{"budgets", "create", "q4", "--amount", "10", "--window", "168h", "--anchor", "2026-09-14T00:00:00Z"},
+			"/v1/budgets/q4",
+			"apiVersion: lux.latere.ai/v1beta1\nkind: Budget\nmetadata:\n  name: q4\nspec:\n  amount: \"10\"\n  window: 168h\n  anchor: 2026-09-14T00:00:00Z\n",
+		},
+		{
 			[]string{"budgets", "create", "q4", "--amount", "12.50"},
 			"/v1/budgets/q4",
 			"apiVersion: lux.latere.ai/v1beta1\nkind: Budget\nmetadata:\n  name: q4\nspec:\n  amount: \"12.5\"\n",
@@ -166,6 +176,7 @@ func TestFlagFormUsageErrors(t *testing.T) {
 		{[]string{"models", "create", "m", "--target", "p/m", "--price-input", "3", "--price-output", "lots"}, "A price is a decimal amount"},
 		{[]string{"budgets", "create", "b"}, "-amount is required."},
 		{[]string{"budgets", "create", "b", "--amount", "-5"}, "-amount takes a decimal amount"},
+		{[]string{"budgets", "create", "b", "--amount", "5", "--anchor", "monday"}, "-anchor takes an RFC 3339 instant"},
 	}
 	for _, tc := range cases {
 		f.reset()

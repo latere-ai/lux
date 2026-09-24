@@ -49,6 +49,7 @@ type KeySpec struct {
 	ValueFrom     *ValueFrom `json:"valueFrom,omitempty"`
 	Limits        KeyLimits  `json:"limits,omitzero"`
 	Budget        string     `json:"budget,omitempty"`
+	Budgets       []string   `json:"budgets,omitempty"`
 	TTL           Duration   `json:"ttl,omitempty"`
 	ExpiresAt     time.Time  `json:"expiresAt,omitzero"`
 	AllowUnpriced bool       `json:"allowUnpriced"`
@@ -106,6 +107,7 @@ type KeyStatus struct {
 	State      KeyState         `json:"state,omitempty"`
 	Selectors  []SelectorStatus `json:"selectors,omitempty"`
 	Budget     *BudgetRef       `json:"budget,omitempty"`
+	Budgets    []BudgetRef      `json:"budgets,omitempty"`
 	Usage      *KeyUsage        `json:"usage,omitempty"`
 	LastUsedAt time.Time        `json:"lastUsedAt,omitzero"`
 	ExpiresAt  time.Time        `json:"expiresAt,omitzero"`
@@ -125,6 +127,23 @@ type SelectorStatus struct {
 type BudgetRef struct {
 	Name string `json:"name"`
 	ID   string `json:"id,omitempty"`
+}
+
+// MaxKeyBudgets is how many Budgets one Key may list in spec.budgets.
+const MaxKeyBudgets = 4
+
+// KeyBudgets is every Budget the Key draws from, in the order written:
+// status.budgets for a Key that lists them, status.budget for one that
+// names one, and none otherwise. Every reader of a Key's Budgets goes
+// through it, so the two forms of spec 037 read as one list.
+func KeyBudgets(k *Key) []BudgetRef {
+	if len(k.Status.Budgets) > 0 {
+		return k.Status.Budgets
+	}
+	if k.Status.Budget != nil && k.Status.Budget.ID != "" {
+		return []BudgetRef{*k.Status.Budget}
+	}
+	return nil
 }
 
 // KeyUsage is the Key's spending, rendered at read time.

@@ -496,6 +496,13 @@ func (o Options) prepareKey(ctx context.Context, cat *catalog, s *step, k *v1.Ke
 		}
 		k.Status.Budget = &v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID}
 	}
+	for _, ref := range k.Spec.Budgets {
+		b, err := cat.Budget(ctx, ref)
+		if err != nil {
+			return s.doc.fail(err, "")
+		}
+		k.Status.Budgets = append(k.Status.Budgets, v1.BudgetRef{Name: b.Metadata.Name, ID: b.Status.ID})
+	}
 	value, _ := k.Spec.Value()
 	hash, hashed := k.Spec.ValueSHA256()
 	k.Spec.ClearValue()

@@ -16,11 +16,12 @@ import (
 
 // references is the auth.Catalog of one apply over the store: the
 // objects a manifest may name, by name or by id, and the Models a
-// selector matches now. It remembers the Budget it answered so the
-// Key's status.budget carries the id beside the name.
+// selector matches now. It remembers the Budgets it answered, by the
+// reference the manifest wrote, so the Key's status.budget and
+// status.budgets carry each id beside its name.
 type references struct {
 	objects store.Objects
-	budget  *v1.Budget
+	budgets map[string]*v1.Budget
 }
 
 // Provider implements auth.Catalog.
@@ -46,7 +47,10 @@ func (r *references) Budget(ctx context.Context, nameOrID string) (*v1.Budget, e
 	if !ok {
 		return nil, fmt.Errorf("Budget %q: the store holds a %T under the reference", nameOrID, obj)
 	}
-	r.budget = b
+	if r.budgets == nil {
+		r.budgets = map[string]*v1.Budget{}
+	}
+	r.budgets[nameOrID] = b
 	return b, nil
 }
 

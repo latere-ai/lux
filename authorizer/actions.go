@@ -233,10 +233,11 @@ func ModelUse(selector string, matched []v1.ModelRef) authz.Resource {
 // KeyCreate is key.create's resource, from the manifest.
 func KeyCreate(k *v1.Key) authz.Resource {
 	return authz.NewResource(v1.KindKey, "", map[string]any{
-		"name":   k.Metadata.Name,
-		"labels": labels(k.Metadata.Labels),
-		"models": list(k.Spec.Models),
-		"budget": k.Spec.Budget,
+		"name":    k.Metadata.Name,
+		"labels":  labels(k.Metadata.Labels),
+		"models":  list(k.Spec.Models),
+		"budget":  k.Spec.Budget,
+		"budgets": list(k.Spec.Budgets),
 	})
 }
 
