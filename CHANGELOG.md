@@ -14,8 +14,10 @@ refused before it is pushed.
   Model, its Providers, and a Provider's credential without a store read.
   The credential stays sealed in memory and is opened per request. A change
   through `/v1` is served at once by the replica that took it and within a
-  second by every other; a status no event names is picked up by a full
-  re-read every `LUX_CATALOG_RELOAD` (default `30s`). `/readyz` waits for
+  second by every other. A Model's availability, which the health job
+  publishes, is read again at every health tick, and everything else no
+  event names by a full re-read every `LUX_CATALOG_RELOAD` (default
+  `30s`). `/readyz` waits for
   the first load. New metrics `lux_catalog_age_seconds`,
   `lux_catalog_reloads_total` and `lux_catalog_objects`, and the alert
   `LuxCatalogStale`.

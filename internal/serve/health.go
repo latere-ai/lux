@@ -62,6 +62,11 @@ type HealthOptions struct {
 	Now func() time.Time
 	// NewID mints event ids; nil mints evt_ ULIDs from Now.
 	NewID func() string
+	// AfterTick runs at the end of every tick on every replica, after the
+	// holder has published the tick's availability, so the catalog
+	// snapshot of spec 036 reads the Models' status on the health
+	// interval rather than waiting for its backstop; nil runs nothing.
+	AfterTick func(ctx context.Context)
 }
 
 // Health is the health job of spec 005 on one replica. Under the health
@@ -208,6 +213,9 @@ func (h *Health) Held() bool {
 // outcome, resets a none-mode Provider to Unknown, and fills the status
 // of any Model that has none yet.
 func (h *Health) Tick(ctx context.Context) {
+	if h.o.AfterTick != nil {
+		defer h.o.AfterTick(ctx)
+	}
 	byRef, list, err := listProviders(ctx, h.o.Store)
 	if err != nil {
 		h.o.Logger.ErrorContext(ctx, "health: reading the Providers", "err", err)

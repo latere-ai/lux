@@ -1007,3 +1007,66 @@ func TestLateCorrectionAfterOutage(t *testing.T) {
 		t.Fatalf("%d budget.exhausted rows, want 1", n)
 	}
 }
+
+// TestCatalogSnapshotFollowsTheHealthTick: a Model declared after the
+// snapshot loaded enters the model list at the health tick that fills
+// its availability, with no journal row and no backstop, because the
+// tick reloads the snapshot's Models; a store that fails the reload
+// leaves the snapshot as it was.
+func TestCatalogSnapshotFollowsTheHealthTick(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	up := &stub{}
+	up.set(http.StatusOK, openaiList("gpt-5"))
+	p := h.provider(t, "oai", v1.DialectOpenAI, serveStub(t, up)+"/v1", func(p *v1.Provider) { p.Spec.Discovery.Mode = v1.DiscoveryNone })
+	reg := metrics.NewRegistry()
+	snap := NewCatalogSnapshot(CatalogSnapshotOptions{Store: h.st, Keys: h.keys, Metrics: reg, Logger: h.logger, Now: h.clock})
+	snap.ReloadModels(ctx)
+	if snap.Loaded() {
+		t.Fatal("a health tick loaded a snapshot that had never loaded")
+	}
+	if err := snap.Load(ctx, triggerStart); err != nil {
+		t.Fatal(err)
+	}
+	h.declare(t, "fresh", p.Metadata.Name, "gpt-5")
+	listed := func() bool {
+		ms, _ := snap.Models(ctx)
+		for _, m := range ms {
+			if m.Metadata.Name == "fresh" && m.Status.Available != nil && *m.Status.Available {
+				return true
+			}
+		}
+		return false
+	}
+	if listed() {
+		t.Fatal("the Model is available before any tick")
+	}
+	health := NewHealth(HealthOptions{
+		Store: h.st, Clients: h.clients, Credentials: h.creds, Interval: time.Hour,
+		Holder: "a", Logger: h.logger, Now: h.clock, AfterTick: snap.ReloadModels,
+	})
+	health.acquire(ctx)
+	health.Tick(ctx)
+	if !listed() {
+		t.Fatal("the tick that filled the availability did not reach the snapshot")
+	}
+	down := &atomic.Bool{}
+	down.Store(true)
+	broken := NewCatalogSnapshot(CatalogSnapshotOptions{Store: &outage{Store: h.st, down: down}, Keys: h.keys, Metrics: reg, Logger: h.logger})
+	down.Store(false)
+	if err := broken.Load(ctx, triggerStart); err != nil {
+		t.Fatal(err)
+	}
+	down.Store(true)
+	broken.ReloadModels(ctx)
+	if ms, _ := broken.Models(ctx); len(ms) != 1 {
+		t.Fatalf("a failed reload changed the snapshot: %d Models", len(ms))
+	}
+	var buf bytes.Buffer
+	reg.WritePrometheus(&buf)
+	for _, want := range []string{`lux_catalog_reloads_total{result="ok",trigger="health"}`, `lux_catalog_reloads_total{result="error",trigger="health"}`} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("the exposition lacks %s", want)
+		}
+	}
+}

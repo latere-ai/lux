@@ -53,6 +53,7 @@ const (
 	triggerTail     = "tail"
 	triggerBackstop = "backstop"
 	triggerSIGHUP   = "sighup"
+	triggerHealth   = "health"
 )
 
 // JournalFollower takes each batch of journal rows the Key cache's tail
@@ -482,6 +483,33 @@ func (c *CatalogSnapshot) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// ReloadModels reads every Model again and swaps them in, keeping the
+// Providers and the credential rows: the health job's tick calls it, so
+// the availability the health lease holder publishes without a journal
+// row reaches the model lists within one health interval (spec 036).
+// Before the first load it does nothing.
+func (c *CatalogSnapshot) ReloadModels(ctx context.Context) {
+	if !c.Loaded() {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	all, err := c.listModels(ctx)
+	if err != nil {
+		c.count(triggerHealth, "error")
+		c.o.Logger.ErrorContext(ctx, "catalog snapshot: reloading the Models after the health tick", "err", err)
+		return
+	}
+	next := c.cur.Load().clone()
+	next.models, next.modelIDs = map[string]*v1.Model{}, map[string]string{}
+	for _, m := range all {
+		next.putModel(m)
+	}
+	next.order()
+	c.cur.Store(next)
+	c.count(triggerHealth, "ok")
 }
 
 // Reload is the file mode's SIGHUP: the directory's new snapshot is read

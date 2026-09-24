@@ -199,7 +199,7 @@ and `luxd` rebuilds the catalog snapshot from it, beside the Key cache's
 | a discovered Model created or removed | the tail interval plus one reload |
 | a discovered Model's shape changed | the tail interval plus one reload |
 | a Provider's health state change, and the `status.available` of its Models | the tail interval plus one reload |
-| `status.available` of a Model the health job filled or reset | `LUX_CATALOG_RELOAD` |
+| `status.available` of a Model the health job filled or reset | the health tick that wrote it on the replica holding the health lease, and one `LUX_HEALTH_INTERVAL` on every other: each replica's tick reloads the snapshot's Models |
 | a credential re-wrapped by `luxd rewrap` | `LUX_CATALOG_RELOAD`; until then the replica opens the old wrap with the key list it started with, or re-reads the row on a failed open |
 | the file mode's `SIGHUP` | at once |
 
@@ -330,7 +330,7 @@ Three rows in [[019-observability]]'s table, owned by this spec:
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
 | `lux_catalog_age_seconds` | gauge | none | seconds since the snapshot last matched the store: the later of the last successful full reload and the last tail read that left nothing to reload |
-| `lux_catalog_reloads_total` | counter | `trigger` (`start`, `tail`, `backstop`, `sighup`), `result` (`ok`, `error`) | snapshot reloads |
+| `lux_catalog_reloads_total` | counter | `trigger` (`start`, `tail`, `backstop`, `sighup`, `health`), `result` (`ok`, `error`) | snapshot reloads; `health` reloads the Models alone |
 | `lux_catalog_objects` | gauge | `kind` (`Model`, `Provider`, `credential`) | objects the snapshot holds |
 
 `lux_key_cache_hits_total` ([[007-keys-and-limits]]) gains the
@@ -429,4 +429,14 @@ above was corrected in the same change:
 - `test/e2e`'s two-replica test waits for the second replica's
   `lux_catalog_objects` before calling it, since a write reaches a
   replica that did not take it within its tail.
+- Amended after the integration tier ran: the availability the health
+  job publishes on a new Model has no journal row, and left to the
+  backstop a new Model reached the model list up to one health interval
+  plus `LUX_CATALOG_RELOAD` after its apply, past the conformance
+  suite's 45 seconds. Every replica's health tick now reloads the
+  snapshot's Models (`HealthOptions.AfterTick`,
+  `CatalogSnapshot.ReloadModels`, trigger `health` on
+  `lux_catalog_reloads_total`), which restores the bound the store read
+  gave, one health interval, on the holder, and adds at most one more on
+  the other replicas. `TestCatalogSnapshotFollowsTheHealthTick` holds it.
 
