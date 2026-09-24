@@ -119,6 +119,10 @@ type serveGateway struct {
 	mu  sync.Mutex
 	tun *tunnel.Gateway
 	srv *httptest.Server
+	// end cancels the context every request of this start derives from,
+	// so a session handler whose connection outlived the drain returns
+	// at stop instead of holding the server's Close open.
+	end context.CancelFunc
 }
 
 func newServeGateway(t *testing.T) *serveGateway {
@@ -186,6 +190,8 @@ func (g *serveGateway) start() {
 		}
 		mux.ServeHTTP(w, r)
 	}))
+	requests, end := context.WithCancel(context.Background())
+	srv.Config.BaseContext = func(net.Listener) context.Context { return requests }
 	srv.Listener = ln
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
@@ -194,20 +200,27 @@ func (g *serveGateway) start() {
 	srv.Start()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.tun, g.srv = tun, srv
+	g.tun, g.srv, g.end = tun, srv, end
 }
 
-// stop closes the replica the way the serve role stops: every session
-// drained, then the listener gone.
+// stop closes the replica the way the serve role stops: no connection
+// accepted any more, every session drained, then every request's context
+// ended and the connections closed. The listener closes first, because
+// lux serve reconnects at once, and a session that connected after the
+// drain on a connection the close did not reach would hold Close for
+// ever; ending the requests' context returns any handler the drain did
+// not reach.
 func (g *serveGateway) stop() {
 	g.mu.Lock()
-	tun, srv := g.tun, g.srv
+	tun, srv, end := g.tun, g.srv, g.end
 	g.srv = nil
 	g.mu.Unlock()
 	if srv == nil {
 		return
 	}
+	_ = srv.Listener.Close()
 	tun.Drain(context.Background())
+	end()
 	srv.CloseClientConnections()
 	srv.Close()
 }
