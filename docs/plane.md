@@ -127,16 +127,16 @@ its own state alone: it holds no session, and it calls neither the
 gateway nor the issuer while deciding, because the gateway is waiting
 inside the very request it is answering.
 
-The policy is the twenty lines of `policy.Decide`. Everything around it — the
-bearer and its successor, the body bound, the decode, the check that an
-action and its `resource.kind` are the gateway's, the reserved probe id,
-the failure mapping, and the answer — is
+The policy is `policy.Decide` and nothing else. Everything around it,
+the bearer and its successor, the body bound, the decode, the check that
+an action and its `resource.kind` are the gateway's, the reserved probe
+id, the failure mapping, and the answer, is
 `latere.ai/x/pkg/authz/server`, which this file mounts in four lines and
 does not write again. The table that scaffold validates against is
 `latere.ai/x/lux/authorizer`'s, the package that carries the vocabulary
 `luxd` asks in, so a reader who copies the block runs
 `go get latere.ai/x/lux` first and then reads one table instead of
-keeping a copy of the twenty-five strings. None of Lux's four list
+keeping a copy of every action string. None of Lux's four list
 actions answers with a page of its own, so the endpoint names no page
 action and writes no `Lister`. It is `examples/authorizer/main.go`, and
 a test holds this block and that file equal, so what is printed here

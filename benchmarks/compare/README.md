@@ -17,26 +17,26 @@ CI; run it by hand with `benchmarks/compare/run.sh`.
 ## What it measures
 
 Both proxies forward to the **same mock upstream**: the stub provider from
-`cmd/lux-stubs` (spec 015), which returns a canned completion with no model
+`cmd/lux-stubs`, which returns a canned completion with no model
 latency. Because provider and network cost are identical and near-zero, the
 difference between a proxy and the baseline is the proxy's added overhead.
 
-- **Baseline** — the load driver calls the mock directly. This is the floor:
+- **Baseline**: the load driver calls the mock directly. This is the floor:
   raw request/response cost with no proxy in the path.
-- **luxd** — the Lux gateway, brought up exactly as `make run` does, with the
+- **luxd**: the Lux gateway, brought up exactly as `make run` does, with the
   stub provider as its upstream. Its data-plane hot path dials no authorizer
-  and no issuer (spec 016, invariant 3), so the comparison is not distorted
+  and no issuer, so the comparison is not distorted
   by an out-of-band webhook.
-- **LiteLLM** — the LiteLLM proxy, pointed at the same stub provider.
+- **LiteLLM**: the LiteLLM proxy, pointed at the same stub provider.
 
 **Added overhead** for a subject is its latency minus the baseline latency
 for the same request shape and mode.
 
 ### Request shapes
 
-- **Passthrough** — OpenAI in, OpenAI upstream. Isolates pure proxy
+- **Passthrough**: OpenAI in, OpenAI upstream. Isolates pure proxy
   overhead: no format conversion, the body is relayed.
-- **Translated** — OpenAI in, Anthropic upstream. Both proxies accept an
+- **Translated**: OpenAI in, Anthropic upstream. Both proxies accept an
   OpenAI Chat Completions request and convert it to the Anthropic Messages
   format for the upstream, then convert the answer back. This shows
   translation overhead. luxd does it through `pkg/llmdialect`; LiteLLM does
@@ -102,8 +102,8 @@ benchmarks/compare/run.sh
 
 1. Creates (once) a Python 3.13 venv **outside the repository** and installs
    `litellm[proxy]` with `uv`. The venv default is `$TMPDIR/lux-bench-venv`;
-   point `BENCH_VENV_DIR` elsewhere if you like, but keep it out of the tree
-   — the venv is large and its files are third-party. It is never committed.
+   point `BENCH_VENV_DIR` elsewhere if you like, but keep it out of the tree,
+   since the venv is large and its files are third-party. It is never committed.
 2. Builds the load driver and brings up `luxd` + `lux-stubs` with `make run`.
    It applies a translated Model (OpenAI door → Anthropic upstream) and a
    high-headroom Budget and Key over the control plane, so the run exercises
@@ -123,17 +123,17 @@ in `out/bench/table.md` (all under the gitignored `out/`).
 
 `render.py` turns the tidy per-trial data into two figures under `figures/`:
 
-- `latency-percentiles.png` — p50..p99 as lines on a log y-axis (LiteLLM is
+- `latency-percentiles.png`: p50..p99 as lines on a log y-axis (LiteLLM is
   ~100x, so a linear axis would flatten luxd against zero), one line per
   subject with a 95% CI band, faceted by shape and mode.
-- `throughput.png` — requests per second as bars on a log y-axis (the
+- `throughput.png`: requests per second as bars on a log y-axis (the
   subjects differ by ~200x) with 95% CI error bars, faceted the same way.
 
 It reads `results.csv`, aggregates each condition and metric to a **median**
 and a seeded bootstrap **95% confidence interval** across trials, writes that
 aggregate to `results-aggregate.csv`, and saves the PNGs. Output is
-deterministic — fixed figure size and dpi, a seeded bootstrap, stripped PNG
-metadata — so a re-render of the same data is byte-stable.
+deterministic (fixed figure size and dpi, a seeded bootstrap, stripped PNG
+metadata), so a re-render of the same data is byte-stable.
 
 It needs `seaborn`, `pandas`, and `matplotlib` in a Python venv, kept outside
 the repository like the LiteLLM one:
@@ -148,7 +148,7 @@ The venv is never committed; a venv created inside the tree (`.venv/`,
 `render-venv/`, `bench-venv/`) is gitignored.
 
 **Where `results.csv` comes from.** It is the data behind the committed
-figures, refreshed from a real run — not hand-typed. The load driver emits it:
+figures, refreshed from a real run, not hand-typed. The load driver emits it:
 `driver csv -in results.jsonl -out results.csv` folds a run's JSON lines into
 the tidy `trial,shape,mode,subject,metric,value` form, and `run.sh` does this
 automatically, writing `out/bench/results.csv`. To refresh the committed data
@@ -178,8 +178,8 @@ telemetry. LiteLLM runs with `--num_workers 1`.
 - This is a **Go proxy versus a Python/uvicorn proxy**. Much of the gap is
   the runtime, not the design; read it as "what each stack costs today on
   this workload", not as a verdict on either project's engineering.
-- It measures **proxy overhead only** — routing, auth, limit checks, header
-  handling, and (for the translated shape) format conversion — against a
+- It measures **proxy overhead only**: routing, auth, limit checks, header
+  handling, and (for the translated shape) format conversion, against a
   zero-latency upstream. It says nothing about model quality, provider
   coverage, or feature breadth, on which the two projects differ greatly.
 - LiteLLM runs with a single worker (`--num_workers 1`). It scales out with

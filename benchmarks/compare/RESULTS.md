@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Measured on 2026-09-15 by `benchmarks/compare/run.sh`. See `README.md` for
 the methodology, the pinned parameters, and the fairness caveats. These are
-real numbers from one machine; re-run on your own hardware — trust the ratios
+real numbers from one machine; re-run on your own hardware, and trust the ratios
 more than the absolutes.
 
 ## Environment
@@ -18,8 +18,8 @@ more than the absolutes.
   subjects on loopback, otherwise quiescent during the run.
 - **Load**: closed-loop, concurrency 50; **10 independent trials** per
   condition against one steady-state bring-up. Each trial is its own
-  measurement window — 4000 measured requests (non-streaming) / 2000
-  (streaming) after a discarded 1000-request warmup — and each records its
+  measurement window, 4000 measured requests (non-streaming) or 2000
+  (streaming) after a discarded 1000-request warmup, and each records its
   own peak RSS.
 - Every measurement across all trials completed with **0 errors**.
 
@@ -32,7 +32,7 @@ interval** (a seeded bootstrap over the 10 per-trial values, so a re-render
 is reproducible). The full per-trial data is `results.csv`; every aggregate,
 including the percentiles not shown here, is `results-aggregate.csv`.
 
-The luxd-vs-LiteLLM gap is **~45–55x** in both latency and throughput —
+The luxd-vs-LiteLLM gap is **~45–55x** in both latency and throughput,
 orders of magnitude beyond the confidence intervals, which do not overlap in
 any condition. That is reported as an **effect size with non-overlapping
 CIs**, not a p-value: with tens of thousands of requests behind each trial a
@@ -86,7 +86,7 @@ line per subject with a 95% CI band, faceted by shape and streaming mode](figure
 
 *Latency (median of 10 trials, 95% CI band), log y-axis. luxd sits ~2–5 ms
 above the direct-to-mock baseline; LiteLLM sits ~100–350 ms above it. The
-band widens at p99, LiteLLM's most of all — the tail is genuinely noisy
+band widens at p99, LiteLLM's most of all: the tail is genuinely noisy
 under a single worker at concurrency 50.*
 
 ![Single-process throughput in requests per second, bars per subject on a log
@@ -112,7 +112,7 @@ bars are dwarfed by the ~45–55x gap between the subjects.*
   ~1 ms more p50 than its passthrough path (the `pkg/llmdialect` conversion),
   a delta the in-repo `benchstat` numbers isolate cleanly.
 - Single-process throughput at concurrency 50 is **~10k–20k req/s** for luxd
-  and **~220–450 req/s** for LiteLLM — luxd is ~45–55x higher here, with
+  and **~220–450 req/s** for LiteLLM; luxd is ~45–55x higher here, with
   non-overlapping confidence intervals in every condition.
 - Peak RSS is **~45 MB** for luxd and **~410 MB** for LiteLLM (~9x), stable
   across trials (its CI is a fraction of a percent).
@@ -122,6 +122,6 @@ bars are dwarfed by the ~45–55x gap between the subjects.*
   tails, and the ratios over the absolutes.
 
 Much of the gap is a Go binary versus a Python/uvicorn service, and this
-measures proxy overhead only — not model quality, provider coverage, or
+measures proxy overhead only, not model quality, provider coverage, or
 feature breadth. LiteLLM scales out with more workers, as luxd does with
 more replicas.

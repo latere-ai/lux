@@ -12,10 +12,12 @@ packages.
 | Configuration | every `LUX_*` variable `luxd` reads, its meaning, default, and when it is required, in [`configuration.md`](configuration.md); [`.env.example`](../.env.example) is the same set as a file to copy |
 | Security | what the gateway protects and what you must do to run it safely, the KEK, TLS, trusted proxies, the authorizer, key rotation, and verifying releases, in [`security.md`](security.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
 | Observability | the `/metrics` endpoint and the metrics worth watching, the health probes, the log fields, traces, and the shipped alerts, in [`observability.md`](observability.md); the rules file is [`deploy/base/prometheusrule.yaml`](../deploy/base/prometheusrule.yaml) |
-| Performance | what the gateway's own overhead costs and how to measure it, in [`performance.md`](performance.md); the design behind the benchmarks is the [performance and benchmarks spec](../specs/023-performance-and-benchmarks.md) |
+| Performance | what the gateway's own overhead costs per request, how to measure it on your machine, and how it compares with another proxy, in [`performance.md`](performance.md) |
+| A priced catalog | 94 Models over seven vendors to start a gateway from, in [`deploy/catalog`](../deploy/catalog/README.md) |
 
-Trying it out before there is anything to install takes one command,
-`make run`: the gateway on loopback, serving its probes.
+Trying it out from a checkout takes one command, `make run`: the gateway
+on loopback with stub providers, a stub issuer, and a Key printed for a
+first request.
 
 ## Building against it
 
@@ -23,8 +25,8 @@ Trying it out before there is anything to install takes one command,
 |---|---|
 | The `lux` command | what `lux -help` prints, command by command, in [`cli.md`](cli.md); the skill that teaches an agent the command is [`skills/lux/SKILL.md`](../skills/lux/SKILL.md) |
 | Manifest reference | each kind's fields are the schemas in the OpenAPI document the [API page](api.md) links; `luxd` validates and defaults them, and a `GET` reads back what runs |
-| API | the `/v1` control plane, the dialect doors, authentication, and the error shape, in [`api.md`](api.md); the authoritative reference is the OpenAPI document [`api/openapi.yaml`](../api/openapi.yaml), served at `GET /v1/openapi.json` |
-| The packages | the [architecture spec](../specs/001-architecture.md) names the exported packages and what each promises |
+| API | the `/v1` control plane, the dialect doors, authentication, the error shape, and what an authorizer is asked, in [`api.md`](api.md); the authoritative reference is the OpenAPI document [`api/openapi.yaml`](../api/openapi.yaml), served at `GET /v1/openapi.json` |
+| The packages | `manifest` (decode, default, validate, and resolve the four kinds), `gateway` (the doors and the routing), `metering` (costing and spend windows), `client` (the typed client of `/v1`), `client/tunnel` (attach a local model runtime), and `authorizer` (the actions and resource shapes an authorizer is written against); each package's Go documentation says what it promises |
 | Building a platform on it | the two doors, where each platform concern goes, a minimal authorizer, how a sandbox gets model access without holding a credential, and the conformance command, in [`plane.md`](plane.md); the runnable endpoint is [`examples/authorizer`](../examples/authorizer) and the server built from the packages is [`examples/plane`](../examples/plane) |
 
 ## Changing it

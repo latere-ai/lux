@@ -8,7 +8,7 @@ works.
 
 | Directory | Holds |
 |---|---|
-| `base/` | the Deployment, hardened as the [threat model](../specs/016-security-and-threat-model.md) says; its Service; a ServiceAccount with no token; the NetworkPolicy; the PodDisruptionBudget; the PrometheusRule of the [observability spec](../specs/019-observability.md). No namespace and no image registry: an overlay names the namespace, and the image `luxd` is pointed at a real reference by the release pipeline, which pins the tag's digest into the base of the deploy archive |
+| `base/` | the Deployment, running as a non-root user on a read-only root file system with every capability dropped; its Service; a ServiceAccount with no token; the NetworkPolicy; the PodDisruptionBudget; the PrometheusRule of the alerts in [`docs/observability.md`](../docs/observability.md#alerts). No namespace and no image registry: an overlay names the namespace, and the image `luxd` is pointed at a real reference by the release pipeline, which pins the tag's digest into the base of the deploy archive |
 | `components/hpa/` | a HorizontalPodAutoscaler an overlay adds with `components:`; not in the base, because each replica opens `LUX_DB_MAX_CONNS` store connections and the count is a decision against the cluster's ceiling |
 | `overlays/kind/` | a laptop cluster: one replica, the memory store, the public port on NodePort 30080, egress to every destination since a lab's endpoints listen on their own ports over plain HTTP and kind enforces the policy, and no PrometheusRule, since a kind cluster runs no Prometheus Operator to read one; applied with `kubectl apply -k` once `luxd.env` names your issuer |
 | `overlays/generic/` | any cluster: two replicas over a Postgres store named in the bootstrap Secret, behind an ingress you add |
@@ -17,9 +17,9 @@ works.
 | `catalog/` | a priced example catalog for a gateway you run yourself: 94 Models over seven Providers at the vendors' public addresses, applied at start with `LUX_BOOTSTRAP_DIR`. They are not cluster objects; the [README](catalog/README.md) says how to use them and the date of the prices |
 
 The configuration is a ConfigMap named `luxd` that each overlay
-generates from its `luxd.env`; every `LUX_*` variable is in the table of
-the [repository scaffold spec](../specs/002-repository-scaffold.md).
-The Deployment rolls one replica at a time with none surging, so a
-rollout never asks the store for more connections than the running
-replicas already hold; the reasoning and the version promise are in the
-[release and installation spec](../specs/017-release-and-installation.md).
+generates from its `luxd.env`; every `LUX_*` variable is in
+[`docs/configuration.md`](../docs/configuration.md). The Deployment rolls
+one replica at a time with none surging, so a rollout never asks the
+store for more connections than the running replicas already hold. What
+a version number promises, and how to upgrade and roll back, is in
+[`docs/upgrades/`](../docs/upgrades/README.md).

@@ -1,9 +1,7 @@
 # Observability
 
 What `luxd` exposes so you can tell whether it is serving, which provider
-is costing you, and whether anything is wrong. The design, for
-contributors, is
-[`specs/019-observability.md`](../specs/019-observability.md).
+is costing you, and whether anything is wrong.
 
 ## Health probes
 
@@ -31,6 +29,7 @@ Scrape `/metrics` on the internal listener. The metrics worth watching:
 | `lux_requests_total` | counter | `door`, `model`, `provider`, `status`, `code` | every request on both planes; `door=control` is `/v1` |
 | `lux_request_duration_seconds` | histogram | `door`, `model`, `status` | request latency |
 | `lux_time_to_first_byte_seconds` | histogram | `door`, `model` | how long a caller waits for the first byte |
+| `lux_output_tokens_per_second` | histogram | `provider`, `model` | a served request's output tokens over the time they took: a stream's from its first byte to its last, any other's over its upstream duration |
 | `lux_refusals_total` | counter | `code` | every error envelope written, by code |
 | `lux_upstream_requests_total` | counter | `provider`, `status` | one per target tried; `status` is `ok`, `error`, `timeout` |
 | `lux_upstream_duration_seconds` | histogram | `provider` | upstream latency |

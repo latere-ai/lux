@@ -10,8 +10,8 @@ not promise a fast request in production; it promises the gateway is not
 what makes a request slow.
 
 Every benchmark drives the same in-process handler, fakes, and stub
-providers the `gateway` tests use ([`gateway/harness_test.go`](../gateway/harness_test.go)).
-Nothing dials a real provider; the arch tests forbid it. The stub upstream
+providers the `gateway` tests use, and nothing dials a real provider. The
+stub upstream
 is an in-process `httptest` server on loopback, so a request pays the real
 HTTP client machinery (serialization, a pooled loopback connection) but not
 a provider's compute; that constant cost is the same for every route class,
@@ -33,8 +33,8 @@ Add `./internal/serve/...` for the limiter benchmark. Per package:
 
 A single run is a point, and a point cannot tell the code's cost from the
 scheduler's noise. For numbers worth comparing, repeat each benchmark and
-summarize with `benchstat`, which reports the mean, its variation, and — when
-comparing two inputs — a p-value:
+summarize with `benchstat`, which reports the mean, its variation, and, when
+comparing two inputs, a p-value:
 
     GOMAXPROCS=8 go test -run '^$' -bench . -benchmem -count=10 \
       ./gateway/ ./manifest/ ./metering/ ./internal/serve/ > new.txt
@@ -47,7 +47,7 @@ The latency distribution is a separate, opt-in test (below).
 
 ## What each benchmark isolates
 
-`gateway`, one benchmark per route class ([request path](../specs/004-request-path.md)):
+`gateway`, one benchmark per route class:
 
 | Benchmark | Isolates |
 |---|---|
@@ -74,7 +74,7 @@ The latency distribution is a separate, opt-in test (below).
 
 | Benchmark | Isolates |
 |---|---|
-| `BenchmarkLimiterReserveSettle` | stage 7 on one replica in its in-memory path: the two rate buckets, the pricing and spend projection, admit, and settle, with no store I/O on the timed path |
+| `BenchmarkLimiterReserveSettle` | the admission check on one replica in its in-memory path: the two rate buckets, the pricing and spend projection, admit, and settle, with no store I/O on the timed path |
 | `BenchmarkCatalogLookups/store`, `/snapshot` | what one request resolves from the catalog, the Model by name, its Provider, and the Provider's credential opened, read from the memory store and from the in-memory catalog every replica holds |
 | `BenchmarkPostgresCatalogLookups/store`, `/snapshot` | the same over the Postgres store, built with `-tags=postgres` and `LUX_DB_URL` set: the store half is the three round trips per request the in-memory catalog removes |
 
@@ -149,7 +149,7 @@ commands above to get your own.
 | `LimiterReserveSettle` | 1.081µs ± 2% | 1.453Ki ± 0% | 29.00 ± 0% |
 
 The translation cost is the delta between the passthrough and the translated
-hot path — the number a single run cannot separate from noise. `benchstat`
+hot path, the number a single run cannot separate from noise. `benchstat`
 comparing the two paths (each `n=10`) can, and it is unambiguous:
 
 | Metric | Passthrough | Translated | Delta | p (n=10) |
@@ -159,7 +159,7 @@ comparing the two paths (each `n=10`) can, and it is unambiguous:
 | allocs/op | 223 | 370 | +65.92% | 0.000 |
 
 Translation adds about 12µs, ~7.7 KB, and ~147 allocations per request over a
-passthrough on this machine — the `pkg/llmdialect` decode-and-re-encode both
+passthrough on this machine: the `pkg/llmdialect` decode and re-encode, both
 ways. With p ≈ 0 at n=10 that is signal, not scheduler jitter, and it is the
 honest reading of the translation overhead: the serial CPU and memory delta
 here, not the concurrent p50, which the constant round-trip dominates.
@@ -200,7 +200,7 @@ with one worker added ~112 ms of p50 and sustained ~420 requests per second at
 ~410 MB. The translated shape held the same ratio, ~2–3 ms added for `luxd`
 against ~105 ms for LiteLLM, and streaming tracked it, with zero errors on
 every trial. The gap is **~45–55x** in both latency and throughput, with
-non-overlapping CIs in every condition — an effect size, not a close call, so
+non-overlapping CIs in every condition: an effect size, not a close call, so
 no p-value is reported: with tens of thousands of requests behind each trial a
 significance test would return a vanishingly small p that says nothing about
 whether a 45x difference matters. Trust the ratios over the absolutes: these
@@ -214,7 +214,7 @@ artifact from the in-repo Go benchmarks above.
 
 ## Where the design lives
 
-[`specs/023-performance-and-benchmarks.md`](../specs/023-performance-and-benchmarks.md)
-owns what each benchmark measures and the methodology, and the
-[request path spec](../specs/004-request-path.md) is the pipeline they
+For contributors, the [benchmark design](../specs/023-performance-and-benchmarks.md)
+records what each benchmark measures and why, and the
+[request path design](../specs/004-request-path.md) is the pipeline they
 exercise.
