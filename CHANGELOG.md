@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.7.2 - 2026-09-24
+
 - A store behind `LUX_DB_POOL_URL` now writes objects that carry labels. Over the
   pooler the driver inferred each statement's parameter types from Go
   types and could not encode a manifest's labels or its JSON columns, so
