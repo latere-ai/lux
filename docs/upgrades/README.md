@@ -1,7 +1,29 @@
 # Upgrades
 
-How a release of `luxd` follows the one before it, and what to read
-before crossing a major.
+How a release of `luxd` follows the one before it, what a version number
+promises, and what to read before crossing a major.
+
+## What a version number promises
+
+Lux uses semantic versioning on the release tag. From `v1.0.0` the table
+below binds, and the release pipeline checks every tag against it: a
+release whose changes need a larger bump than its tag carries is refused.
+Before `v1.0.0` a minor release may break any row, and its CHANGELOG
+entry names the break.
+
+| Surface | A patch may | A minor may | A major may |
+|---|---|---|---|
+| the manifest schema | fix a rule that was refusing a valid manifest | add an optional field whose default keeps the old behavior, or an enum value | move to a new API group, `lux.latere.ai/v2`, served beside the old one for a period with a conversion in both directions |
+| `/v1` routes | fix a status or a message that was wrong | add a route, a parameter, or a response field | remove or repurpose one |
+| error codes | nothing | add a code | remove a code or change what one means |
+| `LUX_*` variables | fix a default that was wrong | add a variable, or widen what one accepts | remove a variable or change its meaning; the first release of the major reads a removed variable, ignores it, and logs one warning naming the replacement |
+| event types and payloads | nothing | add a type or a `data` member | remove a type or a member |
+| the usage record | nothing | add a field | remove or repurpose a field |
+| the exported Go packages | nothing | add a function, a type, or a field | break a call site |
+| the store schema | nothing | add a migration an older binary of the same major can still read | add one it cannot |
+
+A cost computed from one pricing is computed the same way by every later
+release, so a bill does not change under an upgrade.
 
 ## Inside a major: no step
 
@@ -15,12 +37,6 @@ previous minor's binary, which is what makes a rollback inside a minor
 series `kubectl rollout undo` and nothing else: the older binary finds a
 newer schema of its own major, warns, and serves.
 
-What a version number promises is the table in the
-[release and installation spec](../../specs/.archive/017-release-and-installation.md):
-before `v1.0.0` a minor may break a row with a CHANGELOG entry naming
-the break; from `v1.0.0` the table binds, and the release pipeline
-checks every tag against it.
-
 ## When permanent Key fences are in use
 
 Upgrade every writable replica before installing a Key fence. The new table is
@@ -33,12 +49,10 @@ fence-capable binary; this feature changes the usual rollback guarantee.
 
 A change that needs a drop, a rename, or a retype is the first
 migration of a new major, and a binary that finds a schema of another
-major refuses to start naming both. Each major that has ever been cut
-gets a document here, `docs/upgrades/<major>.md`, saying what to
-verify before, in what order to move, and what cannot be undone. There
-is no such document yet: nothing has been released, and the first
-release is `v0.1.0`. The first major, `v1`, gets `v1.md` when it is
-cut, and every major after it the same.
+major refuses to start and names both. Each major gets a document here,
+`docs/upgrades/<major>.md`, saying what to verify before, in what order
+to move, and what cannot be undone. No major has been cut yet, so there
+is no such document; `v1` gets `v1.md` when it is cut.
 
 ## A key rotation is not an upgrade
 
@@ -47,6 +61,5 @@ with `LUX_SECRETS_KEK=new,old`, run `luxd rewrap` once against the
 store, deploy with `LUX_SECRETS_KEK=new`. Every stored credential is
 re-wrapped under the new key without a value being decrypted, and the
 run is idempotent, so an interrupted rotation is repeated rather than
-repaired. The [providers spec](../../specs/005-providers.md) has the
-rule; `luxd check`'s `credentials` line says whether every stored row
-opens under the keys a deployment carries.
+repaired. `luxd check`'s `credentials` line says whether every stored
+row opens under the keys a deployment carries.
