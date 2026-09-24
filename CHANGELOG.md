@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.7.1 - 2026-09-24
+
 - `docker compose up` with no `LUX_VERSION` set pulls the newest release.
   `compose.yaml` defaulted both images to `latest`, a tag no release
   publishes, so the pull failed; it now defaults to the newest release tag,
