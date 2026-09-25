@@ -1,0 +1,52 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Key",
+  "metadata": {
+    "name": "dev"
+  },
+  "spec": {
+    "models": [
+      "*"
+    ],
+    "limits": {
+      "requestsPerMinute": 0,
+      "tokensPerMinute": 0
+    },
+    "budget": "dev",
+    "allowUnpriced": false,
+    "passthrough": false,
+    "disabled": false
+  },
+  "status": {
+    "id": "key_01M3CDTN9S2F6FSADMXZ7WSQVG",
+    "version": 1,
+    "owner": "http://127.0.0.1:9106|dev",
+    "prefix": "lux_qk6aquki",
+    "state": "Active",
+    "selectors": [
+      {
+        "selector": "*",
+        "matched": [
+          "stub-anthropic",
+          "stub-gemini",
+          "stub-lux",
+          "stub-openai"
+        ]
+      }
+    ],
+    "budget": {
+      "name": "dev",
+      "id": "bud_01M3CDTN5BXAG8R1YY74TAXB75"
+    },
+    "usage": {
+      "total": {
+        "requests": 0,
+        "tokens": 0,
+        "spend": "0"
+      }
+    },
+    "createdAt": "2026-09-25T13:59:39.06459128Z",
+    "updatedAt": "2026-09-25T13:59:39.065656046Z",
+    "warnings": []
+  }
+}
