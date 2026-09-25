@@ -1,6 +1,6 @@
 ---
 title: "Usage retention: hourly rows rolled up into monthly ones by rules on Key labels, an owner's rows redacted, and the request log partitioned by a Key label"
-status: drafted
+status: complete
 track: core
 depends_on:
   - specs/006-identity.md
@@ -12,7 +12,7 @@ depends_on:
 affects: [metering/, internal/store/, internal/serve/, internal/api/, internal/config/, internal/reqlog/, authorizer/, cmd/luxd/, docs/, specs/002-repository-scaffold.md, specs/006-identity.md, specs/009-usage-and-metering.md, specs/010-state.md, specs/012-request-log-and-events.md, specs/022-authorizer-vocabulary-package.md]
 effort: large
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 author: changkun
 ---
 
@@ -180,3 +180,34 @@ One row in [[019-observability]]'s table:
 | 7 | With `LUX_REQUESTLOG_PARTITION_LABEL` set, a batch spanning two label values writes one object under each value's prefix and a Key without the label writes under `_`; the reader reads one partition when the query names it and every partition otherwise | `internal/reqlog` exporter and reader tests over the bucket stub |
 | 8 | The job runs on the replica holding the `usage` lease alone | `internal/serve` test with two jobs over one store |
 | 9 | `usage_monthly` and its indexes are served by the queries the job and the usage API run | the Postgres index test |
+
+## Outcome
+
+Built and verified on 2026-09-25 with recommendation A, the rules in
+`LUX_USAGE_RETENTION`.
+
+| # | Test |
+|---|---|
+| 1 | `TestParseRetentionRules`, `metering`; `TestRetentionVariables`, `internal/config` |
+| 2 | `TestRetentionPass`, `internal/serve`; the store suite's `TestUsageRollUp`, over memory, Postgres, and Postgres in the pooled mode |
+| 3 | `TestRetentionPass`, the second pass months later; `TestUsageRollUp`'s expiry |
+| 4 | `TestUsageRollUp` and `TestRetentionPass` hold the totals before and after, a range later in the month reads the month's row, and a grouping by the dropped owner finds none |
+| 5 | `TestUsageRollUp` folds the same moves twice and counts them once; `Fold` deletes an hourly row and adds what the delete returned, so two replicas at once count every row once |
+| 6 | `TestRedactUsage`, `internal/api`, with a recording authorizer; the store suite's `TestUsageRedactOwner`; conformance `case038RedactUsage`, run against the core and the example plane |
+| 7 | `TestArchivePartitionedByLabel`, `internal/reqlog` |
+| 8 | `TestRetentionPass`, a second job under another holder |
+| 9 | `TestPostgresQueriesUseIndexes`, the owner indexes and the monthly primary key among the ones scanned |
+
+Notes on the build:
+
+- The job pages by key after the last row of the previous page, so the
+  rows a rule keeps are read once a pass and never block the pass.
+- A partitioned batch that fails part way is written whole again at the
+  next flush, so the partitions written before the failure hold those
+  records twice; the request log was at least once before and stays so.
+- The file mode's control plane asks no authorizer, and a redaction
+  there rewrites the process's own rows; the conformance case runs
+  against a server in server mode.
+- The example plane serves the redaction over the records it folds its
+  usage from.
+

@@ -248,6 +248,7 @@ peer's, or the forwarded one behind a proxy listed in
 | `budget.list` | `{"kind": "Budget"}`; `filter` applies |
 | `budget.draw` | the Budget as above; asked at Key resolve through `Lookup.Budget` |
 | `usage.read` | `{"kind": "Usage", "keys": [ids], "owners": [subjects]}` from the query, `keys` being ids because the API resolves names first ([[011-api]]); the response's `filter` is intersected with the query and never widens it ([[009-usage-and-metering]]) |
+| `usage.redact` | `{"kind": "Usage", "owner": subject}`, the owner whose identity every usage row loses ([038-usage-retention](.archive/038-usage-retention.md)) |
 | `owner.assign` | `{"kind": "Ownership", "target_kind", "name", "owner", "proposed"}`; additional permission to assign the owner of a new object ([025-mutation-authorization](.archive/025-mutation-authorization.md)) |
 
 With `LUX_AUTHORIZE_LIST_ITEMS=1`, list resources additionally carry
@@ -427,6 +428,7 @@ decided by Lux's rows. The rows, in order, before the frame:
 - `key.list`, `budget.list`, and `usage.read` are allowed with
   `filter.owners` set to the subject alone, so a list and the usage
   surface return the subject's own objects;
+- `usage.redact` is an administrator's alone ([038-usage-retention](.archive/038-usage-retention.md));
 - every other action, `read`, `update`, `delete`, `draw`, and `tunnel`
   on a Key, a Budget, or a tunneled Provider named by id, is the
   frame's: the owner is allowed and everyone else is `not_owner`;

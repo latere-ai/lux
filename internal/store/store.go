@@ -302,10 +302,30 @@ type Usage interface {
 	// inserted. The Recorder's flush calls it with the hour's deltas.
 	AddRows(ctx context.Context, rows []metering.Aggregate) error
 	// QueryRows answers the response rows of q: the hourly rows inside
-	// the range that pass the filters, grouped by q.By and summed into
-	// q.Interval, as metering.Group does, so no row sums two currencies.
-	// q is validated by the caller.
+	// the range and the monthly rows whose month overlaps it (spec 038),
+	// that pass the filters, grouped by q.By and summed into q.Interval,
+	// as metering.Group does, so no row sums two currencies. q is
+	// validated by the caller.
 	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
+	// Hourly pages the hourly rows whose bucket is before before, in
+	// metering.AggregateKey order after after, the zero key starting at
+	// the first, at most limit rows. The roll-up of spec 038 reads
+	// through it.
+	Hourly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error)
+	// Monthly pages the monthly rows the same way.
+	Monthly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error)
+	// Fold deletes each move's hourly row and adds the sums that row
+	// held into the move's monthly row, summed on conflict with its
+	// labels replaced, and deletes the monthly rows expired names, in one
+	// transaction. A move whose hourly row is gone adds nothing, so a
+	// pass run twice, or by two replicas at once, counts every row once.
+	// It answers the hourly rows folded and the monthly rows deleted.
+	Fold(ctx context.Context, moves []metering.Move, expired []metering.AggregateKey) (folded, deleted int, err error)
+	// RedactOwner moves the sums of every hourly and monthly row whose
+	// owner is owner onto the row with the same other dimensions and no
+	// owner, and empties the owner of every ring record carrying it, in
+	// one transaction, and answers the rows rewritten.
+	RedactOwner(ctx context.Context, owner string) (int, error)
 	// AppendRecord adds r to its Key's ring, dropping the oldest past
 	// metering.RecordsPerKey.
 	AppendRecord(ctx context.Context, r metering.Record) error

@@ -45,6 +45,7 @@ const (
 	ActionBudgetList     = "budget.list"
 	ActionBudgetDraw     = "budget.draw"
 	ActionUsageRead      = "usage.read"
+	ActionUsageRedact    = "usage.redact"
 	ActionOwnerAssign    = "owner.assign"
 )
 
@@ -89,6 +90,7 @@ var vocabulary = must(authz.NewVocabulary("lux",
 	authz.Action{Name: ActionBudgetList, Kind: v1.KindBudget},
 	authz.Action{Name: ActionBudgetDraw, Kind: v1.KindBudget},
 	authz.Action{Name: ActionUsageRead, Kind: KindUsage},
+	authz.Action{Name: ActionUsageRedact, Kind: KindUsage},
 	authz.Action{Name: ActionOwnerAssign, Kind: KindOwnership},
 )).WithLabels(kindLabels)
 
@@ -283,6 +285,12 @@ func BudgetObject(b *v1.Budget) authz.Resource {
 
 // BudgetList is budget.list's resource.
 func BudgetList() authz.Resource { return authz.NewResource(v1.KindBudget, "", nil) }
+
+// UsageRedact is usage.redact's resource: the owner whose identity the
+// usage rows lose (spec 038).
+func UsageRedact(owner string) authz.Resource {
+	return authz.NewResource(KindUsage, "", map[string]any{"owner": owner})
+}
 
 // UsageRead is usage.read's resource: the Key ids and the owners a query
 // names, ids because the API resolves names first.

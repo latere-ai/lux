@@ -186,7 +186,7 @@ func TestRouteTableActions(t *testing.T) {
 func TestNoPatch(t *testing.T) {
 	h := newHarness(t, nil)
 	h.seed()
-	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/keys/run-42/rotate", "/v1/budgets", "/v1/budgets/team", "/v1/usage", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
+	for _, path := range []string{"/v1/providers", "/v1/providers/openai", "/v1/models", "/v1/models/gpt-5", "/v1/keys", "/v1/keys/run-42", "/v1/keys/run-42/rotate", "/v1/budgets", "/v1/budgets/team", "/v1/usage", "/v1/usage/redact", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
 		for _, method := range []string{"PATCH", "OPTIONS"} {
 			rec := h.request(method, path, `{"spec": {}}`)
 			if d := wantCode(t, rec, CodeNotFound); !strings.Contains(d["detail"].(string), method+" "+path) {

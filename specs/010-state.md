@@ -355,6 +355,14 @@ type Usage interface {
 	QueryRows(ctx context.Context, q metering.Query) ([]metering.Row, error)
 	AppendRecord(ctx context.Context, r metering.Record) error
 	Records(ctx context.Context, q metering.RecordQuery, p Page) ([]metering.Record, string, error)
+	// The roll-up and the redaction of 038: the hourly and the monthly
+	// rows paged in key order, a fold that deletes an hourly row and adds
+	// what it held into its monthly row, and one owner's rows summed into
+	// the rows without an owner.
+	Hourly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error)
+	Monthly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error)
+	Fold(ctx context.Context, moves []metering.Move, expired []metering.AggregateKey) (folded, deleted int, err error)
+	RedactOwner(ctx context.Context, owner string) (int, error)
 }
 ```
 
@@ -468,6 +476,7 @@ are not one thing and the contract's callers hand in Go times.
 | `journal` | `id` text pk, `gseq` bigint assigned as the table's maximum plus one under a transaction-scoped advisory lock, `object_id` text, `seq` bigint, `type` text, `at` timestamptz, `payload` bytea, `attempts` int, `next_attempt_at` timestamptz, `acked_at` timestamptz null | the events of 012; `payload` is bytea because a delivery is signed over the exact bytes and jsonb would re-spell them, and `gseq` is not a sequence because a sequence's values commit out of order and a replica tailing `Since` past the later one would never see the earlier |
 | `tunnels` | `provider_id` text pk, `session` text, `replica` text, `subject` text, `agent` text, `connected_at`, `expires_at` timestamptz | the registry of [[013-tunneled-runtimes]], one live row per tunneled Provider |
 | `usage_hourly` | the dimensions and sums of [[009-usage-and-metering]] | the aggregates |
+| `usage_monthly` | the columns and primary key of `usage_hourly`, the bucket a month's first instant | the rows the roll-up of [038-usage-retention](.archive/038-usage-retention.md) folds the hourly ones into |
 
 Indexes, one per query shape:
 
@@ -487,6 +496,7 @@ Indexes, one per query shape:
 | `journal (next_attempt_at) where acked_at is null` | `Pending` |
 | `tunnels (provider_id)` | the primary key, read per request toward a tunneled Provider |
 | `usage_hourly (bucket)` and the primary key over the dimensions | the range query and the upsert |
+| the primary key of `usage_monthly`, and `(owner) where owner <> ''` on both usage tables | the roll-up's pages and fold, and the redaction of an owner ([038-usage-retention](.archive/038-usage-retention.md)) |
 
 `Add` on `counters` is one `INSERT ... ON CONFLICT (key) DO UPDATE SET
 value = counters.value + excluded.value RETURNING value`, so two

@@ -311,6 +311,7 @@ func (h *Handler) routes() {
 		}
 	}
 	h.mux.Handle("/v1/usage", h.route(map[string]handlerFunc{http.MethodGet: (*call).usage}))
+	h.mux.Handle("/v1/usage/redact", h.route(map[string]handlerFunc{http.MethodPost: (*call).redactUsage}))
 	h.mux.Handle("/v1/requests", h.route(map[string]handlerFunc{http.MethodGet: (*call).requests}))
 	h.tunnelRoutes()
 	h.mux.Handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))

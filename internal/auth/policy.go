@@ -114,7 +114,7 @@ func (p *OwnerPolicy) decide(ctx context.Context, req authz.Request) (authz.Deci
 		return authz.Decision{Allow: true}, nil
 	}
 	switch req.Action {
-	case authorizer.ActionOwnerAssign, authorizer.ActionKeyFence, authorizer.ActionKeyFenceRead:
+	case authorizer.ActionOwnerAssign, authorizer.ActionKeyFence, authorizer.ActionKeyFenceRead, authorizer.ActionUsageRedact:
 		return authz.Decision{Reason: ReasonAdminOnly}, nil
 	case authorizer.ActionProviderCreate:
 		if tunnel, _ := req.Resource.Fields["tunnel"].(bool); tunnel {

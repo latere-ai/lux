@@ -104,6 +104,7 @@ func TestOwnerPolicy(t *testing.T) {
 		{"budget.list", authorizer.ActionBudgetList, authorizer.BudgetList(), filtered, filtered},
 		{"budget.draw", authorizer.ActionBudgetDraw, authorizer.BudgetObject(budget), allow, notOwner},
 		{"usage.read", authorizer.ActionUsageRead, authorizer.UsageRead(nil, nil), filtered, filtered},
+		{"usage.redact", authorizer.ActionUsageRedact, authorizer.UsageRedact(fixtureSubject), admins, admins},
 	}
 	covered := map[string]bool{}
 	for _, r := range rows {

@@ -4,11 +4,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"maps"
+	"mime"
 	"net/http"
 	"path"
 	"slices"
@@ -225,6 +227,7 @@ func (p *Plane) control() http.Handler {
 	}
 	mux.Handle("/v1/keys/{name}/rotate", p.route(map[string]handlerFunc{http.MethodPost: (*call).rotate}))
 	mux.Handle("/v1/usage", p.route(map[string]handlerFunc{http.MethodGet: (*call).usage}))
+	mux.Handle("/v1/usage/redact", p.route(map[string]handlerFunc{http.MethodPost: (*call).redactUsage}))
 	mux.Handle("/v1/requests", p.route(map[string]handlerFunc{http.MethodGet: (*call).requests}))
 	mux.Handle("/v1/self", p.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
 	mux.Handle("/v1/openapi.json", p.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
@@ -1101,6 +1104,37 @@ func (c *call) usage(ctx context.Context) *apiError {
 		rows = []metering.Row{}
 	}
 	return c.writeJSON(http.StatusOK, usageAnswer{Items: rows}, 0)
+}
+
+// redactUsage is POST /v1/usage/redact: every record of one owner, which
+// is all this front folds usage from, loses the owner, as usage.redact
+// on it.
+func (c *call) redactUsage(ctx context.Context) *apiError {
+	if err := c.authenticate(); err != nil {
+		return err
+	}
+	if ct, _, err := mime.ParseMediaType(c.r.Header.Get("Content-Type")); err != nil || ct != "application/json" {
+		return refuse("unsupported_media_type", "a redaction is JSON")
+	}
+	body, rerr := c.readBody()
+	if rerr != nil {
+		return rerr
+	}
+	var in struct {
+		Owner string `json:"owner"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		return refuse("invalid_request", err.Error())
+	}
+	if issuer, subject, ok := authz.SplitSubject(in.Owner); !ok || issuer == "" || subject == "" {
+		return refuse(codeInvalidField, "owner is a rendered issuer|subject", "owner")
+	}
+	if _, err := c.authorize(ctx, authorizer.ActionUsageRedact, authorizer.UsageRedact(in.Owner)); err != nil {
+		return err
+	}
+	return c.writeJSON(http.StatusOK, map[string]int{"rows": c.p.store.redact(in.Owner)}, 0)
 }
 
 // queryRefusal turns metering's own parameter error into the envelope's

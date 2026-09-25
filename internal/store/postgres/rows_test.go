@@ -423,6 +423,26 @@ func TestPostgresQueriesUseIndexes(t *testing.T) {
 	must("AddRows again", st.Usage().AddRows(ctx, rows))
 	_, err = st.Usage().QueryRows(ctx, metering.Query{From: hour, To: hour.Add(time.Hour), Keys: []string{"key_1"}})
 	must("QueryRows", err)
+	// The roll-up and the redaction of spec 038, over a few thousand rows
+	// of other owners so the owner indexes are the cheaper path.
+	pgtest.Exec(t, dbURL, `
+		INSERT INTO usage_hourly (bucket, key_id, owner) SELECT now() - n * interval '1 hour', 'key_bulk', 'https://login.example.com|bulk' || n FROM generate_series(1, 3000) AS n`)
+	pgtest.Exec(t, dbURL, `
+		INSERT INTO usage_monthly (bucket, key_id, owner) SELECT now() - n * interval '1 hour', 'key_bulk', 'https://login.example.com|bulk' || n FROM generate_series(1, 3000) AS n`)
+	pgtest.Exec(t, dbURL, `ANALYZE usage_hourly`)
+	pgtest.Exec(t, dbURL, `ANALYZE usage_monthly`)
+	owned := []metering.Aggregate{{Bucket: hour, KeyID: "key_2", Owner: subject, Sums: metering.Sums{Requests: 1}}}
+	must("AddRows owned", st.Usage().AddRows(ctx, owned))
+	_, err = st.Usage().Hourly(ctx, hour.Add(time.Hour), metering.AggregateKey{}, 10)
+	must("Hourly", err)
+	_, _, err = st.Usage().Fold(ctx, []metering.Move{{From: rows[0].Key(), To: metering.Aggregate{Bucket: metering.IntervalMonth.Bucket(hour), KeyID: "key_1"}}}, nil)
+	must("Fold", err)
+	_, err = st.Usage().Monthly(ctx, hour.AddDate(0, 1, 0), metering.AggregateKey{}, 10)
+	must("Monthly", err)
+	_, _, err = st.Usage().Fold(ctx, nil, []metering.AggregateKey{{Bucket: metering.IntervalMonth.Bucket(hour).Unix(), KeyID: "key_1"}})
+	must("Fold expiring", err)
+	_, err = st.Usage().RedactOwner(ctx, subject)
+	must("RedactOwner", err)
 
 	// The statistics of every index, flushed by the read.
 	var unused []string

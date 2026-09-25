@@ -316,6 +316,21 @@ func (s *store) append(r metering.Record) {
 	s.records = append(s.records, r)
 }
 
+// redact empties the owner of every record that carries it and answers
+// how many did.
+func (s *store) redact(owner string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for i := range s.records {
+		if s.records[i].Owner == owner {
+			s.records[i].Owner = ""
+			n++
+		}
+	}
+	return n
+}
+
 // recordsOf is every record the filters admit, newest first.
 func (s *store) recordsOf(match func(metering.Record) bool) []metering.Record {
 	s.mu.Lock()

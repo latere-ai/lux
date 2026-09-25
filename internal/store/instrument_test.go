@@ -106,6 +106,19 @@ func TestStoreOperationsAreCounted(t *testing.T) {
 			_, _, err := s.Usage().Records(ctx, metering.RecordQuery{}, store.Page{Cursor: "x"})
 			return err
 		}},
+		{"Usage.Hourly", store.ResultOK, func() error {
+			_, err := s.Usage().Hourly(ctx, time.Now(), metering.AggregateKey{}, 1)
+			return err
+		}},
+		{"Usage.Monthly", store.ResultOK, func() error {
+			_, err := s.Usage().Monthly(ctx, time.Now(), metering.AggregateKey{}, 1)
+			return err
+		}},
+		{"Usage.Fold", store.ResultOK, func() error { _, _, err := s.Usage().Fold(ctx, nil, nil); return err }},
+		{"Usage.RedactOwner", store.ResultOK, func() error {
+			_, err := s.Usage().RedactOwner(ctx, "https://login.example.com|alice")
+			return err
+		}},
 		{"Ready", store.ResultOK, func() error { return s.Ready(ctx) }},
 		{"Transact", store.ResultError, func() error {
 			return s.Transact(ctx, func(tx store.Store) error { return errors.New("fn failed") })

@@ -75,7 +75,10 @@ type state struct {
 	// append may grow a ring's array in place; a snapshot keeps the
 	// shorter header and a rollback shows the ring as it was.
 	aggregates map[metering.AggregateKey]metering.Aggregate
-	records    map[string][]metering.Record
+	// monthly are the rows the roll-up of spec 038 folded the hourly
+	// ones into, one per month per dimension tuple.
+	monthly map[metering.AggregateKey]metering.Aggregate
+	records map[string][]metering.Record
 }
 
 func newState() *state {
@@ -93,6 +96,7 @@ func newState() *state {
 		tunnels:  map[string]store.Tunnel{},
 
 		aggregates: map[metering.AggregateKey]metering.Aggregate{},
+		monthly:    map[metering.AggregateKey]metering.Aggregate{},
 		records:    map[string][]metering.Record{},
 	}
 }
@@ -115,6 +119,7 @@ func (st *state) clone() *state {
 		tunnels:  maps.Clone(st.tunnels),
 
 		aggregates: maps.Clone(st.aggregates),
+		monthly:    maps.Clone(st.monthly),
 		records:    maps.Clone(st.records),
 	}
 }

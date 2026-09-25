@@ -69,6 +69,7 @@ rewriting: the packages are what `luxd` is made of.
 | unattended provisioning | a service token from the platform's own issuer client, whose `sub` is the default `owner`; the Lux-Owner header assigns another principal with `owner.assign` permission | the platform's own service identity in `Options.Actor` |
 | one developer credential | a Key created with `spec.value` set to the platform's own credential, or with `spec.valueSHA256` where the platform's store kept the hash alone, under the Models and the Budget the platform attaches ([[007-keys-and-limits]]); the gateway matches it by hash and decodes nothing; revoking it is `DELETE /v1/keys/{id}` here beside whatever the platform's issuer does | the same Key through the store it constructs |
 | billing | the request log archive for the line items and `GET /v1/usage` for the totals ([[009-usage-and-metering]]) | the platform's own `Recorder` |
+| retention and erasure | `LUX_USAGE_RETENTION` rules on Key labels, `POST /v1/usage/redact`, and `LUX_REQUESTLOG_PARTITION_LABEL` ([038-usage-retention](.archive/038-usage-retention.md)) | the same rules through `metering.RetentionRules` over the platform's own rows |
 | audit | the signed event sink at `LUX_EVENTS_URL` ([[012-request-log-and-events]]) | the platform's own sink |
 | multi-region | one `luxd` per region behind the platform's router, each with its own store or a shared one | one `Handler` per region |
 | a local runtime a user attaches | `provider.tunnel` allowed for that subject, and the user runs `lux serve` ([[013-tunneled-runtimes]]) | the same |

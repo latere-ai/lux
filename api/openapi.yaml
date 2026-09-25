@@ -730,6 +730,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/usage/redact:
+    post:
+      operationId: redactUsage
+      summary: Redact usage owner
+      description: Every hourly and monthly usage row of the owner, and every record of this replica's ring, loses the owner; each row's sums are added into the row with the same other dimensions and no owner, so totals are kept.
+      x-lux-action: usage.redact
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageRedaction"
+      responses:
+        "200":
+          description: The rows rewritten.
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageRedacted"
+        default:
+          description: "A refusal: one code of x-lux-errors with its fixed sentence."
+          headers:
+            Lux-Request-Id:
+              $ref: "#/components/headers/Lux-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/requests:
     get:
       operationId: listRequests
@@ -1848,6 +1880,23 @@ components:
                   description: One developer sentence.
     KeyFence:
       $ref: "#/components/schemas/KeyFence"
+    UsageRedaction:
+      type: object
+      additionalProperties: false
+      required:
+      - owner
+      properties:
+        owner:
+          type: string
+          description: Rendered issuer|subject whose identity every usage row and ring record loses.
+    UsageRedacted:
+      type: object
+      required:
+      - rows
+      properties:
+        rows:
+          type: integer
+          description: The usage rows rewritten.
     KeyFenceAssertion:
       type: object
       additionalProperties: false

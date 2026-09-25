@@ -504,3 +504,53 @@ func TestRequestsArchiveSource(t *testing.T) {
 		t.Errorf("the archive was asked %v", archive.asked)
 	}
 }
+
+// TestRedactUsage is POST /v1/usage/redact of spec 038: usage.redact is
+// asked as the caller with the owner as the resource; allowed, every row
+// of the owner loses it and the answer counts the rows; refused, nothing
+// changes; and a body without a rendered owner, or not JSON, is refused
+// before the authorizer is asked.
+func TestRedactUsage(t *testing.T) {
+	h := newHarness(t, nil)
+	owner := "https://login.example.com|bob"
+	hour := h.clock().Add(-time.Hour).Truncate(time.Hour)
+	rows := []metering.Aggregate{
+		{Bucket: hour, KeyID: "key_1", Owner: owner, Requests: 2},
+		{Bucket: hour, KeyID: "key_1", Owner: "", Requests: 1},
+		{Bucket: hour, KeyID: "key_2", Owner: "https://login.example.com|carol", Requests: 4},
+	}
+	if err := h.st.Usage().AddRows(bg(), rows); err != nil {
+		t.Fatal(err)
+	}
+	rec := h.request(http.MethodPost, "/v1/usage/redact", `{"owner": "`+owner+`"}`)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"rows":1}` {
+		t.Fatalf("redact = %d %s", rec.Code, rec.Body.String())
+	}
+	var asked bool
+	for _, r := range h.stub.Requests() {
+		if r.Action == "usage.redact" {
+			asked = r.Subject == h.subject() && r.Resource.Fields["owner"] == owner
+		}
+	}
+	if !asked {
+		t.Fatal("usage.redact was not asked as the caller with the owner")
+	}
+	left, err := h.st.Usage().Hourly(bg(), h.clock(), metering.AggregateKey{}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range left {
+		if a.Owner == owner || (a.KeyID == "key_1" && a.Requests != 3) {
+			t.Fatalf("after the redaction: %+v", left)
+		}
+	}
+	h.stub.Deny(stub.Rule{Action: "usage.redact"}, "not an operator")
+	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `{"owner": "https://login.example.com|carol"}`), CodeForbidden)
+	if rows, _ := h.st.Usage().Hourly(bg(), h.clock(), metering.AggregateKey{}, 0); len(rows) != 2 {
+		t.Fatalf("a refused redaction changed the rows: %+v", rows)
+	}
+	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `{"owner": "carol"}`), CodeInvalidField)
+	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `{"owner": "`+owner+`", "keys": []}`), CodeInvalidRequest)
+	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `owner: x`, "Content-Type", "application/yaml"), CodeUnsupportedMediaType)
+	wantCode(t, h.request(http.MethodGet, "/v1/usage/redact", ""), CodeNotFound)
+}

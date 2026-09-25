@@ -182,6 +182,8 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_METERING_FLUSH` | 009 | `1s` | how often a replica's usage deltas are written to the store |
 | `LUX_EVENTS_URL`, `LUX_EVENTS_SECRET` | 012 | unset | the event sink and the HMAC key; events are off when the URL is unset; the URL without the secret is a start-up failure |
 | `LUX_REQUESTLOG_EXPORTER` | 012 | `none` | where the request log is archived: `none` or `s3` |
+| `LUX_REQUESTLOG_PARTITION_LABEL` | 038 | unset | a Key label whose value partitions the request log's object keys, `_` for a Key without it |
+| `LUX_USAGE_RETENTION` | 038 | unset, every hourly row kept | a JSON list of retention rules on Key labels, the first match applying |
 | `LUX_S3_ENDPOINT`, `LUX_S3_REGION`, `LUX_S3_BUCKET`, `LUX_S3_ACCESS_KEY`, `LUX_S3_SECRET_KEY`, `LUX_S3_PREFIX` | 012 | unset; region `us-east-1`, prefix `lux/` | the request-log archive; the endpoint, the bucket, the access key, and the secret key are required when the exporter is `s3`, and there is no default endpoint and no credential chain |
 | `LUX_REQUESTS_PER_MINUTE`, `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` | 011 | `600`, `60` | control-plane requests one subject, and one client address before authentication, may send in a minute |
 | `LUX_TRUSTED_PROXIES` | 011 | unset | CIDR ranges of the proxies in front of the gateway whose `X-Forwarded-For` names the client; unset trusts no header |

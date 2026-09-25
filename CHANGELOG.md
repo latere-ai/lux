@@ -6,6 +6,27 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Usage retention: `LUX_USAGE_RETENTION` takes a JSON list of rules matched
+  on a Key's labels, the first match applying. A rule keeps a row's hourly
+  detail for `hourly` (at least `24h`, or `forever`), then folds it into
+  one row per month without the dimensions it `drop`s (`owner`, `key`,
+  `labels`), kept for `monthly` after the month ends. The replica holding
+  the usage lease rolls rows up every hour, and `GET /v1/usage` reads the
+  monthly rows beside the hourly ones with the same totals. Unset keeps
+  every hourly row, as before. New metric `lux_usage_rolled_up_total`; the
+  Postgres schema gains the `usage_monthly` table and two indexes
+  (migration 1000005).
+- `POST /v1/usage/redact` with `{"owner": "<issuer>|<subject>"}` takes one
+  owner out of every usage row, summing each row into the row without an
+  owner, and out of the replica's recent records. It is the new
+  `usage.redact` action; the built-in owner policy allows it to
+  administrators alone.
+- `LUX_REQUESTLOG_PARTITION_LABEL` names a Key label whose value becomes a
+  segment of every request log object key after the prefix, `_` for a Key
+  without it, so a bucket lifecycle rule can expire each partition on its
+  own. `GET /v1/requests` from the archive reads every partition, and only
+  one when its `label` filter names the partition label.
+
 ## v0.7.2 - 2026-09-24
 
 - A store behind `LUX_DB_POOL_URL` now writes objects that carry labels. Over the

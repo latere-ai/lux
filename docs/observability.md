@@ -48,6 +48,7 @@ Scrape `/metrics` on the internal listener. The metrics worth watching:
 | `lux_catalog_age_seconds` | gauge | none | seconds since this replica's in-memory catalog last matched the store |
 | `lux_catalog_reloads_total` | counter | `trigger`, `result` | catalog reloads; `trigger` is `start`, `tail`, `backstop`, `sighup`, or `health` (the Models alone, at each health tick); `result` is `ok`, `error` |
 | `lux_catalog_objects` | gauge | `kind` | what the in-memory catalog holds; `kind` is `Model`, `Provider`, `credential` |
+| `lux_usage_rolled_up_total` | counter | `result` | usage retention: hourly rows folded into monthly ones, monthly rows deleted, and passes that failed; `result` is `folded`, `deleted`, `error` |
 
 `model` and `provider` are the resolved object's `metadata.name`, empty
 when none was resolved; they are never a caller-controlled string, so a

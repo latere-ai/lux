@@ -33,16 +33,53 @@ const maxLine = 4 << 20
 // Reader answers GET /v1/requests from the archive: the durable,
 // installation-wide record set, in place of one replica's ring.
 type Reader struct {
-	bucket Bucket
-	prefix string
+	bucket    Bucket
+	prefix    string
+	partition string
 }
 
-// NewReader constructs the reader over the bucket and LUX_S3_PREFIX.
-func NewReader(b Bucket, prefix string) *Reader {
+// NewReader constructs the reader over the bucket, LUX_S3_PREFIX, and
+// LUX_REQUESTLOG_PARTITION_LABEL, empty for an archive with no
+// partitions.
+func NewReader(b Bucket, prefix, partitionLabel string) *Reader {
 	if prefix == "" {
 		prefix = DefaultPrefix
 	}
-	return &Reader{bucket: b, prefix: prefix}
+	return &Reader{bucket: b, prefix: prefix, partition: partitionLabel}
+}
+
+// roots are the key prefixes an hour's objects sit under, in key order:
+// the prefix itself, and with partitions each partition under it, only
+// the one a query's label filter names when it names the partition
+// label. The prefix itself stays among them, so objects written before
+// partitioning was turned on are read too.
+func (r *Reader) roots(ctx context.Context, q metering.RecordQuery) ([]string, error) {
+	if r.partition == "" {
+		return []string{r.prefix}, nil
+	}
+	if v, ok := q.Labels[r.partition]; ok {
+		return []string{path.Join(r.prefix, v)}, nil
+	}
+	out := []string{r.prefix}
+	base := strings.TrimSuffix(r.prefix, "/") + "/"
+	after := ""
+	for {
+		res, err := r.bucket.ListObjects(ctx, s3.ListOptions{Prefix: base, Delimiter: "/", StartAfter: after})
+		if err != nil {
+			return nil, fmt.Errorf("listing the partitions under %s: %w", base, err)
+		}
+		for _, p := range res.Prefixes {
+			out = append(out, strings.TrimSuffix(p, "/"))
+		}
+		if !res.Truncated || len(res.Prefixes)+len(res.Objects) == 0 {
+			break
+		}
+		after = res.Prefixes[len(res.Prefixes)-1]
+		if n := len(res.Objects); n > 0 && res.Objects[n-1].Key > after {
+			after = res.Objects[n-1].Key
+		}
+	}
+	return out, nil
 }
 
 // List pages the archived records that match q, the shape of
@@ -75,38 +112,48 @@ func (r *Reader) List(ctx context.Context, q metering.RecordQuery, p store.Page)
 		}
 		hour = at
 	}
+	roots, err := r.roots(ctx, q)
+	if err != nil {
+		return nil, "", err
+	}
 	var out []metering.Record
 	for ; !hour.Before(first); hour = hour.Add(-time.Hour) {
 		if ctx.Err() != nil {
 			return nil, "", ctx.Err()
 		}
-		prefix := path.Join(r.prefix, hourPrefix(hour)) + "/"
-		after := ""
-		for {
-			res, err := r.bucket.ListObjects(ctx, s3.ListOptions{Prefix: prefix, StartAfter: after})
-			if err != nil {
-				return nil, "", fmt.Errorf("listing %s: %w", prefix, err)
-			}
-			for _, obj := range res.Objects {
-				if resumeKey != "" && obj.Key < resumeKey {
-					continue
-				}
-				from := 0
-				if obj.Key == resumeKey {
-					from = resumeLine
-				}
-				next, err := r.read(ctx, obj.Key, from, q, p.Limit, &out)
+		prefixes := make([]string, 0, len(roots))
+		for _, root := range roots {
+			prefixes = append(prefixes, path.Join(root, hourPrefix(hour))+"/")
+		}
+		slices.Sort(prefixes)
+		for _, prefix := range prefixes {
+			after := ""
+			for {
+				res, err := r.bucket.ListObjects(ctx, s3.ListOptions{Prefix: prefix, StartAfter: after})
 				if err != nil {
-					return nil, "", err
+					return nil, "", fmt.Errorf("listing %s: %w", prefix, err)
 				}
-				if p.Limit > 0 && len(out) >= p.Limit {
-					return out, encodeCursor(q, obj.Key, next), nil
+				for _, obj := range res.Objects {
+					if resumeKey != "" && obj.Key < resumeKey {
+						continue
+					}
+					from := 0
+					if obj.Key == resumeKey {
+						from = resumeLine
+					}
+					next, err := r.read(ctx, obj.Key, from, q, p.Limit, &out)
+					if err != nil {
+						return nil, "", err
+					}
+					if p.Limit > 0 && len(out) >= p.Limit {
+						return out, encodeCursor(q, obj.Key, next), nil
+					}
 				}
+				if !res.Truncated || len(res.Objects) == 0 {
+					break
+				}
+				after = res.Objects[len(res.Objects)-1].Key
 			}
-			if !res.Truncated || len(res.Objects) == 0 {
-				break
-			}
-			after = res.Objects[len(res.Objects)-1].Key
 		}
 		resumeKey = ""
 	}
@@ -156,11 +203,13 @@ func hourOf(prefix, key string) (time.Time, error) {
 	if !ok {
 		return time.Time{}, fmt.Errorf("%w: key %s is not under %s", store.ErrInvalidCursor, key, prefix)
 	}
-	parts := strings.SplitN(rest, "/", 5)
-	if len(parts) != 5 {
+	// The hour is the four segments before the object's name, after a
+	// partition's own segment when there is one.
+	parts := strings.Split(rest, "/")
+	if len(parts) != 5 && len(parts) != 6 {
 		return time.Time{}, fmt.Errorf("%w: key %s is not an hour and an object", store.ErrInvalidCursor, key)
 	}
-	at, err := time.Parse("2006/01/02/15", strings.Join(parts[:4], "/"))
+	at, err := time.Parse("2006/01/02/15", strings.Join(parts[len(parts)-5:len(parts)-1], "/"))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("%w: key %s: %w", store.ErrInvalidCursor, key, err)
 	}

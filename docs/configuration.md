@@ -75,6 +75,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | `LUX_MAX_MANIFEST_BYTES` | The largest manifest or JSON body accepted on the control plane (1Ki to 16Mi). | `64Ki` | No |
 | `LUX_MAX_BODY_BYTES` | The largest data-plane request body, and the cap on an upstream body read whole (4Ki to 1Gi). | `64Mi` | No |
 | `LUX_METERING_FLUSH` | How often a replica writes its spend deltas and usage aggregates to the store (100ms to 1m). | `1s` | No |
+| `LUX_USAGE_RETENTION` | A JSON list of retention rules, the first whose `match` a usage row's Key labels hold applying to it: `hourly` rows are folded into one row per month after that long (at least `24h`, or `forever`), `monthly` rows are deleted that long after their month ends (at least `720h`, or `forever`), and `drop` names the dimensions a monthly row does not keep (`owner`, `key`, `labels`). Unset keeps every hourly row. | `unset` | No |
 
 ## Providers and upstream
 
@@ -97,6 +98,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | `LUX_S3_BUCKET` | The request-log archive's bucket. | `unset` | When exporter is `s3` |
 | `LUX_S3_ACCESS_KEY` | The request-log archive's access key; there is no credential chain. Never echoed. | `unset` | When exporter is `s3` |
 | `LUX_S3_SECRET_KEY` | The request-log archive's secret key. Never echoed. | `unset` | When exporter is `s3` |
+| `LUX_REQUESTLOG_PARTITION_LABEL` | A Key label whose value partitions the request log's object keys, `<prefix>/<value>/yyyy/mm/dd/hh/`, `_` for a Key without it, so a bucket lifecycle rule can expire each partition on its own. | `unset` | No |
 | `LUX_S3_PREFIX` | The key prefix request-log objects are written under. | `lux/` | No |
 
 ## Tunnel

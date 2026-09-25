@@ -58,3 +58,30 @@ func TestCatalogRules(t *testing.T) {
 		})
 	}
 }
+
+// TestRetentionVariables is spec 038's two variables: LUX_USAGE_RETENTION
+// parses to its rules, a malformed list is a start-up problem naming
+// the variable, unset is no rule; LUX_REQUESTLOG_PARTITION_LABEL takes a
+// label name and refuses anything else.
+func TestRetentionVariables(t *testing.T) {
+	c, err := Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer})))
+	if err != nil || c.UsageRetention != nil || c.RequestLogPartitionLabel != "" {
+		t.Fatalf("unset = %+v, %q, %v", c.UsageRetention, c.RequestLogPartitionLabel, err)
+	}
+	c, err = Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer,
+		"LUX_USAGE_RETENTION":            `[{"match": {"context": "personal"}, "hourly": "2160h", "drop": ["owner"]}]`,
+		"LUX_REQUESTLOG_PARTITION_LABEL": "example.com/context",
+	})))
+	if err != nil || len(c.UsageRetention) != 1 || c.UsageRetention[0].Match["context"] != "personal" || c.RequestLogPartitionLabel != "example.com/context" {
+		t.Fatalf("set = %+v, %q, %v", c.UsageRetention, c.RequestLogPartitionLabel, err)
+	}
+	for name, value := range map[string]string{
+		"LUX_USAGE_RETENTION":            `[{"hourly": "1h"}]`,
+		"LUX_REQUESTLOG_PARTITION_LABEL": "not a label",
+	} {
+		_, err := Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer, name: value})))
+		if err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=%q = %v", name, value, err)
+		}
+	}
+}

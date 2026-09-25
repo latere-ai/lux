@@ -22,6 +22,9 @@ func openAPIDocument(base string) []byte {
 		"/v1/self":         map[string]any{"get": operation(objectResponse("200"))},
 		"/v1/usage":        map[string]any{"get": operation(rowsResponse())},
 		"/v1/requests":     map[string]any{"get": operation(recordsResponse())},
+		"/v1/usage/redact": map[string]any{"post": operation(map[string]any{"200": jsonResponse("the rows rewritten", map[string]any{
+			"type": "object", "required": []any{"rows"}, "properties": map[string]any{"rows": map[string]any{"type": "integer"}},
+		})})},
 		"/v1/keys/{name}/rotate": map[string]any{
 			"post": operation(refResponse("200", "Key")),
 		},

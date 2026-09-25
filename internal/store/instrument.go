@@ -428,6 +428,34 @@ func (u iUsage) Records(ctx context.Context, q metering.RecordQuery, p Page) ([]
 	return recs, next, err
 }
 
+func (u iUsage) Hourly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error) {
+	ctx, done := u.s.begin(ctx, "Usage.Hourly", "")
+	rows, err := u.Usage.Hourly(ctx, before, after, limit)
+	done(err)
+	return rows, err
+}
+
+func (u iUsage) Monthly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error) {
+	ctx, done := u.s.begin(ctx, "Usage.Monthly", "")
+	rows, err := u.Usage.Monthly(ctx, before, after, limit)
+	done(err)
+	return rows, err
+}
+
+func (u iUsage) Fold(ctx context.Context, moves []metering.Move, expired []metering.AggregateKey) (int, int, error) {
+	ctx, done := u.s.begin(ctx, "Usage.Fold", "")
+	folded, deleted, err := u.Usage.Fold(ctx, moves, expired)
+	done(err)
+	return folded, deleted, err
+}
+
+func (u iUsage) RedactOwner(ctx context.Context, owner string) (int, error) {
+	ctx, done := u.s.begin(ctx, "Usage.RedactOwner", "")
+	n, err := u.Usage.RedactOwner(ctx, owner)
+	done(err)
+	return n, err
+}
+
 type iKeyFences struct {
 	KeyFences
 	s *instrumented

@@ -22,6 +22,7 @@ var usageCases = []testCase{
 	{group: "usage", name: "case009RefusedRequestHasARecord", spec: 9, bearer: true, key: true, fn: case009RefusedRequestHasARecord},
 	{group: "usage", name: "case009RecordHasTheStubsTokens", spec: 9, bearer: true, key: true, stubs: true, fn: case009RecordHasTheStubsTokens},
 	{group: "usage", name: "case009UsageAggregates", spec: 9, bearer: true, key: true, fn: case009UsageAggregates},
+	{group: "usage", name: "case038RedactUsage", spec: 38, bearer: true, mode: serverMode, fn: case038RedactUsage},
 }
 
 // recordTimeout bounds the wait for a record or an aggregate row, which
@@ -202,4 +203,28 @@ func sumRequests(body map[string]any) int {
 func integral(m any, path string) bool {
 	data, err := json.Marshal(field(m, path))
 	return err == nil && !strings.ContainsAny(string(data), ".eE")
+}
+
+// case038RedactUsage: POST /v1/usage/redact takes a rendered owner, and
+// answers the rows it rewrote, zero for an owner no row carries, or
+// forbidden when the server's authorizer keeps redaction from this
+// subject; an owner that is no rendered subject is invalid_field, an
+// unknown member invalid_request, and a body that is not JSON
+// unsupported_media_type, each before the authorizer is asked.
+func case038RedactUsage(t testing.TB, c *client) {
+	owner := "https://conformance.invalid|" + c.run
+	resp := c.v1(t, http.MethodPost, "/usage/redact", map[string]any{"owner": owner})
+	switch resp.Status {
+	case http.StatusOK:
+		if body := resp.json(t); num(body, "rows") != 0 || !integral(body, "rows") {
+			t.Errorf("redacting an owner no row carries answered %s", excerpt(resp.Body))
+		}
+	case http.StatusForbidden:
+		c.expect(t, resp, "forbidden")
+	default:
+		t.Errorf("POST /usage/redact: %d %s", resp.Status, excerpt(resp.Body))
+	}
+	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", map[string]any{"owner": "not-a-subject"}), "invalid_field")
+	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", map[string]any{"owner": owner, "keys": []string{}}), "invalid_request")
+	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", "owner: x", header("Content-Type", "application/yaml")), "unsupported_media_type")
 }

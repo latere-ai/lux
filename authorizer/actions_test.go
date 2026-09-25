@@ -109,6 +109,7 @@ func shapes(t *testing.T) map[string]map[string]any {
 		ActionBudgetList:   {"kind": "Budget"},
 		ActionBudgetDraw:   budget,
 		ActionUsageRead:    {"kind": "Usage", "keys": []any{"key_01J9TESTKEY0000000000000000"}, "owners": []any{fixtureSubject}},
+		ActionUsageRedact:  {"kind": "Usage", "owner": fixtureSubject},
 		ActionOwnerAssign:  {"kind": "Ownership", "target_kind": "Key", "name": "run-42", "owner": fixtureSubject, "proposed": map[string]any{"owner": fixtureSubject}},
 	}
 }
@@ -128,6 +129,8 @@ func resourceOf(t *testing.T, action string) authz.Resource {
 		return ModelUse("anthropic/*", fixtureMatched)
 	case ActionUsageRead:
 		return UsageRead([]string{"key_01J9TESTKEY0000000000000000"}, []string{fixtureSubject})
+	case ActionUsageRedact:
+		return UsageRedact(fixtureSubject)
 	}
 	var obj v1.Object
 	switch Kind(action) {
@@ -239,11 +242,11 @@ func TestResourceForRefusesTheWrongKind(t *testing.T) {
 	}
 }
 
-// TestActionsAndKinds: the vocabulary is the table's twenty-seven
+// TestActionsAndKinds: the vocabulary is the table's twenty-eight
 // actions, each maps to its kind, and anything else maps to none.
 func TestActionsAndKinds(t *testing.T) {
 	all := Actions()
-	if len(all) != 27 || len(slices.Compact(slices.Sorted(slices.Values(all)))) != 27 {
+	if len(all) != 28 || len(slices.Compact(slices.Sorted(slices.Values(all)))) != 28 {
 		t.Fatalf("Actions() = %v", all)
 	}
 	for _, a := range all {
@@ -267,7 +270,7 @@ func TestActionsAndKinds(t *testing.T) {
 	}
 }
 
-// TestVocabularyIsTheTable: Vocabulary carries the twenty-seven rows in
+// TestVocabularyIsTheTable: Vocabulary carries the twenty-eight rows in
 // the table's order, each action with the kind it acts on, and the three
 // older reads are that value read three ways rather than a second table.
 func TestVocabularyIsTheTable(t *testing.T) {
@@ -275,8 +278,8 @@ func TestVocabularyIsTheTable(t *testing.T) {
 	if v.Core != "lux" {
 		t.Errorf("Core = %q, want lux", v.Core)
 	}
-	if len(v.Actions) != 27 {
-		t.Fatalf("the vocabulary has %d rows, want the table's twenty-seven", len(v.Actions))
+	if len(v.Actions) != 28 {
+		t.Fatalf("the vocabulary has %d rows, want the table's twenty-eight", len(v.Actions))
 	}
 	names := make([]string, 0, len(v.Actions))
 	for _, a := range v.Actions {

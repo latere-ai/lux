@@ -247,6 +247,15 @@ The archive object key is
 <LUX_S3_PREFIX>/<yyyy>/<mm>/<dd>/<hh>/<replica>-<ulid>.ndjson
 ```
 
+and with `LUX_REQUESTLOG_PARTITION_LABEL` set
+([038-usage-retention](.archive/038-usage-retention.md)) the value of that Key label, `_` for a Key
+without it, is a segment after the prefix, one object per value a batch
+holds, so a bucket's lifecycle rule acts on each partition alone:
+
+```
+<LUX_S3_PREFIX>/<value>/<yyyy>/<mm>/<dd>/<hh>/<replica>-<ulid>.ndjson
+```
+
 `<yyyy>/<mm>/<dd>/<hh>` is the UTC hour of the batch's **first**
 record, so a record never moves between hours after the fact and a
 reader of one hour reads every object under one prefix. `<replica>` is

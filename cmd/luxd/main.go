@@ -246,9 +246,9 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		if err != nil {
 			return fail(stderr, fmt.Errorf("LUX_S3_ENDPOINT: %w", err))
 		}
-		exporter = reqlog.NewExporter(reqlog.ExporterOptions{Bucket: bucket, Prefix: cfg.S3Prefix, Metrics: reg, Logger: logger})
+		exporter = reqlog.NewExporter(reqlog.ExporterOptions{Bucket: bucket, Prefix: cfg.S3Prefix, PartitionLabel: cfg.RequestLogPartitionLabel, Metrics: reg, Logger: logger})
 		recorderOptions.Archive = exporter
-		archive = reqlog.NewReader(bucket, cfg.S3Prefix)
+		archive = reqlog.NewReader(bucket, cfg.S3Prefix, cfg.RequestLogPartitionLabel)
 		_, _ = fmt.Fprintf(stdout, "luxd: request log: archived to bucket %s at %s under %s, in batches of %d records or every %s\n", cfg.S3Bucket, cfg.S3Endpoint, cfg.S3Prefix, reqlog.FlushSize, reqlog.FlushInterval)
 	} else {
 		reqlog.RegisterIdle(reg)
@@ -286,6 +286,13 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	jobs.Go(func() { catalog.Run(jobsCtx) })
 	jobs.Go(func() { limiter.Run(jobsCtx) })
 	jobs.Go(func() { recorder.Run(jobsCtx) })
+	// The roll-up of spec 038 on the replica holding the usage lease;
+	// with no rule it returns at once and every hourly row is kept.
+	retention := serve.NewRetention(serve.RetentionOptions{Store: st, Rules: cfg.UsageRetention, Metrics: reg, Logger: logger})
+	jobs.Go(func() { retention.Run(jobsCtx) })
+	if len(cfg.UsageRetention) > 0 {
+		_, _ = fmt.Fprintf(stdout, "luxd: usage: %d retention rule(s), rolled up hourly on the replica holding the usage lease\n", len(cfg.UsageRetention))
+	}
 	if exporter != nil {
 		jobs.Go(func() { exporter.Run(jobsCtx) })
 	}

@@ -249,3 +249,173 @@ func recordsRingIsBounded(t *testing.T, s store.Store) {
 	wantErr(t, err, store.ErrInvalidCursor, "a journal cursor")
 	truth(t, s.Usage().AppendRecord(ctx, metering.Record{Key: metering.KeyRef{ID: "key_ring"}}) != nil, "a record without an id is refused")
 }
+
+// sumOf is the requests and cost of rows, the totals a fold keeps.
+func sumOf(rows []metering.Row) (requests, cost int64) {
+	for _, r := range rows {
+		requests += r.Requests
+		cost += r.Cost
+	}
+	return requests, cost
+}
+
+// usageRollUp is spec 038's store half: the hourly rows page in key
+// order after a key; a fold deletes each hourly row and adds the sums it
+// held into its monthly row, once however often it runs; the usage
+// query reads the monthly rows beside the hourly ones with the same
+// totals; and expired monthly rows are deleted.
+func usageRollUp(t *testing.T, s store.Store) {
+	ctx := t.Context()
+	rs := usageRecords(120)
+	noErr(t, s.Usage().AddRows(ctx, metering.Aggregates(rs)), "AddRows")
+	all := metering.Query{From: usageStart.Add(-time.Hour), To: usageStart.Add(4 * time.Hour)}
+	before, err := s.Usage().QueryRows(ctx, all)
+	noErr(t, err, "QueryRows before")
+	wantRequests, wantCost := sumOf(before)
+
+	// Paging: two rows at a time reads every row once, in key order.
+	var paged []metering.Aggregate
+	var after metering.AggregateKey
+	for {
+		page, err := s.Usage().Hourly(ctx, usageStart.Add(4*time.Hour), after, 2)
+		noErr(t, err, "Hourly")
+		paged = append(paged, page...)
+		if len(page) < 2 {
+			break
+		}
+		after = page[len(page)-1].Key()
+	}
+	if len(paged) != len(metering.Aggregates(rs)) {
+		t.Fatalf("paged %d hourly rows, want %d", len(paged), len(metering.Aggregates(rs)))
+	}
+	for i := 1; i < len(paged); i++ {
+		if paged[i-1].Key().Compare(paged[i].Key()) >= 0 {
+			t.Fatalf("rows %d and %d are out of key order", i-1, i)
+		}
+	}
+	if early, err := s.Usage().Hourly(ctx, usageStart.Truncate(time.Hour), metering.AggregateKey{}, 0); err != nil || len(early) != 0 {
+		t.Fatalf("rows before the first hour = %d, %v", len(early), err)
+	}
+
+	// Fold every row of team red into its month without the owner.
+	rule := metering.RetentionRule{Match: map[string]string{"team": "red"}, Drop: []metering.Dimension{metering.DropOwner}}
+	var moves []metering.Move
+	for _, a := range paged {
+		if a.Labels["team"] == "red" {
+			moves = append(moves, metering.Move{From: a.Key(), To: rule.MonthlyRow(a)})
+		}
+	}
+	folded, deleted, err := s.Usage().Fold(ctx, moves, nil)
+	noErr(t, err, "Fold")
+	if folded != len(moves) || deleted != 0 {
+		t.Fatalf("Fold = %d folded, %d deleted, want %d and 0", folded, deleted, len(moves))
+	}
+	again, _, err := s.Usage().Fold(ctx, moves, nil)
+	noErr(t, err, "Fold again")
+	if again != 0 {
+		t.Fatalf("a second fold of the same rows folded %d", again)
+	}
+	after2, err := s.Usage().QueryRows(ctx, all)
+	noErr(t, err, "QueryRows after")
+	if r, c := sumOf(after2); r != wantRequests || c != wantCost {
+		t.Fatalf("after the fold the totals are %d requests and %d cost, want %d and %d", r, c, wantRequests, wantCost)
+	}
+	monthly, err := s.Usage().Monthly(ctx, usageStart.AddDate(0, 1, 0), metering.AggregateKey{}, 0)
+	noErr(t, err, "Monthly")
+	if len(monthly) == 0 {
+		t.Fatal("no monthly row after the fold")
+	}
+	for _, a := range monthly {
+		if a.Owner != "" || !a.Bucket.Equal(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)) || a.Labels["team"] != "red" {
+			t.Fatalf("a monthly row = %+v", a)
+		}
+	}
+	byOwner := all
+	byOwner.By = []metering.Dimension{metering.DimensionOwner}
+	grouped, err := s.Usage().QueryRows(ctx, byOwner)
+	noErr(t, err, "QueryRows by owner")
+	for _, row := range grouped {
+		if row.Dimensions["owner"] == subject {
+			t.Fatalf("the dropped owner is still a group: %+v", row)
+		}
+	}
+	// A range that starts later in the month still reads the month's row.
+	late := metering.Query{From: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)}
+	lateRows, err := s.Usage().QueryRows(ctx, late)
+	noErr(t, err, "QueryRows later in the month")
+	if r, _ := sumOf(lateRows); r == 0 {
+		t.Fatal("a range later in the month does not read the month's row")
+	}
+	expired := make([]metering.AggregateKey, 0, len(monthly))
+	for _, a := range monthly {
+		expired = append(expired, a.Key())
+	}
+	_, deleted, err = s.Usage().Fold(ctx, nil, expired)
+	noErr(t, err, "Fold expiring")
+	if deleted != len(monthly) {
+		t.Fatalf("deleted %d monthly rows, want %d", deleted, len(monthly))
+	}
+	if left, err := s.Usage().Monthly(ctx, usageStart.AddDate(1, 0, 0), metering.AggregateKey{}, 0); err != nil || len(left) != 0 {
+		t.Fatalf("monthly rows after the expiry = %d, %v", len(left), err)
+	}
+}
+
+// usageRedactOwner is spec 038's redaction: every hourly and monthly row
+// of the owner is summed into the row without an owner, the totals kept,
+// the owner gone from every grouping and from the ring's records, and
+// an owner no row carries rewrites nothing.
+func usageRedactOwner(t *testing.T, s store.Store) {
+	ctx := t.Context()
+	rs := usageRecords(60)
+	noErr(t, s.Usage().AddRows(ctx, metering.Aggregates(rs)), "AddRows")
+	for _, r := range rs {
+		noErr(t, s.Usage().AppendRecord(ctx, r), "AppendRecord")
+	}
+	// Some of the owner's rows are monthly already.
+	var moves []metering.Move
+	rule := metering.RetentionRule{}
+	page, err := s.Usage().Hourly(ctx, usageStart.Add(time.Hour).Truncate(time.Hour), metering.AggregateKey{}, 0)
+	noErr(t, err, "Hourly")
+	for _, a := range page {
+		moves = append(moves, metering.Move{From: a.Key(), To: rule.MonthlyRow(a)})
+	}
+	_, _, err = s.Usage().Fold(ctx, moves, nil)
+	noErr(t, err, "Fold")
+	all := metering.Query{From: usageStart.Add(-time.Hour), To: usageStart.Add(4 * time.Hour)}
+	before, err := s.Usage().QueryRows(ctx, all)
+	noErr(t, err, "QueryRows before")
+	wantRequests, wantCost := sumOf(before)
+
+	n, err := s.Usage().RedactOwner(ctx, subject)
+	noErr(t, err, "RedactOwner")
+	if n == 0 {
+		t.Fatal("the redaction rewrote no row")
+	}
+	after, err := s.Usage().QueryRows(ctx, all)
+	noErr(t, err, "QueryRows after")
+	if r, c := sumOf(after); r != wantRequests || c != wantCost {
+		t.Fatalf("after the redaction the totals are %d requests and %d cost, want %d and %d", r, c, wantRequests, wantCost)
+	}
+	byOwner := all
+	byOwner.By = []metering.Dimension{metering.DimensionOwner}
+	grouped, err := s.Usage().QueryRows(ctx, byOwner)
+	noErr(t, err, "QueryRows by owner")
+	for _, row := range grouped {
+		if row.Dimensions["owner"] == subject {
+			t.Fatalf("the redacted owner is still a group: %+v", row)
+		}
+	}
+	recs, _, err := s.Usage().Records(ctx, metering.RecordQuery{Query: all}, store.Page{})
+	noErr(t, err, "Records")
+	for _, r := range recs {
+		if r.Owner == subject {
+			t.Fatalf("record %s still carries the owner", r.ID)
+		}
+	}
+	if n, err := s.Usage().RedactOwner(ctx, "https://login.example.com|nobody"); err != nil || n != 0 {
+		t.Fatalf("an owner no row carries = %d, %v", n, err)
+	}
+	if _, err := s.Usage().RedactOwner(ctx, ""); err == nil {
+		t.Fatal("an empty owner was redacted")
+	}
+}

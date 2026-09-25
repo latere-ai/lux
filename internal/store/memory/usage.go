@@ -8,6 +8,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"time"
 
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/metering"
@@ -49,6 +50,11 @@ func (u usage) QueryRows(ctx context.Context, q metering.Query) ([]metering.Row,
 	err := u.s.read(ctx, func(st *state) error {
 		for _, a := range st.aggregates {
 			if q.Matches(a) {
+				matched = append(matched, a)
+			}
+		}
+		for _, a := range st.monthly {
+			if q.MonthOverlaps(a) {
 				matched = append(matched, a)
 			}
 		}
@@ -105,6 +111,132 @@ func (u usage) Records(ctx context.Context, q metering.RecordQuery, p store.Page
 		return out, store.EncodeRecordCursor(q, out[len(out)-1]), nil
 	}
 	return out, "", nil
+}
+
+// Hourly implements store.Usage.
+func (u usage) Hourly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error) {
+	var out []metering.Aggregate
+	err := u.s.read(ctx, func(st *state) error {
+		out = page(st.aggregates, before, after, limit)
+		return nil
+	})
+	return out, err
+}
+
+// Monthly implements store.Usage.
+func (u usage) Monthly(ctx context.Context, before time.Time, after metering.AggregateKey, limit int) ([]metering.Aggregate, error) {
+	var out []metering.Aggregate
+	err := u.s.read(ctx, func(st *state) error {
+		out = page(st.monthly, before, after, limit)
+		return nil
+	})
+	return out, err
+}
+
+// page is the rows of m before before and after after, in key order, at
+// most limit when limit is positive.
+func page(m map[metering.AggregateKey]metering.Aggregate, before time.Time, after metering.AggregateKey, limit int) []metering.Aggregate {
+	var out []metering.Aggregate
+	for k, a := range m {
+		if a.Bucket.Before(before) && k.Compare(after) > 0 {
+			out = append(out, a)
+		}
+	}
+	slices.SortFunc(out, func(a, b metering.Aggregate) int { return a.Key().Compare(b.Key()) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	for i := range out {
+		out[i].Labels = maps.Clone(out[i].Labels)
+	}
+	return out
+}
+
+// add sums a into the row of m under a's key, its labels replacing the
+// row's, as AddRows does.
+func add(m map[metering.AggregateKey]metering.Aggregate, a metering.Aggregate) {
+	k := a.Key()
+	if have, ok := m[k]; ok {
+		have.Add(a.Sums)
+		have.Labels = maps.Clone(a.Labels)
+		m[k] = have
+		return
+	}
+	a.Labels = maps.Clone(a.Labels)
+	if a.Labels == nil {
+		a.Labels = map[string]string{}
+	}
+	m[k] = a
+}
+
+// Fold implements store.Usage.
+func (u usage) Fold(ctx context.Context, moves []metering.Move, expired []metering.AggregateKey) (folded, deleted int, err error) {
+	err = u.s.write(ctx, func(st *state) error {
+		for _, mv := range moves {
+			from, ok := st.aggregates[mv.From]
+			if !ok {
+				continue
+			}
+			delete(st.aggregates, mv.From)
+			to := mv.To
+			to.Bucket = to.Bucket.UTC()
+			to.Sums = from.Sums
+			add(st.monthly, to)
+			folded++
+		}
+		for _, k := range expired {
+			if _, ok := st.monthly[k]; ok {
+				delete(st.monthly, k)
+				deleted++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return folded, deleted, nil
+}
+
+// RedactOwner implements store.Usage.
+func (u usage) RedactOwner(ctx context.Context, owner string) (int, error) {
+	if owner == "" {
+		return 0, errors.New("memory: Usage.RedactOwner with no owner")
+	}
+	n := 0
+	err := u.s.write(ctx, func(st *state) error {
+		for _, m := range []map[metering.AggregateKey]metering.Aggregate{st.aggregates, st.monthly} {
+			for k, a := range m {
+				if a.Owner != owner {
+					continue
+				}
+				delete(m, k)
+				a.Owner = ""
+				add(m, a)
+				n++
+			}
+		}
+		for id, ring := range st.records {
+			var fresh []metering.Record
+			for i, r := range ring {
+				if r.Owner != owner {
+					continue
+				}
+				if fresh == nil {
+					fresh = slices.Clone(ring)
+				}
+				fresh[i].Owner = ""
+			}
+			if fresh != nil {
+				st.records[id] = fresh
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 var _ store.Usage = usage{}

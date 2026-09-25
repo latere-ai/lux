@@ -407,7 +407,7 @@ func TestArchiveRoundTrip(t *testing.T) {
 			t.Fatalf("hour %s holds %v, want %v", hour, in, want)
 		}
 	}
-	rd := NewReader(h.srv.Client(true), "lux/")
+	rd := NewReader(h.srv.Client(true), "lux/", "")
 	from := h.c.Now().Truncate(time.Hour)
 	q := metering.RecordQuery{From: from, To: from.Add(2 * time.Hour)}
 	all, next, err := rd.List(t.Context(), q, store.Page{})
@@ -442,7 +442,7 @@ func TestArchiveRoundTrip(t *testing.T) {
 func TestArchiveReaderPages(t *testing.T) {
 	h := newHarness(t)
 	produced := h.twoHours(t)
-	rd := NewReader(h.srv.Client(true), "lux/")
+	rd := NewReader(h.srv.Client(true), "lux/", "")
 	from := h.c.Now().Truncate(time.Hour)
 	q := metering.RecordQuery{From: from, To: from.Add(2 * time.Hour)}
 	all, _, err := rd.List(t.Context(), q, store.Page{})
@@ -526,7 +526,7 @@ func TestArchiveReaderPages(t *testing.T) {
 	if _, _, err := rd.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing lux/2026/09/14/11/") {
 		t.Fatalf("a refused listing: %v", err)
 	}
-	failing := NewReader(&getFails{h.srv.Client(true)}, "")
+	failing := NewReader(&getFails{h.srv.Client(true)}, "", "")
 	if _, _, err := failing.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "reading lux/2026/09/14/11/") {
 		t.Fatalf("a failed read: %v", err)
 	}
@@ -677,5 +677,85 @@ func TestDrainWritesTheBuffer(t *testing.T) {
 	<-done
 	if len(h.srv.Keys()) != 4 || e.Len() != 0 {
 		t.Fatalf("keys %v, %d left", h.srv.Keys(), e.Len())
+	}
+}
+
+// TestArchivePartitionedByLabel is spec 038's partition: with a label
+// named, a batch writes one object per value of it under the prefix,
+// `_` for a Key without it; the reader reads every partition and the
+// objects written before partitioning, reads one partition alone when
+// the query's label filter names the label, and pages across
+// partitions with the same cursor.
+func TestArchivePartitionedByLabel(t *testing.T) {
+	h := newHarness(t)
+	// An object from before partitioning was turned on.
+	old := h.exporter(func(o *ExporterOptions) { o.Replica = "replica-a" })
+	first := record(0, h.c.Now())
+	old.Append(first)
+	if err := old.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	e := h.exporter(func(o *ExporterOptions) { o.Replica = "replica-a"; o.PartitionLabel = "context" })
+	var produced []metering.Record
+	for i := 1; i <= 9; i++ {
+		r := record(i, h.c.Now().Add(time.Duration(i)*time.Second))
+		switch i % 3 {
+		case 0:
+			r.Labels = map[string]string{"context": "personal"}
+		case 1:
+			r.Labels = map[string]string{"context": "team"}
+		default:
+			r.Labels = map[string]string{}
+		}
+		produced = append(produced, r)
+		e.Append(r)
+	}
+	if err := e.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, k := range h.srv.Keys() {
+		parts := strings.Split(k, "/")
+		switch len(parts) {
+		case 6:
+			counts["unpartitioned"] += len(h.lines(t, k))
+		case 7:
+			counts[parts[1]] += len(h.lines(t, k))
+		default:
+			t.Fatalf("an object key of an unexpected shape: %s", k)
+		}
+	}
+	if counts["personal"] != 3 || counts["team"] != 3 || counts[Unlabeled] != 3 || counts["unpartitioned"] != 1 {
+		t.Fatalf("records per partition = %v", counts)
+	}
+	rd := NewReader(h.srv.Client(true), "lux/", "context")
+	from := h.c.Now().Truncate(time.Hour)
+	q := metering.RecordQuery{From: from, To: from.Add(time.Hour)}
+	all, _, err := rd.List(t.Context(), q, store.Page{})
+	if err != nil || len(all) != 10 {
+		t.Fatalf("every partition = %d, %v", len(all), err)
+	}
+	personal, _, err := rd.List(t.Context(), metering.RecordQuery{From: from, To: from.Add(time.Hour), Labels: map[string]string{"context": "personal"}}, store.Page{})
+	if err != nil || len(personal) != 3 {
+		t.Fatalf("one partition = %d, %v", len(personal), err)
+	}
+	var paged []metering.Record
+	page := store.Page{Limit: 2}
+	for {
+		got, next, err := rd.List(t.Context(), q, page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paged = append(paged, got...)
+		if next == "" {
+			break
+		}
+		page.Cursor = next
+	}
+	if !slices.Equal(ids(paged), ids(all)) {
+		t.Fatalf("paged %v, unpaged %v", ids(paged), ids(all))
+	}
+	if got := partitions(produced, ""); len(got) != 1 || len(got[0].records) != 9 {
+		t.Fatalf("no label is one partition: %d", len(got))
 	}
 }

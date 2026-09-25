@@ -22,6 +22,7 @@ import (
 
 	"latere.ai/x/lux/internal/localissuer"
 	"latere.ai/x/lux/internal/secrets"
+	"latere.ai/x/lux/metering"
 )
 
 // Defaults for the optional variables.
@@ -139,6 +140,12 @@ type Config struct {
 	// MeteringFlush is how often a replica writes its spend deltas and
 	// its usage aggregates to the store.
 	MeteringFlush time.Duration
+	// UsageRetention is LUX_USAGE_RETENTION, the retention rules of spec
+	// 038; none keeps every hourly row.
+	UsageRetention metering.RetentionRules
+	// RequestLogPartitionLabel is LUX_REQUESTLOG_PARTITION_LABEL, the Key
+	// label whose value partitions the request log's object keys.
+	RequestLogPartitionLabel string
 
 	// The control plane variables of spec 011, and the two of spec 004
 	// its Resolve defaults and the doors' body cap read.

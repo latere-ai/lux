@@ -3,7 +3,12 @@
 
 package config
 
-import "time"
+import (
+	"regexp"
+	"time"
+
+	"latere.ai/x/lux/metering"
+)
 
 // Default and bounds for LUX_METERING_FLUSH, spec 009's one variable:
 // how often a replica writes its spend deltas and usage aggregates to
@@ -22,5 +27,18 @@ const (
 func (c *Config) loadMetering(getenv Getenv) []string {
 	var problems []string
 	c.MeteringFlush, problems = interval("LUX_METERING_FLUSH", getenv("LUX_METERING_FLUSH"), DefaultMeteringFlush, MinMeteringFlush, MaxMeteringFlush, problems)
+	rules, err := metering.ParseRetentionRules(getenv("LUX_USAGE_RETENTION"))
+	if err != nil {
+		problems = append(problems, "LUX_USAGE_RETENTION: "+err.Error())
+	}
+	c.UsageRetention = rules
+	c.RequestLogPartitionLabel = getenv("LUX_REQUESTLOG_PARTITION_LABEL")
+	if c.RequestLogPartitionLabel != "" && !partitionLabel.MatchString(c.RequestLogPartitionLabel) {
+		problems = append(problems, "LUX_REQUESTLOG_PARTITION_LABEL is "+c.RequestLogPartitionLabel+", not a label name: [A-Za-z0-9._/-] of at most 253 characters beginning and ending alphanumeric")
+	}
 	return problems
 }
+
+// partitionLabel is the label name grammar of a manifest's labels, an
+// optional DNS prefix and a slash before the name.
+var partitionLabel = regexp.MustCompile(`^[A-Za-z0-9]([-A-Za-z0-9_./]{0,251}[A-Za-z0-9])?$`)

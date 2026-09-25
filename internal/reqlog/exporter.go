@@ -67,6 +67,11 @@ type ExporterOptions struct {
 	// Replica names this process in every object key; empty is the
 	// hostname reduced by Replica.
 	Replica string
+	// PartitionLabel is LUX_REQUESTLOG_PARTITION_LABEL: a Key label whose
+	// value is a segment of every object key after the prefix, so a
+	// bucket's lifecycle rules can differ per partition (spec 038). A
+	// batch writes one object per partition; empty is one object.
+	PartitionLabel string
 	// FlushSize, FlushInterval, and Cap replace the figures above when
 	// positive.
 	FlushSize     int
@@ -186,26 +191,69 @@ func (e *Exporter) Flush(ctx context.Context) error {
 	if len(batch) == 0 {
 		return nil
 	}
+	// A Record is scalars, slices, and string maps, so an encoding error
+	// does not happen; the batch is dropped rather than retried into the
+	// same error for ever.
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)
-	for _, r := range batch {
-		if err := enc.Encode(r); err != nil {
-			// A Record is scalars, slices, and string maps, so this does
-			// not happen; the batch is dropped rather than retried into
-			// the same error forever.
-			e.ring.ack(through)
-			e.countDrops(len(batch))
-			return fmt.Errorf("encoding the batch: %w", err)
+	// One object per partition, in the order the partitions first
+	// appear; the batch leaves the ring once every one is written, so a
+	// failure writes the whole batch again at the next flush and the
+	// partitions already written hold those records twice.
+	for _, part := range partitions(batch, e.o.PartitionLabel) {
+		body.Reset()
+		for _, r := range part.records {
+			if err := enc.Encode(r); err != nil {
+				e.ring.ack(through)
+				e.countDrops(len(batch))
+				return fmt.Errorf("encoding the batch: %w", err)
+			}
 		}
-	}
-	key := objectKey(e.o.Prefix, e.o.Replica, batch[0].At, e.o.NewID(e.o.Now()))
-	b := s3.BytesBody(body.Bytes())
-	b.ContentType = ContentType
-	if _, err := e.o.Bucket.PutObject(ctx, key, b); err != nil {
-		return fmt.Errorf("writing %s with %d records: %w", key, len(batch), err)
+		key := objectKey(path.Join(e.o.Prefix, part.name), e.o.Replica, part.records[0].At, e.o.NewID(e.o.Now()))
+		b := s3.BytesBody(body.Bytes())
+		b.ContentType = ContentType
+		if _, err := e.o.Bucket.PutObject(ctx, key, b); err != nil {
+			return fmt.Errorf("writing %s with %d records: %w", key, len(part.records), err)
+		}
 	}
 	e.ring.ack(through)
 	return nil
+}
+
+// Unlabeled is the partition of a record whose Key does not carry the
+// partition label: no label value can be it, since a value begins and
+// ends alphanumeric.
+const Unlabeled = "_"
+
+// partition is the records of one batch that share a partition.
+type partition struct {
+	name    string
+	records []metering.Record
+}
+
+// partitions splits a batch by the value of label on each record's Key
+// labels, in the order each value first appears; with no label the
+// batch is one partition whose name is empty.
+func partitions(batch []metering.Record, label string) []partition {
+	if label == "" {
+		return []partition{{records: batch}}
+	}
+	var out []partition
+	index := map[string]int{}
+	for _, r := range batch {
+		name := r.Labels[label]
+		if name == "" {
+			name = Unlabeled
+		}
+		i, ok := index[name]
+		if !ok {
+			i = len(out)
+			index[name] = i
+			out = append(out, partition{name: name})
+		}
+		out[i].records = append(out[i].records, r)
+	}
+	return out
 }
 
 // Run flushes a full batch when the ring reaches the flush size and a

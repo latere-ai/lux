@@ -4,13 +4,18 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
@@ -90,6 +95,45 @@ func (c *call) usage(ctx context.Context) *Error {
 		return usageError(rerr)
 	}
 	return c.writeJSON(http.StatusOK, usageResponse{Items: rows}, 0)
+}
+
+// redactUsage is POST /v1/usage/redact (spec 038): every usage row and
+// ring record of one owner loses the owner, summed into the rows without
+// one, as usage.redact on the owner.
+func (c *call) redactUsage(ctx context.Context) *Error {
+	if err := c.authenticate(); err != nil {
+		return err
+	}
+	if contentType, _, err := mime.ParseMediaType(c.r.Header.Get("Content-Type")); err != nil || contentType != "application/json" {
+		return refuse(CodeUnsupportedMediaType, "a redaction requires application/json")
+	}
+	body, bodyErr := c.readBody()
+	if bodyErr != nil {
+		return bodyErr
+	}
+	var in struct {
+		Owner string `json:"owner"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		return refuse(CodeInvalidRequest, "the body is {\"owner\": \"<issuer>|<subject>\"}: "+err.Error())
+	}
+	if issuer, subject, ok := authz.SplitSubject(in.Owner); !ok || issuer == "" || subject == "" {
+		return refuse(CodeInvalidField, "owner must be a rendered issuer|subject", "owner")
+	}
+	// The file mode's control plane is the internal listener's and asks
+	// no authorizer, as its usage reads do.
+	if !c.h.fileMode() {
+		if _, err := c.authorize(ctx, authorizer.ActionUsageRedact, authorizer.UsageRedact(in.Owner)); err != nil {
+			return err
+		}
+	}
+	n, err := c.h.o.Store.Usage().RedactOwner(ctx, in.Owner)
+	if err != nil {
+		return mapError(err)
+	}
+	return c.writeJSON(http.StatusOK, map[string]int{"rows": n}, 0)
 }
 
 // requests is GET /v1/requests: the records of spec 009, newest first,

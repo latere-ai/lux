@@ -113,6 +113,7 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_catalog_age_seconds` | gauge | none | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
 | `lux_catalog_reloads_total` | counter | `trigger`, `result` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
 | `lux_catalog_objects` | gauge | `kind` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
+| `lux_usage_rolled_up_total` | counter | `result` | [038-usage-retention](.archive/038-usage-retention.md) |
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream

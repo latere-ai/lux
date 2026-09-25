@@ -190,6 +190,8 @@ func openAPIDocument() ordered {
 	}
 	s.add("Error", errorSchema())
 	s.add("KeyFence", s.of(reflect.TypeFor[store.KeyFence]()))
+	s.add("UsageRedaction", obj("type", "object", "additionalProperties", false, "required", []string{"owner"}, "properties", obj("owner", obj("type", "string", "description", "Rendered issuer|subject whose identity every usage row and ring record loses."))))
+	s.add("UsageRedacted", obj("type", "object", "required", []string{"rows"}, "properties", obj("rows", obj("type", "integer", "description", "The usage rows rewritten."))))
 	s.add("KeyFenceAssertion", obj("type", "object", "additionalProperties", false, "required", []string{"owner"}, "properties", obj("owner", obj("type", "string", "description", "Rendered issuer|subject of the expected occupant."), "labels", obj("type", "object", "additionalProperties", obj("type", "string"), "description", "Exact expected labels; omitted means empty."))))
 	s.add("Self", s.of(reflect.TypeFor[Self]()))
 	s.add("SelfLimits", s.of(reflect.TypeFor[SelfLimits]()))
@@ -211,6 +213,8 @@ func openAPIDocument() ordered {
 		member{"/v1/usage", obj("get", operation("readUsage", "Aggregate usage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "by"), ref("parameters", "interval"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel")},
 			nil, response("200", "The rows.", "UsageList")))},
+		member{"/v1/usage/redact", obj("post", operation("redactUsage", "Redact usage owner", "Every hourly and monthly usage row of the owner, and every record of this replica's ring, loses the owner; each row's sums are added into the row with the same other dimensions and no owner, so totals are kept.", authorizer.ActionUsageRedact,
+			[]any{}, obj("required", true, "content", obj("application/json", obj("schema", ref("schemas", "UsageRedaction")))), response("200", "The rows rewritten.", "UsageRedacted")))},
 		member{"/v1/requests", obj("get", operation("listRequests", "List requests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.", authorizer.ActionUsageRead,
 			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
 			nil, response("200", "One page of records.", "RecordList")))},
