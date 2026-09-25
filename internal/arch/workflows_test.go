@@ -541,10 +541,10 @@ func TestComposeDefaultsToARelease(t *testing.T) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	// Apply the stamps the way `lateregate release` does: each entry must
-	// match its file once, the versions inside the match move, and each
-	// entry rewrites the file as read, not as an earlier entry left it, so
-	// the last entry naming a file is the one that lands.
+	// Apply the stamps the way `lateregate release` does: entries naming
+	// one file apply in the order listed, each to the file as the entries
+	// before it left it, each must match that file once, and the versions
+	// inside the match move.
 	const cut = "v999.0.0"
 	stamped := compose
 	for _, s := range cfg.Release.Stamp {
@@ -555,12 +555,12 @@ func TestComposeDefaultsToARelease(t *testing.T) {
 		if err != nil {
 			t.Fatalf(".lateregate.yaml stamps compose.yaml with %q: %v", s.Pattern, err)
 		}
-		locs := re.FindAllIndex(compose, -1)
+		locs := re.FindAllIndex(stamped, -1)
 		if len(locs) != 1 {
 			t.Fatalf(".lateregate.yaml stamps compose.yaml with %q, which matches %d times; the cut refuses anything but one", s.Pattern, len(locs))
 		}
 		lo, hi := locs[0][0], locs[0][1]
-		stamped = slices.Concat(compose[:lo], releaseVersion.ReplaceAll(compose[lo:hi], []byte(cut)), compose[hi:])
+		stamped = slices.Concat(stamped[:lo], releaseVersion.ReplaceAll(stamped[lo:hi], []byte(cut)), stamped[hi:])
 	}
 	moved := true
 	for repo, tag := range composeDefaults(stamped) {
