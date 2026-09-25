@@ -57,7 +57,7 @@ check the archives and the image. The same checks run in the release
 workflow before a release is published.
 
 ```sh
-TAG=v0.7.2
+TAG=v0.8.0
 OWNER=latere-ai   # a fork's release: the fork's owner
 IDENTITY="https://github.com/$OWNER/lux/.github/workflows/release.yml@refs/tags/$TAG"
 ISSUER=https://token.actions.githubusercontent.com

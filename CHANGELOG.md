@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.8.0 - 2026-09-25
+
 - A Model can be disabled: `spec.disabled: true` refuses every call to it
   on every door with `model_disabled`, 403, whether the Key names it
   literally or by a glob, and leaves it out of every model list; its
