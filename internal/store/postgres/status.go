@@ -6,7 +6,6 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"time"
 
 	"latere.ai/x/lux/internal/store"
@@ -74,12 +73,12 @@ func fieldsOf(obj v1.Object) (rowFields, error) {
 }
 
 // encoded is one object as its row: the columns the filters read and the
-// two JSON halves Put writes.
+// two JSON halves Put writes, each JSON column as the text it is bound as.
 type encoded struct {
 	kind, name, owner, source string
-	labels                    map[string]string
+	labels                    string // a JSON object
 	providers                 []string
-	spec                      []byte                     // {"metadata": ..., "spec": ...}
+	spec                      string                     // {"metadata": ..., "spec": ...}
 	status                    map[string]json.RawMessage // the control plane's half
 }
 
@@ -106,7 +105,11 @@ func encode(obj v1.Object) (*encoded, error) {
 	if doc.Status == nil {
 		doc.Status = map[string]json.RawMessage{}
 	}
-	e := &encoded{kind: obj.Kind(), name: obj.Name(), owner: obj.Owner(), status: doc.Status, labels: map[string]string{}, providers: []string{}}
+	labels, err := labelsText(f.labels)
+	if err != nil {
+		return nil, err
+	}
+	e := &encoded{kind: obj.Kind(), name: obj.Name(), owner: obj.Owner(), status: doc.Status, labels: labels, providers: []string{}}
 	for _, member := range observedMembers[e.kind] {
 		delete(e.status, member)
 	}
@@ -123,28 +126,32 @@ func encode(obj v1.Object) (*encoded, error) {
 	case *v1.Key:
 		delete(e.status, "value")
 	}
-	maps.Copy(e.labels, f.labels)
-	e.spec = []byte(`{"metadata":` + rawOr(doc.Metadata, "{}") + `,"spec":` + rawOr(doc.Spec, "{}") + `}`)
+	e.spec = `{"metadata":` + rawOr(doc.Metadata, "{}") + `,"spec":` + rawOr(doc.Spec, "{}") + `}`
 	return e, nil
 }
 
 // stamp writes the row's members into the control half, so the stored
 // document carries what the row says and a read renders it without a
-// second lookup.
-func (e *encoded) stamp(id string, version int64, createdAt, updatedAt time.Time) ([]byte, error) {
+// second lookup, and answers the half as the text the status column is
+// bound as.
+func (e *encoded) stamp(id string, version int64, createdAt, updatedAt time.Time) (string, error) {
 	e.status["id"] = json.RawMessage(`"` + id + `"`)
 	e.status["version"] = json.RawMessage(fmt.Sprint(version))
 	for name, t := range map[string]time.Time{"createdAt": createdAt, "updatedAt": updatedAt} {
 		b, err := json.Marshal(t)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		e.status[name] = b
 	}
 	if e.owner != "" {
 		e.status["owner"] = json.RawMessage(`"` + e.owner + `"`)
 	}
-	return json.Marshal(e.status)
+	b, err := json.Marshal(e.status)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // rawOr is a raw message, or def when it is empty.

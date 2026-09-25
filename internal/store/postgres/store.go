@@ -5,6 +5,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -114,9 +115,8 @@ func poolConfig(o Options) (*pgxpool.Config, error) {
 	// A transaction pooler hands each transaction whichever server
 	// connection is free, so a named prepared statement does not survive
 	// past it: the pool prepares none. It still asks the server each
-	// statement's parameter types once and keeps them, which the labels map
-	// and the JSON columns need; a mode that infers them from Go types
-	// cannot encode either.
+	// statement's parameter types once and keeps them, so each parameter
+	// is encoded for its column's type rather than from its Go type alone.
 	if o.PoolURL != "" {
 		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 		cfg.ConnConfig.StatementCacheCapacity = 0
@@ -373,6 +373,24 @@ var errNoRows = pgx.ErrNoRows
 func violates(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == constraint
+}
+
+// labelsText is a label set as the text of a jsonb object: the empty
+// object for none, which is what a labels column holds for a row without
+// labels. Every JSON value the store binds is text, which each query
+// mode sends as it is and the server reads as the column's type. A mode
+// that describes no statement encodes a parameter from its Go type alone,
+// and a Go map has no encoding there, while a byte slice goes as bytea,
+// which a jsonb column refuses.
+func labelsText(labels map[string]string) (string, error) {
+	if labels == nil {
+		return "{}", nil
+	}
+	b, err := json.Marshal(labels)
+	if err != nil {
+		return "", fmt.Errorf("postgres: encoding the labels: %w", err)
+	}
+	return string(b), nil
 }
 
 func servingURL(o Options) string {

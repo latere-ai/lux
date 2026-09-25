@@ -78,7 +78,11 @@ func (f keyFences) Put(ctx context.Context, input store.KeyFence) (store.KeyFenc
 		if input.Labels == nil {
 			input.Labels = map[string]string{}
 		}
-		err = q.QueryRow(ctx, `INSERT INTO key_fences(name,owner,labels,created_at) VALUES($1,$2,$3,$4) RETURNING created_at`, input.Name, input.Owner, input.Labels, input.CreatedAt).Scan(&input.CreatedAt)
+		text, err := labelsText(input.Labels)
+		if err != nil {
+			return err
+		}
+		err = q.QueryRow(ctx, `INSERT INTO key_fences(name,owner,labels,created_at) VALUES($1,$2,$3,$4) RETURNING created_at`, input.Name, input.Owner, text, input.CreatedAt).Scan(&input.CreatedAt)
 		if err == nil {
 			result = input.Clone()
 			inserted = true

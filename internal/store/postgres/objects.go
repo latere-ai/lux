@@ -258,7 +258,11 @@ func (o objects) List(ctx context.Context, kind string, f store.Filter, p store.
 			where = append(where, "owner = "+arg(f.Owner))
 		}
 		if len(f.Labels) > 0 {
-			where = append(where, "labels @> "+arg(f.Labels)+"::jsonb")
+			labels, err := labelsText(f.Labels)
+			if err != nil {
+				return err
+			}
+			where = append(where, "labels @> "+arg(labels)+"::jsonb")
 		}
 		if f.Source != "" {
 			where = append(where, "source = "+arg(f.Source))
@@ -346,7 +350,7 @@ func (o objects) PutStatus(ctx context.Context, kind, id string, observed any) e
 		return err
 	}
 	err = o.s.read(ctx, func(q querier) error {
-		tag, err := q.Exec(ctx, `UPDATE objects SET observed = observed || $3::jsonb WHERE kind = $1 AND id = $2 AND deleted_at IS NULL`, kind, id, doc)
+		tag, err := q.Exec(ctx, `UPDATE objects SET observed = observed || $3::jsonb WHERE kind = $1 AND id = $2 AND deleted_at IS NULL`, kind, id, string(doc))
 		if err != nil {
 			return err
 		}

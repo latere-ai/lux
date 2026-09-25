@@ -54,8 +54,6 @@ func TestPostgresPooledServingRoleDoesNotRunMigrations(t *testing.T) {
 
 // TestPostgresPooledStoreWritesLabeledObjects writes and reads back a
 // labeled Provider and a Model through the serving pool's connection mode.
-// A mode that infers parameter types from Go types cannot encode the labels
-// map or the JSON columns, so every write with labels failed there.
 func TestPostgresPooledStoreWritesLabeledObjects(t *testing.T) {
 	db := pgtest.URL(t)
 	s, warning, err := Connect(t.Context(), Options{URL: db, PoolURL: db, MaxConns: 1})

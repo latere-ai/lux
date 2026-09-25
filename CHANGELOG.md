@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Fixed: a `LUX_DB_URL` naming `default_query_exec_mode=exec`, with no
+  `LUX_DB_POOL_URL` beside it, failed every object write, every Key fence,
+  every usage write and roll-up, and every list or usage query filtered by
+  labels, with `cannot find encode plan` or SQLSTATE 22P02. In that mode
+  the server describes no parameter, so the driver encoded the label maps
+  from their Go type, which it cannot, and sent the JSON documents as
+  `bytea`, which a `jsonb` column refuses. The store now binds every JSON
+  value as text, which each connection mode sends as it is. A pool named
+  by `LUX_DB_POOL_URL` was not affected, since the store selects that
+  pool's mode itself.
+
 ## v0.8.0 - 2026-09-25
 
 - A Model can be disabled: `spec.disabled: true` refuses every call to it

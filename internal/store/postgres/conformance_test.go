@@ -6,6 +6,7 @@
 package postgres_test
 
 import (
+	"net/url"
 	"testing"
 
 	"latere.ai/x/lux/internal/store"
@@ -46,6 +47,35 @@ func TestPostgresPooledStoreConformance(t *testing.T) {
 		t.Helper()
 		url := pgtest.URL(t)
 		st, warning, err := postgres.Connect(t.Context(), postgres.Options{URL: url, PoolURL: url})
+		if err != nil {
+			t.Fatalf("Connect: %v", err)
+		}
+		if warning != "" {
+			t.Fatalf("a fresh database warned: %s", warning)
+		}
+		t.Cleanup(func() { _ = st.Close() })
+		return st
+	})
+}
+
+// TestPostgresExecModeStoreConformance is the same suite with the pool in
+// the exec query mode a pooled DSN can select with
+// default_query_exec_mode=exec. That mode describes no statement, so the
+// driver encodes each parameter from its Go type alone and sends it as
+// text: a Go map has no encoding at all, and a byte slice reaches a jsonb
+// column as a bytea hex literal the column refuses. The URL's mode holds
+// because no PoolURL is set; with one, the store selects its own.
+func TestPostgresExecModeStoreConformance(t *testing.T) {
+	storetest.Run(t, func(t *testing.T) store.Store {
+		t.Helper()
+		u, err := url.Parse(pgtest.URL(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := u.Query()
+		q.Set("default_query_exec_mode", "exec")
+		u.RawQuery = q.Encode()
+		st, warning, err := postgres.Connect(t.Context(), postgres.Options{URL: u.String()})
 		if err != nil {
 			t.Fatalf("Connect: %v", err)
 		}

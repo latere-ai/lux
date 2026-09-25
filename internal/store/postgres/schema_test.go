@@ -304,14 +304,14 @@ func TestObjectEncoding(t *testing.T) {
 			t.Errorf("the control half carries %s", gone)
 		}
 	}
-	if string(e.status["prefix"]) != `"lux_ab"` || e.labels["team"] != "red" || e.kind != v1.KindKey || e.owner != "alice" {
+	if string(e.status["prefix"]) != `"lux_ab"` || e.labels != `{"team":"red"}` || e.kind != v1.KindKey || e.owner != "alice" {
 		t.Errorf("encoded = %+v", e)
 	}
 	status, err := e.stamp("key_1", 3, at, at.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
-	obj, err := decode(v1.KindKey, e.spec, status)
+	obj, err := decode(v1.KindKey, []byte(e.spec), []byte(status))
 	if err != nil {
 		t.Fatal(err)
 	}

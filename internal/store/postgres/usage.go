@@ -38,9 +38,9 @@ func (u usage) AddRows(ctx context.Context, rows []metering.Aggregate) error {
 	err := u.s.write(ctx, func(q pgx.Tx) error {
 		batch := &pgx.Batch{}
 		for _, a := range rows {
-			labels := a.Labels
-			if labels == nil {
-				labels = map[string]string{}
+			labels, err := labelsText(a.Labels)
+			if err != nil {
+				return err
 			}
 			batch.Queue(`
 				INSERT INTO usage_hourly (bucket, key_id, model_id, provider_id, owner, door, status, currency, labels,
@@ -85,7 +85,11 @@ func (u usage) QueryRows(ctx context.Context, q metering.Query) ([]metering.Row,
 	add("provider_id", q.Providers)
 	add("owner", q.Owners)
 	if len(q.Labels) > 0 {
-		args = append(args, q.Labels)
+		labels, err := labelsText(q.Labels)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: Usage.QueryRows: %w", err)
+		}
+		args = append(args, labels)
 		where = append(where, "labels @> $"+strconv.Itoa(len(args))+"::jsonb")
 	}
 	var matched []metering.Aggregate
@@ -202,13 +206,13 @@ const upsertHourly = `
 		unpriced = usage_hourly.unpriced + excluded.unpriced`
 
 // upsertArgs are an upsert's sixteen arguments for a.
-func upsertArgs(a metering.Aggregate) []any {
-	labels := a.Labels
-	if labels == nil {
-		labels = map[string]string{}
+func upsertArgs(a metering.Aggregate) ([]any, error) {
+	labels, err := labelsText(a.Labels)
+	if err != nil {
+		return nil, err
 	}
 	return []any{a.Bucket.UTC(), a.KeyID, a.ModelID, a.ProviderID, a.Owner, string(a.Door), string(a.Status), a.Currency, labels,
-		a.Requests, a.InputTokens, a.OutputTokens, a.CachedInputTokens, a.CacheWriteTokens, a.Cost, a.Unpriced}
+		a.Requests, a.InputTokens, a.OutputTokens, a.CachedInputTokens, a.CacheWriteTokens, a.Cost, a.Unpriced}, nil
 }
 
 // keyArgs are the eight primary key columns of k.
@@ -237,7 +241,11 @@ func (u usage) Fold(ctx context.Context, moves []metering.Move, expired []meteri
 			}
 			to := mv.To
 			to.Sums = s
-			if _, err := tx.Exec(ctx, upsertMonthly, upsertArgs(to)...); err != nil {
+			args, err := upsertArgs(to)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, upsertMonthly, args...); err != nil {
 				return err
 			}
 			folded++
@@ -274,7 +282,11 @@ func (u usage) RedactOwner(ctx context.Context, owner string) (int, error) {
 			}
 			for _, a := range rows {
 				a.Owner = ""
-				if _, err := tx.Exec(ctx, t.upsert, upsertArgs(a)...); err != nil {
+				args, err := upsertArgs(a)
+				if err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, t.upsert, args...); err != nil {
 					return err
 				}
 			}
