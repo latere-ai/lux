@@ -14,6 +14,10 @@ refused before it is pushed.
   that took the apply and within a second on the others. The Keys that
   name it are unchanged, and setting it back to `false` serves them
   again. Discovery and health never change it.
+- `luxd check`'s request-log line passes against object stores that
+  require a `Content-Length` on an empty upload, such as DigitalOcean
+  Spaces: `latere.ai/x/pkg` is v0.82.1, whose S3 client sends
+  `Content-Length: 0` for an empty object.
 - Usage retention: `LUX_USAGE_RETENTION` takes a JSON list of rules matched
   on a Key's labels, the first match applying. A rule keeps a row's hourly
   detail for `hourly` (at least `24h`, or `forever`), then folds it into
