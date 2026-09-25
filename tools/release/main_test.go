@@ -7,11 +7,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -404,5 +408,174 @@ func TestImagesCarryTheReleasedBinaries(t *testing.T) {
 	out.Reset()
 	if code := run([]string{"images", "-dist", dist, "-extracted", extracted}, &out, &out); code != 1 || !strings.Contains(out.String(), "luxd_v0.1.0_linux_amd64.tar.gz: ") {
 		t.Errorf("a corrupt archive: exit %d:\n%s", code, out.String())
+	}
+}
+
+// memTree is a tree held in memory, so a test names exactly which read
+// fails. A name mapped to nil is listed but cannot be read, and listErr
+// fails every List.
+type memTree struct {
+	files   map[string][]byte
+	listErr error
+}
+
+func (m memTree) Read(name string) ([]byte, error) {
+	data, ok := m.files[name]
+	if !ok || data == nil {
+		return nil, fmt.Errorf("%s: %w", name, fs.ErrNotExist)
+	}
+	return data, nil
+}
+
+func (m memTree) List(dir string) ([]string, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var out []string
+	for name := range m.files {
+		if strings.HasPrefix(name, dir+"/") {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// loadTree reads the promised files and the golden corpus of the module
+// into a memTree.
+func loadTree(t *testing.T) memTree {
+	t.Helper()
+	src := dirTree(root(t))
+	goldens, err := src.List(goldenDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := memTree{files: map[string][]byte{}}
+	for _, name := range append([]string{variablesFile, codesFile, eventsFile, recordFile, openAPIFile}, goldens...) {
+		data, err := src.Read(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.files[name] = data
+	}
+	return m
+}
+
+// TestReadRefusesATreeMissingASurface: a tree without one of the promised
+// files, with a golden it lists and cannot read, with a golden directory it
+// cannot list, or with an OpenAPI document that does not parse is an error
+// and never a Surface with that surface empty, which Compare would read as
+// every item of it removed.
+func TestReadRefusesATreeMissingASurface(t *testing.T) {
+	if _, err := Read(loadTree(t)); err != nil {
+		t.Fatalf("the whole tree: %v", err)
+	}
+	var golden string
+	for name := range loadTree(t).files {
+		if strings.HasSuffix(name, ".golden.json") {
+			golden = name
+			break
+		}
+	}
+	listFails := errors.New("the golden directory cannot be listed")
+	for _, tc := range []struct {
+		name   string
+		change func(memTree) memTree
+		want   string
+	}{
+		{"no variable table", func(m memTree) memTree { delete(m.files, variablesFile); return m }, variablesFile},
+		{"no error codes", func(m memTree) memTree { delete(m.files, codesFile); return m }, codesFile},
+		{"no event types", func(m memTree) memTree { delete(m.files, eventsFile); return m }, eventsFile},
+		{"no usage record", func(m memTree) memTree { delete(m.files, recordFile); return m }, recordFile},
+		{"no OpenAPI document", func(m memTree) memTree { delete(m.files, openAPIFile); return m }, openAPIFile},
+		{"an unreadable golden", func(m memTree) memTree { m.files[golden] = nil; return m }, golden},
+		{"an unlistable golden directory", func(m memTree) memTree { m.listErr = listFails; return m }, listFails.Error()},
+		{"an OpenAPI document that does not parse", func(m memTree) memTree { m.files[openAPIFile] = []byte("paths: [\n"); return m }, openAPIFile},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Read(tc.change(loadTree(t)))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Read = %v, want an error naming %s", err, tc.want)
+			}
+		})
+	}
+	if _, err := dirTree(t.TempDir()).List(goldenDir); err == nil {
+		t.Error("a directory without the golden corpus listed")
+	}
+}
+
+// TestPromiseRefusesAnUnreadableTree: the tree being cut is read as the
+// previous tag is, and a tree that cannot be read fails the promise rather
+// than passing it with nothing compared.
+func TestPromiseRefusesAnUnreadableTree(t *testing.T) {
+	var out bytes.Buffer
+	err := promise(memTree{files: map[string][]byte{}}, loadTree(t), "v0.1.0", "v0.1.1", &out)
+	if err == nil || !strings.Contains(err.Error(), "reading the tree") {
+		t.Fatalf("promise = %v, want the tree named", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("differences printed for a tree that was not read:\n%s", out.String())
+	}
+}
+
+// TestCompareAndCheckEdges: a golden output that disappeared is major, and
+// Check refuses a tag that is not later than the previous one whatever
+// the differences are.
+func TestCompareAndCheckEdges(t *testing.T) {
+	prev := Surface{Goldens: map[string]string{"a.golden.json": "1", "b.golden.json": "2"}}
+	next := Surface{Goldens: map[string]string{"a.golden.json": "1"}}
+	diffs := Compare(prev, next)
+	if len(diffs) != 1 || diffs[0].Class != Major || diffs[0].Item != "b.golden.json" || diffs[0].Change != "removed" {
+		t.Fatalf("a removed golden: %v", diffs)
+	}
+	if err := Check("v1.2.0", "v1.1.0", nil); err == nil || !strings.Contains(err.Error(), "not later than") {
+		t.Errorf("an earlier tag: %v", err)
+	}
+}
+
+// TestGitTreeOutsideARepository: a ref read from a directory git does not
+// know is an error naming the git command, for a file and for a listing,
+// whether or not git itself is on PATH.
+func TestGitTreeOutsideARepository(t *testing.T) {
+	g := gitTree{t.TempDir(), "v0.1.0"}
+	if _, err := g.Read(variablesFile); err == nil || !strings.Contains(err.Error(), "git show v0.1.0:"+variablesFile) {
+		t.Errorf("Read = %v", err)
+	}
+	if _, err := g.List(goldenDir); err == nil || !strings.Contains(err.Error(), "git ls-tree -r --name-only v0.1.0 -- "+goldenDir) {
+		t.Errorf("List = %v", err)
+	}
+}
+
+// TestUsageErrorCarriesTheParserMessage: the flag parser has printed the
+// refusal already, and the error run sorts to exit 2 keeps its text.
+func TestUsageErrorCarriesTheParserMessage(t *testing.T) {
+	err := &usageError{errors.New("flag provided but not defined: -x")}
+	if err.Error() != "flag provided but not defined: -x" {
+		t.Fatalf("Error = %q", err.Error())
+	}
+}
+
+// TestMemberDigestRefusesABrokenArchive: an archive that is not there, and
+// a gzip stream whose tar inside is cut short, are errors and never a
+// digest.
+func TestMemberDigestRefusesABrokenArchive(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := memberDigest(filepath.Join(dir, "absent.tar.gz"), "luxd"); err == nil {
+		t.Error("an absent archive has a digest")
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(bytes.Repeat([]byte{'x'}, 100)); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	short := filepath.Join(dir, "short.tar.gz")
+	if err := os.WriteFile(short, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := memberDigest(short, "luxd"); err == nil || strings.Contains(err.Error(), "no member") {
+		t.Errorf("a tar cut short: %v", err)
 	}
 }
