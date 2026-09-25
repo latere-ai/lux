@@ -91,6 +91,7 @@ later.
 | [036](.archive/036-catalog-in-memory.md) | The catalog in memory: Models, Providers, and sealed credentials served from a per-replica snapshot, and serving through a store outage | medium | complete | 004, 005, 007, 009, 010, 012, 019 |
 | [037](.archive/037-several-budgets-per-key.md) | Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart | large | complete | 003, 006, 007, 009, 010, 011, 018 |
 | [038](.archive/038-usage-retention.md) | Usage retention: hourly rows rolled up into monthly ones by rules on Key labels, an owner's rows redacted, and the request log partitioned by a Key label | large | complete | 006, 009, 010, 011, 012, 022 |
+| [039](039-disabled-models.md) | Disabled Models: a Model can be disabled, and a disabled Model is refused at call time | small | drafted | 003, 004, 005, 011, 018, 036 |
 
 ## Dependency graph
 
@@ -127,6 +128,7 @@ flowchart BT
   S036[036 catalog in memory]
   S037[037 several budgets per key]
   S038[038 usage retention]
+  S039[039 disabled models]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -162,6 +164,8 @@ flowchart BT
   S037 --> S018
   S038 --> S012
   S038 --> S022
+  S039 --> S004
+  S039 --> S018
 ```
 
 ## Build order
@@ -181,6 +185,7 @@ flowchart BT
 | 11 | 036 | the catalog served from a per-replica snapshot: no store read per data plane request for a Model, a Provider, or a credential; a bounded grace to keep serving through a store outage, and the spend made during it corrected afterward |
 | 12 | 037 | several Budgets per Key, each a hard gate at the door; a Budget's window anchored to a chosen instant; a restart of the current window |
 | 13 | 038 | usage kept hourly for a period and then monthly, by rules on Key labels; an owner redacted from every row; the request log partitioned by a Key label |
+| 14 | 039 | a Model disabled by one field: refused at every door, left out of every list, and restored with its Keys unchanged |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
