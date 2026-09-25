@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -36,6 +37,7 @@ var keysCases = []testCase{
 	{group: "keys", name: "case037SeveralBudgets", spec: 37, bearer: true, key: true, stubs: true, fn: case037SeveralBudgets},
 	{group: "keys", name: "case037AnchoredWindow", spec: 37, bearer: true, key: true, fn: case037AnchoredWindow},
 	{group: "keys", name: "case037Restart", spec: 37, bearer: true, key: true, stubs: true, fn: case037Restart},
+	{group: "keys", name: "case039DisabledModel", spec: 39, bearer: true, key: true, fn: case039DisabledModel},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -391,4 +393,58 @@ func case037Restart(t testing.TB, c *client) {
 		return str(read, "status.spent") == "0.0015" && str(read, "status.resetsAt") == before,
 			"status.spent is " + strconv.Quote(str(read, "status.spent")) + ", status.resetsAt " + str(read, "status.resetsAt") + " was " + before
 	})
+}
+
+// case039DisabledModel: a Model with spec.disabled true is refused
+// model_disabled on a call and on its one-entry read through a Key that
+// names it by a glob, and is left out of the Key's model list; set back
+// to false, the same Key's call is no longer refused for it, and the Key
+// never changed.
+func case039DisabledModel(t testing.TB, c *client) {
+	if !slices.Contains(c.well.Dialects, "openai") {
+		t.Skip("the server has no openai door")
+	}
+	spec := c.modelSpec(nil, [2]string{"openai", "stub-gpt"})
+	m := c.object(t, v1.KindModel, "gate-one", spec)
+	defer c.mustDelete(t, v1.KindModel, str(m, "status.id"))
+	k := c.object(t, v1.KindKey, "gated", c.keySpec(map[string]any{"models": []string{c.name("gate-*")}}))
+	id, value := str(k, "status.id"), str(k, "status.value")
+	defer c.mustDelete(t, v1.KindKey, id)
+	version := str(c.read(t, v1.KindKey, id).json(t), "status.version")
+	// call is the code a chat to the Model is refused with, "" when it
+	// is served.
+	call := func() string {
+		resp := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("gate-one"), false), value)
+		if resp.Status == http.StatusOK {
+			return ""
+		}
+		return c.doorCode(t, "openai", resp)
+	}
+	if code := call(); code == "model_disabled" {
+		t.Fatal("an enabled Model is refused model_disabled")
+	}
+	spec["disabled"] = true
+	if got := c.object(t, v1.KindModel, "gate-one", spec); field(got, "spec.disabled") != true {
+		t.Fatalf("spec.disabled reads %v", field(got, "spec.disabled"))
+	}
+	c.eventually(t, revocationTimeout, "the disabled Model is refused", func() (bool, string) {
+		code := call()
+		return code == "model_disabled", "the door answers " + strconv.Quote(code)
+	})
+	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodGet, "/v1/models/"+c.name("gate-one"), nil, value), "model_disabled")
+	if names := listedNames(t, "openai", c.door(t, "openai", http.MethodGet, "/v1/models", nil, value)); slices.Contains(names, c.name("gate-one")) {
+		t.Errorf("the disabled Model is listed: %v", names)
+	}
+	delete(spec, "disabled")
+	c.object(t, v1.KindModel, "gate-one", spec)
+	c.eventually(t, revocationTimeout, "the re-enabled Model is served to the same Key", func() (bool, string) {
+		code := call()
+		return code != "model_disabled", "the door answers " + strconv.Quote(code)
+	})
+	if one := c.door(t, "openai", http.MethodGet, "/v1/models/"+c.name("gate-one"), nil, value); one.Status != http.StatusOK {
+		t.Errorf("the re-enabled Model's read: %d %s", one.Status, excerpt(one.Body))
+	}
+	if after := str(c.read(t, v1.KindKey, id).json(t), "status.version"); after != version {
+		t.Errorf("the Key changed from version %s to %s", version, after)
+	}
 }

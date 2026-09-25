@@ -1376,6 +1376,8 @@ components:
           type: integer
         maxOutputTokens:
           type: integer
+        disabled:
+          type: boolean
     Target:
       type: object
       required:
@@ -1837,6 +1839,7 @@ components:
               - key_expired
               - route_not_allowed
               - model_not_allowed
+              - model_disabled
               - model_unpriced
               - not_found
               - model_not_found
@@ -2241,6 +2244,9 @@ x-lux-errors:
 - code: model_not_allowed
   status: 403
   message: This key may not use that model.
+- code: model_disabled
+  status: 403
+  message: This model is disabled.
 - code: model_unpriced
   status: 403
   message: This model has no price, and this key spends under a limit.

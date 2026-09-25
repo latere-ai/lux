@@ -45,6 +45,10 @@ type ModelSpec struct {
 	Modalities      Modalities `json:"modalities,omitzero"`
 	ContextWindow   int        `json:"contextWindow,omitempty"`
 	MaxOutputTokens int        `json:"maxOutputTokens,omitempty"`
+	// Disabled refuses every call to the Model with model_disabled and
+	// leaves it out of every model list while true (spec 039); the Keys
+	// that name it are unchanged, so setting it back restores them.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Target is one Provider the Model reaches and the upstream's own name for

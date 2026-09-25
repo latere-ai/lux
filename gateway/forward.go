@@ -518,7 +518,7 @@ func (c *call) chooseProvider(ctx context.Context) (*v1.Provider, *failure) {
 	}
 	reachable := map[string]bool{}
 	for _, m := range models {
-		if !allowed(c.key, m.Metadata.Name) {
+		if m.Spec.Disabled || !allowed(c.key, m.Metadata.Name) {
 			continue
 		}
 		for _, t := range m.Spec.Targets {

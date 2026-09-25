@@ -1,0 +1,9 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Model
+metadata:
+  name: retired
+spec:
+  targets:
+    - provider: openai
+      model: gpt-4
+  disabled: true                       # refused with model_disabled and left out of every list until set back to false

@@ -110,7 +110,9 @@ shape, exactly:
 `model_not_allowed` when the Key's selectors do not match, so the list
 and the read agree on what the Key may name. The read answers a Model
 whose `status.available` is false, which the list leaves out, because
-the Model exists and the Key may name it. Names are sorted.
+the Model exists and the Key may name it. A Model with `spec.disabled`
+true is left out of the list and its read is `model_disabled`
+([039-disabled-models](.archive/039-disabled-models.md)). Names are sorted.
 
 A token count that no upstream answers, the `/anthropic` count route
 toward a non-`anthropic` target and the `/lux` count route toward one,
@@ -206,8 +208,10 @@ flowchart TD
    JSON object or has no string `model` is `invalid_request`, 400. The
    name is resolved against the catalog by exact name; an unknown name
    is `model_not_found`, 404. A name that matches none of the Key's
-   selectors under `manifest.Match` is `model_not_allowed`, 403. An
-   opaque route skips this stage.
+   selectors under `manifest.Match` is `model_not_allowed`, 403. A
+   Model with `spec.disabled` true is `model_disabled`, 403
+   ([039-disabled-models](.archive/039-disabled-models.md)). An opaque route skips this stage, and reaches no
+   Provider through a disabled Model.
 6. Target: [[008-routing-and-models]] selects a target, or answers
    `provider_unavailable`, 503, when none is reachable. The door's
    dialect against the target's decides the mode: equal is passthrough;
@@ -466,6 +470,7 @@ is the developer detail, truncated.
 | `invalid_request` | 400 | a body that is not a JSON object or names no `model`; on translation, a body the door's codec cannot decode |
 | `model_not_found` | 404 | no Model of that name |
 | `model_not_allowed` | 403 | no selector matches |
+| `model_disabled` | 403 | the Model has `spec.disabled` true ([039-disabled-models](.archive/039-disabled-models.md)) |
 | `provider_unavailable` | 503 | no admitted target, or the last attempt failed at the transport before a response line |
 | `dialect_unsupported` | 400 | the door and the target cannot be bridged |
 | `provider_required` | 400 | an opaque route with no `Lux-Provider` and more than one candidate |

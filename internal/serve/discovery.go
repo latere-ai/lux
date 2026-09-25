@@ -457,6 +457,8 @@ func (d *Discovery) resolve(ctx context.Context, p *v1.Provider, c candidate, ol
 	var existing v1.Object
 	if old != nil {
 		existing = old
+		// spec.disabled is an operator's apply alone: an update keeps it.
+		in.Spec.Disabled = old.Spec.Disabled
 	}
 	resolved, err := manifest.Resolve(ctx, in, manifest.Options{
 		Actor:    manifest.Actor{Subject: p.Status.Owner},

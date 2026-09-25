@@ -47,6 +47,7 @@ const (
 	CodeKeyExpired            Code = "key_expired"
 	CodeRouteNotAllowed       Code = "route_not_allowed"
 	CodeModelNotAllowed       Code = "model_not_allowed"
+	CodeModelDisabled         Code = "model_disabled"
 	CodeModelUnpriced         Code = "model_unpriced"
 	CodeNotFound              Code = "not_found"
 	CodeModelNotFound         Code = "model_not_found"
@@ -103,6 +104,7 @@ var table = map[Code]Row{
 	CodeKeyExpired:            {http.StatusForbidden, "This key has expired."},
 	CodeRouteNotAllowed:       {http.StatusForbidden, "This key may not use this route."},
 	CodeModelNotAllowed:       {http.StatusForbidden, "This key may not use that model."},
+	CodeModelDisabled:         {http.StatusForbidden, "This model is disabled."},
 	CodeModelUnpriced:         {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
 	CodeNotFound:              {http.StatusNotFound, "There is no such object."},
 	CodeModelNotFound:         {http.StatusNotFound, "There is no model of that name."},
@@ -134,7 +136,7 @@ var codes = []Code{
 	CodeMissingField, CodeInvalidField, CodeReservedPrefix, CodeExclusiveFields, CodeDuplicateTarget,
 	CodeInvalidRequest, CodeUpstreamRejected, CodeDialectUnsupported, CodeProviderRequired, CodeCurrencyMismatch,
 	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeRouteNotAllowed, CodeModelNotAllowed,
-	CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
+	CodeModelDisabled, CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
 	CodeImmutableField, CodeBudgetInUse, CodeProviderInUse, CodeBodyTooLarge, CodeUnsupportedMediaType,
 	CodeCeilingExceeded, CodeRateLimited, CodeSpendExceeded, CodeBudgetExhausted, CodeInternal, CodeUpstreamError,
 	CodeAuthorizerUnavailable, CodeStoreUnavailable, CodeProviderUnavailable, CodeUpstreamTimeout,

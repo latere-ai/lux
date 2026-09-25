@@ -1,0 +1,32 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Model",
+  "metadata": {
+    "name": "retired"
+  },
+  "spec": {
+    "targets": [
+      {
+        "provider": "openai",
+        "model": "gpt-4",
+        "weight": 100,
+        "priority": 0
+      }
+    ],
+    "fallback": "onError",
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "disabled": true
+  },
+  "status": {
+    "warnings": [
+      "This model has no pricing, so a key with a spend limit or a budget cannot use it unless it allows unpriced models."
+    ]
+  }
+}

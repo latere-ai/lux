@@ -25,7 +25,8 @@
           "anthropic/claude-sonnet-4",
           "gpt-5",
           "laptop/llama3.1:8b",
-          "relay/anthropic/claude-sonnet-4"
+          "relay/anthropic/claude-sonnet-4",
+          "retired"
         ]
       }
     ],

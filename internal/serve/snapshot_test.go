@@ -1070,3 +1070,160 @@ func TestCatalogSnapshotFollowsTheHealthTick(t *testing.T) {
 		}
 	}
 }
+
+// TestDisabledModel is spec 039 over the doors and the snapshot: a
+// Model disabled on one replica is refused model_disabled there at once
+// and on a second replica after its tail, through a literal name and a
+// glob, after model_not_allowed; it leaves every list and its read is
+// model_disabled; a passthrough route reaches no Provider through it;
+// the Key is unchanged, and re-enabling serves it again. No door asks an
+// authorizer.
+func TestDisabledModel(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	up := &stub{}
+	up.set(http.StatusOK, openaiChatResponse)
+	p := h.provider(t, "oai", v1.DialectOpenAI, serveStub(t, up)+"/v1", nil)
+	available := true
+	var models []*v1.Model
+	for _, name := range []string{"gpt", "fam/a"} {
+		m := h.declare(t, name, p.Metadata.Name, "gpt-4.1")
+		if err := h.st.Objects().PutStatus(ctx, v1.KindModel, m.Status.ID, store.ModelObserved{Available: &available}); err != nil {
+			t.Fatal(err)
+		}
+		models = append(models, m)
+	}
+	_, value := h.key(t, "k", func(k *v1.Key) { k.Spec.Models = []string{"gpt", "fam/*"}; k.Spec.Passthrough = true })
+	_, other := h.key(t, "other", func(k *v1.Key) { k.Spec.Models = []string{"nothing"} })
+	type replica struct {
+		cache *KeyCache
+		doors *gateway.Handler
+	}
+	var replicas []replica
+	for range 2 {
+		cache, snap := h.replica(t, h.st)
+		limiter := NewLimiter(LimiterOptions{Store: h.st, Budgets: cache, Flush: time.Second, Logger: h.logger, Now: h.clock})
+		doors := gateway.New(gateway.Options{
+			Keys: cache, Catalog: snap, Credentials: snap,
+			Router:  gateway.NewTargetRouter(gateway.RouterOptions{Catalog: snap, Now: h.clock}),
+			Limiter: limiter, Recorder: NewRecorder(RecorderOptions{Store: h.st, Catalog: snap, Limiter: limiter, Logger: h.logger, Now: h.clock}),
+			Clients: h.clients, Version: "test", Now: h.clock,
+		})
+		replicas = append(replicas, replica{cache, doors})
+	}
+	do := func(r replica, method, path, body, value string, header ...string) (int, string) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+value)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		for i := 0; i+1 < len(header); i += 2 {
+			req.Header.Set(header[i], header[i+1])
+		}
+		rec := httptest.NewRecorder()
+		r.doors.ServeHTTP(rec, req)
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &env)
+		return rec.Code, env.Error.Code
+	}
+	for _, name := range []string{"gpt", "fam/a"} {
+		if code, _ := do(replicas[1], "POST", "/openai/v1/chat/completions", chat(name), value); code != http.StatusOK {
+			t.Fatalf("%s before the disable: %d", name, code)
+		}
+	}
+	setDisabled := func(disabled bool) {
+		for _, m := range models {
+			obj, version, err := h.st.Objects().Get(ctx, v1.KindModel, m.Status.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cur := obj.(*v1.Model)
+			cur.Spec.Disabled = disabled
+			if _, err := h.st.Objects().Put(ctx, cur, version); err != nil {
+				t.Fatal(err)
+			}
+			if err := appendEvent(ctx, h.st.Journal(), "model.updated", reasonRequest, cur, map[string]any{}, h.clock(), newEventID(h.clock)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// The replica that took the write tails as its commit returns.
+		replicas[0].cache.Tail(ctx)
+	}
+	setDisabled(true)
+	for _, name := range []string{"gpt", "fam/a"} {
+		if status, code := do(replicas[0], "POST", "/openai/v1/chat/completions", chat(name), value); status != http.StatusForbidden || code != "model_disabled" {
+			t.Fatalf("%s on the replica that took the write = %d %s", name, status, code)
+		}
+		if status, _ := do(replicas[1], "POST", "/openai/v1/chat/completions", chat(name), value); status != http.StatusOK {
+			t.Fatalf("%s on the other replica before its tail = %d", name, status)
+		}
+	}
+	replicas[1].cache.Tail(ctx)
+	for _, r := range replicas {
+		if status, code := do(r, "POST", "/openai/v1/chat/completions", chat("gpt"), value); code != "model_disabled" {
+			t.Fatalf("after the tail = %d %s", status, code)
+		}
+		if _, code := do(r, "POST", "/openai/v1/chat/completions", chat("gpt"), other); code != "model_not_allowed" {
+			t.Fatalf("a Key that may not name it = %s, want model_not_allowed first", code)
+		}
+		if _, code := do(r, "GET", "/openai/v1/models/gpt", "", value); code != "model_disabled" {
+			t.Fatalf("the read = %s", code)
+		}
+		req := httptest.NewRequest("GET", "/openai/v1/models", nil)
+		req.Header.Set("Authorization", "Bearer "+value)
+		rec := httptest.NewRecorder()
+		r.doors.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"gpt"`) || strings.Contains(rec.Body.String(), `"fam/a"`) {
+			t.Fatalf("the list = %d %s", rec.Code, rec.Body)
+		}
+		if status, _ := do(r, "GET", "/openai/v1/files", "", value, "Lux-Provider", "oai"); status == http.StatusOK {
+			t.Fatal("a passthrough reached the Provider through disabled Models")
+		}
+	}
+	setDisabled(false)
+	replicas[1].cache.Tail(ctx)
+	for _, r := range replicas {
+		if status, _ := do(r, "POST", "/openai/v1/chat/completions", chat("fam/a"), value); status != http.StatusOK {
+			t.Fatalf("after the re-enable = %d", status)
+		}
+	}
+	now := h.clock()
+	recs, _, err := h.st.Usage().Records(ctx, metering.RecordQuery{From: now.Add(-time.Hour), To: now.Add(time.Hour), Error: "model_disabled"}, store.Page{})
+	if err != nil || len(recs) == 0 || recs[0].Model.Name == "" {
+		t.Fatalf("the refused calls' records = %d, %v", len(recs), err)
+	}
+}
+
+// TestDiscoveryKeepsDisabled: discovery's update of a discovered Model
+// keeps the spec.disabled it finds, and the health job never writes it.
+func TestDiscoveryKeepsDisabled(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
+	p := h.provider(t, "openai", v1.DialectOpenAI, serveStub(t, up), func(p *v1.Provider) { p.Metadata.Labels = map[string]string{"tenant": "a"} })
+	d := h.discovery("a")
+	d.acquire(ctx)
+	d.Tick(ctx)
+	m := h.models(t, "")["openai/gpt-5"]
+	m.Spec.Disabled = true
+	if _, err := h.st.Objects().Put(ctx, m, m.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	p = h.get(t, p.Status.ID)
+	p.Metadata.Labels["tenant"] = "b"
+	if _, err := h.st.Objects().Put(ctx, p, p.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	d.Tick(ctx)
+	health := h.health("a")
+	health.acquire(ctx)
+	health.Tick(ctx)
+	after := h.models(t, "")["openai/gpt-5"]
+	if after.Metadata.Labels["tenant"] != "b" || !after.Spec.Disabled {
+		t.Fatalf("after discovery and health: labels %v, disabled %v", after.Metadata.Labels, after.Spec.Disabled)
+	}
+}

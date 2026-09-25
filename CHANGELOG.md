@@ -6,6 +6,14 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A Model can be disabled: `spec.disabled: true` refuses every call to it
+  on every door with `model_disabled`, 403, whether the Key names it
+  literally or by a glob, and leaves it out of every model list; its
+  one-entry read answers `model_disabled` too, and a passthrough route
+  reaches no Provider through it. It takes effect at once on the replica
+  that took the apply and within a second on the others. The Keys that
+  name it are unchanged, and setting it back to `false` serves them
+  again. Discovery and health never change it.
 - Usage retention: `LUX_USAGE_RETENTION` takes a JSON list of rules matched
   on a Key's labels, the first match applying. A rule keeps a row's hourly
   detail for `hourly` (at least `24h`, or `forever`), then folds it into

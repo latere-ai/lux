@@ -1,6 +1,6 @@
 ---
 title: "Disabled Models: a Model can be disabled, and a disabled Model is refused at call time"
-status: drafted
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -104,3 +104,24 @@ enabled the next call through it is served.
 | 5 | A Key naming a disabled Model keeps its selectors, and after `spec.disabled` returns to false its next call is served | `internal/serve` test; conformance `case039DisabledModel` |
 | 6 | Discovery's update of a discovered Model keeps the value it finds, and the health job never writes it | `internal/serve` discovery test |
 | 7 | The code is in the door table of [[004-request-path]], the API table of [[011-api]], the OpenAPI document, and the agent skill | `TestOpenAPIIsCurrent`; the error table tests |
+
+## Outcome
+
+Built and verified on 2026-09-25 with recommendation A: `model_disabled`,
+403.
+
+| # | Test |
+|---|---|
+| 1 | the corpus entry `accepted/model/retired`, which renders `disabled: true`, and every other accepted Model, which renders without it; conformance `case039DisabledModel` sets it and clears it through `/v1` |
+| 2 | `TestDisabledModel`, `internal/serve`, through the doors over the snapshot, a literal name and a glob, `model_not_allowed` first for a Key that may not name it, and the refused calls recorded with the code; conformance `case039DisabledModel` against the core and the example plane |
+| 3 | `TestDisabledModel`, two replicas over one store: the one that tails at the commit refuses at once, the other after its own tail. The doors hold no authorizer, so no call asks one |
+| 4 | `TestDisabledModel`: the list, the read, and a passthrough with the Provider named; conformance `case039DisabledModel` for the list and the read |
+| 5 | `TestDisabledModel` and conformance `case039DisabledModel`, which also holds the Key's version unchanged |
+| 6 | `TestDiscoveryKeepsDisabled` |
+| 7 | the tables of specs 004 and 011, `TestErrorTable`, `TestOpenAPIIsCurrent`, and the skill's code table |
+
+The door checks the flag in `lookupModel`, which every model route, the
+one-entry read, and the token count routes resolve through, so no door
+has a path around it. The example plane refuses it too, since it serves
+its doors from the same gateway package.
+

@@ -273,6 +273,7 @@ and no other ([[001-architecture]], invariant 2).
 | `targets[].model` | string | `metadata.name` | yes | the upstream's name for the model, 1 to 256 printable characters |
 | `targets[].weight` | int | `100` | yes | `0` to `1000`; `0` is used only when every target of a lower priority is unavailable |
 | `targets[].priority` | int | `0` | yes | `0` to `9`; the fallback order |
+| `disabled` | bool | `false` | yes | while true every door refuses a call to the Model with `model_disabled` and leaves it out of every model list ([039-disabled-models](.archive/039-disabled-models.md)); rendered only when true; written by an apply alone, never by discovery or health |
 | `fallback` | enum | `onError` | yes | `onError` tries the next target on a retryable failure before any response bytes reached the caller ([[008-routing-and-models]]); `never` fails on the first |
 | `pricing` | object | absent | yes | absent is unpriced, which `status.warnings` says; present requires `input` and `output` |
 | `pricing.currency` | string | `USD` | yes | an ISO 4217 code, upper case |

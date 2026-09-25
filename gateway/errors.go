@@ -32,6 +32,7 @@ const (
 	CodeInvalidRequest      Code = "invalid_request"
 	CodeModelNotFound       Code = "model_not_found"
 	CodeModelNotAllowed     Code = "model_not_allowed"
+	CodeModelDisabled       Code = "model_disabled"
 	CodeProviderUnavailable Code = "provider_unavailable"
 	CodeDialectUnsupported  Code = "dialect_unsupported"
 	CodeProviderRequired    Code = "provider_required"
@@ -70,6 +71,7 @@ var table = map[Code]codeRow{
 	CodeInvalidRequest:      {http.StatusBadRequest, "The request body is not valid for this request."},
 	CodeModelNotFound:       {http.StatusNotFound, "There is no model of that name."},
 	CodeModelNotAllowed:     {http.StatusForbidden, "This key may not use that model."},
+	CodeModelDisabled:       {http.StatusForbidden, "This model is disabled."},
 	CodeProviderUnavailable: {http.StatusServiceUnavailable, "No provider for this model is available right now."},
 	CodeDialectUnsupported:  {http.StatusBadRequest, "This door cannot reach the provider that serves this model."},
 	CodeProviderRequired:    {http.StatusBadRequest, "Name a provider with the Lux-Provider header."},
@@ -89,7 +91,7 @@ func Codes() []Code {
 	return []Code{
 		CodeNotFound, CodeBodyTooLarge, CodeUnauthenticated, CodeKeyDisabled,
 		CodeKeyExpired, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound,
-		CodeModelNotAllowed, CodeProviderUnavailable, CodeDialectUnsupported,
+		CodeModelNotAllowed, CodeModelDisabled, CodeProviderUnavailable, CodeDialectUnsupported,
 		CodeProviderRequired, CodeRateLimited, CodeModelUnpriced, CodeCurrencyMismatch,
 		CodeSpendExceeded, CodeBudgetExhausted, CodeUpstreamRejected, CodeUpstreamError,
 		CodeUpstreamTimeout, CodeStoreUnavailable,

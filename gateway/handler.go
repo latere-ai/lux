@@ -321,8 +321,10 @@ func (c *call) resolveModel(ctx context.Context) *failure {
 }
 
 // lookupModel resolves a name against the catalog and holds it to the
-// Key's selectors: model_not_found before model_not_allowed, so a caller
-// learns whether the name exists before whether this Key may use it.
+// Key's selectors and to the Model's spec.disabled: model_not_found,
+// then model_not_allowed, then model_disabled, so a caller learns
+// whether the name exists, then whether this Key may use it, then
+// whether an operator has stopped it (spec 039).
 func (c *call) lookupModel(ctx context.Context, name string) (*v1.Model, *failure) {
 	m, err := c.h.o.Catalog.Model(ctx, name)
 	if err != nil {
@@ -334,6 +336,9 @@ func (c *call) lookupModel(ctx context.Context, name string) (*v1.Model, *failur
 	c.rec.Model, c.rec.ModelID = m.Metadata.Name, m.Status.ID
 	if !allowed(c.key, m.Metadata.Name) {
 		return nil, fail(CodeModelNotAllowed, "none of the Key's selectors "+fmt.Sprint(c.key.Spec.Models)+" matches "+strconv.Quote(m.Metadata.Name))
+	}
+	if m.Spec.Disabled {
+		return nil, fail(CodeModelDisabled, "Model "+strconv.Quote(m.Metadata.Name)+" has spec.disabled true")
 	}
 	return m, nil
 }
@@ -427,8 +432,8 @@ func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 const modelOwner = "lux"
 
 // listModels answers GET /v1/models: the Models whose names match one of
-// the Key's selectors and whose status.available is true, sorted, in the
-// door's list shape; never forwarded.
+// the Key's selectors, whose status.available is true, and that are not
+// disabled, sorted, in the door's list shape; never forwarded.
 func (c *call) listModels(ctx context.Context) *failure {
 	models, err := c.h.o.Catalog.Models(ctx)
 	if err != nil {
@@ -436,7 +441,7 @@ func (c *call) listModels(ctx context.Context) *failure {
 	}
 	var names []string
 	for _, m := range models {
-		if m.Status.Available != nil && *m.Status.Available && allowed(c.key, m.Metadata.Name) {
+		if m.Status.Available != nil && *m.Status.Available && !m.Spec.Disabled && allowed(c.key, m.Metadata.Name) {
 			names = append(names, m.Metadata.Name)
 		}
 	}
@@ -450,7 +455,8 @@ func (c *call) listModels(ctx context.Context) *failure {
 }
 
 // readModel answers GET /v1/models/{model}: the one entry, or
-// model_not_found, or model_not_allowed, so the list and the read agree.
+// model_not_found, model_not_allowed, or model_disabled, so the list and
+// the read agree.
 func (c *call) readModel(ctx context.Context) *failure {
 	m, f := c.lookupModel(ctx, c.route.model)
 	if f != nil {
