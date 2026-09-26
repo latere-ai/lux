@@ -15,14 +15,14 @@ import (
 )
 
 // This file is the control plane's half of spec 019's traces and logs:
-// one lux.api span per request, a child of the context the caller
-// propagated, with the authorizer's and the store's spans under it, and
-// one INFO line per request with that spec's fields for the plane. The
-// tracer is the global provider's, so the wiring passes nothing and
-// without an endpoint every span is the no-op's. The span carries the
-// route template, the action, the kind, the outcome, and the request
-// id, and never the subject; the log line carries the subject, because
-// the log is the operator's own record.
+// one lux.api span per request, a child of the listener's server span or
+// of the context the caller propagated, with the authorizer's and the
+// store's spans under it, and one INFO line per request with that spec's
+// fields for the plane. The tracer is the global provider's, so the
+// wiring passes nothing and without an endpoint every span is the
+// no-op's. The span carries the route template, the action, the kind,
+// the outcome, and the request id, and never the subject; the log line
+// carries the subject, because the log is the operator's own record.
 
 // SpanAPI is the span's name and LogAPI the line's message.
 const (
@@ -50,12 +50,20 @@ const (
 	StatusFailed  = "failed"
 )
 
-// startAPI opens the lux.api span under the request's context, as a
-// child of the context the caller propagated, when it did, through the
-// W3C headers.
+// startAPI opens the lux.api span under the request's context. When
+// that context already carries a span this process opened, the server
+// span of a listener instrumented with latere.ai/x/pkg/otel's Handler
+// among them, lux.api is an INTERNAL child of it, so a request has one
+// SERVER span. Otherwise lux.api is the request's SERVER span, a child
+// of the context the caller propagated through the W3C headers, when it
+// did.
 func startAPI(ctx context.Context, h http.Header) (context.Context, trace.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
-	return otel.Tracer(tracerScope).Start(ctx, SpanAPI, trace.WithSpanKind(trace.SpanKindServer))
+	kind := trace.SpanKindInternal
+	if sc := trace.SpanContextFromContext(ctx); !sc.IsValid() || sc.IsRemote() {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
+		kind = trace.SpanKindServer
+	}
+	return otel.Tracer(tracerScope).Start(ctx, SpanAPI, trace.WithSpanKind(kind))
 }
 
 // outcome is the status and code the request ended with: ok without a

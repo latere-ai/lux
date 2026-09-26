@@ -155,6 +155,40 @@ func requestLines(t *testing.T, text string) []map[string]any {
 	return out
 }
 
+// TestSpanNestsUnderTheListenerSpan: when the request's context already
+// carries a span this process opened, the listener's server span, lux.api
+// is an INTERNAL child of it, the caller's traceparent is not read a
+// second time, and the request has one SERVER span.
+func TestSpanNestsUnderTheListenerSpan(t *testing.T) {
+	sr := recordSpans(t)
+	h := newHarness(t, nil)
+	ctx, listener := otel.Tracer("listener").Start(context.Background(), "GET /v1/self", trace.WithSpanKind(trace.SpanKindServer))
+	r := httptest.NewRequest(http.MethodGet, "/v1/self", nil).WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+h.alice)
+	r.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	h.h.ServeHTTP(httptest.NewRecorder(), r)
+	listener.End()
+	var api sdktrace.ReadOnlySpan
+	servers := 0
+	for _, s := range sr.Ended() {
+		if s.Name() == SpanAPI {
+			api = s
+		}
+		if s.SpanKind() == trace.SpanKindServer {
+			servers++
+		}
+	}
+	if api == nil {
+		t.Fatal("no lux.api span")
+	}
+	if api.SpanKind() != trace.SpanKindInternal || api.Parent().SpanID() != listener.SpanContext().SpanID() || api.SpanContext().TraceID() != listener.SpanContext().TraceID() {
+		t.Errorf("lux.api: kind %v parent %s trace %s, want an internal child of the listener's span %s", api.SpanKind(), api.Parent().SpanID(), api.SpanContext().TraceID(), listener.SpanContext().SpanID())
+	}
+	if servers != 1 {
+		t.Errorf("%d SERVER spans for one request", servers)
+	}
+}
+
 // TestAPILineFields is the control plane's half of spec 019's log row at
 // the package: one INFO line per request named after the span, with
 // exactly the row's fields beside the encoder's three, the subject on

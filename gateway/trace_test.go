@@ -80,6 +80,38 @@ func keysOf(attrs map[string]attribute.Value) []string {
 	return slices.Sorted(maps.Keys(attrs))
 }
 
+// TestRequestSpanNestsUnderTheListenerSpan: when the request's context
+// already carries a span this process opened, the listener's server span,
+// lux.request is an INTERNAL child of it, the caller's traceparent is not
+// read a second time, and the request has one SERVER span.
+func TestRequestSpanNestsUnderTheListenerSpan(t *testing.T) {
+	sr := recordSpans(t)
+	w := newWorld(t)
+	ctx, listener := otel.Tracer("listener").Start(context.Background(), "POST /openai/v1/chat/completions", trace.WithSpanKind(trace.SpanKindServer))
+	w.anthropic.respondJSON(200, anthropicResponse)
+	r := w.request(http.MethodPost, "/openai/v1/chat/completions", chatBody("dual", false)).WithContext(ctx)
+	r.Header.Set("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	w.do(r)
+	listener.End()
+	requests, _, _ := byName(sr.Ended())
+	if len(requests) != 1 {
+		t.Fatalf("%d request spans", len(requests))
+	}
+	req := requests[0]
+	if req.SpanKind() != trace.SpanKindInternal || req.Parent().SpanID() != listener.SpanContext().SpanID() || req.SpanContext().TraceID() != listener.SpanContext().TraceID() {
+		t.Errorf("lux.request: kind %v parent %s trace %s, want an internal child of the listener's span %s", req.SpanKind(), req.Parent().SpanID(), req.SpanContext().TraceID(), listener.SpanContext().SpanID())
+	}
+	servers := 0
+	for _, s := range sr.Ended() {
+		if s.SpanKind() == trace.SpanKindServer {
+			servers++
+		}
+	}
+	if servers != 1 {
+		t.Errorf("%d SERVER spans for one request", servers)
+	}
+}
+
 // TestRequestSpans is spec 019's row for the data plane: one lux.request
 // span per request, a child of the context the caller propagated, with
 // one lux.upstream child per target tried carrying the attempt number,

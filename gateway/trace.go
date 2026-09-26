@@ -19,7 +19,8 @@ import (
 )
 
 // This file is the data plane's half of spec 019's traces and logs: one
-// lux.request span per request with one lux.upstream child per target
+// lux.request span per request, the child of the listener's server span
+// when the listener opens one, with one lux.upstream child per target
 // tried, and one INFO line per request. The tracer is the global
 // provider's, which latere.ai/x/pkg/otel installs from the OTEL_*
 // variables; without an endpoint the provider is the SDK's no-op, a
@@ -56,12 +57,20 @@ const (
 	AttrHTTPStatus = "http.response.status_code"
 )
 
-// startRequest opens the lux.request span under the request's context,
-// as a child of the context the caller propagated, when it did, through
-// the W3C headers.
+// startRequest opens the lux.request span under the request's context.
+// When that context already carries a span this process opened, the
+// server span of a listener instrumented with latere.ai/x/pkg/otel's
+// Handler among them, lux.request is an INTERNAL child of it, so a
+// request has one SERVER span. Otherwise lux.request is the request's
+// SERVER span, a child of the context the caller propagated through the
+// W3C headers, when it did.
 func startRequest(ctx context.Context, h http.Header) (context.Context, trace.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
-	return otel.Tracer(tracerScope).Start(ctx, SpanRequest, trace.WithSpanKind(trace.SpanKindServer))
+	kind := trace.SpanKindInternal
+	if sc := trace.SpanContextFromContext(ctx); !sc.IsValid() || sc.IsRemote() {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
+		kind = trace.SpanKindServer
+	}
+	return otel.Tracer(tracerScope).Start(ctx, SpanRequest, trace.WithSpanKind(kind))
 }
 
 // startUpstream opens one lux.upstream child for an attempt.
