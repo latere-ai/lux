@@ -74,7 +74,10 @@ func (c *call) self(context.Context) *Error {
 }
 
 // WellKnown is GET /.well-known/lux: the one document a client reads
-// before it has a token. Every URL is built from LUX_PUBLIC_URL; Mode is
+// before it has a token. Every URL is built from LUX_PUBLIC_URL: each door
+// is that address plus the dialect, and API is that address plus /v1, or
+// the address itself where the base path stands in the place of /v1
+// (spec 040), which is how a client tells the two mounts apart; Mode is
 // server or file. Issuers is every issuer whose tokens the control plane
 // accepts: the listed ones in order, then the local issuer of spec 035
 // when a key is configured, whose name is LUX_PUBLIC_URL.
@@ -95,9 +98,15 @@ type WellKnown struct {
 // no installation's data.
 func (c *call) wellKnown(context.Context) *Error {
 	base := c.h.o.PublicURL.String()
+	// Under LUX_BASE_PATH_MODE=replace the base path, which is the public
+	// URL's path, stands in the place of /v1 (spec 040).
+	api := base + "/v1"
+	if c.h.o.BaseReplacesV1 {
+		api = base
+	}
 	doc := WellKnown{
 		Name: "lux", Version: c.h.o.Version, APIVersion: v1.APIVersion,
-		API: base + "/v1", OpenAPI: base + "/v1/openapi.json",
+		API: api, OpenAPI: api + "/openapi.json",
 		Doors:    map[string]string{},
 		Dialects: []string{string(v1.DialectOpenAI), string(v1.DialectAnthropic), string(v1.DialectGemini), string(v1.DialectLux)},
 		Issuers:  []string{},

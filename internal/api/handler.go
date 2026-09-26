@@ -68,6 +68,12 @@ type Options struct {
 	// it on every path and names PublicURL as its server. The handler's
 	// own routes stay rooted.
 	BasePath string
+	// BaseReplacesV1 is LUX_BASE_PATH_MODE=replace (spec 040): BasePath
+	// stands in the place of /v1, so the served document names /v1/keys
+	// as <base>/keys and /.well-known/lux names PublicURL itself as the
+	// control plane. The listener in front puts /v1 back before a request
+	// reaches this handler, whose routes stay rooted.
+	BaseReplacesV1 bool
 	// Version is the build's, for /.well-known/lux.
 	Version string
 	// RequestsPerMinute is LUX_REQUESTS_PER_MINUTE, which an authorizer's
@@ -131,6 +137,9 @@ type Handler struct {
 	refusals *metrics.Counter
 	openapi  []byte
 	logger   *slog.Logger
+	// patterns is every pattern routes registered, in order, so a test
+	// reads the route table rather than a copy of it.
+	patterns []string
 }
 
 // DefaultMaxManifestBytes is LUX_MAX_MANIFEST_BYTES's default.
@@ -167,7 +176,7 @@ func New(o Options) *Handler {
 	if o.Metrics != nil {
 		h.refusals = o.Metrics.Counter(MetricRefusals, "Control plane refusals by code.")
 	}
-	h.openapi = openAPIJSONAt(o.BasePath, o.PublicURL)
+	h.openapi = openAPIJSONAt(o.BasePath, o.BaseReplacesV1, o.PublicURL)
 	h.routes()
 	return h
 }
@@ -287,7 +296,7 @@ func echoable(s string) bool {
 // package's not_found and never the mux's own 405.
 func (h *Handler) routes() {
 	for _, k := range kinds {
-		h.mux.Handle("/v1/"+k.plural, h.route(map[string]handlerFunc{
+		h.handle("/v1/"+k.plural, h.route(map[string]handlerFunc{
 			http.MethodGet: func(c *call, ctx context.Context) *Error { return c.list(ctx, k) },
 		}))
 		item := "/v1/" + k.plural + "/{name}"
@@ -299,25 +308,31 @@ func (h *Handler) routes() {
 			http.MethodGet:    func(c *call, ctx context.Context) *Error { return c.read(ctx, k, c.r.PathValue("name")) },
 			http.MethodDelete: func(c *call, ctx context.Context) *Error { return c.delete(ctx, k, c.r.PathValue("name")) },
 		}
-		h.mux.Handle(item, h.route(methods))
+		h.handle(item, h.route(methods))
 		if k.name == v1.KindKey {
-			h.mux.Handle(item+"/fence", h.route(map[string]handlerFunc{
+			h.handle(item+"/fence", h.route(map[string]handlerFunc{
 				http.MethodPost: func(c *call, ctx context.Context) *Error { return c.keyFence(ctx, c.r.PathValue("name")) },
 				http.MethodGet:  func(c *call, ctx context.Context) *Error { return c.keyFence(ctx, c.r.PathValue("name")) },
 			}))
-			h.mux.Handle(item+"/rotate", h.route(map[string]handlerFunc{
+			h.handle(item+"/rotate", h.route(map[string]handlerFunc{
 				http.MethodPost: func(c *call, ctx context.Context) *Error { return c.rotate(ctx, c.r.PathValue("name")) },
 			}))
 		}
 	}
-	h.mux.Handle("/v1/usage", h.route(map[string]handlerFunc{http.MethodGet: (*call).usage}))
-	h.mux.Handle("/v1/usage/redact", h.route(map[string]handlerFunc{http.MethodPost: (*call).redactUsage}))
-	h.mux.Handle("/v1/requests", h.route(map[string]handlerFunc{http.MethodGet: (*call).requests}))
+	h.handle("/v1/usage", h.route(map[string]handlerFunc{http.MethodGet: (*call).usage}))
+	h.handle("/v1/usage/redact", h.route(map[string]handlerFunc{http.MethodPost: (*call).redactUsage}))
+	h.handle("/v1/requests", h.route(map[string]handlerFunc{http.MethodGet: (*call).requests}))
 	h.tunnelRoutes()
-	h.mux.Handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
-	h.mux.Handle("/v1/openapi.json", h.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
-	h.mux.Handle("/.well-known/lux", h.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
-	h.mux.Handle("/", h.route(nil))
+	h.handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
+	h.handle("/v1/openapi.json", h.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
+	h.handle("/.well-known/lux", h.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
+	h.handle("/", h.route(nil))
+}
+
+// handle registers one route and records its pattern.
+func (h *Handler) handle(pattern string, handler http.Handler) {
+	h.patterns = append(h.patterns, pattern)
+	h.mux.Handle(pattern, handler)
 }
 
 // route dispatches on the method and writes the refusal a handler

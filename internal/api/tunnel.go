@@ -29,10 +29,10 @@ type TunnelRoutes interface {
 // Provider routes. Both are POST alone; another method is this package's
 // not_found like any path outside the table.
 func (h *Handler) tunnelRoutes() {
-	h.mux.Handle("/v1/providers/{name}/tunnel", h.route(map[string]handlerFunc{
+	h.handle("/v1/providers/{name}/tunnel", h.route(map[string]handlerFunc{
 		http.MethodPost: func(c *call, ctx context.Context) *Error { return c.tunnelSession(ctx, c.r.PathValue("name")) },
 	}))
-	h.mux.Handle("/v1/providers/{name}/tunnel/carry", h.route(map[string]handlerFunc{
+	h.handle("/v1/providers/{name}/tunnel/carry", h.route(map[string]handlerFunc{
 		http.MethodPost: func(c *call, ctx context.Context) *Error { return c.tunnelCarrier(ctx, c.r.PathValue("name")) },
 	}))
 }

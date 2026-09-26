@@ -139,12 +139,12 @@ func openAPIJSON() []byte {
 }
 
 // openAPIJSONAt renders the document GET /v1/openapi.json serves behind
-// a base path: every path carries the base and servers names the public
-// URL, so servers[0].url plus a path is the address a client reaches the
-// route at, and a document fetched through a shared origin describes that
-// origin. With no base it is openAPIJSON, byte for byte the committed
-// document, which names no server.
-func openAPIJSONAt(base string, public *url.URL) []byte {
+// a base path: every path is the address Route gives it and servers names
+// the public URL, so servers[0].url plus a path is the address a client
+// reaches the route at, and a document fetched through a shared origin
+// describes that origin. With no base it is openAPIJSON, byte for byte
+// the committed document, which names no server.
+func openAPIJSONAt(base string, replacesV1 bool, public *url.URL) []byte {
 	if base == "" {
 		return openAPIJSON()
 	}
@@ -153,11 +153,11 @@ func openAPIJSONAt(base string, public *url.URL) []byte {
 	for _, m := range doc {
 		if m.key == "paths" {
 			paths, _ := m.value.(ordered)
-			prefixed := make(ordered, 0, len(paths))
+			moved := make(ordered, 0, len(paths))
 			for _, p := range paths {
-				prefixed = append(prefixed, member{base + p.key, p.value})
+				moved = append(moved, member{Route(base, replacesV1, p.key), p.value})
 			}
-			m.value = prefixed
+			m.value = moved
 		}
 		out = append(out, m)
 		if m.key == "info" {
