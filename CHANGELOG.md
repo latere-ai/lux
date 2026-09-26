@@ -6,6 +6,34 @@ refused before it is pushed.
 
 ## Unreleased
 
+- With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the public listener exports
+  OpenTelemetry's HTTP server metrics, `http.server.request.duration`
+  and the request and response body sizes, for every request but
+  `/livez` and `/readyz`, refused and rate-limited ones included. Each
+  point carries `http.route`: the door's template
+  (`/openai/v1/chat/completions`,
+  `/gemini/v1beta/models/{model}:generateContent`), the control plane's
+  (`/v1/keys/{name}`), `/`, or `/version`, written without
+  `LUX_BASE_PATH`, and none for a request no route answers, so no model
+  or object name becomes a series. The metrics go to the collector and
+  are not on `/metrics`; the internal listener exports none.
+- Each request to the public listener now has one server span, named by
+  its method and route, and a response carries its trace id in
+  `X-Trace-Id` while tracing is on. `lux.request` and `lux.api` are
+  internal children of that span with their attributes unchanged, so a
+  trace query that selects them by span kind `server` selects the new
+  span instead. The server span carries no client address, peer
+  address, or user agent.
+- `gateway.RouteTemplate(method, path)` returns the door table's route
+  template for a request, or `""` when the table has no row for it: the
+  label a listener in front of the doors can record a request under.
+  `gateway.Handler` opens `lux.request` as an internal child when the
+  request's context already carries a span the process opened, such as
+  a server span of `latere.ai/x/pkg/otel`'s `Handler`; a plane that
+  mounts the handler without one still gets `lux.request` as the
+  request's server span.
+- `latere.ai/x/pkg` v0.86.0.
+
 ## v0.9.0 - 2026-09-26
 
 - `LUX_BASE_PATH_MODE=replace` serves the control plane with the base

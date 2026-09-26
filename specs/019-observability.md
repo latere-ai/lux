@@ -9,7 +9,7 @@ depends_on:
 affects: [cmd/luxd/, internal/serve/, internal/api/, internal/auth/, internal/store/, internal/events/, internal/reqlog/, internal/tunnel/, gateway/, deploy/base/prometheusrule.yaml, .lateregate.yaml, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-09-26
 author: changkun
 ---
 
@@ -49,7 +49,9 @@ metric of the table that waited on its owner,
 [[013-tunneled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
 on every configuration, and the rules file's `promtool` step is the
 `rules` job [release and installation](.archive/017-release-and-installation.md) wrote into `verify.yml`.
-Every row of the acceptance table passes.
+`cmd/luxd` wraps the public listener in `latere.ai/x/pkg/otel`'s
+`Handler`, which opens each request's server span and records the OTLP
+HTTP server metrics by route. Every row of the acceptance table passes.
 
 ## Design
 
@@ -114,6 +116,32 @@ while the mark is still there, so the mark cannot outlive the build.
 | `lux_catalog_reloads_total` | counter | `trigger`, `result` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
 | `lux_catalog_objects` | gauge | `kind` | [036-catalog-in-memory](.archive/036-catalog-in-memory.md) |
 | `lux_usage_rolled_up_total` | counter | `result` | [038-usage-retention](.archive/038-usage-retention.md) |
+
+The table is the Prometheus registry's. Beside it, the public listener
+exports OpenTelemetry's HTTP server metrics over OTLP, and only with an
+endpoint set: `latere.ai/x/pkg/otel`'s `Handler` wraps the whole
+listener and records `http.server.request.duration` and the request
+and response body size histograms for every request but `GET /livez`
+and `GET /readyz`, sampled or not. They are not in `/metrics` and not
+in the table, so `TestMetricsTable` does not read them. Their
+`http.route` is the route the request reaches, rooted as the handlers
+behind the base path read it: `/` and `/version` for the build
+identity, the door table's template on a door
+(`gateway.RouteTemplate`: `/openai/v1/chat/completions`,
+`/gemini/v1beta/models/{model}:generateContent`, `/openai/v1/*`), and
+the mux pattern of [[011-api]]'s route table on the control plane
+(`/v1/keys/{name}`, `/.well-known/lux`). A request no route answers
+carries no `http.route`: a path outside the base, a path the mux
+redirects, a method a route does not take, a path under a door or
+`/v1` outside its table, and `/v1` on the file mode's public listener.
+So the set is bounded by the build, as the cardinality rule below asks
+of every label, and neither a model name nor an object name is ever a
+value. The handler sits outside the base path's mount, the per-address
+bucket, and both planes' authentication, so a refused or rate-limited
+request is recorded like a served one. The internal listener is not
+wrapped: its requests are the orchestrator's probes, the scrape, and
+the tunnel's forward hop, which the receiving replica's public listener
+has already recorded.
 
 `lux_output_tokens_per_second` is a stream's output tokens over the time
 from its first byte to its last, and a non-stream's over its upstream
@@ -277,9 +305,9 @@ carries no valid span context.
 
 | Span | Parent | Attributes |
 |---|---|---|
-| `lux.request` | the caller's context, when it propagated one | `lux.door`, `lux.route`, `lux.model`, `lux.provider`, `lux.status`, `lux.code`, `lux.request_id`, `lux.stream`, `lux.translated` |
+| `lux.request` | the listener's server span; without one, the caller's context, when it propagated one | `lux.door`, `lux.route`, `lux.model`, `lux.provider`, `lux.status`, `lux.code`, `lux.request_id`, `lux.stream`, `lux.translated` |
 | `lux.upstream` | `lux.request` | `lux.provider`, `lux.attempt`, `http.request.method`, `url.template`, `http.response.status_code`, `lux.ttfb_ms` |
-| `lux.api` | the caller's context | `lux.route`, `lux.action`, `lux.kind`, `lux.status`, `lux.code`, `lux.request_id` |
+| `lux.api` | the listener's server span; without one, the caller's context | `lux.route`, `lux.action`, `lux.kind`, `lux.status`, `lux.code`, `lux.request_id` |
 | `lux.authorizer` | `lux.api` | `lux.action`, `lux.decision` |
 | `lux.store` | `lux.api` or `lux.request` | `lux.op`, `lux.kind`, `lux.result` |
 
@@ -288,10 +316,15 @@ The attribute names are constants beside the spans that write them:
 `auth.SpanAuthorizer`, `auth.AttrAction`, and `auth.AttrDecision`,
 `store.SpanStore` and `store.Attr*`. What each carries:
 
-- `lux.request` and `lux.api` are server spans, each the child of the
-  `traceparent` the caller sent when it sent one, extracted from the
-  request's headers by the propagator `Bootstrap` installs; without an
-  endpoint there is no propagator and the span is a root. The
+- `lux.request` and `lux.api` are INTERNAL children of the listener's
+  server span when the request's context carries a span this process
+  opened, which on `luxd`'s public listener it always does, so a
+  request has one SERVER span. Under a listener that opens none, a
+  plane that mounts the handler without `latere.ai/x/pkg/otel`'s
+  `Handler` among them, each is the request's SERVER span and the child
+  of the `traceparent` the caller sent when it sent one, extracted from
+  the request's headers by the propagator `Bootstrap` installs; without
+  an endpoint there is no propagator and the span is a root. The
   attributes are set when the request ends, from the record, so a
   refused request's `lux.model` is empty as its label is. `lux.route`
   is the door table's template on the data plane and the mux's pattern
@@ -322,13 +355,26 @@ HTTP client in this module, opens a client span inside each
 `lux.upstream`, inside each `lux.authorizer`, and around the verifier's
 fetches; it carries `http.*` attributes, `url.full` among them, which
 names the provider's, the authorizer's, or the issuer's address and
-never a caller's. That package's `Handler`, which would open a server
-span around each listener, is not mounted in this build: the two
-listeners are [[002-repository-scaffold]]'s mount, `lux.request` and
-`lux.api` are the roots a trace starts at when the caller sent no
-parent, and mounting the server span is that spec's edit if it wants
-one. The table is what this module names, and the acceptance criteria
-read every span an e2e run produces, the transports' included.
+never a caller's. That package's `Handler` wraps the public listener
+and opens the request's SERVER span, the root a trace starts at when
+the caller sent no parent and the child of the caller's `traceparent`
+when it sent one. It is named by the method and the route
+(`POST /openai/v1/chat/completions`) and carries otelhttp's server
+attributes: `http.route` with the value the request metrics carry, the
+method, the status code, `url.path`, the scheme, the server's address
+and port as the `Host` header names them, the protocol version, and the
+body sizes.
+`url.path` is the path as sent, which on the control plane holds an
+object's name and on the gemini door a model's; it is never a Key id,
+a Key prefix, a Key value, or a subject. otelhttp would also copy the
+peer address, the `X-Forwarded-For` client, and the `User-Agent` onto
+that span as `network.peer.address`, `client.address`, and
+`user_agent.original`, so the wiring hands it the request with those
+three removed and gives them back to the listener behind it, where the
+per-address bucket and the authorizer's `request.ip` read them. The
+probes open no span. The internal listener opens no server span. The
+table is what this module names, and the acceptance criteria read every
+span an e2e run produces, the transports' and the listener's included.
 
 One `lux.request` span per data plane request with one `lux.upstream`
 child per target tried, so a fallback is visible as two children of one
@@ -497,9 +543,15 @@ Each of these is written into the Design above in the same commit.
 - `lux.store` opens only under a parent span, so the jobs trace
   nothing; without the rule every tick of discovery, health, and the
   two flushes would be a root trace of its own.
-- The listener carries no server span in this build; the roots are
-  `lux.request` and `lux.api`, and mounting `otel.Handler` is
-  [[002-repository-scaffold]]'s edit if wanted.
+- The public listener carries the server span and the OTLP request
+  metrics through `otel.Handler`, and `lux.request` and `lux.api` open
+  as INTERNAL children of a span the process already opened, so a
+  request has one SERVER span and a plane that mounts the handler
+  without a server span of its own keeps `lux.request` as the root.
+  The listener's own muxes and the base path's mount route a copy of
+  the request, because otelhttp labels the metrics with a matched mux
+  pattern in preference to the route template, and the listener's
+  patterns (`/openai/`, `/v1/`) are coarser than the template.
 - The line's message is the span's name, so the two field rows need no
   field to tell the planes apart.
 - The threat table of [[016-security-and-threat-model]] marked
@@ -536,6 +588,8 @@ the events, and the tunnel ([[012-request-log-and-events]],
 | A Key value written to a log argument by a deliberate caller appears truncated to twelve characters | `TestLogRedactsKeyValues` | passing, `internal/serve` |
 | No span carries a subject, owner, Key id, Key prefix, or caller address, over every span the e2e tier produces | `TestSpansCarryNoIdentity` | passing, `cmd/luxd` over the exported spans and `gateway` over the package's |
 | A data plane request produces one `lux.request` span with one `lux.upstream` child per target tried, each carrying the request id's parent; a control plane request produces `lux.api` with its authorizer and store children | `TestRequestSpans`, with an in-memory exporter | passing, `gateway` for the data plane and `internal/api` for the control plane |
+| The public listener records `http.server.request.duration` for every request but the probes, under the door table's template, the control plane's route pattern, `/`, or `/version` as `http.route`, and no `http.route` for a request no route answers, at the root, under a base path in either mode, and in the file mode; every request has exactly one SERVER span, which carries no caller address | `TestPublicListenerRecordsRequestMetrics`, over the real listener with an in-memory meter reader and span recorder, and `TestObservePublicHandsTheListenerTheCaller` | passing, `cmd/luxd` |
+| Under a propagated parent the listener's SERVER span is its child, and `lux.request` and `lux.api` are INTERNAL children of the SERVER span with their attributes | `TestHandMadeSpansNestUnderTheRequestSpan`, with `TestRequestSpanNestsUnderTheListenerSpan` in `gateway` and `TestSpanNestsUnderTheListenerSpan` in `internal/api` | passing |
 | With no `OTEL_EXPORTER_OTLP_ENDPOINT` no span is exported and the request path starts no recording span: the context the Key lookup receives carries no span context | `TestTracingOffByDefault` | passing, `gateway` |
 | Each histogram in the buckets table is registered with exactly the boundaries in its row, and a ten minute stream lands in a bucket below `+Inf` | `TestHistogramBuckets` | passing, `internal/serve` |
 | Every log line of an e2e run carries the base fields and exactly the fields of its plane's row and no other, and a name, label, and model string of newlines and terminal escapes produce one line each | `TestLogFieldsAreTheTable` | passing, `cmd/luxd`, with `TestRequestLineFields` in `gateway` and `TestAPILineFields` in `internal/api` |
@@ -598,3 +652,18 @@ three test markers this build dropped having already gone.
 that runs `promtool check rules` over the file this spec's alert table
 fixes. A dashboard over any of it is a platform's and is not shipped
 here.
+
+2026-09-26. The public listener gained the server span and the OTLP
+HTTP server metrics, which the first build left out: without them a
+platform read the core's traffic from its own authorizer calls and from
+sampled spans. `otel.Handler` wraps the listener outside the mount,
+with the probes skipped and `http.route` from `gateway.RouteTemplate`
+and `api.Handler.RouteTemplate`, the latter reached through the mount's
+own mux so the base path's two modes need no second table. The point in
+the first build's list that said neither listener carries a server span
+is replaced by the one in the Design: `lux.request` and `lux.api` open
+as INTERNAL children of the listener's span, and stay the root under a
+listener that opens none. otelhttp puts the caller's address and
+`User-Agent` on its span unconditionally, so the wiring removes them
+from the request it sees; `TestSpansCarryNoIdentity` now also forbids
+`network.peer.address` and `network.peer.port`.

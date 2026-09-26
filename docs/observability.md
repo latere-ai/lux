@@ -58,6 +58,30 @@ request id, or client address is ever a label: those live in
 answer how the gateway is behaving in aggregate; per-key, per-owner spend
 is `GET /v1/usage`'s.
 
+### Request metrics over OTLP
+
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the public listener also exports
+OpenTelemetry's HTTP server metrics: `http.server.request.duration`, and
+the request and response body sizes, for every request except the
+`/livez` and `/readyz` probes. They go to your collector with the traces
+and are not on `/metrics`. Refused, unauthenticated, and rate-limited
+requests are counted like served ones, so the duration histogram's count
+is the listener's full request rate.
+
+Each point carries `http.route`, the route the request reached, written
+without `LUX_BASE_PATH` in front:
+
+| Request | `http.route` |
+|---|---|
+| a door route | the door's template, such as `/openai/v1/chat/completions`, `/anthropic/v1/messages`, `/gemini/v1beta/models/{model}:generateContent`, or `/openai/v1/*` for a passthrough |
+| a control-plane route | its template, such as `/v1/keys/{name}`, `/v1/models/{name...}`, or `/.well-known/lux` |
+| the build identity | `/` or `/version` |
+| anything no route answers | no `http.route` |
+
+A model name, an object name, or any other part of the path a caller
+sent is never the value, so the number of series is fixed by the build.
+The internal listener exports no request metrics.
+
 ## Alerts
 
 `deploy/base/prometheusrule.yaml` ships twelve alerts as a `PrometheusRule`
@@ -102,10 +126,22 @@ its first twelve characters.
 
 Off unless you set `OTEL_EXPORTER_OTLP_ENDPOINT`. When set, `luxd` exports
 OTLP over HTTP through the standard `OTEL_*` variables; no `LUX_*` knob
-configures tracing. A data-plane request is one `lux.request` span with a
-`lux.upstream` child per target tried; a control-plane request is
-`lux.api` with `lux.authorizer` and `lux.store` children. Every span
-carries `lux.request_id`, which joins it to the log line and the usage
-record, and carries no subject, owner, Key, or address, so a tracing
+configures tracing.
+
+Every request to the public listener, except the probes, has one server
+span, named by its method and route (`POST /openai/v1/chat/completions`)
+and carrying the same `http.route` as the request metrics, with the
+status code and the path. It is a child of the caller's `traceparent`
+when one was sent, and its trace id comes back in the `X-Trace-Id`
+response header. Under it, a data-plane request is one `lux.request`
+span with a `lux.upstream` child per target tried; a control-plane
+request is `lux.api` with `lux.authorizer` and `lux.store` children.
+`lux.request` and `lux.api` carry `lux.request_id`, which joins the trace
+to the log line and the usage record, and `lux.request` carries the
+resolved model and provider.
+
+No span carries a subject, owner, Key, or caller address: the server
+span has no client address, peer address, or user agent, so a tracing
 system you share with other teams does not become a list of who called
-what.
+what. The path on the server span can hold an object's name on `/v1`
+and a model's name on the gemini door.
