@@ -98,6 +98,11 @@ func runServe(a *app, o *serveOptions, args []string) error {
 	}
 	c := a.client(base)
 	c.Token = token
+	// The Provider is applied through the control plane, which may sit in
+	// the place of /v1 under LUX_URL's path (spec 040).
+	if err := c.Discover(a.ctx); err != nil {
+		return err
+	}
 	if !o.noApply {
 		if err := a.applyTunneled(c, o, labels); err != nil {
 			return err

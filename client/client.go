@@ -30,11 +30,20 @@ const MaxBodyBytes int64 = 64 << 20
 // Client speaks the /v1 API at BaseURL with the token Token yields per
 // request. A nil Token sends no Authorization header, which is what the
 // two documents no bearer guards need. A nil HTTP is NewHTTPClient().
+//
+// BaseURL is the installation's public URL, or any other address its
+// public listener answers at. BaseReplacesV1 is set for an installation
+// whose base path stands in the place of the control plane's /v1
+// (LUX_BASE_PATH_MODE=replace): a request path under /v1 is then sent to
+// BaseURL with that segment removed, so /v1/keys goes to BaseURL +
+// "/keys", while /.well-known/lux and a door's path are sent as written.
+// Discover sets it from the installation's own document.
 type Client struct {
-	BaseURL   string
-	Token     TokenSource
-	HTTP      *http.Client
-	UserAgent string
+	BaseURL        string
+	BaseReplacesV1 bool
+	Token          TokenSource
+	HTTP           *http.Client
+	UserAgent      string
 }
 
 // NewHTTPClient is this package's transport policy: the process's
@@ -73,7 +82,7 @@ type Request struct {
 // *UnreadableError when it is not; a failure before a response is a
 // *TransportError. Nothing is retried.
 func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
-	target := strings.TrimRight(c.BaseURL, "/") + req.Path
+	target := c.url(req.Path)
 	if len(req.Query) > 0 {
 		target += "?" + req.Query.Encode()
 	}
@@ -127,6 +136,21 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 	return nil, &UnreadableError{Method: req.Method, URL: target, Status: resp.StatusCode, RequestID: out.RequestID, Body: data}
 }
 
+// versionSegment is the segment every control plane route sits under at
+// an installation's root.
+const versionSegment = "/v1"
+
+// url is the address a request path is sent to: BaseURL plus the path,
+// with a control plane path's /v1 removed when BaseReplacesV1 is set.
+func (c *Client) url(path string) string {
+	if c.BaseReplacesV1 {
+		if rest, ok := strings.CutPrefix(path, versionSegment); ok && (rest == "" || rest[0] == '/') {
+			path = rest
+		}
+	}
+	return strings.TrimRight(c.BaseURL, "/") + path
+}
+
 // ObjectPath is /v1/{plural}/{name}. A Model's name may carry slashes,
 // which stay slashes, since the model routes match any number of
 // segments; every other character a segment cannot carry is escaped.
@@ -169,7 +193,7 @@ func (c *Client) Self(ctx context.Context) (*Response, error) {
 func (c *Client) WellKnown(ctx context.Context) (*Response, error) {
 	bare := *c
 	bare.Token = nil
-	return bare.Do(ctx, Request{Method: http.MethodGet, Path: "/.well-known/lux"})
+	return bare.Do(ctx, Request{Method: http.MethodGet, Path: wellKnownPath})
 }
 
 // Usage is GET /v1/usage with the query as given; the route pages

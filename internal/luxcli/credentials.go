@@ -59,6 +59,12 @@ func (a *app) controlClient() (*client.Client, error) {
 	}
 	c := a.client(url)
 	c.Token = source
+	// A LUX_URL with a path may name an installation whose base path
+	// stands in the place of /v1 (spec 040); its /.well-known/lux says
+	// which. A LUX_URL without a path sends nothing.
+	if err := c.Discover(a.ctx); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 

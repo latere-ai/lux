@@ -23,6 +23,7 @@ import (
 
 	"latere.ai/x/pkg/httpjson"
 
+	"latere.ai/x/lux/client"
 	"latere.ai/x/lux/internal/tunnel/wire"
 )
 
@@ -101,15 +102,18 @@ func (e *RefusedError) Error() string {
 
 // agent is one Run.
 type agent struct {
-	o        Options
-	gateway  *url.URL
-	upstream *url.URL
-	client   *http.Client
-	runtime  *http.Client
-	logger   *slog.Logger
-	session  string
-	inFlight atomic.Int32
-	wg       sync.WaitGroup // the carriers and the heartbeat, joined before Run returns
+	o       Options
+	gateway *url.URL
+	// replacesV1 is the gateway's mount as /.well-known/lux reports it:
+	// set, its base path stands in the place of the control plane's /v1.
+	replacesV1 bool
+	upstream   *url.URL
+	client     *http.Client
+	runtime    *http.Client
+	logger     *slog.Logger
+	session    string
+	inFlight   atomic.Int32
+	wg         sync.WaitGroup // the carriers and the heartbeat, joined before Run returns
 }
 
 // Run opens one session and serves it until it ends. It returns nil
@@ -133,8 +137,9 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return fmt.Errorf("agent: reading the token: %w", err)
 	}
+	a.discover(sctx)
 	pr, pw := io.Pipe()
-	req, err := a.newRequest(sctx, a.gateway.JoinPath("v1", "providers", a.o.Provider, "tunnel").String(), token, pr)
+	req, err := a.newRequest(sctx, a.control("providers", a.o.Provider, "tunnel"), token, pr)
 	if err != nil {
 		return err
 	}
@@ -201,6 +206,31 @@ func Run(ctx context.Context, o Options) error {
 }
 
 // newAgent checks the options and builds the clients.
+// discover reads where the gateway's control plane sits under Gateway
+// (spec 040), so the session and carrier routes reach an installation
+// whose base path stands in the place of /v1. It runs at the start of
+// every session, so an agent that reconnects after its installation
+// changed mount follows it. A failed discovery is logged and keeps the
+// /v1 routes; the connect that follows reports what is wrong in the terms
+// Run documents.
+func (a *agent) discover(ctx context.Context) {
+	c := &client.Client{BaseURL: a.gateway.String(), HTTP: a.client, UserAgent: a.o.UserAgent}
+	if err := c.Discover(ctx); err != nil {
+		a.logger.WarnContext(ctx, "agent: reading the gateway's /.well-known/lux failed; the session uses the /v1 routes", "err", err)
+		return
+	}
+	a.replacesV1 = c.BaseReplacesV1
+}
+
+// control is the address of a control plane route under the gateway:
+// Gateway, then /v1 unless the base path stands in its place, then elem.
+func (a *agent) control(elem ...string) string {
+	if !a.replacesV1 {
+		elem = append([]string{"v1"}, elem...)
+	}
+	return a.gateway.JoinPath(elem...).String()
+}
+
 func newAgent(o Options) (*agent, error) {
 	switch {
 	case o.Gateway == "":
@@ -360,7 +390,7 @@ func (a *agent) carry(ctx context.Context) (replaced bool, err error) {
 	// ends the body, which resets the parked stream at once.
 	stop := context.AfterFunc(ctx, func() { _ = pw.CloseWithError(ctx.Err()) })
 	defer stop()
-	req, err := a.newRequest(ctx, a.gateway.JoinPath("v1", "providers", a.o.Provider, "tunnel", "carry").String(), token, pr)
+	req, err := a.newRequest(ctx, a.control("providers", a.o.Provider, "tunnel", "carry"), token, pr)
 	if err != nil {
 		return false, err
 	}

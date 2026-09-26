@@ -33,7 +33,7 @@ func (c *Client) List(ctx context.Context, path string, query url.Values, limit 
 		}
 		page, err := parsePage(resp.Body)
 		if err != nil {
-			return nil, &UnreadableError{Method: http.MethodGet, URL: c.BaseURL + path, Status: resp.Status, RequestID: resp.RequestID, Body: resp.Body}
+			return nil, &UnreadableError{Method: http.MethodGet, URL: c.url(path), Status: resp.Status, RequestID: resp.RequestID, Body: resp.Body}
 		}
 		pages++
 		if first == nil {
