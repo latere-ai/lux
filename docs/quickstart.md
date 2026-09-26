@@ -18,7 +18,7 @@ Every release publishes both images under the tag it was cut at, and the
 run an older one:
 
 ```sh
-export LUX_VERSION=v0.8.0
+export LUX_VERSION=v0.9.0
 ```
 
 `LUX_OWNER` selects the registry namespace, `latere-ai` unless you run

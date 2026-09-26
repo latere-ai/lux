@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.9.0 - 2026-09-26
+
 - `LUX_BASE_PATH_MODE=replace` serves the control plane with the base
   path in the place of its `/v1`, so behind a shared origin every address
   carries one version segment: under `/v1/models`, `/v1/models/v1/keys`
