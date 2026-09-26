@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.10.0 - 2026-09-27
+
 - With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the public listener exports
   OpenTelemetry's HTTP server metrics, `http.server.request.duration`
   and the request and response body sizes, for every request but
