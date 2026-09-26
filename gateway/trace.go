@@ -92,13 +92,29 @@ func endUpstream(span trace.Span, at Attempt, ttfb time.Duration) {
 	span.End()
 }
 
+// unmatchedRoute is lux.route and the line's route for a request the
+// door table has no row for, whose Record.Route is empty. It is the
+// value latere.ai/x/pkg/otel names UnmatchedRoute, the label every
+// service gives a request no route serves. That package also carries
+// the SDK and its exporters, which spec 001 keeps out of this package,
+// so the value is repeated here and a test holds the two equal.
+const unmatchedRoute = "unmatched"
+
+// routeLabel is a record's route as lux.route and the line carry it.
+func routeLabel(route string) string {
+	if route == "" {
+		return unmatchedRoute
+	}
+	return route
+}
+
 // requestAttributes is what the record puts on lux.request when it
 // ends: the door, the route template, the resolved names, the outcome,
 // the request id, and the two flags.
 func requestAttributes(rec Record) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		attribute.String(AttrDoor, string(rec.Door)),
-		attribute.String(AttrRoute, rec.Route),
+		attribute.String(AttrRoute, routeLabel(rec.Route)),
 		attribute.String(AttrModel, rec.Model),
 		attribute.String(AttrProvider, rec.Provider),
 		attribute.String(AttrStatus, string(rec.Status)),
@@ -145,7 +161,7 @@ func logRequest(ctx context.Context, logger *slog.Logger, rec Record) {
 	logger.LogAttrs(ctx, slog.LevelInfo, LogRequest,
 		slog.String("request_id", rec.ID),
 		slog.String("door", string(rec.Door)),
-		slog.String("route", rec.Route),
+		slog.String("route", routeLabel(rec.Route)),
 		slog.String("model", rec.Model),
 		slog.String("provider", rec.Provider),
 		slog.String("status", string(rec.Status)),

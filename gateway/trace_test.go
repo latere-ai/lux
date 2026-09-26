@@ -19,6 +19,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
+
+	pkgotel "latere.ai/x/pkg/otel"
 )
 
 // recordSpans installs an SDK provider with an in-memory recorder as
@@ -346,5 +348,42 @@ func TestRequestLineFields(t *testing.T) {
 	}
 	if strings.Contains(w.log.String(), "\x1b") || strings.Contains(w.log.String(), "red") {
 		t.Errorf("the caller's string reached the log: %q", w.log.String())
+	}
+}
+
+// TestUnmatchedRequestIsLabeledUnmatched: a request the door table has
+// no row for carries latere.ai/x/pkg/otel's UnmatchedRoute as lux.route
+// and as the line's route, while its record keeps the empty route the
+// request log and the usage record read.
+func TestUnmatchedRequestIsLabeledUnmatched(t *testing.T) {
+	if unmatchedRoute != pkgotel.UnmatchedRoute {
+		t.Fatalf("unmatchedRoute is %q, latere.ai/x/pkg/otel.UnmatchedRoute %q", unmatchedRoute, pkgotel.UnmatchedRoute)
+	}
+	sr := recordSpans(t)
+	w := newWorld(t)
+	rec := w.post("/openai/nowhere", chatBody("gpt", false))
+	if errorCode(t, rec) != CodeNotFound {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	lines := logLines(t, w.log.String())
+	if len(lines) != 1 || lines[0]["route"] != pkgotel.UnmatchedRoute || lines[0]["code"] != string(CodeNotFound) {
+		t.Errorf("lines %v, want one with route %q", lines, pkgotel.UnmatchedRoute)
+	}
+	var routes []string
+	for _, s := range sr.Ended() {
+		if s.Name() != SpanRequest {
+			continue
+		}
+		for _, kv := range s.Attributes() {
+			if kv.Key == AttrRoute {
+				routes = append(routes, kv.Value.AsString())
+			}
+		}
+	}
+	if !slices.Equal(routes, []string{pkgotel.UnmatchedRoute}) {
+		t.Errorf("lux.request spans carry lux.route %q, want one with %q", routes, pkgotel.UnmatchedRoute)
+	}
+	if r := w.recorder.last(t); r.Route != "" {
+		t.Errorf("the record's route is %q, want empty", r.Route)
 	}
 }
