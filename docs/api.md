@@ -68,6 +68,34 @@ door, so an existing SDK points at it unchanged.
 `GET /{door}/v1/models` is that dialect's own model list, distinct from
 `/v1/models`, which is the `Model` kind in manifest shape.
 
+## Under a base path
+
+An installation that shares an origin with other services answers under
+a prefix, `LUX_BASE_PATH`, which is the path of `LUX_PUBLIC_URL`.
+`LUX_BASE_PATH_MODE` decides how the routes sit under it. With the base
+`/v1/models` at `https://api.example.com`:
+
+| Route at the root | `prefix`, the default | `replace` |
+|---|---|---|
+| a control plane route, `/v1/keys` | `/v1/models/v1/keys` | `/v1/models/keys` |
+| the Model kind, `/v1/models/{name}` | `/v1/models/v1/models/{name}` | `/v1/models/models/{name}` |
+| the OpenAPI document, `/v1/openapi.json` | `/v1/models/v1/openapi.json` | `/v1/models/openapi.json` |
+| a door, `/openai/v1/chat/completions` | `/v1/models/openai/v1/chat/completions` | the same |
+| `/.well-known/lux` and `/version` | `/v1/models/.well-known/lux`, `/v1/models/version` | the same |
+| `/livez` and `/readyz` | `/v1/models/livez`, `/v1/models/readyz` | the internal listener only |
+
+Under `replace` the base takes the place of the control plane's `/v1`,
+so every address carries one version segment. The Model kind keeps its
+`models` segment: a Model's name may contain slashes, and at the base
+itself a name such as `openai/gpt-5` would collide with a door. The
+doors do not move, so an SDK's base URL is the same under both values.
+
+`GET /.well-known/lux` tells the two apart. Its `api` member is the
+public URL plus `/v1` at the root and under `prefix`, and the public URL
+itself under `replace`; each door is the public URL plus the dialect
+under both. The `lux` command and the tunnel agent read it, so `LUX_URL`
+is the public URL whichever value the installation runs.
+
 ## Authentication
 
 Two credentials, one per surface, and neither works on the other.
@@ -158,6 +186,10 @@ generated from the code, at `GET /v1/openapi.json`:
 ```sh
 curl -s "$LUX_URL/v1/openapi.json" | less
 ```
+
+Under a base path the document is at the address the `openapi` member of
+`GET /.well-known/lux` names, with every path written as a caller reaches
+it and `LUX_PUBLIC_URL` as its server.
 
 Open either in an OpenAPI viewer (Swagger UI, Redoc, or an editor plugin)
 for the full schema of every kind, every route, and every error code.

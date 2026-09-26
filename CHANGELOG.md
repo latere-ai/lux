@@ -6,6 +6,34 @@ refused before it is pushed.
 
 ## Unreleased
 
+- `LUX_BASE_PATH_MODE=replace` serves the control plane with the base
+  path in the place of its `/v1`, so behind a shared origin every address
+  carries one version segment: under `/v1/models`, `/v1/models/v1/keys`
+  is `/v1/models/keys`, the Model kind is `/v1/models/models/{name}`, and
+  the OpenAPI document is `/v1/models/openapi.json`. The doors,
+  `/.well-known/lux` and `/version` keep their addresses under the base,
+  so an SDK's base URL does not change, and `/livez` and `/readyz` answer
+  on the internal listener alone. The served OpenAPI document names every
+  route where it answers, and `/.well-known/lux` names the public URL
+  itself as `api`. `replace` needs `LUX_BASE_PATH`. The default, `prefix`,
+  is the mount `LUX_BASE_PATH` has had since v0.6.0, so an installation
+  that upgrades serves the same addresses until it sets the new value.
+  `luxd check` and the start-up line report the mode.
+- `client.Client` has `BaseReplacesV1` and `Discover`: `Discover` reads
+  from `/.well-known/lux` whether the installation's base path stands in
+  the place of `/v1`, and with `BaseReplacesV1` set a request path under
+  `/v1` is sent without that segment. Only the relation between the
+  document's `api` and its doors is read, never a host, so a client that
+  reaches the installation at another address keeps its own. The `lux`
+  command and the tunnel agent (`lux serve`, `client/tunnel`) discover it
+  when their URL carries a path, so they reach an installation under
+  either mode from its public URL. Code that joins `BaseURL` and
+  `client.ObjectPath` itself does not see the mode.
+- The conformance suite reads the base path from the doors and every
+  route relative to the discovered control plane, so the same cases run
+  against either mode, and it recognizes the Model item route by its end
+  rather than by a `/v1/models/` prefix, which under a base path matched
+  every route.
 - Fixed: a `LUX_DB_URL` naming `default_query_exec_mode=exec`, with no
   `LUX_DB_POOL_URL` beside it, failed every object write, every Key fence,
   every usage write and roll-up, and every list or usage query filtered by
