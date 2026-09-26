@@ -128,21 +128,19 @@ func conceal(next http.Handler) http.Handler {
 	})
 }
 
-// reveal hands next a copy of r with the address and header conceal
-// removed, so the per-address bucket and the authorizer's request.ip read
-// the caller as the listener received it. The body stays r's, which
-// otelhttp wraps to count what is read. The copy also keeps the listener's
-// muxes from writing their pattern onto the request otelhttp labels the
-// metrics from: otelhttp prefers a matched pattern over the route
-// template, and the listener's patterns (/openai/, /v1/) are coarser than
-// the template.
+// reveal puts the address and header conceal removed back on r before
+// next reads it, so the per-address bucket and the authorizer's
+// request.ip read the caller as the listener received it. r is the
+// request otel.Handler hands the handler it wraps, its own copy of the
+// one otelhttp holds, and otelhttp has read the fields it puts on the
+// span by then: they are span start attributes, and the request metrics
+// read none of them.
 func reveal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r2 := r.WithContext(r.Context())
 		if c, ok := r.Context().Value(concealedKey{}).(caller); ok {
-			r2.RemoteAddr = c.remoteAddr
-			r2.Header = c.header
+			r.RemoteAddr = c.remoteAddr
+			r.Header = c.header
 		}
-		next.ServeHTTP(w, r2)
+		next.ServeHTTP(w, r)
 	})
 }

@@ -64,7 +64,9 @@ func installInMemory(t *testing.T) inMemory {
 }
 
 // durationCounts is the number of requests http.server.request.duration
-// recorded by http.route, "" for a point without one.
+// recorded by http.route, "" for a point without one. A point that
+// carries http.route with an empty value fails the test: a request no
+// route answers carries none.
 func (m inMemory) durationCounts(t *testing.T) map[string]uint64 {
 	t.Helper()
 	var rm metricdata.ResourceMetrics
@@ -82,7 +84,10 @@ func (m inMemory) durationCounts(t *testing.T) map[string]uint64 {
 				t.Fatalf("http.server.request.duration is a %T", md.Data)
 			}
 			for _, dp := range h.DataPoints {
-				route, _ := dp.Attributes.Value("http.route")
+				route, ok := dp.Attributes.Value("http.route")
+				if ok && route.AsString() == "" {
+					t.Errorf("a http.server.request.duration point carries an empty http.route")
+				}
 				out[route.AsString()] += dp.Count
 			}
 		}
@@ -99,6 +104,15 @@ type observedRequest struct {
 	probe        bool
 }
 
+// serverSpanKey is a SERVER span as the listener test compares it: its
+// name, then its http.route when it carries one.
+func serverSpanKey(name, route string, hasRoute bool) string {
+	if !hasRoute {
+		return name
+	}
+	return name + " http.route=" + route
+}
+
 // callerKeys are the attributes that would put the caller's address or
 // client on a span, which spec 019 forbids on every span.
 var callerKeys = []string{"client.address", "client.port", "network.peer.address", "network.peer.port", "user_agent.original"}
@@ -108,7 +122,9 @@ var callerKeys = []string{"client.address", "client.port", "network.peer.address
 // providers received after the listener stopped: one duration point per
 // request under its bounded route, none for a probe, no raw name or path
 // in any route, and exactly one SERVER span per request that carries no
-// caller address.
+// caller address, named by the method and the route and carrying the
+// route as http.route, or named by the method alone and carrying no
+// http.route for a request no route answers.
 func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 	const base = "/v1/models"
 	manifests := t.TempDir()
@@ -183,6 +199,7 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 			mem := installInMemory(t)
 			srv := startServe(t, mode.env)
 			want := map[string]uint64{}
+			wantSpans := map[string]int{}
 			served := 0
 			for _, rq := range mode.requests {
 				resp, body := do(t, rq.method, srv.publicURL+rq.path, "", "User-Agent", "canary-agent/1.0", "X-Forwarded-For", "203.0.113.9")
@@ -191,6 +208,11 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 				}
 				if !rq.probe {
 					want[rq.route]++
+					if rq.route == "" {
+						wantSpans[serverSpanKey(rq.method, "", false)]++
+					} else {
+						wantSpans[serverSpanKey(rq.method+" "+rq.route, rq.route, true)]++
+					}
 					served++
 				}
 			}
@@ -209,12 +231,17 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 			}
 
 			servers := map[trace.TraceID]int{}
+			gotSpans := map[string]int{}
 			for _, s := range mem.spans.Ended() {
 				if s.SpanKind() != trace.SpanKindServer {
 					continue
 				}
 				servers[s.SpanContext().TraceID()]++
+				route, hasRoute := "", false
 				for _, kv := range s.Attributes() {
+					if kv.Key == "http.route" {
+						route, hasRoute = kv.Value.AsString(), true
+					}
 					if slices.Contains(callerKeys, string(kv.Key)) {
 						t.Errorf("SERVER span %q carries %s", s.Name(), kv.Key)
 					}
@@ -222,6 +249,10 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 						t.Errorf("SERVER span %q attribute %s carries the caller's %q", s.Name(), kv.Key, kv.Value.String())
 					}
 				}
+				gotSpans[serverSpanKey(s.Name(), route, hasRoute)]++
+			}
+			if !maps.Equal(gotSpans, wantSpans) {
+				t.Errorf("SERVER spans by name and http.route:\n got %v\nwant %v", gotSpans, wantSpans)
 			}
 			if len(servers) != served {
 				t.Errorf("%d traces carry a SERVER span, want one per request, %d", len(servers), served)
