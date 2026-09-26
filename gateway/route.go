@@ -109,6 +109,22 @@ func match(method, path string) (route, *failure) {
 	return route{}, notInTable(d, method, rest)
 }
 
+// RouteTemplate is the door table's route template for a request with
+// method and path, the path rooted at the doors as the handler reads it
+// (/openai/v1/chat/completions), or "" when the table has no row for
+// them. The template holds a model's place with {model} and an opaque
+// route's rest with *, so it is bounded by the table and never carries
+// the caller's own path: the value a listener in front of the doors
+// labels its request metrics and spans with. It is the route the
+// handler records as Record.Route for the same request.
+func RouteTemplate(method, path string) string {
+	rt, f := match(method, path)
+	if f != nil {
+		return ""
+	}
+	return rt.template
+}
+
 func notInTable(d v1.Dialect, method, rest string) *failure {
 	return fail(CodeNotFound, method+" "+rest+" is not in the /"+string(d)+" door's route table")
 }

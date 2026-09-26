@@ -96,6 +96,23 @@ func TestMatch(t *testing.T) {
 	}
 }
 
+// TestRouteTemplate: the exported template is the table's for every row
+// and empty for every request the table does not list, so a listener in
+// front of the doors labels a request with the route the handler records
+// and never with the caller's path.
+func TestRouteTemplate(t *testing.T) {
+	for _, row := range tableRows {
+		if got := RouteTemplate(row.method, row.path); got != row.template {
+			t.Errorf("RouteTemplate(%s, %s) = %q, want %q", row.method, row.path, got, row.template)
+		}
+	}
+	for _, row := range offTable {
+		if got := RouteTemplate(row.method, row.path); got != "" {
+			t.Errorf("RouteTemplate(%s, %s) = %q, want empty", row.method, row.path, got)
+		}
+	}
+}
+
 func TestRouteHelpers(t *testing.T) {
 	for _, row := range tableRows {
 		rt, _ := match(row.method, row.path)
