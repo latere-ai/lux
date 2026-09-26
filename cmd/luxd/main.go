@@ -453,8 +453,15 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		_, _ = fmt.Fprintf(stdout, "luxd: the public listener answers under %s\n", cfg.BasePath)
 	}
 
+	// The public listener records every request but the probes through
+	// latere.ai/x/pkg/otel's Handler, with the route as http.route. The
+	// internal listener is not wrapped: its traffic is the orchestrator's
+	// probes, the metrics scrape, and the tunnel's forward hop, whose
+	// request the replica that received it has already recorded.
+	mounted := mountAt(cfg.BasePath, replacesV1, public)
+	routes := listenerRoutes{base: cfg.BasePath, mounted: mounted, public: public, control: control, controlOnPublic: files == nil}
 	servers := []*http.Server{
-		{Handler: mountAt(cfg.BasePath, replacesV1, public), ReadHeaderTimeout: 10 * time.Second},
+		{Handler: observePublic(mounted, routes), ReadHeaderTimeout: 10 * time.Second},
 		{Handler: internal, ReadHeaderTimeout: 10 * time.Second},
 	}
 	if tun != nil {

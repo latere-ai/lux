@@ -74,18 +74,56 @@ func mountReplacingV1(base string, h http.Handler) http.Handler {
 // replacement is "/". An escaped path that does not carry base literally
 // is dropped, so the two forms never disagree and the decoded one rules.
 func rebase(base, to string, h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r2 := new(http.Request)
-		*r2 = *r
-		u := *r.URL
-		u.Path = rooted(to + strings.TrimPrefix(r.URL.Path, base))
-		u.RawPath = ""
-		if raw, ok := strings.CutPrefix(r.URL.RawPath, base); ok {
-			u.RawPath = rooted(to + raw)
-		}
-		r2.URL = &u
-		h.ServeHTTP(w, r2)
-	})
+	return rebased{base: base, to: to, h: h}
+}
+
+// rebased is the handler rebase returns, a type of its own so that
+// rootedRequest can ask a mount which rewrite a request takes.
+type rebased struct {
+	base, to string
+	h        http.Handler
+}
+
+func (b rebased) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b.h.ServeHTTP(w, b.request(r))
+}
+
+// request is a copy of r with the rewritten path, the request the handler
+// behind the mount reads.
+func (b rebased) request(r *http.Request) *http.Request {
+	r2 := new(http.Request)
+	*r2 = *r
+	u := *r.URL
+	u.Path = rooted(b.to + strings.TrimPrefix(r.URL.Path, b.base))
+	u.RawPath = ""
+	if raw, ok := strings.CutPrefix(r.URL.RawPath, b.base); ok {
+		u.RawPath = rooted(b.to + raw)
+	}
+	r2.URL = &u
+	return r2
+}
+
+// rootedRequest is r as the handler behind mounted, mountAt's result for
+// base, reads it: r itself at the root, and under a base the copy the
+// rewrite the mount's mux picks for r produces. It is false for a request
+// no pattern of the mount takes, a path outside the base or one the mux
+// redirects, which reaches no route. The mount's own mux decides, so the
+// answer follows mountAt and mountReplacingV1 without a second copy of
+// their table.
+func rootedRequest(base string, mounted http.Handler, r *http.Request) (*http.Request, bool) {
+	if base == "" {
+		return r, true
+	}
+	mux, ok := mounted.(*http.ServeMux)
+	if !ok {
+		return nil, false
+	}
+	h, _ := mux.Handler(r)
+	b, ok := h.(rebased)
+	if !ok {
+		return nil, false
+	}
+	return b.request(r), true
 }
 
 // rooted is the path left after the base is trimmed, "/" when nothing is.

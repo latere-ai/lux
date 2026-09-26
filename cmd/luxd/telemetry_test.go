@@ -405,7 +405,7 @@ var spanTable = map[string][]string{
 
 // identityKeys are the shapes a leak of identity would take on a span.
 var identityKeys = []string{"lux.subject", "lux.owner", "lux.key_id", "lux.key_prefix", "lux.key", "subject", "owner", "key_id", "key_prefix",
-	"client.address", "client.port", "net.sock.peer.addr", "net.peer.ip", "http.client_ip", "enduser.id", "user_agent.original"}
+	"client.address", "client.port", "network.peer.address", "network.peer.port", "net.sock.peer.addr", "net.peer.ip", "http.client_ip", "enduser.id", "user_agent.original"}
 
 func attributeString(v interface{ GetStringValue() string }) string { return v.GetStringValue() }
 
