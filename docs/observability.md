@@ -116,6 +116,11 @@ planes apart by it.
 | data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
 | control | `request_id`, `route`, `action`, `kind`, `name`, `status`, `code`, `subject`, `duration_ms` |
 
+`route` is the route's template, never the path as sent: the door's
+(`/openai/v1/chat/completions`) or the control plane's (`/v1/keys/{name}`),
+and `unmatched` for a request no route answers. The `lux.request` and
+`lux.api` spans carry the same value as `lux.route`.
+
 `WARN` marks an event delivery failure, a dropped request-log batch, a
 provider health transition, and a circuit opening; `ERROR` a failed store
 operation or a start-up problem. No body, header, prompt, completion, or

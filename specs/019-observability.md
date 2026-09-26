@@ -9,7 +9,7 @@ depends_on:
 affects: [cmd/luxd/, internal/serve/, internal/api/, internal/auth/, internal/store/, internal/events/, internal/reqlog/, internal/tunnel/, gateway/, deploy/base/prometheusrule.yaml, .lateregate.yaml, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-26
+updated: 2026-09-27
 author: changkun
 ---
 
@@ -328,8 +328,14 @@ The attribute names are constants beside the spans that write them:
   attributes are set when the request ends, from the record, so a
   refused request's `lux.model` is empty as its label is. `lux.route`
   is the door table's template on the data plane and the mux's pattern
-  of [[011-api]]'s route table on the control plane, empty for a
-  request no route answered.
+  of [[011-api]]'s route table on the control plane, and `unmatched`,
+  `latere.ai/x/pkg/otel`'s `UnmatchedRoute`, for a request no route
+  answered: a path the door table has no row for, the control plane's
+  catch-all, a refusal before its route table, and the file mode's
+  public `/v1`. A pattern of a mux in front of the control plane, such
+  as the listener's `/v1/` mount, is never the value. Under `luxd`'s
+  public listener it is the server span's `http.route`, or `unmatched`
+  where that span carries none.
 - `lux.upstream`'s `lux.attempt` is the attempt's ordinal from one,
   `url.template` is the upstream path with the model's place held by
   `{model}` on the gemini model routes, the target dialect's path on a
@@ -422,7 +428,10 @@ are what the authorizer was asked, empty when nothing was.
 
 `route` is the route template of [[004-request-path]]'s door table or
 [[011-api]]'s route table, never the request's own path, for the reason
-the cardinality rule gives above. Every field name is from these two
+the cardinality rule gives above, and `unmatched` for a request no route
+answered, the value the span's `lux.route` carries. The record keeps an
+empty route for such a request, so the request log and the usage record
+([[012-request-log-and-events]]) are unchanged. Every field name is from these two
 tables and no caller string is ever a field name; a value is a JSON
 string the encoder escapes, so a name or a label carrying newlines or
 terminal escapes is one line and not two
@@ -548,10 +557,12 @@ Each of these is written into the Design above in the same commit.
   as INTERNAL children of a span the process already opened, so a
   request has one SERVER span and a plane that mounts the handler
   without a server span of its own keeps `lux.request` as the root.
-  The listener's own muxes and the base path's mount route a copy of
-  the request, because otelhttp labels the metrics with a matched mux
-  pattern in preference to the route template, and the listener's
-  patterns (`/openai/`, `/v1/`) are coarser than the template.
+  `otel.Handler` decides the route once the listener has answered, from
+  the route template alone, and writes it onto the request otelhttp
+  labels the metrics from, so the listener's own muxes and the base
+  path's mount serve the request `otel.Handler` hands them and the
+  patterns they match (`/openai/`, `/v1/`), coarser than the template,
+  never reach a label.
 - The line's message is the span's name, so the two field rows need no
   field to tell the planes apart.
 - The threat table of [[016-security-and-threat-model]] marked
@@ -589,6 +600,7 @@ the events, and the tunnel ([[012-request-log-and-events]],
 | No span carries a subject, owner, Key id, Key prefix, or caller address, over every span the e2e tier produces | `TestSpansCarryNoIdentity` | passing, `cmd/luxd` over the exported spans and `gateway` over the package's |
 | A data plane request produces one `lux.request` span with one `lux.upstream` child per target tried, each carrying the request id's parent; a control plane request produces `lux.api` with its authorizer and store children | `TestRequestSpans`, with an in-memory exporter | passing, `gateway` for the data plane and `internal/api` for the control plane |
 | The public listener records `http.server.request.duration` for every request but the probes, under the door table's template, the control plane's route pattern, `/`, or `/version` as `http.route`, and no `http.route` for a request no route answers, at the root, under a base path in either mode, and in the file mode; every request has exactly one SERVER span, which carries no caller address | `TestPublicListenerRecordsRequestMetrics`, over the real listener with an in-memory meter reader and span recorder, and `TestObservePublicHandsTheListenerTheCaller` | passing, `cmd/luxd` |
+| `lux.route` and the line's `route` are a route of the door table or of the control plane's route table, or `unmatched` for a request no route answered, never the pattern of a mux in front of the control plane; under the public listener `lux.request` and `lux.api` carry the SERVER span's `http.route`, or `unmatched` where it has none, while the record keeps an empty route | `TestUnmatchedRequestIsLabeledUnmatched` in `gateway`, `TestRouteIsATableRouteOrUnmatched` in `internal/api`, and `TestPublicListenerRecordsRequestMetrics` over the real listener | passing |
 | Under a propagated parent the listener's SERVER span is its child, and `lux.request` and `lux.api` are INTERNAL children of the SERVER span with their attributes | `TestHandMadeSpansNestUnderTheRequestSpan`, with `TestRequestSpanNestsUnderTheListenerSpan` in `gateway` and `TestSpanNestsUnderTheListenerSpan` in `internal/api` | passing |
 | With no `OTEL_EXPORTER_OTLP_ENDPOINT` no span is exported and the request path starts no recording span: the context the Key lookup receives carries no span context | `TestTracingOffByDefault` | passing, `gateway` |
 | Each histogram in the buckets table is registered with exactly the boundaries in its row, and a ten minute stream lands in a bucket below `+Inf` | `TestHistogramBuckets` | passing, `internal/serve` |
@@ -667,3 +679,16 @@ listener that opens none. otelhttp puts the caller's address and
 `User-Agent` on its span unconditionally, so the wiring removes them
 from the request it sees; `TestSpansCarryNoIdentity` now also forbids
 `network.peer.address` and `network.peer.port`.
+
+2026-09-27. `latere.ai/x/pkg` v0.87.0's `otel.Handler` decides one
+route per request after the handler returns and writes it onto the
+request otelhttp labels the metrics from, so a mux inside the listener
+no longer replaces the route template. The copy of the request the
+listener's muxes were served on, which kept their patterns off the
+metrics, is gone; the caller's address and header are still removed
+before otelhttp reads the request and restored before the listener
+does. `lux.route` and the line's `route` took the shared label for a
+request no route answered, `unmatched`, in place of the empty string,
+and the control plane stopped reporting the pattern of the mux in front
+of it, a listener's `/v1/` mount, as the route of the file mode's public
+`/v1` and of a request refused before its route table.

@@ -6,6 +6,22 @@ refused before it is pushed.
 
 ## Unreleased
 
+- For a request no route answers, the `route` field of the `lux.request`
+  and `lux.api` log lines and the `lux.route` span attribute are now
+  `unmatched`, the value `latere.ai/x/pkg/otel` defines as
+  `UnmatchedRoute`, where they were empty: a path the door table has no
+  row for, and a path under `/v1` that is not in the control plane's
+  route table. A log or trace query that selected those requests by an
+  empty route selects them by `unmatched` now. `gateway.Handler` writes
+  the same value for a platform that mounts it. The usage record and the
+  request log keep an empty route.
+- In the file mode, a request to the public listener's `/v1`, and a
+  write the internal listener refuses as `read_only`, report `unmatched`
+  as their route, where they reported `/v1/`, the pattern of the
+  listener's mount.
+- `latere.ai/x/pkg` v0.87.0. The public listener's `http.route` values
+  and server span names are unchanged.
+
 ## v0.10.0 - 2026-09-27
 
 - With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the public listener exports
