@@ -80,13 +80,16 @@ func case011WellKnown(t testing.TB, c *client) {
 	if w.APIVersion != v1.APIVersion {
 		t.Errorf("apiVersion %q, want %s", w.APIVersion, v1.APIVersion)
 	}
-	if !strings.HasSuffix(w.API, "/v1") || w.OpenAPI != w.API+"/openapi.json" {
-		t.Errorf("api %q openapi %q", w.API, w.OpenAPI)
+	// Every door extends one address with its dialect, and the control
+	// plane is that address plus /v1, or the address itself where the base
+	// path stands in the place of /v1 (spec 040).
+	base := strings.TrimSuffix(w.Doors["lux"], "/lux")
+	if (w.API != base+"/v1" && w.API != base) || w.OpenAPI != w.API+"/openapi.json" {
+		t.Errorf("api %q openapi %q, want %s/v1 or %s with /openapi.json under it", w.API, w.OpenAPI, base, base)
 	}
 	if len(w.Dialects) == 0 || len(w.Dialects) != len(w.Doors) {
 		t.Errorf("dialects %v doors %v", w.Dialects, w.Doors)
 	}
-	base := strings.TrimSuffix(w.API, "/v1")
 	for _, d := range w.Dialects {
 		if w.Doors[d] != base+"/"+d {
 			t.Errorf("the %s door is %q, want %s", d, w.Doors[d], base+"/"+d)
@@ -588,10 +591,9 @@ func case011OpenAPIValidatesEveryResponse(t testing.TB, c *client) {
 	if c.doc == nil {
 		c.skip(t, "the server is in file mode, where /v1 is on the internal listener, and "+EnvInternalURL+" is unset")
 	}
-	base := c.basePath()
 	for _, p := range []string{"/v1/providers", "/v1/providers/{name}", "/v1/models", "/v1/models/{name}", "/v1/keys", "/v1/keys/{name}", "/v1/keys/{name}/rotate", "/v1/budgets", "/v1/budgets/{name}", "/v1/usage", "/v1/requests", "/v1/self", "/v1/openapi.json", "/.well-known/lux"} {
-		if c.doc.paths[base+p] == nil {
-			t.Errorf("the document names no %s", base+p)
+		if c.doc.paths[c.route(p)] == nil {
+			t.Errorf("the document names no %s", c.route(p))
 		}
 	}
 	for _, s := range []string{"Provider", "Model", "Key", "Budget", "Error"} {
@@ -606,7 +608,7 @@ func case011OpenAPIValidatesEveryResponse(t testing.TB, c *client) {
 		t.Error("no /v1 answer was held to the document")
 	}
 	known := c.request(t, http.MethodGet, c.cfg.URL+"/.well-known/lux", nil)
-	for _, p := range c.doc.validate(http.MethodGet, base+"/.well-known/lux", known.Status, known.Header.Get("Content-Type"), known.Body) {
+	for _, p := range c.doc.validate(http.MethodGet, c.route("/.well-known/lux"), known.Status, known.Header.Get("Content-Type"), known.Body) {
 		t.Errorf("/.well-known/lux: %s", p)
 	}
 }

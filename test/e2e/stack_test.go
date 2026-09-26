@@ -223,6 +223,9 @@ func (s *stubs) base(dialect string) string { return s.urls[dialect] + versionPr
 type gateway struct {
 	*process
 	public, internal string
+	// api is the control plane's address: public plus /v1, or public
+	// itself where the base path stands in the place of /v1 (spec 040).
+	api string
 }
 
 var listening = regexp.MustCompile(`listening public=(\S+) internal=(\S+)`)
@@ -372,6 +375,10 @@ func newStack(t *testing.T, extra map[string]string, stubArgs ...string) *stack 
 	// 034), so the stack's public address carries the prefix and every
 	// helper built on it reaches the prefixed installation unchanged.
 	gw.public += extra["LUX_BASE_PATH"]
+	gw.api = gw.public + "/v1"
+	if extra["LUX_BASE_PATH_MODE"] == "replace" {
+		gw.api = gw.public
+	}
 	return &stack{stubs: s, gw: gw, token: mint(t, s, "dev")}
 }
 
@@ -380,7 +387,7 @@ func (s *stack) apply(t *testing.T, kind, name, manifest string) response {
 	t.Helper()
 	h := bearer(s.token)
 	h.Set("Content-Type", "application/yaml")
-	resp := do(t, http.MethodPut, s.gw.public+"/v1/"+kind+"s/"+name, h, manifest)
+	resp := do(t, http.MethodPut, s.gw.api+"/"+kind+"s/"+name, h, manifest)
 	if resp.status != http.StatusCreated && resp.status != http.StatusOK {
 		t.Fatalf("PUT /v1/%ss/%s = %d %s", kind, name, resp.status, resp.body)
 	}
@@ -440,7 +447,7 @@ func (s *stack) chat(t *testing.T, keyValue, model, text string, stream bool) re
 // records reads GET /v1/requests for one Key.
 func (s *stack) records(t *testing.T, keyName string) []map[string]any {
 	t.Helper()
-	resp := do(t, http.MethodGet, s.gw.public+"/v1/requests?key="+keyName, bearer(s.token), "")
+	resp := do(t, http.MethodGet, s.gw.api+"/requests?key="+keyName, bearer(s.token), "")
 	if resp.status != http.StatusOK {
 		t.Fatalf("GET /v1/requests = %d %s", resp.status, resp.body)
 	}

@@ -233,10 +233,33 @@ func (c *client) request(t testing.TB, method, rawURL string, body any, opts ...
 			t.Errorf("%s %s: Lux-Request-Id %q does not begin with %s", method, rawURL, out.ID, v1.PrefixRequest)
 		}
 	}
-	if c.api != "" && strings.HasPrefix(rawURL, c.api) {
+	if c.controlPlane(rawURL) {
 		c.hold(t, method, rawURL, out)
 	}
 	return out
+}
+
+// controlPlane reports whether rawURL is a control plane route, the
+// answers the OpenAPI document describes: at or under the API base, and
+// not a door, the discovery document, or the build identity, which sit
+// under that base too where the base path stands in the place of /v1
+// (spec 040).
+func (c *client) controlPlane(rawURL string) bool {
+	if c.api == "" {
+		return false
+	}
+	rest, ok := strings.CutPrefix(rawURL, c.api)
+	if !ok || (rest != "" && rest[0] != '/' && rest[0] != '?') {
+		return false
+	}
+	for _, door := range c.well.Doors {
+		if d, ok := strings.CutPrefix(rawURL, door); ok && (d == "" || d[0] == '/' || d[0] == '?') {
+			return false
+		}
+	}
+	first, _, _ := strings.Cut(strings.TrimPrefix(rest, "/"), "/")
+	first, _, _ = strings.Cut(first, "?")
+	return first != ".well-known" && first != "version"
 }
 
 // hold validates one /v1 answer against the OpenAPI document and notes
@@ -640,13 +663,29 @@ func itoa(n int) string { return strconv.Itoa(n) }
 // sprintf is fmt.Sprintf under a shorter name.
 func sprintf(format string, args ...any) string { return fmt.Sprintf(format, args...) }
 
-// basePath is the prefix the server answers under, read from the API
-// base the discovery document gave: its path less the trailing /v1, ""
-// for a server at the root.
+// basePath is the prefix the server answers under, "" for a server at
+// the root: the path of the one address every door extends with its
+// dialect. The doors are read rather than the API base because a door
+// keeps its address under both mounts of a base path, while the control
+// plane is at the base plus /v1 under one and at the base under the other
+// (spec 040).
 func (c *client) basePath() string {
-	u, err := url.Parse(c.api)
+	u, err := url.Parse(strings.TrimSuffix(c.well.Doors["lux"], "/lux"))
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSuffix(u.Path, "/v1")
+	return u.Path
+}
+
+// route is the path a route written at the root is reached at on this
+// server: a control plane route with its /v1 in the place the API base
+// the discovery document gave puts it, and any other route under the
+// base path.
+func (c *client) route(p string) string {
+	if rest, ok := strings.CutPrefix(p, "/v1"); ok && (rest == "" || rest[0] == '/') {
+		if u, err := url.Parse(c.api); err == nil {
+			return u.Path + rest
+		}
+	}
+	return c.basePath() + p
 }

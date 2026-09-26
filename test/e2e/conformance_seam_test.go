@@ -45,6 +45,28 @@ func TestE2EConformanceUnderBasePath(t *testing.T) {
 	runConformance(t, s, key)
 }
 
+// TestE2EConformanceUnderReplacedBasePath is spec 040's criterion 8: the
+// same case files against an installation whose base path stands in the
+// place of the control plane's /v1, driven through the public URL alone.
+// The control plane answers at the base, the doubled address answers
+// nothing, and nothing answers at the root.
+func TestE2EConformanceUnderReplacedBasePath(t *testing.T) {
+	const base = "/v1/models"
+	s := newStack(t, map[string]string{"LUX_BASE_PATH": base, "LUX_BASE_PATH_MODE": "replace", "LUX_OIDC_AUDIENCE": "lux,api.example.com"})
+	key := s.fixtures(t)
+	if resp := do(t, http.MethodGet, s.gw.public+"/self", bearer(s.token), ""); resp.status != http.StatusOK {
+		t.Fatalf("the control plane at the base: %d %s", resp.status, resp.body)
+	}
+	if resp := do(t, http.MethodGet, s.gw.public+"/v1/self", bearer(s.token), ""); resp.status != http.StatusNotFound {
+		t.Fatalf("the doubled address answered %d: %s", resp.status, resp.body)
+	}
+	root := strings.TrimSuffix(s.gw.public, base)
+	if resp := do(t, http.MethodGet, root+"/.well-known/lux", nil, ""); resp.status != http.StatusNotFound {
+		t.Fatalf("the root answered %d: %s", resp.status, resp.body)
+	}
+	runConformance(t, s, key)
+}
+
 // runConformance is the one seam between this tier and test/conformance:
 // the suite runs against the stack's public URL with a token minted from
 // the stack's own issuer for whichever subject a case asks for, so every

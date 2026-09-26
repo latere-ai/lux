@@ -68,13 +68,16 @@ func (d *document) operation(method, path string) map[string]any {
 }
 
 // matchTemplate matches a path against a template: a literal segment
-// matches itself, {name} matches one segment, and under /v1/models it
-// matches every remaining segment, since a Model name carries slashes.
+// matches itself, {name} matches one segment, and as the last segment of
+// the Model item template, .../models/{name}, it matches every remaining
+// segment, since a Model name carries slashes. The template is recognized
+// by its end because a base path may put anything, /v1/models included,
+// in front of every template.
 // literal counts the literal segments matched, so /v1/keys/{name}/rotate
 // wins over a wider template.
 func matchTemplate(template, path string) (literal int, ok bool) {
 	ts, ps := strings.Split(template, "/"), strings.Split(path, "/")
-	models := strings.HasPrefix(template, "/v1/models/")
+	models := strings.HasSuffix(template, "/models/{name}")
 	for i, seg := range ts {
 		if i >= len(ps) {
 			return 0, false
