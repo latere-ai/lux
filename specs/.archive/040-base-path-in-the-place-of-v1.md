@@ -1,6 +1,6 @@
 ---
 title: "The base path in the place of /v1: one version segment in every address behind a shared origin"
-status: in-progress
+status: complete
 track: core
 depends_on:
   - specs/011-api.md
@@ -18,7 +18,7 @@ author: changkun
 
 ## Overview
 
-[034-serving-behind-a-shared-origin](.archive/034-serving-behind-a-shared-origin.md)
+[034-serving-behind-a-shared-origin](034-serving-behind-a-shared-origin.md)
 moves the whole public listener under `LUX_BASE_PATH` as a plain prefix.
 Behind an origin that already versions its namespace, every control
 plane address then carries two version segments:
@@ -196,3 +196,50 @@ installation, one under `prefix`, and one under `replace`.
 | 8 | The conformance suite is green against an installation under `replace` | `TestE2EConformanceUnderReplacedBasePath` in `test/e2e`, a step of the `conformance-twice` job |
 | 9 | `luxd check` and the start-up line report the mode | `TestCheckCommand` in `cmd/luxd`, widened |
 | 10 | `docs/configuration.md` and `.env.example` carry `LUX_BASE_PATH_MODE`, `docs/api.md` states the addresses under each mode, and spec 002's table carries the row | `TestConfigurationReferenceIsCurrent` in `internal/config`, and the files read against this spec |
+
+## Outcome
+
+Implemented on 2026-09-26 for `v0.9.0`. Every criterion holds; three
+details differ from the text above.
+
+- Criterion 1: `TestBasePathModeRules` in `internal/config`.
+- Criteria 2 and 3: `TestBasePathReplaceMovesTheControlPlane` in
+  `cmd/luxd` asserts every control plane collection at the base, a Model
+  named like a door answered by the control plane, a Budget read through
+  an escaped path, `<base>/v1/self` and the probes answered `not_found` by
+  the control plane, the doors, the documents and the build identity at
+  their own paths, a bare 404 at the root, the probes on the internal
+  listener, and the two start-up lines. The spec 034 tests are unchanged
+  apart from `mountAt`'s new argument.
+- Criteria 4 and 5: `TestReplacedControlPlaneShadowsNoOtherRoute`, which
+  reads the patterns the route table registered, `TestRoute`,
+  `TestServedDocumentUnderReplace` and `TestWellKnownUnderReplace` in
+  `internal/api`.
+- Criterion 6: `TestDiscoverReadsTheMount` in `client`.
+- Criterion 7: `TestCLIUnderReplacedBasePath` and
+  `TestTunnelUnderReplacedBasePath` in `cmd/luxd`, each run under both
+  values, and each failing with the discovery removed.
+- Criterion 8: `TestE2EConformanceUnderReplacedBasePath` in `test/e2e`, a
+  fourth step of the `conformance-twice` job.
+- Criteria 9 and 10: `TestCheckCommand` widened; `docs/configuration.md`
+  and `.env.example` regenerated; `docs/api.md` gained "Under a base
+  path"; spec 002's table carries the row.
+
+Divergences:
+
+- `Discover` sends nothing when `BaseURL` has no path and clears
+  `BaseReplacesV1`: at an installation's root the control plane is at
+  `/v1` under both values, because `replace` needs a base path. The `lux`
+  command and the tunnel agent therefore discover only for a URL with a
+  path, and their tests against a rooted server see no extra request.
+- The `lux` command returns a failed discovery as the command's error
+  rather than falling back to the rooted shape. A fallback turns a
+  transient failure against a `replace` installation into
+  `GET /v1/v1/... is not in the route table`, which names nothing the
+  caller did. The tunnel agent logs the failure and keeps the `/v1`
+  routes, so `Run` keeps returning only the errors it documents.
+- The conformance suite's per-request hold selected every URL under the
+  API base. Under `replace` the doors, the discovery document and
+  `/version` sit under that base, so the hold now selects control plane
+  routes alone, by the same set of first segments the collision guard
+  reads.

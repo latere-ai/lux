@@ -92,7 +92,7 @@ later.
 | [037](.archive/037-several-budgets-per-key.md) | Several Budgets per Key: a list of Budgets a Key draws on together, anchored windows, and a restart | large | complete | 003, 006, 007, 009, 010, 011, 018 |
 | [038](.archive/038-usage-retention.md) | Usage retention: hourly rows rolled up into monthly ones by rules on Key labels, an owner's rows redacted, and the request log partitioned by a Key label | large | complete | 006, 009, 010, 011, 012, 022 |
 | [039](.archive/039-disabled-models.md) | Disabled Models: a Model can be disabled, and a disabled Model is refused at call time | small | complete | 003, 004, 005, 011, 018, 036 |
-| [040](040-base-path-in-the-place-of-v1.md) | The base path in the place of /v1: one version segment in every address behind a shared origin | medium | in-progress | 011, 014, 018, 034 |
+| [040](.archive/040-base-path-in-the-place-of-v1.md) | The base path in the place of /v1: one version segment in every address behind a shared origin | medium | complete | 011, 014, 018, 034 |
 
 ## Dependency graph
 
