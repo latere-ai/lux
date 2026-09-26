@@ -274,7 +274,7 @@ func startLuxd(t *testing.T, env map[string]string) *gateway {
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		if m := listening.FindStringSubmatch(p.out.String()); m != nil {
-			return &gateway{process: p, public: "http://" + m[1], internal: "http://" + m[2]}
+			return &gateway{process: p, public: "http://" + m[1], internal: "http://" + m[2], api: "http://" + m[1] + "/v1"}
 		}
 		if p.exited() {
 			t.Fatalf("luxd exited before listening:\n%s%s", p.out.String(), p.errOut.String())
