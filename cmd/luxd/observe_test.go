@@ -19,6 +19,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+
+	pkgotel "latere.ai/x/pkg/otel"
 )
 
 // The request telemetry of the public listener: latere.ai/x/pkg/otel's
@@ -124,7 +126,9 @@ var callerKeys = []string{"client.address", "client.port", "network.peer.address
 // in any route, and exactly one SERVER span per request that carries no
 // caller address, named by the method and the route and carrying the
 // route as http.route, or named by the method alone and carrying no
-// http.route for a request no route answers.
+// http.route for a request no route answers. lux.request and lux.api
+// carry the same route as lux.route, and latere.ai/x/pkg/otel's
+// UnmatchedRoute where the SERVER span has none.
 func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 	const base = "/v1/models"
 	manifests := t.TempDir()
@@ -232,8 +236,13 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 
 			servers := map[trace.TraceID]int{}
 			gotSpans := map[string]int{}
+			serverRoutes := map[trace.TraceID]string{}
+			var planes []sdktrace.ReadOnlySpan
 			for _, s := range mem.spans.Ended() {
 				if s.SpanKind() != trace.SpanKindServer {
+					if s.Name() == "lux.request" || s.Name() == "lux.api" {
+						planes = append(planes, s)
+					}
 					continue
 				}
 				servers[s.SpanContext().TraceID()]++
@@ -250,6 +259,26 @@ func TestPublicListenerRecordsRequestMetrics(t *testing.T) {
 					}
 				}
 				gotSpans[serverSpanKey(s.Name(), route, hasRoute)]++
+				if !hasRoute {
+					route = pkgotel.UnmatchedRoute
+				}
+				serverRoutes[s.SpanContext().TraceID()] = route
+			}
+			// A plane's lux.route is the route the listener recorded, and
+			// the unmatched label where the listener recorded none.
+			for _, s := range planes {
+				var got string
+				for _, kv := range s.Attributes() {
+					if kv.Key == "lux.route" {
+						got = kv.Value.AsString()
+					}
+				}
+				if want, ok := serverRoutes[s.SpanContext().TraceID()]; !ok || got != want {
+					t.Errorf("%s carries lux.route %q, want %q, the route of its SERVER span", s.Name(), got, want)
+				}
+			}
+			if len(planes) == 0 {
+				t.Error("no lux.request or lux.api span")
 			}
 			if !maps.Equal(gotSpans, wantSpans) {
 				t.Errorf("SERVER spans by name and http.route:\n got %v\nwant %v", gotSpans, wantSpans)
