@@ -55,8 +55,16 @@ func TestCheckCommand(t *testing.T) {
 	if code := run(t.Context(), []string{"check"}, env(based), &out, &errOut); code != 0 {
 		t.Fatalf("exit %d under a base path:\n%s%s", code, out.String(), errOut.String())
 	}
-	if !strings.Contains(out.String(), "https://api.example.com/v1/models is absolute, the public listener answers under base path /v1/models") {
+	if !strings.Contains(out.String(), "https://api.example.com/v1/models is absolute, the public listener answers under base path /v1/models, and") {
 		t.Errorf("the public url line does not report the base path:\n%s", out.String())
+	}
+	based["LUX_BASE_PATH_MODE"] = "replace"
+	out.Reset()
+	if code := run(t.Context(), []string{"check"}, env(based), &out, &errOut); code != 0 {
+		t.Fatalf("exit %d under a base path in the place of /v1:\n%s%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String(), "https://api.example.com/v1/models is absolute, the public listener answers under base path /v1/models in the place of the control plane's /v1, and") {
+		t.Errorf("the public url line does not report the mode:\n%s", out.String())
 	}
 	inOrder := func(out string, names []string) {
 		t.Helper()

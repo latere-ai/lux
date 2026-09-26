@@ -344,6 +344,10 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// The control plane of spec 011: on the public listener in server
 	// mode, and on the internal listener alone in the file mode, where
 	// the public listener answers not_found under /v1.
+	// Under LUX_BASE_PATH_MODE=replace the base stands in the place of the
+	// control plane's /v1 (spec 040): the listener puts /v1 back, and the
+	// documents name the addresses a caller reaches.
+	replacesV1 := cfg.BasePathMode == config.BasePathReplace
 	control := api.New(api.Options{
 		Store:                 st,
 		Auth:                  identity,
@@ -351,6 +355,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		AuthorizeListItems:    cfg.AuthorizeListItems,
 		PublicURL:             cfg.PublicURL,
 		BasePath:              cfg.BasePath,
+		BaseReplacesV1:        replacesV1,
 		Version:               version.Version,
 		RequestsPerMinute:     cfg.RequestsPerMinute,
 		TrustedProxies:        cfg.TrustedProxies,
@@ -388,7 +393,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	// per-address bucket of spec 011, one instance so a refused
 	// credential on either plane draws from the same bucket.
 	planes := http.NewServeMux()
-	for _, d := range []string{"openai", "anthropic", "gemini", "lux"} {
+	for _, d := range doorNames {
 		planes.Handle("/"+d, doors)
 		planes.Handle("/"+d+"/", doors)
 	}
@@ -405,7 +410,11 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	if files == nil {
 		planes.Handle("/v1/", control)
-		_, _ = fmt.Fprintf(stdout, "luxd: control plane at %s/v1 on the public listener\n", cfg.PublicURL)
+		controlURL := cfg.PublicURL.String() + "/v1"
+		if replacesV1 {
+			controlURL = cfg.PublicURL.String()
+		}
+		_, _ = fmt.Fprintf(stdout, "luxd: control plane at %s on the public listener\n", controlURL)
 	} else {
 		planes.Handle("/v1/", control.Unmounted())
 		internal.Handle("/v1/", control)
@@ -437,12 +446,15 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	}
 	_, _ = fmt.Fprintf(stdout, "luxd: %s listening public=%s internal=%s\n",
 		version.Version, publicLn.Addr(), internalLn.Addr())
-	if cfg.BasePath != "" {
+	switch {
+	case replacesV1:
+		_, _ = fmt.Fprintf(stdout, "luxd: the public listener answers under %s, in the place of the control plane's /v1\n", cfg.BasePath)
+	case cfg.BasePath != "":
 		_, _ = fmt.Fprintf(stdout, "luxd: the public listener answers under %s\n", cfg.BasePath)
 	}
 
 	servers := []*http.Server{
-		{Handler: mountAt(cfg.BasePath, public), ReadHeaderTimeout: 10 * time.Second},
+		{Handler: mountAt(cfg.BasePath, replacesV1, public), ReadHeaderTimeout: 10 * time.Second},
 		{Handler: internal, ReadHeaderTimeout: 10 * time.Second},
 	}
 	if tun != nil {

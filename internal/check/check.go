@@ -368,6 +368,9 @@ func (r *run) publicURL(context.Context) Line {
 	if r.cfg.BasePath != "" {
 		mount = "base path " + r.cfg.BasePath
 	}
+	if r.cfg.BasePath != "" && r.cfg.BasePathMode == config.BasePathReplace {
+		mount += " in the place of the control plane's /v1"
+	}
 	return Line{OK, name, fmt.Sprintf("%s is absolute, the public listener answers under %s, and none of %d Provider(s) names its host", u, mount, len(r.providers))}
 }
 
