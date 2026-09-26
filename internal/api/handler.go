@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -333,6 +334,23 @@ func (h *Handler) routes() {
 func (h *Handler) handle(pattern string, handler http.Handler) {
 	h.patterns = append(h.patterns, pattern)
 	h.mux.Handle(pattern, handler)
+}
+
+// RouteTemplate is the pattern of spec 011's route table that r reaches,
+// such as /v1/keys/{name}, or "" when no route answers it: the catch-all,
+// and a path that is not clean, which ServeHTTP refuses before the mux.
+// ServeMux.Handler names the cleaned path itself for a path it would
+// redirect, so only a pattern this handler registered is returned, and
+// the value is bounded by the route table whatever the caller sent.
+func (h *Handler) RouteTemplate(r *http.Request) string {
+	if p := r.URL.Path; p != path.Clean(p) {
+		return ""
+	}
+	_, pattern := h.mux.Handler(r)
+	if pattern == "/" || !slices.Contains(h.patterns, pattern) {
+		return ""
+	}
+	return pattern
 }
 
 // route dispatches on the method and writes the refusal a handler
