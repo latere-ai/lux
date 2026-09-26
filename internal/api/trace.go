@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+
+	pkgotel "latere.ai/x/pkg/otel"
 )
 
 // This file is the control plane's half of spec 019's traces and logs:
@@ -81,16 +83,17 @@ func (c *call) outcome() (status, code string) {
 }
 
 // route is the template of the route the mux matched, spec 011's route
-// table, and empty for a request no route answered: the mux's catch-all
-// and a refusal before the mux are not routes. Only a pattern this
-// handler registered is a route: until the mux matched, c.r is the
-// request the handler was handed, which carries the pattern of a mux in
-// front of it, such as a listener's /v1/ mount.
+// table, and latere.ai/x/pkg/otel's UnmatchedRoute, "unmatched", for a
+// request no route answered, the label every service gives such a
+// request: the mux's catch-all and a refusal before the mux are not
+// routes. Only a pattern this handler registered is a route: until the
+// mux matched, c.r is the request the handler was handed, which carries
+// the pattern of a mux in front of it, such as a listener's /v1/ mount.
 func (c *call) route() string {
 	if p := c.r.Pattern; p != "/" && slices.Contains(c.h.patterns, p) {
 		return p
 	}
-	return ""
+	return pkgotel.UnmatchedRoute
 }
 
 // end writes the request's line inside its span, sets the span's

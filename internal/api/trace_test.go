@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"latere.ai/x/pkg/metrics"
+	pkgotel "latere.ai/x/pkg/otel"
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
@@ -60,7 +61,8 @@ var apiAttrKeys = []string{AttrRoute, AttrAction, AttrKind, AttrStatus, AttrCode
 // span per request, a child of the context the caller propagated, with
 // the authorizer's and the store's spans as its children, the attributes
 // exactly the table's, and no identity on any span; a request no route
-// answers is a span too, with the refusal's code and no route.
+// answers is a span too, with the refusal's code and the unmatched
+// route.
 func TestRequestSpans(t *testing.T) {
 	sr := recordSpans(t)
 	h := newHarness(t, func(o *Options) { o.Store = store.Instrument(o.Store, metrics.NewRegistry()) })
@@ -127,17 +129,18 @@ func TestRequestSpans(t *testing.T) {
 	if len(refused) != 1 {
 		t.Fatalf("%d lux.api spans for a refusal", len(refused))
 	}
-	if a := attrsOf(refused[0]); a[AttrStatus].AsString() != StatusRefused || a[AttrCode].AsString() != "not_found" || a[AttrRoute].AsString() != "" || a[AttrAction].AsString() != "" {
+	if a := attrsOf(refused[0]); a[AttrStatus].AsString() != StatusRefused || a[AttrCode].AsString() != "not_found" || a[AttrRoute].AsString() != pkgotel.UnmatchedRoute || a[AttrAction].AsString() != "" {
 		t.Errorf("refusal attributes %v", a)
 	}
 }
 
-// TestRouteIsATableRoute: lux.route and the line's route are a pattern
-// of the route table, and empty for a request no route answered: the
-// catch-all, a path refused before the route table, and the file mode's
-// public /v1. Behind a listener's /v1/ mount, whose mux sets its own
-// pattern on the request, that pattern is never the route.
-func TestRouteIsATableRoute(t *testing.T) {
+// TestRouteIsATableRouteOrUnmatched: lux.route and the line's route are
+// a pattern of the route table, or latere.ai/x/pkg/otel's
+// UnmatchedRoute for a request no route answered: the catch-all, a path
+// refused before the route table, and the file mode's public /v1.
+// Behind a listener's /v1/ mount, whose mux sets its own pattern on the
+// request, that pattern is never the route.
+func TestRouteIsATableRouteOrUnmatched(t *testing.T) {
 	sr := recordSpans(t)
 	h := newHarness(t, nil)
 	mounted := http.NewServeMux()
@@ -153,10 +156,10 @@ func TestRouteIsATableRoute(t *testing.T) {
 	}{
 		{"a route behind the mount", mounted, http.MethodGet, "/v1/self", "/v1/self"},
 		{"a route with a name behind the mount", mounted, http.MethodGet, "/v1/keys/nobody", "/v1/keys/{name}"},
-		{"the catch-all behind the mount", mounted, http.MethodGet, "/v1/nothing", ""},
-		{"the catch-all", h.h, http.MethodGet, "/v1/nothing", ""},
-		{"a path refused before the route table", h.h, http.MethodGet, "/v1//self", ""},
-		{"the file mode's public /v1 behind the mount", unmounted, http.MethodGet, "/v1/self", ""},
+		{"the catch-all behind the mount", mounted, http.MethodGet, "/v1/nothing", pkgotel.UnmatchedRoute},
+		{"the catch-all", h.h, http.MethodGet, "/v1/nothing", pkgotel.UnmatchedRoute},
+		{"a path refused before the route table", h.h, http.MethodGet, "/v1//self", pkgotel.UnmatchedRoute},
+		{"the file mode's public /v1 behind the mount", unmounted, http.MethodGet, "/v1/self", pkgotel.UnmatchedRoute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h.log.Reset()
@@ -292,7 +295,7 @@ func TestAPILineFields(t *testing.T) {
 	h.h.Unmounted().ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/v1/self", nil))
 	wantCode(t, rec2, CodeNotFound)
 	lines = requestLines(t, h.log.String())
-	if len(lines) != 1 || lines[0]["code"] != "not_found" || lines[0]["route"] != "" || lines[0]["subject"] != "" {
+	if len(lines) != 1 || lines[0]["code"] != "not_found" || lines[0]["route"] != pkgotel.UnmatchedRoute || lines[0]["subject"] != "" {
 		t.Errorf("unmounted produced %d lines: %v", len(lines), lines)
 	}
 }
