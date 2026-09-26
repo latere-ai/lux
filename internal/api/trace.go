@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -81,13 +82,15 @@ func (c *call) outcome() (status, code string) {
 
 // route is the template of the route the mux matched, spec 011's route
 // table, and empty for a request no route answered: the mux's catch-all
-// and a refusal before the mux are not routes.
+// and a refusal before the mux are not routes. Only a pattern this
+// handler registered is a route: until the mux matched, c.r is the
+// request the handler was handed, which carries the pattern of a mux in
+// front of it, such as a listener's /v1/ mount.
 func (c *call) route() string {
-	pattern := c.r.Pattern
-	if pattern == "/" {
-		return ""
+	if p := c.r.Pattern; p != "/" && slices.Contains(c.h.patterns, p) {
+		return p
 	}
-	return pattern
+	return ""
 }
 
 // end writes the request's line inside its span, sets the span's

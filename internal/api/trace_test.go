@@ -132,6 +132,55 @@ func TestRequestSpans(t *testing.T) {
 	}
 }
 
+// TestRouteIsATableRoute: lux.route and the line's route are a pattern
+// of the route table, and empty for a request no route answered: the
+// catch-all, a path refused before the route table, and the file mode's
+// public /v1. Behind a listener's /v1/ mount, whose mux sets its own
+// pattern on the request, that pattern is never the route.
+func TestRouteIsATableRoute(t *testing.T) {
+	sr := recordSpans(t)
+	h := newHarness(t, nil)
+	mounted := http.NewServeMux()
+	mounted.Handle("/v1/", h.h)
+	unmounted := http.NewServeMux()
+	unmounted.Handle("/v1/", h.h.Unmounted())
+	for _, tc := range []struct {
+		name    string
+		handler http.Handler
+		method  string
+		path    string
+		want    string
+	}{
+		{"a route behind the mount", mounted, http.MethodGet, "/v1/self", "/v1/self"},
+		{"a route with a name behind the mount", mounted, http.MethodGet, "/v1/keys/nobody", "/v1/keys/{name}"},
+		{"the catch-all behind the mount", mounted, http.MethodGet, "/v1/nothing", ""},
+		{"the catch-all", h.h, http.MethodGet, "/v1/nothing", ""},
+		{"a path refused before the route table", h.h, http.MethodGet, "/v1//self", ""},
+		{"the file mode's public /v1 behind the mount", unmounted, http.MethodGet, "/v1/self", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h.log.Reset()
+			sr.Reset()
+			r := httptest.NewRequest(tc.method, tc.path, nil)
+			r.Header.Set("Authorization", "Bearer "+h.alice)
+			tc.handler.ServeHTTP(httptest.NewRecorder(), r)
+			lines := requestLines(t, h.log.String())
+			if len(lines) != 1 || lines[0]["route"] != tc.want {
+				t.Errorf("request lines %v, want one with route %q", lines, tc.want)
+			}
+			var routes []string
+			for _, s := range sr.Ended() {
+				if s.Name() == SpanAPI {
+					routes = append(routes, attrsOf(s)[AttrRoute].AsString())
+				}
+			}
+			if !slices.Equal(routes, []string{tc.want}) {
+				t.Errorf("lux.api spans carry lux.route %q, want one with %q", routes, tc.want)
+			}
+		})
+	}
+}
+
 // controlLogFields is spec 019's field row for the control plane.
 var controlLogFields = []string{"request_id", "route", "action", "kind", "name", "status", "code", "subject", "duration_ms"}
 
