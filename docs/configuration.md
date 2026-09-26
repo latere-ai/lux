@@ -29,6 +29,7 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | `LUX_INTERNAL_ADDR` | Address the internal listener binds for the cluster's probes; must differ from `LUX_PUBLIC_ADDR` unless both ask for port 0. | `:8081` | No |
 | `LUX_PUBLIC_URL` | Absolute URL callers reach the public listener at; the base of every URL in a response and the loop check of resolve. | `none` | Yes |
 | `LUX_BASE_PATH` | Prefix the whole public listener answers under, such as `/v1/models` behind a shared origin; set, it equals the path of `LUX_PUBLIC_URL`. | `unset` | No |
+| `LUX_BASE_PATH_MODE` | How the routes sit under `LUX_BASE_PATH`: `prefix` appends every route whole, so the control plane is at `<base>/v1`; `replace` puts the base in the place of the control plane's `/v1`, so it is at `<base>`, while the doors, `/.well-known/lux` and `/version` stay at the base plus their own path and the probes answer on the internal listener alone. `replace` needs `LUX_BASE_PATH`. | `prefix` | No |
 
 ## Identity
 

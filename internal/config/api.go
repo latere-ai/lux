@@ -44,6 +44,7 @@ func (c *Config) loadAPI(getenv Getenv) []string {
 	var problems []string
 	c.PublicURL, problems = publicURL(getenv("LUX_PUBLIC_URL"), problems)
 	c.BasePath, problems = basePath(getenv("LUX_BASE_PATH"), problems)
+	c.BasePathMode, problems = basePathMode(getenv("LUX_BASE_PATH_MODE"), problems)
 	c.RequestsPerMinute, problems = countOr("LUX_REQUESTS_PER_MINUTE", getenv("LUX_REQUESTS_PER_MINUTE"), DefaultRequestsPerMinute, problems)
 	c.UnauthenticatedRequestsPerMinute, problems = countOr("LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE", getenv("LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE"), DefaultUnauthenticatedRequestsPerMinute, problems)
 	c.TrustedProxies, problems = prefixes("LUX_TRUSTED_PROXIES", getenv("LUX_TRUSTED_PROXIES"), problems)
@@ -90,6 +91,33 @@ func basePath(raw string, problems []string) (string, []string) {
 		return "", append(problems, "LUX_BASE_PATH is "+strconv.Quote(raw)+", not a clean path that begins with a slash and ends without one, such as /v1/models")
 	}
 	return raw, problems
+}
+
+// The two mounts of LUX_BASE_PATH_MODE (spec 040).
+const (
+	// BasePathPrefix is spec 034's mount and the default: every route of
+	// the public listener answers under the base with its own path
+	// appended, so the control plane is at <base>/v1.
+	BasePathPrefix = "prefix"
+	// BasePathReplace puts the base in the place of the control plane's
+	// /v1, so /v1/keys answers at <base>/keys and every public address
+	// carries one version segment; every other route answers at the base
+	// plus its own path, and the probes are the internal listener's alone.
+	BasePathReplace = "replace"
+)
+
+// basePathMode reads LUX_BASE_PATH_MODE: blank is BasePathPrefix, so an
+// installation that upgrades keeps the addresses it served; any value
+// other than the two is a problem, because a typo would otherwise pick a
+// mount silently.
+func basePathMode(raw string, problems []string) (string, []string) {
+	switch raw = strings.TrimSpace(raw); raw {
+	case "":
+		return BasePathPrefix, problems
+	case BasePathPrefix, BasePathReplace:
+		return raw, problems
+	}
+	return BasePathPrefix, append(problems, "LUX_BASE_PATH_MODE is "+strconv.Quote(raw)+", not "+BasePathPrefix+" or "+BasePathReplace)
 }
 
 // countOr reads a whole number of zero or more, or def when blank.

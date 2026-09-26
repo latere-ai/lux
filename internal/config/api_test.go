@@ -156,6 +156,49 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
+// TestBasePathModeRules is spec 040's LUX_BASE_PATH_MODE at load: unset
+// is prefix, the two values are read as written, another value is a
+// problem naming the variable, and replace without a base path is a
+// problem naming both variables.
+func TestBasePathModeRules(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mode   string
+		base   string
+		public string
+		want   string // the loaded mode
+		fail   string // a fragment of the problem, or "" for a configuration that loads
+	}{
+		{"unset at the root", "", "", "https://lux.example.com", BasePathPrefix, ""},
+		{"unset under a base", "", "/v1/models", "https://api.example.com/v1/models", BasePathPrefix, ""},
+		{"blank", "  ", "/v1/models", "https://api.example.com/v1/models", BasePathPrefix, ""},
+		{"prefix", "prefix", "/v1/models", "https://api.example.com/v1/models", BasePathPrefix, ""},
+		{"prefix at the root", "prefix", "", "https://lux.example.com", BasePathPrefix, ""},
+		{"replace", "replace", "/v1/models", "https://api.example.com/v1/models", BasePathReplace, ""},
+		{"replace with surrounding space", " replace ", "/v1/models", "https://api.example.com/v1/models", BasePathReplace, ""},
+		{"replace without a base", "replace", "", "https://lux.example.com", "", "LUX_BASE_PATH_MODE is replace and LUX_BASE_PATH is unset"},
+		{"replace beside a public path without a base", "replace", "", "https://api.example.com/v1/models", "", "LUX_BASE_PATH_MODE is replace and LUX_BASE_PATH is unset"},
+		{"another value", "Replace", "/v1/models", "https://api.example.com/v1/models", "", `LUX_BASE_PATH_MODE is "Replace", not prefix or replace`},
+		{"a boolean", "true", "/v1/models", "https://api.example.com/v1/models", "", `LUX_BASE_PATH_MODE is "true"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Load(env(withKEK(map[string]string{"LUX_OIDC_ISSUERS": issuer, "LUX_PUBLIC_URL": tc.public, "LUX_BASE_PATH": tc.base, "LUX_BASE_PATH_MODE": tc.mode})))
+			if tc.fail != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.fail) {
+					t.Fatalf("Load() = %v, want a problem with %q", err, tc.fail)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if c.BasePathMode != tc.want {
+				t.Fatalf("BasePathMode = %q, want %q", c.BasePathMode, tc.want)
+			}
+		})
+	}
+}
+
 // TestBasePathRules is spec 034's LUX_BASE_PATH at load: empty is the
 // root; a set value begins with a slash, ends without one, is clean,
 // carries no query, fragment, or escape, and equals the path of

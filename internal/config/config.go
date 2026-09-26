@@ -159,6 +159,11 @@ type Config struct {
 	// PublicURL, so the routing rule in front, the mount, and every
 	// advertised URL carry one literal.
 	BasePath string
+	// BasePathMode is LUX_BASE_PATH_MODE, how the routes sit under
+	// BasePath: BasePathPrefix appends every route whole, BasePathReplace
+	// puts the base in the place of the control plane's /v1. It is
+	// BasePathPrefix when unset, and BasePathReplace needs a BasePath.
+	BasePathMode string
 	// RequestsPerMinute is the control plane rate per subject per
 	// replica, which an authorizer's limits.requests_per_minute overrides
 	// for that subject; 0 is no limit.
@@ -303,6 +308,12 @@ func Load(getenv Getenv) (Config, error) {
 	// The rule reads both loaders' results, so it runs after both.
 	if c.BasePath != "" && c.PublicURL != nil && c.PublicURL.Path != c.BasePath {
 		problems = append(problems, "LUX_BASE_PATH is "+c.BasePath+" and the path of LUX_PUBLIC_URL is "+strconv.Quote(c.PublicURL.Path)+"; the listener's prefix and the advertised address are one prefix")
+	}
+	// With no base there is nothing to stand in the place of /v1, and a
+	// replace that silently served the root would advertise addresses the
+	// operator did not ask for.
+	if c.BasePathMode == BasePathReplace && c.BasePath == "" {
+		problems = append(problems, "LUX_BASE_PATH_MODE is "+BasePathReplace+" and LUX_BASE_PATH is unset; the mode puts the base path in the place of /v1, so it needs one")
 	}
 	// The local issuer's name is the public address, so a listed issuer
 	// carrying that name could sign subjects the local issuer owns. The

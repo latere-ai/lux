@@ -72,6 +72,12 @@ var referenceGroups = []referenceGroup{
 			def:      "unset",
 			required: "No",
 		},
+		{
+			name:     "LUX_BASE_PATH_MODE",
+			meaning:  "How the routes sit under `LUX_BASE_PATH`: `prefix` appends every route whole, so the control plane is at `<base>/v1`; `replace` puts the base in the place of the control plane's `/v1`, so it is at `<base>`, while the doors, `/.well-known/lux` and `/version` stay at the base plus their own path and the probes answer on the internal listener alone. `replace` needs `LUX_BASE_PATH`.",
+			def:      "prefix",
+			required: "No",
+		},
 	}},
 	{title: "Identity", vars: []referenceVar{
 		{
