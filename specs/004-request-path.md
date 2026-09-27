@@ -87,12 +87,12 @@ what the gateway does with each path. Three route classes:
 | `/lux` | `POST /v1/count_tokens` | served by the gateway: the lux body is decoded and forwarded to an `anthropic` target's count route re-encoded, or answered from the estimate below | body `model` |
 | `/lux` | `GET /v1/models`, `GET /v1/models/{model}` | served by the gateway | path |
 
-A path under a door that is not under the dialect's version prefix, a
-method the table does not list for a translated or model route, and
-anything outside the four doors is `not_found`, 404, in the door's
-envelope; a path under no door has no dialect and is answered in the
-`/lux` door's shape. The record of a model list or read carries the
-route class `served`, the fourth value beside the three above, because
+A path under a door that is not under the dialect's version prefix,
+and a method the table does not list for a translated or model route,
+are `not_found`, 404, in the door's envelope; a path outside the four
+doors is `door_not_found`, 404, whose sentence names them, and having no
+dialect it is answered in the `/lux` door's shape. The record of a
+model list or read carries the route class `served`, the fourth value beside the three above, because
 the gateway answered it and no provider did. `GET /v1/models` on a door
 lists the Models whose names match
 one of the Key's selectors now and whose `status.available` is true,
@@ -462,6 +462,7 @@ is the developer detail, truncated.
 | Code | Status | When |
 |---|---|---|
 | `not_found` | 404 | a path or method not in the route table |
+| `door_not_found` | 404 | a path under none of the four doors |
 | `body_too_large` | 413 | the body exceeds `LUX_MAX_BODY_BYTES` |
 | `unauthenticated` | 401 | no credential, or a credential whose hash names no Key |
 | `key_disabled` | 403 | `spec.disabled` |
@@ -596,7 +597,7 @@ tunnel that makes a local runtime a Provider ([[013-tunneled-runtimes]]).
 
 | Criterion | Test that proves it | State |
 |---|---|---|
-| Every row of the route table dispatches to its class and reads the model from where the table says; every path outside the table is `not_found` in the door's envelope | `TestRouteTable`, table-driven over every row and ten off-table paths | passing |
+| Every row of the route table dispatches to its class and reads the model from where the table says; every path outside the table is `not_found` in the door's envelope, and one under no door is `door_not_found` in the `/lux` door's shape | `TestRouteTable`, table-driven over every row and ten off-table paths | passing |
 | A request through the `/openai` door to an `openai` target with equal names arrives at the stub provider byte-identical, with only the credential, `Host`, `User-Agent`, `Lux-Request-Id`, and the hop-by-hop and `Accept-Encoding` headers changed | `TestSameDialectSameBytes` | passing |
 | A request through the `/anthropic` door to an `openai` target is translated, a field the target cannot represent appears in `Lux-Loss` and in the record, the header is absent when nothing was lost, and the outbound request carries `anthropic-version` when the target is `anthropic` | `TestTranslationReportsLoss`, `TestNoLossNoHeader`, `TestAnthropicVersionInjected` | passing |
 | A `gemini` door to a non-gemini target and a model route across dialects are `dialect_unsupported`; a `lux` door reaches every dialect | `TestDialectBridging`, table-driven over the door and target matrix | passing |

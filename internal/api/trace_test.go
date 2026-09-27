@@ -119,7 +119,7 @@ func TestRequestSpans(t *testing.T) {
 
 	sr.Reset()
 	rec = h.request(http.MethodGet, "/v1/nothing", "")
-	wantCode(t, rec, CodeNotFound)
+	wantCode(t, rec, CodeDoorNotFound)
 	var refused []sdktrace.ReadOnlySpan
 	for _, s := range sr.Ended() {
 		if s.Name() == SpanAPI {
@@ -129,7 +129,7 @@ func TestRequestSpans(t *testing.T) {
 	if len(refused) != 1 {
 		t.Fatalf("%d lux.api spans for a refusal", len(refused))
 	}
-	if a := attrsOf(refused[0]); a[AttrStatus].AsString() != StatusRefused || a[AttrCode].AsString() != "not_found" || a[AttrRoute].AsString() != pkgotel.UnmatchedRoute || a[AttrAction].AsString() != "" {
+	if a := attrsOf(refused[0]); a[AttrStatus].AsString() != StatusRefused || a[AttrCode].AsString() != "door_not_found" || a[AttrRoute].AsString() != pkgotel.UnmatchedRoute || a[AttrAction].AsString() != "" {
 		t.Errorf("refusal attributes %v", a)
 	}
 }

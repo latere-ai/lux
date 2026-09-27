@@ -86,14 +86,14 @@ func door(path string) (v1.Dialect, string) {
 }
 
 // match reads the door table for one method and path: the route, or a
-// not_found failure carrying the door for the envelope. A path under a
-// door that is not under the dialect's version prefix, a method the table
-// does not list for a translated or model route, and anything outside
-// the four doors is not_found.
+// failure carrying the door for the envelope. A path under a door that
+// is not under the dialect's version prefix, and a method the table does
+// not list for a translated or model route, are not_found; a path
+// outside the four doors is door_not_found, whose sentence names them.
 func match(method, path string) (route, *failure) {
 	d, rest := door(path)
 	if d == "" {
-		return route{}, fail(CodeNotFound, "the path is under none of the doors /openai, /anthropic, /gemini, /lux")
+		return route{}, fail(CodeDoorNotFound, method+" "+path+" is under none of the doors")
 	}
 	rt := route{door: d, rest: rest}
 	switch d {

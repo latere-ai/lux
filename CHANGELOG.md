@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+- A request to a path no route answers and no door holds, such as `POST
+  /v1/messages` at the root or `POST /v1/models/v1/messages` under the
+  base `/v1/models`, which is what an SDK sends when its base URL leaves
+  the door out, is refused with the new code `door_not_found`, 404,
+  whose message names the doors `/openai`, `/anthropic`, `/gemini`, and
+  `/lux`, where it was `not_found` with "There is no such object.". The
+  envelope, the status, and the detail naming the path are unchanged; a
+  client that matched `not_found` for such a path matches
+  `door_not_found` now. A path under a door that its route table does
+  not list is still `not_found`, and so is any unrouted path on the file
+  mode's internal listener.
 - The example catalog in `deploy/catalog` gives 63 of its 94 Models
   their `contextWindow`, `maxOutputTokens` and `modalities.input`, taken
   from OpenRouter's public model list on 2026-09-27; the README says how

@@ -116,10 +116,14 @@ func TestRouteTable(t *testing.T) {
 	}
 	for _, row := range offTable {
 		rec := w.do(w.request(row.method, row.path, `{"model":"gpt"}`))
-		if code := errorCode(t, rec); code != CodeNotFound {
-			t.Errorf("%s %s: %s, want not_found", row.method, row.path, code)
+		want := CodeNotFound
+		if row.door == "" {
+			want = CodeDoorNotFound
 		}
-		checkEnvelope(t, row.door, rec, CodeNotFound)
+		if code := errorCode(t, rec); code != want {
+			t.Errorf("%s %s: %s, want %s", row.method, row.path, code, want)
+		}
+		checkEnvelope(t, row.door, rec, want)
 	}
 }
 

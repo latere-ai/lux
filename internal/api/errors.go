@@ -51,6 +51,7 @@ const (
 	CodeModelUnpriced         Code = "model_unpriced"
 	CodeNotFound              Code = "not_found"
 	CodeModelNotFound         Code = "model_not_found"
+	CodeDoorNotFound          Code = "door_not_found"
 	CodeReadOnly              Code = "read_only"
 	CodeAlreadyExists         Code = "already_exists"
 	CodeConflict              Code = "conflict"
@@ -108,6 +109,7 @@ var table = map[Code]Row{
 	CodeModelUnpriced:         {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
 	CodeNotFound:              {http.StatusNotFound, "There is no such object."},
 	CodeModelNotFound:         {http.StatusNotFound, "There is no model of that name."},
+	CodeDoorNotFound:          {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
 	CodeReadOnly:              {http.StatusMethodNotAllowed, "This server reads its manifests from a directory and cannot change them."},
 	CodeAlreadyExists:         {http.StatusConflict, "An object of this kind already has that name."},
 	CodeKeyFenced:             {http.StatusConflict, "This key name is permanently closed to credential changes."},
@@ -136,7 +138,7 @@ var codes = []Code{
 	CodeMissingField, CodeInvalidField, CodeReservedPrefix, CodeExclusiveFields, CodeDuplicateTarget,
 	CodeInvalidRequest, CodeUpstreamRejected, CodeDialectUnsupported, CodeProviderRequired, CodeCurrencyMismatch,
 	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeRouteNotAllowed, CodeModelNotAllowed,
-	CodeModelDisabled, CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
+	CodeModelDisabled, CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeDoorNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
 	CodeImmutableField, CodeBudgetInUse, CodeProviderInUse, CodeBodyTooLarge, CodeUnsupportedMediaType,
 	CodeCeilingExceeded, CodeRateLimited, CodeSpendExceeded, CodeBudgetExhausted, CodeInternal, CodeUpstreamError,
 	CodeAuthorizerUnavailable, CodeStoreUnavailable, CodeProviderUnavailable, CodeUpstreamTimeout,

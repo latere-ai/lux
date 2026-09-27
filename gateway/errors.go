@@ -31,6 +31,7 @@ const (
 	CodeRouteNotAllowed     Code = "route_not_allowed"
 	CodeInvalidRequest      Code = "invalid_request"
 	CodeModelNotFound       Code = "model_not_found"
+	CodeDoorNotFound        Code = "door_not_found"
 	CodeModelNotAllowed     Code = "model_not_allowed"
 	CodeModelDisabled       Code = "model_disabled"
 	CodeProviderUnavailable Code = "provider_unavailable"
@@ -70,6 +71,7 @@ var table = map[Code]codeRow{
 	CodeRouteNotAllowed:     {http.StatusForbidden, "This key may not use this route."},
 	CodeInvalidRequest:      {http.StatusBadRequest, "The request body is not valid for this request."},
 	CodeModelNotFound:       {http.StatusNotFound, "There is no model of that name."},
+	CodeDoorNotFound:        {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
 	CodeModelNotAllowed:     {http.StatusForbidden, "This key may not use that model."},
 	CodeModelDisabled:       {http.StatusForbidden, "This model is disabled."},
 	CodeProviderUnavailable: {http.StatusServiceUnavailable, "No provider for this model is available right now."},
@@ -90,7 +92,7 @@ var table = map[Code]codeRow{
 func Codes() []Code {
 	return []Code{
 		CodeNotFound, CodeBodyTooLarge, CodeUnauthenticated, CodeKeyDisabled,
-		CodeKeyExpired, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound,
+		CodeKeyExpired, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound, CodeDoorNotFound,
 		CodeModelNotAllowed, CodeModelDisabled, CodeProviderUnavailable, CodeDialectUnsupported,
 		CodeProviderRequired, CodeRateLimited, CodeModelUnpriced, CodeCurrencyMismatch,
 		CodeSpendExceeded, CodeBudgetExhausted, CodeUpstreamRejected, CodeUpstreamError,

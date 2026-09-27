@@ -1843,6 +1843,7 @@ components:
               - model_unpriced
               - not_found
               - model_not_found
+              - door_not_found
               - read_only
               - already_exists
               - key_fenced
@@ -2256,6 +2257,9 @@ x-lux-errors:
 - code: model_not_found
   status: 404
   message: There is no model of that name.
+- code: door_not_found
+  status: 404
+  message: This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux.
 - code: read_only
   status: 405
   message: This server reads its manifests from a directory and cannot change them.

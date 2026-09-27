@@ -65,6 +65,7 @@ const (
 	codeUnauthenticated       = "unauthenticated"
 	codeForbidden             = "forbidden"
 	codeNotFound              = "not_found"
+	codeDoorNotFound          = "door_not_found"
 	codeInvalidField          = "invalid_field"
 	codeAlreadyExists         = "already_exists"
 	codeConflict              = "conflict"
@@ -100,7 +101,7 @@ var codeStatus = map[string]int{
 	"malformed_body": 400, "multi_document": 400, "unsupported_version": 400, "unsupported_kind": 400,
 	"unknown_field": 400, "missing_field": 400, "invalid_field": 400, "reserved_prefix": 400,
 	"exclusive_fields": 400, "duplicate_target": 400, "invalid_request": 400, "currency_mismatch": 400,
-	"unauthenticated": 401, "forbidden": 403, "not_found": 404, "read_only": 405,
+	"unauthenticated": 401, "forbidden": 403, "not_found": 404, "door_not_found": 404, "read_only": 405,
 	"already_exists": 409, "conflict": 409, "immutable_field": 409, "budget_in_use": 409, "provider_in_use": 409,
 	"body_too_large": 413, "unsupported_media_type": 415, "ceiling_exceeded": 422, "rate_limited": 429,
 	"internal": 500, "authorizer_unavailable": 503, "store_unavailable": 503,
@@ -122,6 +123,7 @@ var codeMessage = map[string]string{
 	"unauthenticated":        "This request needs a valid credential.",
 	"forbidden":              "You do not have permission to do this.",
 	"not_found":              "There is no such object.",
+	"door_not_found":         "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux.",
 	"read_only":              "This server reads its manifests from a directory and cannot change them.",
 	"already_exists":         "An object of this kind already has that name.",
 	"conflict":               "The object changed since you read it; read it again and retry.",
@@ -232,7 +234,14 @@ func (p *Plane) control() http.Handler {
 	mux.Handle("/v1/self", p.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
 	mux.Handle("/v1/openapi.json", p.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
 	mux.Handle("/.well-known/lux", p.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
-	mux.Handle("/", p.route(nil))
+	// A clean path no route answers is most often a model request sent
+	// under no door, so the answer names the doors, as Lux's own control
+	// plane does.
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := callOf(r)
+		c.r = r
+		c.fail(refuse(codeDoorNotFound, r.Method+" "+r.URL.Path+" is not in the route table"))
+	}))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := p.begin(w, r)
 		// A path the mux would redirect is no route of the table, so it

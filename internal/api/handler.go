@@ -327,7 +327,23 @@ func (h *Handler) routes() {
 	h.handle("/v1/self", h.route(map[string]handlerFunc{http.MethodGet: (*call).self}))
 	h.handle("/v1/openapi.json", h.route(map[string]handlerFunc{http.MethodGet: (*call).openAPI}))
 	h.handle("/.well-known/lux", h.route(map[string]handlerFunc{http.MethodGet: (*call).wellKnown}))
-	h.handle("/", h.route(nil))
+	h.handle("/", http.HandlerFunc(h.noRoute))
+}
+
+// noRoute answers a path no route of the table answers. Beside the doors
+// on the public listener such a path is most often a model request sent
+// under no door, an SDK whose base URL leaves the door out, so the
+// answer is door_not_found, whose sentence names the doors. The file
+// mode serves this handler on the internal listener alone, where there
+// are no doors, and its answer is not_found.
+func (h *Handler) noRoute(w http.ResponseWriter, r *http.Request) {
+	c := callOf(r)
+	c.r = r
+	code := CodeDoorNotFound
+	if h.fileMode() {
+		code = CodeNotFound
+	}
+	c.fail(refuse(code, r.Method+" "+r.URL.Path+" is not in the route table"))
 }
 
 // handle registers one route and records its pattern.

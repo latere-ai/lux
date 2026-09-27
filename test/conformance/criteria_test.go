@@ -74,6 +74,7 @@ var covered = map[string]string{
 	"TestUpstreamBodyIsDetailOnly":                  "case004UpstreamError",
 	"TestUpstreamStatusMapping":                     "case004UpstreamError",
 	// 011
+	"TestNoRouteNamesTheDoors":                      "case011NoRouteNamesTheDoors",
 	"TestAddressByIdOrName":                         "case011AddressByIdOrName",
 	"TestApplyIsByNameOnly":                         "case011AddressByIdOrName",
 	"TestApplyIsCreateThenUpdate":                   "case011ApplyIsCreateThenUpdate",

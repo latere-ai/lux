@@ -87,8 +87,12 @@ func TestMatch(t *testing.T) {
 			t.Errorf("%s %s: matched %+v, want not_found", row.method, row.path, rt)
 			continue
 		}
-		if f.code != CodeNotFound {
-			t.Errorf("%s %s: code %s", row.method, row.path, f.code)
+		want := CodeNotFound
+		if row.door == "" {
+			want = CodeDoorNotFound
+		}
+		if f.code != want {
+			t.Errorf("%s %s: code %s, want %s", row.method, row.path, f.code, want)
 		}
 		if d, _ := door(row.path); d != row.door {
 			t.Errorf("%s %s: door %q, want %q", row.method, row.path, d, row.door)

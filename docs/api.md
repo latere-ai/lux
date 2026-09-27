@@ -68,6 +68,10 @@ door, so an existing SDK points at it unchanged.
 `GET /{door}/v1/models` is that dialect's own model list, distinct from
 `/v1/models`, which is the `Model` kind in manifest shape.
 
+A request that names no door, such as `POST /v1/messages` from an SDK
+whose base URL left the door out, is refused with `door_not_found`, 404,
+and its message names the four doors.
+
 ## Under a base path
 
 An installation that shares an origin with other services answers under

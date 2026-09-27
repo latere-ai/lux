@@ -23,6 +23,7 @@ import (
 var apiCases = []testCase{
 	{group: "api", name: "case011WellKnown", spec: 11, fn: case011WellKnown},
 	{group: "api", name: "case011NoCORS", spec: 11, fn: case011NoCORS},
+	{group: "api", name: "case011NoRouteNamesTheDoors", spec: 11, mode: serverMode, fn: case011NoRouteNamesTheDoors},
 	{group: "api", name: "case011ListReads", spec: 11, bearer: true, fn: case011ListReads},
 	{group: "api", name: "case011Self", spec: 11, bearer: true, fn: case011Self},
 	{group: "api", name: "case011Envelope", spec: 11, bearer: true, fn: case011Envelope},
@@ -119,6 +120,19 @@ func case011NoCORS(t testing.TB, c *client) {
 	known := c.request(t, http.MethodGet, c.cfg.URL+"/.well-known/lux", nil)
 	if known.Header.Get("Access-Control-Allow-Origin") != "" {
 		t.Error("/.well-known/lux answers with Access-Control-Allow-Origin")
+	}
+}
+
+// case011NoRouteNamesTheDoors: a model request sent under the control
+// plane's address instead of a door, as an SDK whose base URL left the
+// door out sends it, is door_not_found, 404, and its sentence names the
+// four doors.
+func case011NoRouteNamesTheDoors(t testing.TB, c *client) {
+	e := c.expect(t, c.v1(t, http.MethodPost, "/messages", map[string]any{"model": c.name("claude")}), "door_not_found")
+	for _, door := range []string{"/openai", "/anthropic", "/gemini", "/lux"} {
+		if !strings.Contains(e.message, door) {
+			t.Errorf("the sentence %q does not name %s", e.message, door)
+		}
 	}
 }
 

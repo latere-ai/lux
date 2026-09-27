@@ -162,12 +162,15 @@ func TestBasePathReplaceMovesTheControlPlane(t *testing.T) {
 		{"a Model named like a door", "/models/openai/gpt-5", true, http.StatusNotFound, envelope, "not_found"},
 		{"usage", "/usage", true, http.StatusOK, `"items"`, ""},
 		{"requests", "/requests", true, http.StatusOK, `"items"`, ""},
-		// The doubled address of spec 034 is not an alias.
-		{"the prefix address", "/v1/self", true, http.StatusNotFound, envelope + "GET /v1/v1/self is not in the route table", "not_found"},
+		// The doubled address of spec 034 is not an alias, and a path no
+		// route answers names the doors.
+		{"the prefix address", "/v1/self", true, http.StatusNotFound, envelope + "GET /v1/v1/self is not in the route table", "door_not_found"},
+		// A model request whose base URL left the door out.
+		{"a model request under no door", "/v1/messages", false, http.StatusNotFound, "/openai, /anthropic, /gemini, and /lux", "door_not_found"},
 		// The probes are the internal listener's: under the base they are
 		// paths the control plane does not route.
-		{"livez", "/livez", true, http.StatusNotFound, envelope + "GET /v1/livez is not in the route table", "not_found"},
-		{"readyz", "/readyz", true, http.StatusNotFound, envelope + "GET /v1/readyz is not in the route table", "not_found"},
+		{"livez", "/livez", true, http.StatusNotFound, envelope + "GET /v1/livez is not in the route table", "door_not_found"},
+		{"readyz", "/readyz", true, http.StatusNotFound, envelope + "GET /v1/readyz is not in the route table", "door_not_found"},
 	} {
 		t.Run(rt.name, func(t *testing.T) {
 			var headers []string

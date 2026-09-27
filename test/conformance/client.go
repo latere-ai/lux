@@ -45,7 +45,7 @@ var statuses = map[string]int{
 	"dialect_unsupported": 400, "provider_required": 400, "currency_mismatch": 400,
 	"unauthenticated": 401, "forbidden": 403, "key_disabled": 403, "key_expired": 403,
 	"route_not_allowed": 403, "model_not_allowed": 403, "model_disabled": 403, "model_unpriced": 403,
-	"not_found": 404, "model_not_found": 404, "read_only": 405,
+	"not_found": 404, "model_not_found": 404, "door_not_found": 404, "read_only": 405,
 	"already_exists": 409, "conflict": 409, "immutable_field": 409, "budget_in_use": 409, "provider_in_use": 409,
 	"body_too_large": 413, "unsupported_media_type": 415, "ceiling_exceeded": 422,
 	"rate_limited": 429, "spend_exceeded": 429, "budget_exhausted": 429,

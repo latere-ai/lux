@@ -181,6 +181,33 @@ func TestRouteTableActions(t *testing.T) {
 	}
 }
 
+// TestNoRouteNamesTheDoors: a clean path no route answers, such as a
+// model request whose base URL left the door out, is door_not_found in
+// the envelope with the path in the detail and the doors in the
+// message, whatever its method and without a bearer; the file mode's
+// internal listener, which has no doors, answers not_found.
+func TestNoRouteNamesTheDoors(t *testing.T) {
+	h := newHarness(t, nil)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/messages"}, {http.MethodPost, "/v1/v1/chat/completions"}, {http.MethodGet, "/v1/nothing"}, {http.MethodGet, "/v1"},
+	} {
+		rec := h.request(tc.method, tc.path, `{"model":"gpt-5"}`, "Authorization", "")
+		d := wantCode(t, rec, CodeDoorNotFound)
+		if !strings.Contains(d["detail"].(string), tc.method+" "+tc.path) {
+			t.Errorf("%s %s: detail %v", tc.method, tc.path, d["detail"])
+		}
+	}
+	for _, door := range []string{"/openai", "/anthropic", "/gemini", "/lux"} {
+		if !strings.Contains(CodeDoorNotFound.Message(), door) {
+			t.Errorf("the sentence %q does not name %s", CodeDoorNotFound.Message(), door)
+		}
+	}
+	files, _ := fileModeHarness(t)
+	rec := httptest.NewRecorder()
+	files.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader("{}")))
+	wantCode(t, rec, CodeNotFound)
+}
+
 // TestNoPatch: PATCH and OPTIONS on every route are not_found in the
 // envelope, never the mux's own 405.
 func TestNoPatch(t *testing.T) {
