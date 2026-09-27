@@ -134,3 +134,9 @@ func hash(seed byte) string {
 
 // lapse is the TTL the lease and tunnel cases wait past.
 const lapse = 60 * time.Millisecond
+
+// hold is the TTL a case gives a lease that must stay held across several
+// round-trips. A lapse-long TTL there races the store: on a loaded runner
+// two round-trips take longer than a lapse, the row expires between them,
+// and a check that the lease is still held fails.
+const hold = time.Minute

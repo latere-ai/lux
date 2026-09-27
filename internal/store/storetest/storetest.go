@@ -759,23 +759,28 @@ func noneWindowIsNeverPruned(t *testing.T, s store.Store) {
 
 func leases(t *testing.T, s store.Store) {
 	ctx := t.Context()
-	held, err := s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", lapse)
+	held, err := s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", hold)
 	noErr(t, err, "Acquire a")
 	truth(t, held, "a acquires a free lease")
-	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", lapse)
+	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", hold)
 	noErr(t, err, "Acquire b")
 	truth(t, !held, "b does not acquire a held lease")
-	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", lapse)
+	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", hold)
 	noErr(t, err, "Acquire a again")
 	truth(t, held, "the holder renews")
-	held, err = s.Leases().Acquire(ctx, store.LeaseHealth, "replica-b", lapse)
+	held, err = s.Leases().Acquire(ctx, store.LeaseHealth, "replica-b", hold)
 	noErr(t, err, "Acquire another lease")
 	truth(t, held, "another name is another lease")
 	noErr(t, s.Leases().Release(ctx, store.LeaseDiscovery, "replica-b"), "Release by a non-holder")
-	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", lapse)
+	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-b", hold)
 	noErr(t, err, "Acquire b after a non-holder's Release")
 	truth(t, !held, "a non-holder's Release changed nothing")
 
+	// The holder's renewal sets the TTL it names, so a renews with a lapse
+	// and the lease is let run out.
+	held, err = s.Leases().Acquire(ctx, store.LeaseDiscovery, "replica-a", lapse)
+	noErr(t, err, "Renew a with a lapse")
+	truth(t, held, "the holder renews with a shorter ttl")
 	time.Sleep(2 * lapse)
 	// b takes the lapsed lease with a long TTL, so the next check, that a
 	// is no longer the holder and cannot take it, does not race b's own
