@@ -81,7 +81,7 @@ specs of this repository only.
 
 ```go
 b, err := bridge.Open(from, to ir.Dialect, bridge.Options{
-	DefaultMaxTokens:       int64, // Model.spec.maxOutputTokens, 0 for the codec's 4096
+	DefaultMaxTokens:       int64, // 4096, or Model.spec.maxOutputTokens when lower, as [[004-request-path]] says
 	DropSampling:           bool,  // false, as [[004-request-path]] says
 	UseMaxCompletionTokens: bool,  // OpenAIReasoningFamily(upstream name)
 })
@@ -236,8 +236,9 @@ was added to the bridge for this, and
    `testdata`. The door-level tests are not touched: the four decode
    shapes `handler_test.go` reads a body back through move to
    `shapes_test.go`, a test helper, and `TestCodecOptionsFollowTheModel`
-   holds the Model's `maxOutputTokens` to the codec's `max_tokens`
-   through the handler in place of the unit test over the pair.
+   holds the codec's `max_tokens` to the default and the Model's
+   `maxOutputTokens` through the handler in place of the unit test over
+   the pair.
 
 Each commit leaves the tree green. Nothing is kept behind a flag and no
 forwarding function is left at an old name: the deleted code is deleted

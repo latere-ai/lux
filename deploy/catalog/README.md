@@ -31,11 +31,10 @@ matched by its target as it stands. The other 31 have no entry of that
 name and carry no figure, which the gateway reads as unknown, never as
 zero.
 
-`maxOutputTokens` is also the `max_tokens` a request translated to an
-`anthropic` target is sent with when the caller names none, in place of
-4096, so a Claude Model here allows its whole output on such a request.
-Lower it, or delete it, where the vendor's output rate limit is counted
-against `max_tokens` and that matters to you.
+`maxOutputTokens` is the model's output limit and a ceiling, not a
+default: a request translated to an `anthropic` target that names no
+`max_tokens` is sent 4096, or the Model's `maxOutputTokens` when that is
+lower.
 
 ## Using it
 

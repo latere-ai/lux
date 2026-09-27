@@ -104,18 +104,29 @@ func targetDialect(d v1.Dialect, upstream string) ir.Dialect {
 	return ""
 }
 
+// defaultMaxTokens is the max_tokens a request translated to a dialect
+// that requires one, the Messages API, is sent with when the caller
+// named none. It is a default of the translation and not a figure of
+// the model: a Model's maxOutputTokens only lowers it, so declaring a
+// model's whole output limit does not make every such request ask for
+// that much, which the upstream would count against its output rate
+// limit.
+const defaultMaxTokens = 4096
+
 // bridgeFor opens the codec pair one translated attempt runs through,
-// with the options spec 004's table sets: DefaultMaxTokens is the
-// Model's maxOutputTokens when set and the codec's 4096 otherwise;
+// with the options spec 004's table sets: DefaultMaxTokens is
+// defaultMaxTokens, or the Model's maxOutputTokens when that is lower;
 // DropSampling is false, because the gateway carries no table of which
 // models refuse a sampling parameter; UseMaxCompletionTokens follows the
 // reasoning family predicate. A pair the bridge cannot open is a bug,
 // because bridgeable refused the target first; it is answered through
 // bridgeFailure rather than a panic.
 func (c *call) bridgeFor(ctx context.Context, t Target) (*bridge.Bridge, *failure) {
-	var maxTokens int64
+	maxTokens := int64(defaultMaxTokens)
 	if c.model != nil {
-		maxTokens = int64(c.model.Spec.MaxOutputTokens)
+		if limit := int64(c.model.Spec.MaxOutputTokens); limit > 0 && limit < maxTokens {
+			maxTokens = limit
+		}
 	}
 	b, err := bridge.Open(doorDialect(c.route.op), targetDialect(t.Provider.Spec.Dialect, t.Model), bridge.Options{
 		DefaultMaxTokens:       maxTokens,

@@ -61,23 +61,26 @@ func TestDialectsPerRouteAndTarget(t *testing.T) {
 }
 
 // TestCodecOptionsFollowTheModel: the codec options are this package's,
-// computed per target as spec 004's table says. A Model's
-// maxOutputTokens is the anthropic codec's max_tokens when the caller
-// sent none, and a Model without one leaves the codec's 4096.
+// computed per target as spec 004's table says. A request that names no
+// max_tokens reaches an anthropic target with the default of 4096,
+// whether the Model declares no maxOutputTokens or one far above it; a
+// Model's maxOutputTokens below the default is sent in its place.
 func TestCodecOptionsFollowTheModel(t *testing.T) {
 	w := newWorld(t)
 	w.model("capped", target("ant", "claude-3")).Spec.MaxOutputTokens = 256
-	w.anthropic.respondJSON(200, anthropicResponse)
-	if rec := w.post("/openai/v1/chat/completions", chatBody("capped", false)); rec.Code != 200 {
-		t.Fatalf("%d %s", rec.Code, rec.Body.String())
-	}
-	if got := string(w.anthropic.last(t).Body); !strings.Contains(got, `"max_tokens":256`) {
-		t.Errorf("the Model's maxOutputTokens is not the codec's default: %s", got)
-	}
-	w.anthropic.respondJSON(200, anthropicResponse)
-	w.post("/openai/v1/chat/completions", chatBody("claude", false))
-	if got := string(w.anthropic.last(t).Body); !strings.Contains(got, `"max_tokens":4096`) {
-		t.Errorf("no maxOutputTokens does not fall back to the codec's 4096: %s", got)
+	w.model("roomy", target("ant", "claude-3")).Spec.MaxOutputTokens = 128000
+	for model, want := range map[string]string{
+		"capped": `"max_tokens":256`,
+		"roomy":  `"max_tokens":4096`,
+		"claude": `"max_tokens":4096`,
+	} {
+		w.anthropic.respondJSON(200, anthropicResponse)
+		if rec := w.post("/openai/v1/chat/completions", chatBody(model, false)); rec.Code != 200 {
+			t.Fatalf("%s: %d %s", model, rec.Code, rec.Body.String())
+		}
+		if got := string(w.anthropic.last(t).Body); !strings.Contains(got, want) {
+			t.Errorf("%s: sent %s, want %s", model, got, want)
+		}
 	}
 }
 

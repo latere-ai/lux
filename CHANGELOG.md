@@ -20,11 +20,14 @@ refused before it is pushed.
 - The example catalog in `deploy/catalog` gives 63 of its 94 Models
   their `contextWindow`, `maxOutputTokens` and `modalities.input`, taken
   from OpenRouter's public model list on 2026-09-27; the README says how
-  a Model is matched there. A Claude Model's `maxOutputTokens` is also
-  the `max_tokens` a translated request that names none is sent with, so
-  such a request to an `anthropic` target now asks for the model's whole
-  output where it asked for 4096; lower or delete the figure to keep the
-  old default.
+  a Model is matched there.
+- A request translated to an `anthropic` target that names no
+  `max_tokens` is sent 4096, or the Model's `maxOutputTokens` when that
+  is lower. It was sent the Model's `maxOutputTokens` whenever one was
+  set, so declaring a model's whole output limit made every such request
+  ask for all of it, which the upstream counts against its output rate
+  limit. `maxOutputTokens` is now a ceiling on the default and the model
+  list's figure; a caller that wants more names `max_tokens`.
 - For a request no route answers, the `route` field of the `lux.request`
   and `lux.api` log lines and the `lux.route` span attribute are now
   `unmatched`, the value `latere.ai/x/pkg/otel` defines as

@@ -383,9 +383,11 @@ because there is no codec, and the table above says so.
 
 The codecs take options, and each is set from the manifest where it has
 a member and from a constant otherwise: `anthropic.BackendOptions.
-DefaultMaxTokens` is `Model.spec.maxOutputTokens` when set and the
-codec's `4096` otherwise, because the Messages API requires
-`max_tokens`; `anthropic.BackendOptions.DropSampling` is `false`, so a
+DefaultMaxTokens` is `4096`, or `Model.spec.maxOutputTokens` when that
+is lower, because the Messages API requires `max_tokens` and a request
+that names none should not ask for the model's whole output, which the
+upstream counts against its output rate limit: the Model's limit is a
+ceiling on the default, never the default; `anthropic.BackendOptions.DropSampling` is `false`, so a
 sampling parameter reaches an upstream that rejects it and comes back
 as `upstream_rejected`, since the gateway carries no table of which
 models do; `openaichat.BackendOptions.UseMaxCompletionTokens` is
