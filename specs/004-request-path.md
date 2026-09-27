@@ -126,11 +126,11 @@ beside them otherwise, which OpenAI's and Anthropic's clients ignore:
 | `/openai` | `context_window` | `max_output_tokens` | `input_modalities` | `pricing`: `{"currency", "per": 1000000, "input", "output", "cached_input", "cache_write"}` |
 | `/anthropic` | `max_input_tokens` | `max_tokens` | `input_modalities` | `pricing`, as on `/openai` |
 | `/gemini` | `inputTokenLimit` | `outputTokenLimit` | none | none: Google's model object has no price member |
-| `/lux` | `contextWindow` | `maxOutputTokens` | `modalities`: `{"input"}` | `pricing`: `{"currency", "per": 1000000, "input", "output", "cachedInput", "cacheWrite"}` |
+| `/lux` | `context_window` | `max_output_tokens` | `input_modalities` | `pricing`, as on `/openai` |
 
-The `/lux` door names them as the `Model` kind does
-([[003-manifest-contract]]), because the lux dialect is the gateway's
-own. The shapes are the bridge's, as every list shape is
+The `/lux` door's entry is the `/openai` door's, figures included, in
+the snake case the lux dialect's JSON uses everywhere else. The shapes
+are the bridge's, as every list shape is
 ([[021-translation-through-llmdialect]]): `bridge.Model` carries the
 figures and renders them per wire, and the gateway fills them from the
 Model.
