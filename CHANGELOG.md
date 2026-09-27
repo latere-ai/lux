@@ -41,8 +41,26 @@ refused before it is pushed.
   write the internal listener refuses as `read_only`, report `unmatched`
   as their route, where they reported `/v1/`, the pattern of the
   listener's mount.
-- `latere.ai/x/pkg` v0.87.0. The public listener's `http.route` values
-  and server span names are unchanged.
+- `latere.ai/x/pkg` v0.89.0. The public listener's `http.route` values
+  and server span names are unchanged. Through the translation it
+  brings, a reasoning model served over OpenAI Responses keeps its
+  reasoning across turns:
+  - On `/openai`'s `POST /v1/responses`, `include:
+    ["reasoning.encrypted_content"]` is honored: a Responses target is
+    asked for it with `store: false`, the reasoning items it returns
+    reach the caller as they came, in the body and in the stream, and
+    the ones the caller sends back are replayed to the target byte for
+    byte. Toward an `anthropic` or `openai` Chat target such an item is
+    dropped and `Lux-Loss` names `opaque` where it named `reasoning`,
+    and the include is `reasoning_replay` on a Chat target where it was
+    `include`. In the stream, a reasoning item's
+    `response.output_item.done` is written when the next event arrives.
+  - On `/lux`, a request with `reasoning_replay: true` asks a Responses
+    target for the same, and each reasoning item comes back as a block
+    `{"type": "opaque", "opaque": {"dialect", "kind", "raw"}}`; sent back
+    in a later request, the block is replayed to a Responses target as
+    it came and dropped toward any other target with `opaque` in
+    `Lux-Loss`. A caller that never asks sees no such block.
 
 ## v0.10.0 - 2026-09-27
 
