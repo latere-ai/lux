@@ -14,3 +14,7 @@ spec:
     per: 1000000
     input: "3"
     output: "15"
+  modalities:
+    input: [text, image, file]
+  contextWindow: 200000
+  maxOutputTokens: 64000

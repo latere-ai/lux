@@ -15,3 +15,7 @@ spec:
     input: "1.25"
     output: "10"
     cachedInput: "0.125"
+  modalities:
+    input: [text, image, file]
+  contextWindow: 400000
+  maxOutputTokens: 128000

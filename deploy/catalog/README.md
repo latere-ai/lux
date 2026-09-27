@@ -15,6 +15,28 @@ these files current is your installation's job: the gateway charges what
 a Model's `spec.pricing` says and fetches no price from anywhere. Edit a
 file and start the gateway again, and that one Model is updated.
 
+## The windows and input modalities are a snapshot too
+
+63 of the Models also carry `spec.contextWindow`, `spec.maxOutputTokens`
+and `spec.modalities.input`, taken on 2026-09-27 from OpenRouter's
+public model list (`https://openrouter.ai/api/v1/models`): its
+`context_length`, `top_provider.max_completion_tokens` and
+`architecture.input_modalities`. A Model is matched by its target's
+upstream name under the vendor's OpenRouter prefix (`openai`,
+`anthropic`, `google` for `gemini`, `moonshotai` for `moonshot`, `x-ai`
+for `xai`, `z-ai` for `zhipu`), with an Anthropic version written with a
+dot where the vendor writes a hyphen (`claude-opus-4-1` is
+`anthropic/claude-opus-4.1`); a Model of the `openrouter` Provider is
+matched by its target as it stands. The other 31 have no entry of that
+name and carry no figure, which the gateway reads as unknown, never as
+zero.
+
+`maxOutputTokens` is also the `max_tokens` a request translated to an
+`anthropic` target is sent with when the caller names none, in place of
+4096, so a Claude Model here allows its whole output on such a request.
+Lower it, or delete it, where the vendor's output rate limit is counted
+against `max_tokens` and that matters to you.
+
 ## Using it
 
 1. Export the key of each vendor you hold:

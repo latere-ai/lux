@@ -14,3 +14,7 @@ spec:
     per: 1000000
     input: "10"
     output: "30"
+  modalities:
+    input: [text]
+  contextWindow: 8191
+  maxOutputTokens: 4096

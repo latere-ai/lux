@@ -15,3 +15,7 @@ spec:
     input: "1.2"
     output: "4"
     cachedInput: "0.24"
+  modalities:
+    input: [text]
+  contextWindow: 202752
+  maxOutputTokens: 131072
