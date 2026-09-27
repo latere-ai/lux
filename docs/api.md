@@ -66,7 +66,20 @@ door, so an existing SDK points at it unchanged.
 | Lux | `/lux/v1` |
 
 `GET /{door}/v1/models` is that dialect's own model list, distinct from
-`/v1/models`, which is the `Model` kind in manifest shape.
+`/v1/models`, which is the `Model` kind in manifest shape. Each entry
+also carries the figures its Model declares, so a client can size its
+context and its spend from the list: the context window, the output
+limit, the input modalities, and the prices per 1,000,000 tokens as
+decimal strings. A figure the Model does not declare is left out.
+
+| Door | Window | Output limit | Input modalities | Prices |
+|---|---|---|---|---|
+| `/openai`, `/lux` | `context_window` | `max_output_tokens` | `input_modalities` | `pricing.input`, `.output`, `.cached_input`, `.cache_write` |
+| `/anthropic` | `max_input_tokens` | `max_tokens` | `input_modalities` | as on `/openai` |
+| `/gemini` | `inputTokenLimit` | `outputTokenLimit` | not listed | not listed |
+
+Every `pricing` object also names its `currency` and `per`, which is
+always `1000000`.
 
 A request that names no door, such as `POST /v1/messages` from an SDK
 whose base URL left the door out, is refused with `door_not_found`, 404,

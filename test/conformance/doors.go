@@ -4,6 +4,7 @@
 package conformance
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -25,6 +26,7 @@ var doorsCases = []testCase{
 	{group: "doors", name: "case004RouteTable", spec: 4, bearer: true, key: true, fn: case004RouteTable},
 	{group: "doors", name: "case004ErrorEnvelopePerDialect", spec: 4, bearer: true, key: true, fn: case004ErrorEnvelopePerDialect},
 	{group: "doors", name: "case004ModelsListIsTheKeysView", spec: 4, bearer: true, key: true, fn: case004ModelsListIsTheKeysView},
+	{group: "doors", name: "case004ModelFigures", spec: 4, bearer: true, key: true, fn: case004ModelFigures},
 	{group: "doors", name: "case004DialectBridging", spec: 4, bearer: true, key: true, fn: case004DialectBridging},
 	{group: "doors", name: "case004CredentialForms", spec: 4, bearer: true, key: true, fn: case004CredentialForms},
 	{group: "doors", name: "case004CountTokens", spec: 4, bearer: true, key: true, fn: case004CountTokens},
@@ -286,6 +288,49 @@ func case004ModelsListIsTheKeysView(t testing.TB, c *client) {
 	}
 	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodGet, "/v1/models/"+c.name("claude"), nil, value), "model_not_allowed")
 	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("claude"), false), value), "model_not_allowed")
+}
+
+// case004ModelFigures: a Model's window, output limit, input modalities,
+// and prices reach each door's read in that door's members, a price per
+// 1,000,000 tokens whatever count the manifest quotes it per, and the
+// cached input and cache write prices at the input price they default
+// to.
+func case004ModelFigures(t testing.TB, c *client) {
+	spec := c.modelSpec(map[string]any{"currency": "USD", "per": 1000, "input": "0.00125", "output": "0.01"},
+		[2]string{c.well.Dialects[0], "stub-figures"})
+	spec["contextWindow"], spec["maxOutputTokens"] = 400000, 128000
+	spec["modalities"] = map[string]any{"input": []string{"text", "image"}}
+	m := c.object(t, v1.KindModel, "figures", spec)
+	defer c.mustDelete(t, v1.KindModel, str(m, "status.id"))
+	snake := map[string]string{"input_modalities": "[text image]", "pricing.currency": "USD", "pricing.per": "1e+06",
+		"pricing.input": "1.25", "pricing.output": "10", "pricing.cached_input": "1.25", "pricing.cache_write": "1.25"}
+	with := func(limits map[string]string) map[string]string {
+		out := map[string]string{}
+		maps.Copy(out, snake)
+		maps.Copy(out, limits)
+		return out
+	}
+	want := map[string]map[string]string{
+		"openai":    with(map[string]string{"context_window": "400000", "max_output_tokens": "128000"}),
+		"anthropic": with(map[string]string{"max_input_tokens": "400000", "max_tokens": "128000"}),
+		"gemini":    {"inputTokenLimit": "400000", "outputTokenLimit": "128000"},
+		"lux":       with(map[string]string{"context_window": "400000", "max_output_tokens": "128000"}),
+	}
+	for _, d := range c.well.Dialects {
+		c.eventually(t, modelsListTimeout, d+" door reads the Model's figures", func() (bool, string) {
+			resp := c.door(t, d, http.MethodGet, modelsPath(d)+"/"+c.name("figures"), nil, c.key.value)
+			if resp.Status != http.StatusOK {
+				return false, sprintf("the read answers %d %s", resp.Status, excerpt(resp.Body))
+			}
+			body := resp.json(t)
+			for path, v := range want[d] {
+				if got := sprintf("%v", field(body, path)); got != v {
+					return false, sprintf("%s is %s, want %s, in %s", path, got, v, excerpt(resp.Body))
+				}
+			}
+			return true, ""
+		})
+	}
 }
 
 // case004DialectBridging: a gemini door to a non-gemini target and a

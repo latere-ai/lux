@@ -56,6 +56,8 @@ var covered = map[string]string{
 	"TestIncludeUsageInjected":                      "case004Streaming",
 	"TestInvalidRequestBodies":                      "case004RouteTable",
 	"TestKeyExtractionOrder":                        "case004CredentialForms",
+	"TestModelFiguresOmitted":                       "case004ModelFigures",
+	"TestModelFiguresPerDoor":                       "case004ModelFigures",
 	"TestModelNameRewrite":                          "case004ModelNameRewrite",
 	"TestModelsListIsTheKeysView":                   "case004ModelsListIsTheKeysView",
 	"TestModelsListShapes":                          "case004ModelsListIsTheKeysView",
@@ -126,6 +128,7 @@ var unreachable = map[string]string{
 	"TestClientDisconnectCancelsUpstream": "the cancellation is measured in process within 100 ms of the disconnect",
 	"TestHotPathDialsNoWebhook":           "the stub issuer's and authorizer's recorders are read across a process boundary by spec 015's tier",
 	"TestNoRetryAfterFirstByte":           "a stream that fails after its first byte is spec 015's fail-stream-mid stub, not built",
+	"TestPerMillion":                      "a price at the largest money the kind admits and a per the kind refuses are staged in process",
 	"TestRefusalOrder":                    "two refusals holding at once are staged in process against fakes",
 	"TestStreamErrorFramePerDoor":         "a stream that fails after its first byte is spec 015's fail-stream-mid stub, not built",
 	// 011

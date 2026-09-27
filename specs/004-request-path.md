@@ -106,7 +106,7 @@ shape, exactly:
 | `/anthropic` | `{"data": [{"type": "model", "id": "<name>", "display_name": "<name>", "created_at": "1970-01-01T00:00:00Z"}], "has_more": false, "first_id": "<first>", "last_id": "<last>"}` |
 | `/gemini` | `{"models": [{"name": "models/<name>", "displayName": "<name>", "supportedGenerationMethods": ["generateContent", "countTokens"]}]}` |
 
-Each entry is to carry the figures the Model has, after the members
+Each entry also carries the figures the Model has, after the members
 above, so a client can size its context and account its spend from the
 list instead of a table of its own. The context window is listed as the
 input window, as Anthropic's `max_input_tokens` is; the output limit is
@@ -637,7 +637,7 @@ tunnel that makes a local runtime a Provider ([[013-tunneled-runtimes]]).
 | The last attempt's `400`, `404`, and `422` are `upstream_rejected`; its `401`, `403`, `302`, and `529` are `upstream_error`; a refused connection is `provider_unavailable`; a timeout is `upstream_timeout`; each carries the upstream status and body excerpt in `Lux-Error-Detail` and never in the body | `TestUpstreamStatusMapping`, table-driven | passing |
 | A count-tokens request toward an `anthropic` target is forwarded and its answer relayed; toward an `openai` target and on the `/lux` door it is answered from the estimate with `Lux-Estimated: true`, the stub provider sees nothing, and the record says `ok` with zero tokens | `TestCountTokensEmulation` | passing |
 | `GET /v1/models` on each door renders the list shape in the table byte-exactly for a fixed catalog | `TestModelsListShapes`, golden files per door | passing |
-| The model list and the read on each door carry a Model's window, output limit, input modalities, and prices per 1,000,000 tokens in the members of the figures table, and leave out a figure the Model does not have and a discovered Model's modalities | the bridge's per-wire entry cases in `latere.ai/x/pkg`, and a door case over a Model with every figure | not started: `bridge.Model` carries no figure in the `latere.ai/x/pkg` this tree builds on |
+| The model list and the read on each door carry a Model's window, output limit, input modalities, and prices per 1,000,000 tokens in the members of the figures table, a price quoted per 1 or per 1,000 tokens moved to a million exactly, and leave out a figure the Model does not have, a discovered Model's modalities, and the prices of a `per` that does not divide a million by a power of ten | `TestModelFiguresPerDoor`, `TestModelFiguresOmitted`, `TestPerMillion`, `TestModelsListShapes` | passing, on `latere.ai/x/pkg` v0.89.0's `bridge.Model` |
 | A streamed `/openai` chat completion toward an `openai` target carries `stream_options.include_usage: true` upstream and the usage chunk reaches the caller; a non-streamed one is byte-identical; the record's tokens are the chunk's | `TestIncludeUsageInjected` | passing |
 | An upstream `text/html` response reaches the caller as `application/octet-stream`, and every door response carries `X-Content-Type-Options: nosniff` | `TestNoHTMLIsEverServed` | passing |
 | Each stage's refusal fires with its code and status before the stub provider sees a request, and in the pipeline's order when two conditions hold at once | `TestRefusalOrder`, table-driven over every code | passing |

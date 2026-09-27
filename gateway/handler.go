@@ -433,23 +433,20 @@ const modelOwner = "lux"
 
 // listModels answers GET /v1/models: the Models whose names match one of
 // the Key's selectors, whose status.available is true, and that are not
-// disabled, sorted, in the door's list shape; never forwarded.
+// disabled, sorted, in the door's list shape with each Model's figures;
+// never forwarded.
 func (c *call) listModels(ctx context.Context) *failure {
 	models, err := c.h.o.Catalog.Models(ctx)
 	if err != nil {
 		return fail(CodeStoreUnavailable, "Model list: "+err.Error())
 	}
-	var names []string
+	var entries []bridge.Model
 	for _, m := range models {
 		if m.Status.Available != nil && *m.Status.Available && !m.Spec.Disabled && allowed(c.key, m.Metadata.Name) {
-			names = append(names, m.Metadata.Name)
+			entries = append(entries, modelEntry(m))
 		}
 	}
-	slices.Sort(names)
-	entries := make([]bridge.Model, 0, len(names))
-	for _, n := range names {
-		entries = append(entries, bridge.Model{Name: n, OwnedBy: modelOwner})
-	}
+	slices.SortFunc(entries, func(a, b bridge.Model) int { return strings.Compare(a.Name, b.Name) })
 	c.writeJSON(http.StatusOK, bridge.ModelList(wireOf(c.door), entries))
 	return nil
 }
@@ -462,7 +459,7 @@ func (c *call) readModel(ctx context.Context) *failure {
 	if f != nil {
 		return f
 	}
-	c.writeJSON(http.StatusOK, bridge.ModelEntry(wireOf(c.door), bridge.Model{Name: m.Metadata.Name, OwnedBy: modelOwner}))
+	c.writeJSON(http.StatusOK, bridge.ModelEntry(wireOf(c.door), modelEntry(m)))
 	return nil
 }
 

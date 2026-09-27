@@ -6,6 +6,21 @@ refused before it is pushed.
 
 ## Unreleased
 
+- Every door's model list and model read carry the figures a Model
+  declares, after the members the dialect's clients already read, so a
+  client can size its context and account its spend from the gateway
+  instead of a table of its own: the context window, the output limit,
+  the input modalities, and the four prices per 1,000,000 tokens as
+  decimal strings with their `currency` and `per`. `/openai` and `/lux`
+  name them `context_window`, `max_output_tokens`, `input_modalities`
+  and `pricing` (`input`, `output`, `cached_input`, `cache_write`);
+  `/anthropic` uses Anthropic's own `max_input_tokens` and `max_tokens`
+  beside the same `input_modalities` and `pricing`; `/gemini` uses
+  Google's own `inputTokenLimit` and `outputTokenLimit` and lists no
+  price. A price the manifest quotes per 1 or per 1,000 tokens is listed
+  per 1,000,000. A figure the Model does not declare is left out, and so
+  are a discovered Model's modalities, which are the kind's default; an
+  entry without figures is unchanged byte for byte.
 - A request to a path no route answers and no door holds, such as `POST
   /v1/messages` at the root or `POST /v1/models/v1/messages` under the
   base `/v1/models`, which is what an SDK sends when its base URL leaves
