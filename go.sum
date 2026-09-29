@@ -144,7 +144,5 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 latere.ai/x/ci-gate v0.50.2 h1:C+Tm8Q+AQp4cPc1RiFiu4BPqvQNxW3ADutLevMN8XzI=
 latere.ai/x/ci-gate v0.50.2/go.mod h1:kg1CjxG++fy21VRkwTQSzW4JgGwjOFSeisERzZfarWo=
-latere.ai/x/pkg v0.87.0 h1:H0QIeU66c5o0YNQclkEvl1Xsr0yyv/U6SMCbl7wlG1Y=
-latere.ai/x/pkg v0.87.0/go.mod h1:Pmf8j9JQsD/76hizUdPIxiuRaknhX7GbwHd10ULadyw=
 latere.ai/x/pkg v0.89.0 h1:/5/G7rMCC9t7EK1m5cCk08rfHJb1AcfegcphmpaGWyU=
 latere.ai/x/pkg v0.89.0/go.mod h1:L4Z/J7iyc6tY79/sphRmmbtA9/RKZt1Dc08lMa/ETso=
