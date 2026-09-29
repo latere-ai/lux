@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.11.0 - 2026-09-29
+
 - Every door's model list and model read carry the figures a Model
   declares, after the members the dialect's clients already read, so a
   client can size its context and account its spend from the gateway
