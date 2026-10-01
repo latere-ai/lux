@@ -179,6 +179,19 @@ func (c *call) usageQuery(ctx context.Context, records bool) (usageQuery, *Error
 	if err != nil {
 		return q, err
 	}
+	// A cursor carries the range its first page resolved, so an end the
+	// caller leaves open is that range's and not the clock's; a cursor
+	// that does not decode is left to the source, which refuses it.
+	if q.cursor != "" {
+		if from, to, ok := store.QueryCursorWindow(q.cursor); ok {
+			if q.q.From.IsZero() {
+				q.q.From = from
+			}
+			if q.q.To.IsZero() {
+				q.q.To = to
+			}
+		}
+	}
 	q.q.Query = q.q.WithDefaults(c.h.o.Now())
 	if verr := q.q.Validate(); verr != nil {
 		return q, usageError(verr)

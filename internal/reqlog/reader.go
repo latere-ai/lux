@@ -6,9 +6,6 @@ package reqlog
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -217,62 +214,28 @@ func hourOf(prefix, key string) (time.Time, error) {
 }
 
 // encodeCursor renders the cursor that resumes q at line of key: the
-// store's cursor shape, kind archive, the digest of the query, the key,
-// and the line.
+// store's query cursor of kind archive, its position the line and the
+// key, last so a '|' in a prefix stays in it.
 func encodeCursor(q metering.RecordQuery, key string, line int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(CursorKind + "|" + digest(q) + "|" + key + "|" + strconv.Itoa(line)))
+	return store.EncodeQueryCursor(CursorKind, q, strconv.Itoa(line)+"|"+key)
 }
 
 // decodeCursor checks cursor against q and returns the key and line to
 // resume from; a cursor that does not decode or is over another kind or
 // query is store.ErrInvalidCursor with the detail.
 func decodeCursor(cursor string, q metering.RecordQuery) (key string, line int, err error) {
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	raw, err := store.DecodeQueryCursor(cursor, CursorKind, q)
 	if err != nil {
-		return "", 0, fmt.Errorf("%w: not base64url: %w", store.ErrInvalidCursor, err)
+		return "", 0, err
 	}
-	parts := strings.SplitN(string(raw), "|", 4)
-	if len(parts) != 4 {
-		return "", 0, fmt.Errorf("%w: %d fields, want kind, query, key, and line", store.ErrInvalidCursor, len(parts))
+	n, key, ok := strings.Cut(raw, "|")
+	if !ok {
+		return "", 0, fmt.Errorf("%w: position %q is not a line and a key", store.ErrInvalidCursor, raw)
 	}
-	if parts[0] != CursorKind {
-		return "", 0, fmt.Errorf("%w: cursor is over %s, the request over %s", store.ErrInvalidCursor, parts[0], CursorKind)
+	if line, err = strconv.Atoi(n); err != nil || line < 0 {
+		return "", 0, fmt.Errorf("%w: line %q is not a count", store.ErrInvalidCursor, n)
 	}
-	if parts[1] != digest(q) {
-		return "", 0, fmt.Errorf("%w: cursor query %s, the request's %s", store.ErrInvalidCursor, parts[1], digest(q))
-	}
-	if line, err = strconv.Atoi(parts[3]); err != nil || line < 0 {
-		return "", 0, fmt.Errorf("%w: line %q is not a count", store.ErrInvalidCursor, parts[3])
-	}
-	return parts[2], line, nil
-}
-
-// digest is the 8 hex characters of SHA-256 over the query's canonical
-// JSON, the store's spelling: members in a fixed order, lists sorted,
-// labels by sorted key.
-func digest(q metering.RecordQuery) string {
-	sorted := func(s []string) []string {
-		out := slices.Clone(s)
-		slices.Sort(out)
-		return out
-	}
-	data, err := json.Marshal(struct {
-		From      time.Time         `json:"from"`
-		To        time.Time         `json:"to"`
-		Keys      []string          `json:"keys,omitempty"`
-		Models    []string          `json:"models,omitempty"`
-		Providers []string          `json:"providers,omitempty"`
-		Owners    []string          `json:"owners,omitempty"`
-		Labels    map[string]string `json:"labels,omitempty"`
-		Status    metering.Status   `json:"status,omitempty"`
-		Error     string            `json:"error,omitempty"`
-		Stream    *bool             `json:"stream,omitempty"`
-	}{q.From.UTC(), q.To.UTC(), sorted(q.Keys), sorted(q.Models), sorted(q.Providers), sorted(q.Owners), q.Labels, q.Status, q.Error, q.Stream})
-	if err != nil {
-		panic("reqlog: a RecordQuery of strings and times does not encode: " + err.Error())
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:4])
+	return key, line, nil
 }
 
 // The seam: the reader is what internal/api switches to for the archive

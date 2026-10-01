@@ -4,7 +4,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +18,9 @@ import (
 
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/authz/stub"
+	"latere.ai/x/pkg/s3/s3test"
 
+	"latere.ai/x/lux/internal/reqlog"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
@@ -503,6 +507,100 @@ func TestRequestsArchiveSource(t *testing.T) {
 	if len(archive.asked) != 1 || archive.asked[0].Limit != 2 {
 		t.Errorf("the archive was asked %v", archive.asked)
 	}
+}
+
+// TestRequestsCursorKeepsItsRange: a cursor carries the range its first
+// page resolved, so over the ring and over the archive a query that
+// leaves to open pages to its end while the clock moves between pages,
+// as one with to on every page does, and the cursor alone resumes it;
+// a cursor sent with another filter, another from, or another to is
+// invalid_field at cursor. Spec 041's rows 1 and 2.
+func TestRequestsCursorKeepsItsRange(t *testing.T) {
+	for name, setup := range map[string]func(*testing.T) *harness{
+		"memory":  func(t *testing.T) *harness { return newUsageHarness(t).harness },
+		"archive": newArchiveHarness,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := setup(t)
+			const from = "from=2026-09-14T10:00:00Z"
+			all := ids(t, h.request(http.MethodGet, "/v1/requests?"+from+"&limit=1000", ""))
+			if len(all) != 4 {
+				t.Fatalf("the unpaged answer: %v", all)
+			}
+			for _, query := range []string{from, from + "&to=2026-09-14T12:30:00Z"} {
+				if got := followRequests(t, h, "/v1/requests?"+query+"&limit=1"); !reflect.DeepEqual(got, all) {
+					t.Errorf("%s: paged %v, unpaged %v", query, got, all)
+				}
+			}
+
+			rec := h.request(http.MethodGet, "/v1/requests?"+from+"&limit=1", "")
+			next, _ := body(t, rec)["next_cursor"].(string)
+			h.advance(time.Minute)
+			rest := ids(t, h.request(http.MethodGet, "/v1/requests?cursor="+url.QueryEscape(next), ""))
+			if got := append(ids(t, rec), rest...); !reflect.DeepEqual(got, all) {
+				t.Errorf("the cursor alone: %v, unpaged %v", got, all)
+			}
+
+			first, _ := body(t, h.request(http.MethodGet, "/v1/requests?"+from+"&status=ok&limit=1", ""))["next_cursor"].(string)
+			if first == "" {
+				t.Fatal("no cursor to carry over")
+			}
+			for _, query := range []string{from, from + "&status=refused", "from=2026-09-14T09:00:00Z&status=ok", from + "&to=2026-09-14T12:30:00Z&status=ok"} {
+				rec := h.request(http.MethodGet, "/v1/requests?"+query+"&cursor="+url.QueryEscape(first), "")
+				if d := wantCode(t, rec, CodeInvalidField); !reflect.DeepEqual(paths(d), []string{"cursor"}) {
+					t.Errorf("%s: paths %v, detail %v", query, paths(d), d["detail"])
+				}
+			}
+		})
+	}
+}
+
+// followRequests pages path through next_cursor to the end, the clock a
+// minute later for every page, and answers the record ids in order.
+func followRequests(t *testing.T, h *harness, path string) []string {
+	t.Helper()
+	var out []string
+	cursor := ""
+	for range 20 {
+		q := path
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		rec := h.request(http.MethodGet, q, "")
+		out = append(out, ids(t, rec)...)
+		next, _ := body(t, rec)["next_cursor"].(string)
+		if next == "" {
+			return out
+		}
+		cursor = next
+		h.advance(time.Minute)
+	}
+	t.Fatalf("%s: twenty pages without an end", path)
+	return nil
+}
+
+// newArchiveHarness is the surface with a request log archive over
+// s3test as the source of GET /v1/requests, holding four records an
+// hour before the clock in two objects, the second refused.
+func newArchiveHarness(t *testing.T) *harness {
+	t.Helper()
+	srv := s3test.New(t, "archive")
+	h := newHarness(t, func(o *Options) { o.Archive = reqlog.NewReader(srv.Client(true), "lux/", "") })
+	at := h.clock().Add(-time.Hour)
+	for i, object := range [][]string{{"req_A", "req_B"}, {"req_C", "req_D"}} {
+		var buf bytes.Buffer
+		for j, id := range object {
+			r := metering.Record{ID: id, At: at.Add(time.Duration(2*i+j) * time.Minute), Key: metering.KeyRef{ID: "key_1"}, Owner: h.subject(), Status: metering.StatusOK}
+			if id == "req_B" {
+				r.Status, r.Error = metering.StatusRefused, "model_not_allowed"
+			}
+			if err := json.NewEncoder(&buf).Encode(r); err != nil {
+				t.Fatal(err)
+			}
+		}
+		srv.Put(at.Format("lux/2006/01/02/15/")+"replica-a-0"+string(rune('1'+i))+".ndjson", buf.Bytes())
+	}
+	return h
 }
 
 // TestRedactUsage is POST /v1/usage/redact of spec 038: usage.redact is

@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- `GET /v1/requests` pages a query that leaves `to` open, as `lux
+  requests -since` does: a cursor carries the range its first page
+  resolved, and a follow-up page that repeats the first page's
+  parameters, or sends the cursor alone, reads that range where it was
+  refused `invalid_field` at `cursor` once the clock had moved. A cursor
+  sent with another filter, `from`, or `to` is still refused. Cursors
+  issued before this release do not decode and are refused; start again
+  from the first page.
+
 ## v0.11.0 - 2026-09-29
 
 - Every door's model list and model read carry the figures a Model
