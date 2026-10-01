@@ -93,6 +93,7 @@ later.
 | [038](.archive/038-usage-retention.md) | Usage retention: hourly rows rolled up into monthly ones by rules on Key labels, an owner's rows redacted, and the request log partitioned by a Key label | large | complete | 006, 009, 010, 011, 012, 022 |
 | [039](.archive/039-disabled-models.md) | Disabled Models: a Model can be disabled, and a disabled Model is refused at call time | small | complete | 003, 004, 005, 011, 018, 036 |
 | [040](.archive/040-base-path-in-the-place-of-v1.md) | The base path in the place of /v1: one version segment in every address behind a shared origin | medium | complete | 011, 014, 018, 034 |
+| [041](041-request-history-paging.md) | Request history paging: a cursor that keeps its range, and archive pages of bounded reading | small | validated | 009, 011, 012 |
 
 ## Dependency graph
 
@@ -131,6 +132,7 @@ flowchart BT
   S038[038 usage retention]
   S039[039 disabled models]
   S040[040 base path in the place of /v1]
+  S041[041 request history paging]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -170,6 +172,8 @@ flowchart BT
   S039 --> S018
   S040 --> S014
   S040 --> S018
+  S041 --> S011
+  S041 --> S012
 ```
 
 ## Build order
@@ -191,6 +195,7 @@ flowchart BT
 | 13 | 038 | usage kept hourly for a period and then monthly, by rules on Key labels; an owner redacted from every row; the request log partitioned by a Key label |
 | 14 | 039 | a Model disabled by one field: refused at every door, left out of every list, and restored with its Keys unchanged |
 | 15 | 040 | one version segment in every address behind a shared origin: the base path in the place of the control plane's `/v1`, opted into by `LUX_BASE_PATH_MODE=replace`, with the documents, the clients and the conformance suite following it |
+| 16 | 041 | a cursor that keeps the range it was issued for, so a page without `to` follows the first; archive pages that make a bounded number of bucket calls and skip the hours that hold no objects |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
