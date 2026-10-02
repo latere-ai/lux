@@ -590,8 +590,9 @@ func encodeBase64(s string) string { return base64.RawURLEncoding.EncodeToString
 // TestArchivePagesReadABoundedAmount: over a 90 day range whose archive
 // holds three days of objects and one object two months older, under an
 // owner filter that matches the newest objects and the old one alone,
-// every limited page makes at most PageReads bucket calls beyond the
-// listings of its roots, the pages together answer every match once in
+// every limited page makes at most PageReads bucket calls, and one more
+// for each further root a level is listed under, the pages together
+// answer every match once in
 // the unpaged order, a page may hold no record while a cursor remains,
 // and no listing names an hour or a day that holds no object, with one
 // root and with partitions. Spec 041's row 4.
@@ -635,8 +636,8 @@ func TestArchivePagesReadABoundedAmount(t *testing.T) {
 			b := &tally{Bucket: srv.Client(true)}
 			rd := NewReader(b, "lux/", partition)
 			q := metering.RecordQuery{From: now.Add(-89 * 24 * time.Hour), To: now, Owners: []string{alice}}
-			rootCalls := 0
-			roots, err := rd.roots(t.Context(), q, &rootCalls)
+			var calls int
+			roots, err := rd.roots(t.Context(), q, &calls)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -655,7 +656,7 @@ func TestArchivePagesReadABoundedAmount(t *testing.T) {
 					t.Fatalf("page %d: %v", pages, err)
 				}
 				pages++
-				if bound := PageReads + rootCalls + len(roots) - 1; b.calls > bound {
+				if bound := PageReads + len(roots) - 1; b.calls > bound {
 					t.Fatalf("page %d made %d bucket calls, over %d", pages, b.calls, bound)
 				}
 				paged = append(paged, page...)
