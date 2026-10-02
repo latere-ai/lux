@@ -79,8 +79,14 @@ start from; the knobs are in
 A leaked Key value is contained by `POST /v1/keys/{id}/rotate`, which
 replaces the value with no grace period; by `spec.disabled`, which refuses
 at once; by `spec.ttl`; and by `DELETE`. Each takes effect on every
-replica within `LUX_KEY_CACHE`. A Key's spend limit and its Budget bound
-what a leak can cost before you notice.
+replica within `LUX_KEY_CACHE`, except on a replica cut off from the
+store: it keeps serving the Keys it has cached for up to
+`LUX_KEY_CACHE_GRACE` past that window, five minutes by default, and a
+revocation reaches it only when the grace ends. Set
+`LUX_KEY_CACHE_GRACE=0` where a revocation must hold through a store
+outage; such a replica then refuses each Key `store_unavailable` once its
+cached entry lapses. A Key's spend limit and its Budget bound what a leak
+can cost before you notice.
 
 ### Verify released artifacts
 
