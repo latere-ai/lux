@@ -45,6 +45,27 @@ records. Once fences exist, rolling back to a writer without fence support would
 reopen credential mutations and is unsupported. Continue serving with a
 fence-capable binary; this feature changes the usual rollback guarantee.
 
+## What a rollback turns off
+
+An older binary leaves in the store what a newer one wrote and ignores
+what it does not know: a manifest field, a table, or a `LUX_*` variable. A rollback
+below the release that brought a feature therefore turns that feature off
+while the data stays in place, and rolling forward again turns it back
+on.
+
+- Below `v0.8.0`, a Model with `spec.disabled: true` is served again on
+  every door and listed again; delete it before rolling back if it must
+  stay out of service.
+- Below `v0.8.0`, `GET /v1/usage` reads the hourly rows alone, so the
+  months `LUX_USAGE_RETENTION` has folded into monthly rows are missing
+  from its totals, and with `LUX_REQUESTLOG_PARTITION_LABEL` set,
+  `GET /v1/requests` does not find the archived records written under a
+  partition.
+- Below `v0.9.0`, `LUX_BASE_PATH_MODE=replace` is ignored and the control
+  plane answers at `<base>/v1` again; a `lux` command of `v0.9.0` or newer
+  follows it through `/.well-known/lux`, and a client that wrote the
+  `replace` addresses down does not.
+
 ## Across a major: one document
 
 A change that needs a drop, a rename, or a retype is the first
