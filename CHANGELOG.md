@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.12.0 - 2026-10-02
+
 ### Fixed
 
 - `GET /v1/requests` pages a query that leaves `to` open, as `lux
