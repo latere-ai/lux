@@ -170,8 +170,10 @@ release on a cluster, see [Install](docs/install.md).
   the server writes, evolving under written compatibility rules.
 - Four dialects on the data plane, translated through one package with a
   golden corpus, and a conformance suite any server must pass. Each door's
-  model list carries a Model's context window, output limit, input
-  modalities, and prices, so a client sizes its requests from the gateway.
+  model list carries the figures a Model declares: the context window and
+  the output limit on every door, and the input modalities and prices on
+  every door but `/gemini`, so a client sizes its requests from the
+  gateway.
 - Routing by weight and priority, fallback on a failure or rate limit
   before the first byte, a per-provider health probe that takes a
   target out of rotation, and a switch that takes a Model out of service
