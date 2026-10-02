@@ -169,10 +169,13 @@ release on a cluster, see [Install](docs/install.md).
 - Four kinds with strict decoding, server-side defaults, and a `status`
   the server writes, evolving under written compatibility rules.
 - Four dialects on the data plane, translated through one package with a
-  golden corpus, and a conformance suite any server must pass.
+  golden corpus, and a conformance suite any server must pass. Each door's
+  model list carries a Model's context window, output limit, input
+  modalities, and prices, so a client sizes its requests from the gateway.
 - Routing by weight and priority, fallback on a failure or rate limit
-  before the first byte, and a per-provider health probe that takes a
-  target out of rotation.
+  before the first byte, a per-provider health probe that takes a
+  target out of rotation, and a switch that takes a Model out of service
+  on every door at once.
 - Keys with model selectors, per-minute request and token limits, an
   expiry, and a value shown once; budgets several keys draw from, with
   windows anchored where you choose, and up to four budgets on one key
@@ -180,9 +183,12 @@ release on a cluster, see [Install](docs/install.md).
 - Streaming in every dialect, translated as it arrives rather than
   buffered.
 - Usage records and per-key, per-model, per-target metering, costed from
-  the prices on the `Model`.
+  the prices on the `Model`, kept hourly and then folded into monthly
+  rows by retention rules matched on Key labels, with one person's
+  identity removable from every row.
 - A request log with the bodies kept out of the gateway's own store and
-  archived where you point it.
+  archived where you point it, partitioned by a Key label so a bucket
+  lifecycle rule expires each partition on its own.
 - Provider credentials wrapped by a key-encryption key, write-only
   through the API, never read back and never handed to a caller.
 - State in memory, in Postgres, or read from a directory of manifests on
