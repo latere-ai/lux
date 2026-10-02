@@ -9,7 +9,7 @@ depends_on:
 affects: [internal/events/, internal/reqlog/, internal/config/, test/stubs/, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-23
+updated: 2026-10-02
 author: changkun
 ---
 
@@ -311,16 +311,21 @@ and one of an hour lossy by the cap. At shutdown the drain of
 process exits.
 
 `internal/reqlog` also holds the reader `GET /v1/requests` uses when
-the exporter is `s3` ([[009-usage-and-metering]]): for each UTC hour
-prefix the range covers, newest first, `ListObjects` with that prefix
-and `StartAfter` for paging, then `GetObject` per object, decoded one
-line at a time with the filters applied while reading, in listing order
-within an hour, which is by replica and then write order; the `cursor`
-is the object key and the line offset to resume from, in the store's
-cursor shape under the kind `archive` with the query's digest, and one
-from another query, another kind, or naming an hour outside the range
-is `store.ErrInvalidCursor`, which [[011-api]] answers as
-`invalid_field` at `cursor`. The reader is `reqlog.Reader.List(ctx,
+the exporter is `s3` ([[009-usage-and-metering]]): newest first through
+the UTC hours of the range that hold objects, found by a delimited
+`ListObjects` of each month and of each present day, then `ListObjects`
+with the hour's prefix and `StartAfter` for paging, then `GetObject` per
+object, decoded one line at a time with the filters applied while
+reading, in listing order within an hour, which is by replica and then
+write order. A page with a `limit` ends after `reqlog.PageReads` bucket
+calls once it has moved past where it resumed, so it may hold fewer
+records than `limit`, or none, with a cursor
+([request history paging](.archive/041-request-history-paging.md)). The
+`cursor` is the store's query cursor under the kind `archive`: the
+query's digest and range, and the hour, the object key, and the line
+offset to resume from; one from another query, another kind, or naming
+an hour outside the range is `store.ErrInvalidCursor`, which
+[[011-api]] answers as `invalid_field` at `cursor`. The reader is `reqlog.Reader.List(ctx,
 RecordQuery, Page)`, the shape of `Store.Usage().Records`, so the route
 switches on the source through one option.
 

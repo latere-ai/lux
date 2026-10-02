@@ -1,6 +1,6 @@
 ---
 title: "Request history paging: a cursor that keeps its range, and archive pages of bounded reading"
-status: validated
+status: complete
 track: core
 depends_on:
   - specs/009-usage-and-metering.md
@@ -129,5 +129,49 @@ absent, which `client.List` and `lux requests` do.
 | 1 | Over the ring, a query with `from` and no `to` pages to its end across a clock tick between pages, with every record once and in order; the same with `to` on every page; the cursor alone resumes; and a cursor with another `model`, `from`, or `to` is `invalid_field` at `cursor` | `internal/api` test over the memory store |
 | 2 | The same four over the archive, with a `reqlog.Reader` over `s3test` as the route's source | `internal/api` test |
 | 3 | The ring and the archive cursor carry the range, decode only under their own kind and query, and refuse a malformed cursor, a key outside the prefix, an hour outside the range, and a key outside its hour | `internal/store` and `internal/reqlog` tests |
-| 4 | Over an archive of thousands of objects in a 90 day range where the filter matches only the newest objects, every page makes at most `PageReads` calls beyond those that pass its starting position, the pages together answer every matching record once in the unpaged order, and a stretch of empty months and days costs no listing per hour | `internal/reqlog` test with a counting bucket |
+| 4 | Over an archive of hundreds of objects in a 90 day range where the filter matches only the newest objects and one two months older, every page makes at most `PageReads` calls and one more for each further root a level is listed under, the pages together answer every matching record once in the unpaged order, a page may hold none while a cursor remains, and no listing names a day or an hour that holds no object | `internal/reqlog` test with a counting bucket |
 | 5 | The `listRequests` operation says a page may hold fewer records than `limit`, or none, while `next_cursor` is present | `TestOpenAPIIsCurrent` |
+
+## Outcome
+
+Built and verified on 2026-10-02 as designed, with `PageReads` at 64.
+
+| # | Test |
+|---|---|
+| 1 | `TestRequestsCursorKeepsItsRange/memory`, `internal/api`: `from` alone with the clock a minute later on every page, `to` on every page, the cursor alone, and a cursor sent with `status` dropped or changed, another `from`, or another `to`. Without the fill from the cursor, the second page is refused with the detail `cursor query f5d32f65, the request's 67ae9f16` |
+| 2 | `TestRequestsCursorKeepsItsRange/archive`, the same over a `reqlog.Reader` on `s3test` holding two objects |
+| 3 | `TestRecordCursorBindsTheQuery` and `TestQueryCursorWindow`, `internal/store`; `TestArchiveReaderPages`, `internal/reqlog`, with a short position, a bad or negative line, an hour that is not one, a line of no object, a key outside the prefix, without an hour, or in another hour, and an hour outside the range |
+| 4 | `TestArchivePagesReadABoundedAmount`, `internal/reqlog`, 577 objects with one root and with three partitions beside the unpartitioned prefix. Against the reader before this spec its first page made 2 713 calls with one root and 11 258 with partitions |
+| 5 | `TestOpenAPIIsCurrent` and `TestOpenAPINavigationLabels`, `internal/api` |
+
+Measured with a bucket that waits 20 milliseconds per call, a 90 day
+range, `limit` 200, and an archive of two replicas writing an object
+every ten minutes each:
+
+| Archive and filter | Before | After |
+|---|---|---|
+| 20 days of objects, an owner once per object in the newest two days | pages 1 and 2: 4.8 s; page 3: stopped at a 60 s deadline after 2 532 reads and 212 listings | every page 1.40 to 1.43 s, 64 calls; 56 records a page while the owner appears, then pages of none; 103 pages to the end |
+| 20 days of objects, no filter | 0.26 to 0.29 s a page of 200, 2 listings | 0.31 to 0.33 s a page of 200, 4 listings |
+| 2 days of objects, no filter | pages of 200 in 0.28 s; the last page 46.1 s, 2 089 listings | pages of 200 in 0.33 s; the last page 0.27 s, 5 listings |
+
+Divergences and findings:
+
+- A level of the walk is listed under every root that holds it before
+  the count is checked again, and the calls that find the position a
+  page resumes from come before it can end, so a page with several
+  roots makes at most `PageReads` calls and one more for each further
+  root once past its start.
+- A truncated delimited listing continued from the name of its last
+  common prefix, which lists the keys under that prefix again and rolls
+  them up into the same prefix. The partition listing had this flaw
+  before this spec, and the new month and day listings shared it; the
+  test over listings of two entries a page found it. A listing now
+  continues after the prefix with its trailing delimiter raised by one
+  byte.
+- A page resumes with a listing of its month and of its day before the
+  listing of its hour, two calls more than before, which is the 40
+  milliseconds the unfiltered pages above gained.
+- A page that fills `limit` at the last line of an object resumes in
+  that object and reads it once more to find no line left, as before.
+- A `List` with no `limit`, which the route never sends, reads to the
+  end of the range without the bound.

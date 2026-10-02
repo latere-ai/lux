@@ -10,7 +10,7 @@ depends_on:
 affects: [metering/, gateway/, internal/store/, internal/api/, internal/reqlog/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-10-02
 author: changkun
 ---
 
@@ -337,7 +337,9 @@ dimension a member, because a row keyed by a `dimensions` map cannot be
 upserted on its primary key; `QueryRows` answers `[]metering.Row`, the
 response rows, grouped as `metering.Group` groups; `AppendRecord` and
 `Records` are the ring, with `store.EncodeRecordCursor` binding a
-cursor to the record query and the record's `at` and `id`. That spec's
+cursor to the record query and the record's `at` and `id`, and carrying
+the query's range so a page that leaves an end open reads the first
+page's ([request history paging](.archive/041-request-history-paging.md)). That spec's
 code block names the element type of `AddRows` as `Row` and is its
 edit to make. `serve.Usage(ctx, store, query, now)` is what the route
 calls: it fills an open range with the last day, validates, and reads
@@ -394,10 +396,13 @@ durable and installation-wide answer, and `memory` otherwise, which is
 the replica's own ring of the last `metering.RecordsPerKey` records per
 key. A multi-replica installation without an archive is told by
 `source` that it is reading one replica. The archive is read by
-`internal/reqlog`'s reader ([[012-request-log-and-events]]): the range
-names the hour prefixes, the objects under them are listed and decoded
-newest first, and the filters are applied while reading, with the
-`cursor` naming the object and offset to resume from.
+`internal/reqlog`'s reader ([[012-request-log-and-events]]): the hours
+of the range that hold objects are found by listing, their objects are
+read and decoded newest first, the filters are applied while reading, a
+page ends after a bounded number of bucket calls and may then hold fewer
+records than `limit`, and the `cursor` carries the range and names the
+hour, object, and offset to resume from ([request history
+paging](.archive/041-request-history-paging.md)).
 
 ### Retention and aggregates
 
