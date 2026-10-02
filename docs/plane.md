@@ -108,6 +108,10 @@ HTTP/2 session; the CLI supplies a concurrency-safe refreshing token source and
 its reconnect policy. It returns typed refusal and close errors and joins its
 goroutines on cancellation. The local runtime URL never leaves the client.
 Use `client.FileToken` or `client.StaticToken` when those token sources suffice.
+Behind a base path, the CLI calls `Discover` once before its first `/v1` call:
+it reads from `/.well-known/lux` whether the installation serves the control
+plane at `<base>/v1` or, under `LUX_BASE_PATH_MODE=replace`, at the base itself,
+and sets `BaseReplacesV1` to match. `client/tunnel.Run` discovers on its own.
 
 ## The minimal authorizer
 
@@ -468,7 +472,10 @@ LUX_TEST_URL=https://api.example.com LUX_TEST_TOKEN=$(platform-token) \
 `TestContract` builds its configuration from the environment and runs
 every case the configuration admits against whatever `LUX_TEST_URL`
 names: `luxd` on loopback, a release image in a cluster, or a
-platform's own binary built from the packages. `LUX_TEST_TOKEN` is a
+platform's own binary built from the packages. Under a base path,
+`LUX_TEST_URL` is the public URL with the base included: the suite reads
+from the doors and `/.well-known/lux` where the control plane is, so the
+same cases run under either `LUX_BASE_PATH_MODE`. `LUX_TEST_TOKEN` is a
 token that server accepts on `/v1`; the suite mints no issuer token of
 its own and holds no key. `LUX_TEST_STUBS_URL`, when a `lux-stubs`
 instance the server can reach is running, adds the cases that assert
