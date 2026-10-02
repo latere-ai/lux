@@ -572,6 +572,25 @@ func (b *smallPages) ListObjects(ctx context.Context, o s3.ListOptions) (s3.List
 	return b.Bucket.ListObjects(ctx, o)
 }
 
+// TestContinueAfter: a truncated listing continues after its last
+// object, or past every key under its last common prefix when that is
+// the later entry.
+func TestContinueAfter(t *testing.T) {
+	for _, c := range []struct {
+		res  s3.ListResult
+		want string
+	}{
+		{s3.ListResult{Objects: []s3.Object{{Key: "lux/a.ndjson"}}}, "lux/a.ndjson"},
+		{s3.ListResult{Prefixes: []string{"lux/2026/"}, Objects: []s3.Object{{Key: "lux/a.ndjson"}}}, "lux/a.ndjson"},
+		{s3.ListResult{Prefixes: []string{"lux/_/", "lux/team/"}, Objects: []s3.Object{{Key: "lux/2026.ndjson"}}}, "lux/team0"},
+		{s3.ListResult{}, ""},
+	} {
+		if got := continueAfter(c.res); got != c.want {
+			t.Errorf("continueAfter(%+v) = %q, want %q", c.res, got, c.want)
+		}
+	}
+}
+
 // listFails is a Bucket whose listing of one prefix fails.
 type listFails struct {
 	Bucket

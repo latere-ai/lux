@@ -25,6 +25,10 @@ refused before it is pushed.
   few records, such as one owner's, therefore answers pages that hold
   fewer records than `limit`, or none, while `next_cursor` is present;
   follow `next_cursor` until it is absent, as `lux requests` does.
+- An archive with more than 1,000 request log partitions is read once
+  per partition: a partition listing that ran over one page of 1,000
+  continued from the last partition's name, listed that partition again,
+  and answered its records twice.
 
 ## v0.11.0 - 2026-09-29
 

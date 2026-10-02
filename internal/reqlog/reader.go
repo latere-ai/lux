@@ -73,7 +73,7 @@ func (r *Reader) roots(ctx context.Context, q metering.RecordQuery, calls *int) 
 		if !res.Truncated || len(res.Prefixes)+len(res.Objects) == 0 {
 			break
 		}
-		after = lastListed(res)
+		after = continueAfter(res)
 	}
 	return out, nil
 }
@@ -313,7 +313,7 @@ func (w *walk) present(ctx context.Context, roots []string, under string, keep f
 			if !res.Truncated || len(res.Prefixes)+len(res.Objects) == 0 {
 				break
 			}
-			after = lastListed(res)
+			after = continueAfter(res)
 		}
 	}
 	out := make([]present, 0, len(byAt))
@@ -324,17 +324,21 @@ func (w *walk) present(ctx context.Context, roots []string, under string, keep f
 	return out, nil
 }
 
-// lastListed is the key a truncated listing continues after: the
-// greater of its last prefix and its last object.
-func lastListed(res s3.ListResult) string {
-	after := ""
-	if n := len(res.Prefixes); n > 0 {
-		after = res.Prefixes[n-1]
+// continueAfter is the StartAfter that continues a truncated listing:
+// the last object's key, or, when the last entry is a common prefix, the
+// prefix with its trailing delimiter raised by one byte. Every key under
+// the prefix sorts before that, and continuing after the prefix itself
+// would list those keys again and roll them up into the same prefix.
+func continueAfter(res s3.ListResult) string {
+	last := ""
+	if n := len(res.Objects); n > 0 {
+		last = res.Objects[n-1].Key
 	}
-	if n := len(res.Objects); n > 0 && res.Objects[n-1].Key > after {
-		after = res.Objects[n-1].Key
+	if n := len(res.Prefixes); n > 0 && res.Prefixes[n-1] > last {
+		p := res.Prefixes[n-1]
+		return p[:len(p)-1] + string([]byte{p[len(p)-1] + 1})
 	}
-	return after
+	return last
 }
 
 // monthOf is the first instant of t's UTC month.
