@@ -20,7 +20,9 @@ OpenAPI document, below.
 
 A Key also has `POST /v1/keys/{id-or-name}/rotate`, which mints a new
 value and keeps the id. `GET /v1/usage` and `GET /v1/requests` read what
-was spent and what ran; `GET /v1/self` reports the caller's identity.
+was spent and what ran, and `POST /v1/usage/redact` with
+`{"owner": "<issuer>|<subject>"}` takes one owner out of every usage row,
+keeping the totals; `GET /v1/self` reports the caller's identity.
 There is no `PATCH` and no creating `POST`: the loop is `GET`, edit,
 `PUT`, and a `PUT` repeated with one body is `201` then `200` on the same
 object.
