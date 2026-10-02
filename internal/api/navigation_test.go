@@ -44,7 +44,7 @@ func TestOpenAPINavigationLabels(t *testing.T) {
 		"readBudget":     {"Read budget", "Read one Budget by id or name, with its status."},
 		"deleteBudget":   {"Delete budget", "Delete one Budget by id or name; 204 with no body."},
 		"readUsage":      {"Aggregate usage", "Usage aggregated over a range, grouped by at most three dimensions and bucketed by an interval; unpaged, and no row sums two currencies. A filter outside the authorizer's own is an empty items."},
-		"listRequests":   {"List requests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them."},
+		"listRequests":   {"List requests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them. A cursor keeps the range of its first page, so a follow-up page that leaves from or to open reads that range. A page read from the archive ends after a bounded amount of reading and may hold fewer records than limit, or none, while next_cursor is present; follow next_cursor until it is absent."},
 		"redactUsage":    {"Redact usage owner", "Every hourly and monthly usage row of the owner, and every record of this replica's ring, loses the owner; each row's sums are added into the row with the same other dimensions and no owner, so totals are kept."},
 		"readSelf":       {"Read caller identity", "The caller's identity, who decides permission, and what this replica remembers granting the subject."},
 		"readOpenAPI":    {"Read OpenAPI document", "This document as JSON; no bearer."},

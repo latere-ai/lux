@@ -13,8 +13,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -481,9 +484,9 @@ func TestArchiveReaderPages(t *testing.T) {
 	if err != nil || next == "" || len(page) != 4 {
 		t.Fatalf("first page: %d %q %v", len(page), next, err)
 	}
-	key, line, err := decodeCursor(next, q)
-	if err != nil || line != 4 || !strings.HasPrefix(key, "lux/2026/09/14/11/replica-a-") {
-		t.Fatalf("cursor = %s %d %v", key, line, err)
+	at, err := rd.decodeCursor(next, q)
+	if err != nil || at.line != 4 || !at.hour.Equal(from.Add(time.Hour)) || !strings.HasPrefix(at.key, "lux/2026/09/14/11/replica-a-") {
+		t.Fatalf("cursor = %+v %v", at, err)
 	}
 	rest, _, err := rd.List(t.Context(), q, store.Page{Cursor: next})
 	if err != nil || len(rest) != len(all)-4 || rest[0].ID != all[4].ID {
@@ -491,16 +494,22 @@ func TestArchiveReaderPages(t *testing.T) {
 	}
 
 	other := metering.RecordQuery{From: from, To: from.Add(time.Hour)}
+	ten := strconv.FormatInt(from.Unix(), 10)
 	for name, cursor := range map[string]string{
-		"another query": next,
-		"garbage":       "not-base64!",
-		"few fields":    encodeCursor(other, "", 0)[:8],
-		"another kind":  store.EncodeQueryCursor(store.RecordsKind, other, "1|req_1"),
-		"no key":        store.EncodeQueryCursor(CursorKind, other, "0"),
-		"a bad line":    store.EncodeQueryCursor(CursorKind, other, "many|lux/2026/09/14/10/x-1.ndjson"),
-		"outside":       encodeCursor(other, "elsewhere/2026/09/14/10/x-1.ndjson", 0),
-		"no hour":       encodeCursor(other, "lux/x-1.ndjson", 0),
-		"a bad hour":    encodeCursor(other, "lux/2026/13/40/99/x-1.ndjson", 0),
+		"another query":     next,
+		"garbage":           "not-base64!",
+		"few fields":        encodeBase64(CursorKind + "|00000000|1|2"),
+		"another kind":      store.EncodeQueryCursor(store.RecordsKind, other, "1|req_1"),
+		"a short position":  store.EncodeQueryCursor(CursorKind, other, ten+"|0"),
+		"a bad line":        store.EncodeQueryCursor(CursorKind, other, ten+"|many|lux/2026/09/14/10/x-1.ndjson"),
+		"a negative line":   store.EncodeQueryCursor(CursorKind, other, ten+"|-1|lux/2026/09/14/10/x-1.ndjson"),
+		"a bad hour":        store.EncodeQueryCursor(CursorKind, other, "soon|0|lux/2026/09/14/10/x-1.ndjson"),
+		"not on the hour":   store.EncodeQueryCursor(CursorKind, other, strconv.FormatInt(from.Unix()+60, 10)+"|0|"),
+		"a line of nothing": store.EncodeQueryCursor(CursorKind, other, ten+"|3|"),
+		"outside":           rd.encodeCursor(other, position{hour: from, key: "elsewhere/2026/09/14/10/x-1.ndjson"}),
+		"no hour":           rd.encodeCursor(other, position{hour: from, key: "lux/x-1.ndjson"}),
+		"a bad key hour":    rd.encodeCursor(other, position{hour: from, key: "lux/2026/13/40/99/x-1.ndjson"}),
+		"another hour":      rd.encodeCursor(other, position{hour: from, key: "lux/2026/09/14/11/x-1.ndjson"}),
 	} {
 		if _, _, err := rd.List(t.Context(), other, store.Page{Cursor: cursor}); !errors.Is(err, store.ErrInvalidCursor) {
 			t.Errorf("%s: %v", name, err)
@@ -510,8 +519,8 @@ func TestArchiveReaderPages(t *testing.T) {
 		t.Error("a query without a range was answered")
 	}
 	// A cursor naming an hour outside the range is not this query's.
-	for _, key := range []string{"lux/2026/09/15/10/x-1.ndjson", "lux/2026/09/14/09/x-1.ndjson"} {
-		if _, _, err := rd.List(t.Context(), q, store.Page{Cursor: encodeCursor(q, key, 0)}); !errors.Is(err, store.ErrInvalidCursor) {
+	for _, hour := range []time.Time{from.Add(24 * time.Hour), from.Add(-time.Hour)} {
+		if _, _, err := rd.List(t.Context(), q, store.Page{Cursor: rd.encodeCursor(q, position{hour: hour})}); !errors.Is(err, store.ErrInvalidCursor) {
 			t.Fatalf("a cursor outside the range: %v", err)
 		}
 	}
@@ -520,12 +529,19 @@ func TestArchiveReaderPages(t *testing.T) {
 		t.Fatalf("a malformed line: %v", err)
 	}
 	h.srv.Fail(3, http.StatusInternalServerError) // the test client's three attempts
-	if _, _, err := rd.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing lux/2026/09/14/11/") {
+	if _, _, err := rd.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing lux/2026/09/") {
 		t.Fatalf("a failed listing: %v", err)
 	}
 	h.srv.Fail(1, http.StatusNotFound)
-	if _, _, err := rd.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing lux/2026/09/14/11/") {
+	if _, _, err := rd.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing lux/2026/09/") {
 		t.Fatalf("a refused listing: %v", err)
+	}
+	// A failure at each level of the walk names the prefix it listed.
+	for _, prefix := range []string{"lux/2026/09/", "lux/2026/09/14/", "lux/2026/09/14/11/"} {
+		failing := NewReader(&listFails{Bucket: h.srv.Client(true), prefix: prefix}, "lux/", "")
+		if _, _, err := failing.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "listing "+prefix+":") {
+			t.Fatalf("a failed listing of %s: %v", prefix, err)
+		}
 	}
 	failing := NewReader(&getFails{h.srv.Client(true)}, "", "")
 	if _, _, err := failing.List(t.Context(), q, store.Page{}); err == nil || !strings.Contains(err.Error(), "reading lux/2026/09/14/11/") {
@@ -548,7 +564,158 @@ func (getFails) GetObject(context.Context, string, string) (io.ReadCloser, s3.Ob
 	return nil, s3.Object{}, errors.New("the read failed")
 }
 
+// smallPages is a Bucket whose listings answer two entries a page.
+type smallPages struct{ Bucket }
+
+func (b *smallPages) ListObjects(ctx context.Context, o s3.ListOptions) (s3.ListResult, error) {
+	o.MaxKeys = 2
+	return b.Bucket.ListObjects(ctx, o)
+}
+
+// listFails is a Bucket whose listing of one prefix fails.
+type listFails struct {
+	Bucket
+	prefix string
+}
+
+func (b *listFails) ListObjects(ctx context.Context, o s3.ListOptions) (s3.ListResult, error) {
+	if o.Prefix == b.prefix {
+		return s3.ListResult{}, errors.New("the listing failed")
+	}
+	return b.Bucket.ListObjects(ctx, o)
+}
+
 func encodeBase64(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+
+// TestArchivePagesReadABoundedAmount: over a 90 day range whose archive
+// holds three days of objects and one object two months older, under an
+// owner filter that matches the newest objects and the old one alone,
+// every limited page makes at most PageReads bucket calls beyond the
+// listings of its roots, the pages together answer every match once in
+// the unpaged order, a page may hold no record while a cursor remains,
+// and no listing names an hour or a day that holds no object, with one
+// root and with partitions. Spec 041's row 4.
+func TestArchivePagesReadABoundedAmount(t *testing.T) {
+	for name, partition := range map[string]string{"one root": "", "partitions": "context"} {
+		t.Run(name, func(t *testing.T) {
+			srv := s3test.New(t, "archive")
+			now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+			holds := map[string]bool{} // every day and hour prefix that holds an object
+			put := func(n int, at time.Time, owners []string) {
+				var body bytes.Buffer
+				for i, owner := range owners {
+					r := record(n*10+i, at.Add(time.Duration(i)*time.Second))
+					r.Owner = owner
+					if err := json.NewEncoder(&body).Encode(r); err != nil {
+						t.Fatal(err)
+					}
+				}
+				prefix := "lux/"
+				if partition != "" {
+					prefix += []string{"", "team", "personal", Unlabeled}[n%4]
+				}
+				key := objectKey(prefix, []string{"replica-a", "replica-b"}[n%2], at, fmt.Sprintf("01ULID%020d", n))
+				srv.Put(key, body.Bytes())
+				holds[path.Dir(key)+"/"] = true
+				holds[path.Dir(path.Dir(key))+"/"] = true
+			}
+			alice, bob := "https://login.example.com|alice", "https://login.example.com|bob"
+			n := 0
+			for m := range 3 * 24 * 8 {
+				owners := []string{bob, bob, bob, bob, bob}
+				if m < 16 {
+					owners[0] = alice
+				}
+				put(n, now.Add(-time.Duration(m)*7*time.Minute-time.Second), owners)
+				n++
+			}
+			put(n, now.Add(-60*24*time.Hour), []string{bob, alice, bob})
+			n++
+
+			b := &tally{Bucket: srv.Client(true)}
+			rd := NewReader(b, "lux/", partition)
+			q := metering.RecordQuery{From: now.Add(-89 * 24 * time.Hour), To: now, Owners: []string{alice}}
+			rootCalls := 0
+			roots, err := rd.roots(t.Context(), q, &rootCalls)
+			if err != nil {
+				t.Fatal(err)
+			}
+			all, next, err := rd.List(t.Context(), q, store.Page{})
+			if err != nil || next != "" || len(all) != 17 {
+				t.Fatalf("unpaged = %d, %q, %v", len(all), next, err)
+			}
+			b.reset()
+			var paged []metering.Record
+			cursor := ""
+			pages, empty := 0, 0
+			for {
+				b.calls = 0
+				page, next, err := rd.List(t.Context(), q, store.Page{Limit: 200, Cursor: cursor})
+				if err != nil {
+					t.Fatalf("page %d: %v", pages, err)
+				}
+				pages++
+				if bound := PageReads + rootCalls + len(roots) - 1; b.calls > bound {
+					t.Fatalf("page %d made %d bucket calls, over %d", pages, b.calls, bound)
+				}
+				paged = append(paged, page...)
+				if next == "" {
+					break
+				}
+				if len(page) == 0 {
+					empty++
+				}
+				cursor = next
+			}
+			if !slices.Equal(ids(paged), ids(all)) {
+				t.Fatalf("paged %v\nunpaged %v", ids(paged), ids(all))
+			}
+			if want := n / PageReads; pages < want || empty == 0 {
+				t.Fatalf("%d pages, %d empty, over %d objects", pages, empty, n)
+			}
+			for _, l := range b.listed {
+				// A day's listing names hours and an hour's names objects:
+				// neither is made for a prefix that holds nothing.
+				if dayOrHour.MatchString(l) && !holds[l] {
+					t.Fatalf("listed %s, which holds no object", l)
+				}
+			}
+		})
+	}
+}
+
+// dayOrHour matches the prefix of a day or an hour of the archive.
+var dayOrHour = regexp.MustCompile(`/\d{4}/\d{2}/\d{2}/(\d{2}/)?$`)
+
+// tally is a Bucket that counts its calls and keeps the prefix of every
+// listing.
+type tally struct {
+	Bucket
+	mu     sync.Mutex
+	calls  int
+	listed []string
+}
+
+func (b *tally) ListObjects(ctx context.Context, o s3.ListOptions) (s3.ListResult, error) {
+	b.mu.Lock()
+	b.calls++
+	b.listed = append(b.listed, o.Prefix)
+	b.mu.Unlock()
+	return b.Bucket.ListObjects(ctx, o)
+}
+
+func (b *tally) GetObject(ctx context.Context, key, ifNoneMatch string) (io.ReadCloser, s3.Object, error) {
+	b.mu.Lock()
+	b.calls++
+	b.mu.Unlock()
+	return b.Bucket.GetObject(ctx, key, ifNoneMatch)
+}
+
+func (b *tally) reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls, b.listed = 0, nil
+}
 
 // TestArchiveOutageNeverBlocksTheHotPath: with the bucket refusing every
 // write, appends stay under the bound, the ring stops at its cap, the
@@ -755,6 +922,12 @@ func TestArchivePartitionedByLabel(t *testing.T) {
 	}
 	if !slices.Equal(ids(paged), ids(all)) {
 		t.Fatalf("paged %v, unpaged %v", ids(paged), ids(all))
+	}
+	// Listings two entries a page answer the same: the partitions, the
+	// days, the hours, and the objects each continue after a truncation.
+	small, _, err := NewReader(&smallPages{h.srv.Client(true)}, "lux/", "context").List(t.Context(), q, store.Page{})
+	if err != nil || !slices.Equal(ids(small), ids(all)) {
+		t.Fatalf("truncated listings answer %v, %v", ids(small), err)
 	}
 	if got := partitions(produced, ""); len(got) != 1 || len(got[0].records) != 9 {
 		t.Fatalf("no label is one partition: %d", len(got))

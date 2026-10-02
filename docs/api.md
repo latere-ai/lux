@@ -149,6 +149,14 @@ A list answers `{"items": [...], "next_cursor": "<cursor>"}`; pass
 `next_cursor` back as `?cursor=` for the next page, absent on the last.
 `?limit=` defaults to 50, at most 200.
 
+`GET /v1/requests` pages the same way, with `?limit=` at most 1000. Its
+cursor keeps the range of the first page, so a query that gives `from`
+alone, or a next page that sends the cursor alone, reads that range on
+every page. Read from a request log archive, a page ends after a bounded
+amount of reading, so it may hold fewer records than `limit`, or none,
+while `next_cursor` is present: keep following `next_cursor` until it is
+absent.
+
 With `LUX_AUTHORIZE_LIST_ITEMS=1`, each candidate must also pass its
 `provider.read`, `model.read`, `key.read`, or `budget.read` decision. Denied
 objects are skipped without consuming page capacity. The list decision carries

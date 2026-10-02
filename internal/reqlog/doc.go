@@ -13,8 +13,10 @@
 // whatever is there every FlushInterval, as one object keyed by the UTC
 // hour of the batch's first record, the replica, and a ULID; a failed
 // write returns its batch to the head of the ring for the next flush,
-// and the stop drains what the ring holds. The Reader lists each hour
-// prefix the range covers, newest first, decodes each object a line at
-// a time with the filters applied, and resumes from a cursor of the
-// object key and the line offset.
+// and the stop drains what the ring holds. The Reader walks the hours of
+// the range that hold objects, newest first, found by delimited listings
+// of each month and day, decodes each object a line at a time with the
+// filters applied, ends a limited page once it has made PageReads bucket
+// calls, and resumes from a cursor of the hour, the object key, and the
+// line offset.
 package reqlog

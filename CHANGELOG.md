@@ -16,6 +16,15 @@ refused before it is pushed.
   sent with another filter, `from`, or `to` is still refused. Cursors
   issued before this release do not decode and are refused; start again
   from the first page.
+- `GET /v1/requests` read from a request log archive costs about the
+  same on every page, where a page deep in a long range could read for
+  over a minute. The reader lists only the days and hours of the range
+  that hold objects, where it listed every hour of it, and a page ends
+  after a bounded number of bucket calls with the records it has found,
+  where it read on until `limit` records matched. A filter that matches
+  few records, such as one owner's, therefore answers pages that hold
+  fewer records than `limit`, or none, while `next_cursor` is present;
+  follow `next_cursor` until it is absent, as `lux requests` does.
 
 ## v0.11.0 - 2026-09-29
 

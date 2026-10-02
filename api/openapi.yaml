@@ -766,7 +766,7 @@ paths:
     get:
       operationId: listRequests
       summary: List requests
-      description: Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them.
+      description: Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them. A cursor keeps the range of its first page, so a follow-up page that leaves from or to open reads that range. A page read from the archive ends after a bounded amount of reading and may hold fewer records than limit, or none, while next_cursor is present; follow next_cursor until it is absent.
       x-lux-action: usage.read
       parameters:
       - $ref: "#/components/parameters/from"
