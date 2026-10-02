@@ -47,6 +47,14 @@ the three packages with a store and an identity of its own, and
 `examples/authorizer/` is the endpoint of the first kind. Both are in
 this repository and both are held to the contract by tests.
 
+A server of the second kind that instruments its own listener keeps one
+trace per request: `gateway.Handler` opens `lux.request` as a child of a
+server span the request's context already carries, such as the one
+`latere.ai/x/pkg/otel`'s `Handler` opens, and
+`gateway.RouteTemplate(method, path)` names the door table's route to
+label that span and the request metrics with, or `""` for a path the
+table does not list, so no model name becomes a series.
+
 ## Where each platform concern goes
 
 Every row is an endpoint the platform writes or an object it applies.
