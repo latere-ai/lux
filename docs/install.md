@@ -449,6 +449,10 @@ never the content.
   request record; [`configuration.md`](configuration.md) has the knobs
   and [`observability.md`](observability.md) the metrics for the sink and
   the archive.
+- Set `LUX_USAGE_RETENTION` to decide how long usage keeps its hourly
+  detail before it is folded into one row per month, by rules matched on
+  Key labels; unset, every hourly row is kept.
+  [`configuration.md`](configuration.md) has the rule format.
 - Every `LUX_*` variable is in the table of the
   [configuration reference](configuration.md), and
   every alert to start with is in
