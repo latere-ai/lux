@@ -116,7 +116,7 @@ HTTP/2 session; the CLI supplies a concurrency-safe refreshing token source and
 its reconnect policy. It returns typed refusal and close errors and joins its
 goroutines on cancellation. The local runtime URL never leaves the client.
 Use `client.FileToken` or `client.StaticToken` when those token sources suffice.
-Behind a base path, the CLI calls `Discover` once before its first `/v1` call:
+A platform CLI behind a base path calls `Discover` once before its first `/v1` call:
 it reads from `/.well-known/lux` whether the installation serves the control
 plane at `<base>/v1` or, under `LUX_BASE_PATH_MODE=replace`, at the base itself,
 and sets `BaseReplacesV1` to match. `client/tunnel.Run` discovers on its own.
