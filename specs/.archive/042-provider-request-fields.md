@@ -168,7 +168,7 @@ Built and verified on 2026-10-03 as designed.
 | 4 | `TestRequestFieldsReachTheUpstream`, over passthrough on all four dialects and translation in both directions between `openai` and `anthropic`, stream and not; `TestSameDialectSameBytes` for a Provider without the field |
 | 5 | `TestRequestFieldsOnOpaqueRoutes` |
 | 6 | `TestRequestFieldsReachTheUpstream`, which reads `GetBody` from the request the transport is handed and compares it with what the upstream read |
-| 7 | `TestStoreConformance/TestOptimisticConcurrency`, against the memory store and Postgres |
+| 7 | `TestStoreConformance/TestOptimisticConcurrency` against the memory store, and `TestPostgresStoreConformance`, `TestPostgresPooledStoreConformance`, and `TestPostgresExecModeStoreConformance` in the Postgres tier, `make test-postgres`, which the gate does not start |
 | 8 | `TestOpenAPIIsCurrent`; the schema's description is formatted from `manifest.ReservedRequestFields` and `manifest.MaxRequestFieldsBytes` |
 
 Two details the design left to the build. The merge writes an object
