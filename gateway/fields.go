@@ -28,11 +28,22 @@ import (
 // merge does not reach keeps its bytes. A body that is not a JSON
 // object, an empty one included, is returned unchanged.
 func mergeRequestFields(body []byte, fields map[string]any) ([]byte, error) {
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(body, &top); err != nil || top == nil {
+	top, ok := jsonObject(body)
+	if !ok {
 		return body, nil
 	}
 	return mergeObject(top, fields)
+}
+
+// jsonObject decodes b as one JSON object with its member values left
+// undecoded, and reports whether b is one: null, any other value, and
+// bytes that are not JSON are not.
+func jsonObject(b []byte) (map[string]json.RawMessage, bool) {
+	var object map[string]json.RawMessage
+	if json.Unmarshal(b, &object) != nil {
+		return nil, false
+	}
+	return object, object != nil
 }
 
 // mergeObject merges fields into one decoded object and encodes it.
@@ -48,8 +59,8 @@ func mergeObject(object map[string]json.RawMessage, fields map[string]any) ([]by
 			err error
 		)
 		if nested, ok := value.(map[string]any); ok {
-			var inner map[string]json.RawMessage
-			if json.Unmarshal(object[name], &inner) != nil || inner == nil {
+			inner, isObject := jsonObject(object[name])
+			if !isObject {
 				inner = map[string]json.RawMessage{}
 			}
 			raw, err = mergeObject(inner, nested)
