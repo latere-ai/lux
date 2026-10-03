@@ -68,3 +68,11 @@ the Models listed here. Set it to `auto` to also list the vendor's other
 models, which arrive without a price. A Model routes to its one target
 and does not fall back; to fall back across vendors, give a Model more
 targets. The Gemini Models answer through the `/gemini/v1beta` door.
+
+The `openrouter` Provider sets no data policy, so OpenRouter routes each
+request under its account defaults. To hold every request through it to
+endpoints with zero data retention, add `spec.requestFields` with
+`provider: {zdr: true, data_collection: deny}`, as
+[`docs/security.md`](../../docs/security.md#hold-an-upstream-to-its-data-terms)
+shows; the gateway then sets those members on every request, whatever a
+caller sends.

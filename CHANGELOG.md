@@ -6,6 +6,26 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- A Provider takes `spec.requestFields`, a JSON object the gateway
+  merges into every request body it sends that Provider, after any
+  translation, with the Provider's value winning on each member it
+  names: an object merges member by member, and any other value, a list
+  included, replaces the caller's whole. A caller can then neither leave
+  an upstream option out nor turn it off; for OpenRouter,
+  `provider: {zdr: true, data_collection: deny}` restricts every request
+  to endpoints with zero data retention run by providers that do not
+  collect data. The merge reaches model routes and opaque routes alike,
+  so toward such a Provider an opaque body is read whole rather than
+  streamed, and a request whose body is sent under a `Content-Encoding`
+  is refused `invalid_request`. `model`, `stream`, and `stream_options`
+  cannot be set (`reserved_prefix`), a member cannot be null, and the
+  object is at most 16384 bytes encoded (`invalid_field`). The field is
+  not secret: every read and the authorizer's proposal carry it. A
+  Provider without it is sent what it was sent before, byte for byte.
+  `docs/security.md` walks the OpenRouter case.
+
 ## v0.12.1 - 2026-10-04
 
 ### Fixed

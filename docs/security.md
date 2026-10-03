@@ -88,6 +88,56 @@ outage; such a replica then refuses each Key `store_unavailable` once its
 cached entry lapses. A Key's spend limit and its Budget bound what a leak
 can cost before you notice.
 
+### Hold an upstream to its data terms
+
+A prompt the gateway forwards is kept by the upstream under the
+upstream's terms. Where an upstream takes those terms per request in the
+body, set them on the Provider with `spec.requestFields`: the gateway
+merges the object into every request body it sends that Provider, after
+any translation between dialects, and the Provider's value wins on each
+member it names, so a caller can neither leave the option out nor turn
+it off. A caller's other members, its own routing preferences beside
+yours included, still reach the upstream.
+
+For OpenRouter, this restricts every request to endpoints with zero data
+retention, run by providers that do not collect data:
+
+```yaml
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: openrouter
+spec:
+  dialect: openai
+  baseURL: https://openrouter.ai/api/v1
+  requestFields:
+    provider:
+      zdr: true
+      data_collection: deny
+```
+
+A model that has no endpoint meeting the terms is refused by OpenRouter,
+and the call fails rather than reaching an endpoint that keeps the
+prompt.
+
+To change the field on a running gateway, apply the Provider again with
+`lux apply -f`, or `PUT` it to `/v1/providers/{name}`; a manifest that
+carries no credential value keeps the stored one, and every replica
+picks the change up as it does any other apply. A gateway that reads its
+manifests from a directory takes the edited file when it starts again.
+The field is returned by every read of the Provider, so it holds terms
+and never a secret.
+
+The merge reaches every request body that is a JSON object: each model
+route, and each opaque route for a Key with `passthrough`. A body sent
+with a `Content-Encoding` is refused toward such a Provider, because the
+fields cannot be written into it. An option inside an uploaded file, such
+as a batch input, is not a body the gateway reads, so keep `passthrough`
+off on the Keys that reach a Provider whose terms must hold for every
+call. The object cannot set `model`, `stream`, or `stream_options`,
+which the gateway writes itself; the `ProviderSpec` schema in
+[`api/openapi.yaml`](../api/openapi.yaml) has the full rule.
+
 ### Verify released artifacts
 
 Every release is signed by the release workflow's own identity. Verify
