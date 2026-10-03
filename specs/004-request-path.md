@@ -324,6 +324,15 @@ The outbound request toward the target's `baseURL`:
   and the query parameter `key` is dropped.
 - The Provider's `headers` are added; the credential header wins over a
   static header of the same name.
+- The Provider's `requestFields` are merged into the body last, after
+  translation, the model rewrite, and the usage member, on every route,
+  model and opaque, by `decorate`, which both request builders call:
+  the Provider's value wins on each member it names, an object merges
+  member by member, and a body that is not a JSON object is sent
+  unchanged. Toward such a Provider an opaque body is read whole under
+  `LUX_MAX_BODY_BYTES` instead of streamed, and a request under a
+  `Content-Encoding` other than `identity` is `invalid_request`
+  ([042-provider-request-fields](.archive/042-provider-request-fields.md)).
 - Hop-by-hop headers are removed in both directions: `Connection`,
   `Keep-Alive`, `Proxy-Connection`, `Transfer-Encoding`, `TE`,
   `Trailer`, `Upgrade`, and every header `Connection` names. `Host` is

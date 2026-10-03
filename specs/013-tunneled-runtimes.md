@@ -91,8 +91,8 @@ The rules the field carries:
 - `tunnel: true` with `Options.TunnelEnabled` false, or in file mode where no session can be opened ([[010-state]]), is `invalid_field`
   at `spec.tunnel`, with `LUX_TUNNEL_ENABLED` in the developer detail.
 
-`dialect`, `discovery`, `health`, `headers`, `timeout`, and
-`concurrency` keep their meaning and their defaults. The upstream host
+`dialect`, `discovery`, `health`, `headers`, `requestFields`, `timeout`,
+and `concurrency` keep their meaning and their defaults. The upstream host
 rule and `LUX_UPSTREAM_ALLOW_PRIVATE` do not apply, because there is no
 host and no dial.
 

@@ -94,6 +94,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [039](.archive/039-disabled-models.md) | Disabled Models: a Model can be disabled, and a disabled Model is refused at call time | small | complete | 003, 004, 005, 011, 018, 036 |
 | [040](.archive/040-base-path-in-the-place-of-v1.md) | The base path in the place of /v1: one version segment in every address behind a shared origin | medium | complete | 011, 014, 018, 034 |
 | [041](.archive/041-request-history-paging.md) | Request history paging: a cursor that keeps its range, and archive pages of bounded reading | small | complete | 009, 011, 012 |
+| [042](.archive/042-provider-request-fields.md) | Provider request fields: JSON members a Provider sets on every request body the gateway sends it | small | complete | 003, 004, 005, 011 |
 
 ## Dependency graph
 
@@ -133,6 +134,7 @@ flowchart BT
   S039[039 disabled models]
   S040[040 base path in the place of /v1]
   S041[041 request history paging]
+  S042[042 provider request fields]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -174,6 +176,8 @@ flowchart BT
   S040 --> S018
   S041 --> S011
   S041 --> S012
+  S042 --> S005
+  S042 --> S011
 ```
 
 ## Build order
@@ -196,6 +200,7 @@ flowchart BT
 | 14 | 039 | a Model disabled by one field: refused at every door, left out of every list, and restored with its Keys unchanged |
 | 15 | 040 | one version segment in every address behind a shared origin: the base path in the place of the control plane's `/v1`, opted into by `LUX_BASE_PATH_MODE=replace`, with the documents, the clients and the conformance suite following it |
 | 16 | 041 | a cursor that keeps the range it was issued for, so a page without `to` follows the first; archive pages that make a bounded number of bucket calls and skip the hours that hold no objects |
+| 17 | 042 | a Provider's `requestFields` merged into every request body the gateway sends it, the Provider's value winning, so an upstream option such as zero data retention routing holds whatever a caller sends |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.

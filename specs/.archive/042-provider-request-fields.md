@@ -1,6 +1,6 @@
 ---
 title: "Provider request fields: JSON members a Provider sets on every request body the gateway sends it"
-status: drafted
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -87,9 +87,8 @@ as it leaves the gateway, member by member:
   would otherwise read the caller's value.
 - A body that is not a JSON object, or no body, is sent unchanged.
 
-Each object the merge writes into is encoded again, compact, with its
-members sorted by name and a duplicate member collapsed to the last
-one, which is the one `bridge.Probe` reads, so the upstream cannot read
+Each object the merge writes into is written again with its members
+sorted by name and a duplicate member collapsed to the last one, which is the one `bridge.Probe` reads, so the upstream cannot read
 a duplicate the gateway did not. Every value the merge does not reach
 keeps its bytes. A Provider without `requestFields` is sent what it is
 sent today, byte for byte.
@@ -127,7 +126,7 @@ body, after the model rewrite and the usage member.
 | a JSON object whose values are objects, arrays, strings, numbers, and booleans | `invalid_field` from the schema walk | `spec.requestFields` |
 | `model`, `stream`, and `stream_options` at the top level, compared case-insensitively, are the gateway's: `model` names the target's upstream model, `stream` decides how the answer is read, and `stream_options` carries the usage a stream is metered by | `reserved_prefix`, as a reserved header in `headers` is | `spec.requestFields["model"]` |
 | a member whose value is null is refused, so null keeps no meaning a later change would have to preserve; removing the caller's member, as a JSON merge patch does with null, is left open | `invalid_field` | the member's path, `spec.requestFields["provider"]["zdr"]` |
-| the compact JSON encoding is at most `maxRequestFields`, 16384 bytes, because every request to the Provider carries it | `invalid_field` | `spec.requestFields` |
+| the compact JSON encoding is at most `manifest.MaxRequestFieldsBytes`, 16384 bytes, because every request to the Provider carries it | `invalid_field` | `spec.requestFields` |
 
 A number is decoded as a 64-bit float wherever the object is read back,
 the stores and the API among them, so an integer above 2^53 loses
@@ -156,3 +155,34 @@ prices, none of which reach that range.
 | 6 | `GetBody` of the outbound request returns the merged body | `gateway` forward test |
 | 7 | The field survives a store round trip, memory and Postgres | `storetest` |
 | 8 | The OpenAPI document carries the field | `TestOpenAPIIsCurrent` |
+
+## Outcome
+
+Built and verified on 2026-10-03 as designed.
+
+| # | Test |
+|---|---|
+| 1 | the corpus entry `accepted/provider/aggregator`, whose golden decodes and resolves again to itself; `TestRequestFieldsInGoForm`, which resolves Go-typed values to their JSON form; `TestProviderRequestFieldsRoundTrip`, `internal/api`, which applies, reads, changes, and removes the field through `/v1`; `TestMutationProposalExcludesSecretsAndIncludesPolicy`, which holds the authorizer's proposal to carrying it |
+| 2 | `TestRequestFieldsRules`, and the corpus entries `refused/reserved_prefix/request-field-model` and `refused/invalid_field/request-field-null`, the second a YAML member left without a value |
+| 3 | `TestMergeRequestFields` |
+| 4 | `TestRequestFieldsReachTheUpstream`, over passthrough on all four dialects and translation in both directions between `openai` and `anthropic`, stream and not; `TestSameDialectSameBytes` for a Provider without the field |
+| 5 | `TestRequestFieldsOnOpaqueRoutes` |
+| 6 | `TestRequestFieldsReachTheUpstream`, which reads `GetBody` from the request the transport is handed and compares it with what the upstream read |
+| 7 | `TestStoreConformance/TestOptimisticConcurrency`, against the memory store and Postgres |
+| 8 | `TestOpenAPIIsCurrent`; the schema's description is formatted from `manifest.ReservedRequestFields` and `manifest.MaxRequestFieldsBytes` |
+
+Two details the design left to the build. The merge writes an object
+it touches by hand, member by member, rather than through
+`encoding/json`, so a value it does not reach keeps its bytes, the
+insignificant whitespace inside it included, where an encoder would
+compact it. And a merge that cannot encode a value, which `Resolve`
+refuses but a Provider a platform builds in Go without `Resolve` could
+carry, fails the attempt `provider_unavailable` rather than send the
+body without the fields.
+
+What the gateway cannot hold: an option inside an uploaded file, a
+batch input for one, is not a body the gateway reads, and an upstream
+that accepts the same option in another encoding, a form body for one,
+on an opaque route is reached by any Key with `passthrough`. An
+operator who relies on the field keeps `passthrough` off on the Keys
+that reach the Provider.

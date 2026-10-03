@@ -240,6 +240,7 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | `credential.header` | string | per dialect | yes | a header name; `Authorization` for `openai` and `lux`, `x-api-key` for `anthropic`, `x-goog-api-key` for `gemini`; defaulted with `scheme` on every Provider that is not tunneled, a Provider with no credential included, because the gateway strips a caller's copy of that header whether or not it injects one ([[005-providers]]) |
 | `credential.scheme` | enum | per dialect | yes | `bearer` prefixes `Bearer `; `raw` writes the value verbatim; `bearer` on `Authorization`, `raw` elsewhere; the default follows the dialect, not a header the caller chose |
 | `headers` | map | empty | yes | header names to values, at most 16, values up to 4 KiB of visible ASCII and space with no CR or LF (`invalid_field`); the effective `credential.header`, given or the dialect's, `Host`, `Content-Length`, and the hop-by-hop headers are `reserved_prefix`, compared case-insensitively |
+| `requestFields` | object | absent | yes | a JSON object the gateway merges into every request body it sends the Provider, the Provider's value winning on each member it names: an object value is merged member by member, any other value, a list included, replaces the caller's whole ([042-provider-request-fields](.archive/042-provider-request-fields.md)); `model`, `stream`, and `stream_options` at the top level, compared case-insensitively, are `reserved_prefix`; a null member value, and a compact encoding above `manifest.MaxRequestFieldsBytes`, 16384 bytes, are `invalid_field`; not secret, so every read returns it |
 | `discovery.mode` | enum | `auto` | yes | `auto` lists the upstream's models on the discovery interval and declares each as a discovered Model ([[005-providers]]); `none` declares nothing |
 | `discovery.include`, `.exclude` | []string | empty | yes | globs under the glob rule below over upstream names; `include` empty is everything; `exclude` wins |
 | `health.mode` | enum | `probe` | yes | `probe` calls the upstream's model list on the health interval; `passive` infers health from traffic; `none` reports `Unknown` and never marks a target unavailable |
@@ -572,7 +573,7 @@ there.
 | `unknown_field` | a field the schema does not have |
 | `missing_field` | a required field is absent |
 | `invalid_field` | a value fails its syntax, enum, range, name, money, window, glob, or host rule; the YAML limits; a `valueFrom` in server mode; a `Key.spec.value` or `Key.spec.valueSHA256` in file mode |
-| `reserved_prefix` | a label or annotation under `lux.latere.ai/`; a reserved header in `headers`; a name beginning with an id prefix |
+| `reserved_prefix` | a label or annotation under `lux.latere.ai/`; a reserved header in `headers`; a reserved member in `requestFields`; a name beginning with an id prefix |
 | `exclusive_fields` | `ttl` with `expiresAt`; `credential.value` with `credential.valueFrom`; `Key.spec.value`, `Key.spec.valueSHA256`, and `Key.spec.valueFrom` with one another; `tunnel: true` with `baseURL` or any `credential` |
 | `duplicate_target` | two targets with one `(provider, model)` pair |
 | `not_found` | a named `Provider`, `Budget`, or selector the actor cannot see or use |
