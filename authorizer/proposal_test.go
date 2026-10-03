@@ -26,6 +26,7 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 	provider.Spec.Credential = &v1.Credential{Header: "X-API-Key"}
 	provider.Spec.Credential.SetValue("provider-secret-canary")
 	provider.Spec.Headers = map[string]string{"X-Private": "header-secret-canary"}
+	provider.Spec.RequestFields = map[string]any{"provider": map[string]any{"zdr": true}}
 	for _, obj := range []v1.Object{key, provider, fixtureModel(), fixtureBudget(t)} {
 		proposal, err := Proposal(obj, "issuer|target")
 		if err != nil {
@@ -56,6 +57,9 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 			names := spec["headerNames"].([]string)
 			if len(names) != 1 || names[0] != "X-Private" {
 				t.Fatal("header names missing")
+			}
+			if fields, _ := spec["requestFields"].(map[string]any); fields["provider"].(map[string]any)["zdr"] != true {
+				t.Fatalf("request fields missing: %v", spec["requestFields"])
 			}
 		}
 	}

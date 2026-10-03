@@ -1168,6 +1168,10 @@ components:
           type: object
           additionalProperties:
             type: string
+        requestFields:
+          type: object
+          additionalProperties: true
+          description: "JSON members merged into every request body the gateway sends this Provider, the Provider's value winning on every member it names: an object value is merged member by member, any other value, a list included, replaces the caller's whole, and the caller's other members are kept. Not secret: every read returns it. The top-level members model, stream, stream_options are refused, as is a null member, and the compact encoding is at most 16384 bytes."
         discovery:
           $ref: "#/components/schemas/Discovery"
         health:

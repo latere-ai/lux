@@ -6,6 +6,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -74,6 +75,7 @@ func optimisticConcurrency(t *testing.T, s store.Store) {
 	truth(t, !p.Status.CreatedAt.IsZero() && p.Status.UpdatedAt.Equal(p.Status.CreatedAt), "timestamps written back on create")
 
 	p.Spec.BaseURL = "https://api.example.com/v2"
+	p.Spec.RequestFields = map[string]any{"provider": map[string]any{"zdr": true, "order": []any{"a", "b"}, "max_price": map[string]any{"prompt": 1.5}}}
 	v, err = s.Objects().Put(ctx, p, 1)
 	noErr(t, err, "update at the current version")
 	equal(t, v, 2, "version after update")
@@ -85,6 +87,7 @@ func optimisticConcurrency(t *testing.T, s store.Store) {
 	noErr(t, err, "Get")
 	equal(t, gv, 2, "Get version")
 	equal(t, as[*v1.Provider](t, got).Spec.BaseURL, "https://api.example.com/v2", "Get spec")
+	truth(t, reflect.DeepEqual(as[*v1.Provider](t, got).Spec.RequestFields, p.Spec.RequestFields), "Get spec.requestFields")
 	equal(t, as[*v1.Provider](t, got).Status.Version, 2, "Get status.version")
 
 	// Two writers at one version: exactly one succeeds.
