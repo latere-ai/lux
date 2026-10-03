@@ -283,12 +283,15 @@ func (f *fakeRecorder) count() int {
 
 // countingTransport counts every outbound request and refuses any host
 // that is not a stub provider's, so the hot-path proof is a count and
-// not a promise.
+// not a promise. seen, when a test sets it, is handed every request
+// before it is sent, so a test can read what only the request carries,
+// such as GetBody.
 type countingTransport struct {
 	next  http.RoundTripper
 	hosts map[string]bool
 	calls atomic.Int64
 	other atomic.Int64
+	seen  func(*http.Request)
 }
 
 func (t *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -296,6 +299,9 @@ func (t *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if !t.hosts[r.URL.Host] {
 		t.other.Add(1)
 		return nil, errors.New("dial to a host that is no provider: " + r.URL.Host)
+	}
+	if t.seen != nil {
+		t.seen(r)
 	}
 	return t.next.RoundTrip(r)
 }

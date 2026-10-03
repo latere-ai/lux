@@ -262,17 +262,23 @@ func (c *call) readBody() *failure {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(c.w.ResponseWriter, c.r.Body, limit))
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		switch {
-		case errors.As(err, &tooLarge):
-			return fail(CodeBodyTooLarge, "the body crossed the limit of "+strconv.FormatInt(limit, 10)+" bytes")
-		case c.r.Context().Err() != nil:
-			return fail(ClientClosed, "")
-		}
-		return fail(CodeInvalidRequest, "reading the body: "+err.Error())
+		return c.bodyFailure(err)
 	}
 	c.body = body
 	return nil
+}
+
+// bodyFailure classifies an error reading the caller's body: the limit
+// crossed, the caller gone, or a body that could not be read.
+func (c *call) bodyFailure(err error) *failure {
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		return fail(CodeBodyTooLarge, "the body crossed the limit of "+strconv.FormatInt(c.h.maxBody, 10)+" bytes")
+	case c.r.Context().Err() != nil:
+		return fail(ClientClosed, "")
+	}
+	return fail(CodeInvalidRequest, "reading the body: "+err.Error())
 }
 
 // authenticate is stage 3: the credential, its hash, the Key, its state.

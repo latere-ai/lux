@@ -150,7 +150,9 @@ func (c *call) outbound(ctx context.Context, t Target, m mode) (*http.Request, [
 	}
 	req.Header = hdr
 	req.ContentLength = int64(len(body))
-	c.decorate(req, p)
+	if f := c.decorate(req, p); f != nil {
+		return nil, nil, f
+	}
 	return req, loss, nil
 }
 
@@ -168,13 +170,55 @@ func (c *call) passthroughTarget(t Target) string {
 }
 
 // decorate adds what every outbound request carries: the Provider's
-// static headers, the User-Agent, and the request id.
-func (c *call) decorate(req *http.Request, p *v1.Provider) {
+// static headers, the User-Agent, the request id, and the Provider's
+// requestFields in the body. Both builders of an upstream request,
+// outbound and forwardOpaque, call it, so it is the one place
+// requestFields are written and no route reaches a Provider without
+// them (spec 042).
+func (c *call) decorate(req *http.Request, p *v1.Provider) *failure {
 	for name, value := range p.Spec.Headers {
 		req.Header.Set(name, value)
 	}
 	req.Header.Set("User-Agent", c.h.ua)
 	req.Header.Set(HeaderRequestID, c.id)
+	if len(p.Spec.RequestFields) == 0 {
+		return nil
+	}
+	return c.writeRequestFields(req, p)
+}
+
+// writeRequestFields replaces the outbound body with itself merged with
+// the Provider's requestFields: on a model route the body outbound
+// built, on an opaque route the caller's, read whole here under the body
+// limit instead of streamed. A body under a Content-Encoding other than
+// identity is invalid_request, because the fields cannot be written into
+// it and an upstream that decodes it would read it without them. GetBody
+// returns the merged body, so a transport that sends the request again
+// on a new connection sends it merged.
+func (c *call) writeRequestFields(req *http.Request, p *v1.Provider) *failure {
+	if enc := strings.TrimSpace(req.Header.Get("Content-Encoding")); enc != "" && !strings.EqualFold(enc, "identity") {
+		return fail(CodeInvalidRequest, "Provider "+p.Metadata.Name+" sets requestFields, which cannot be written into a body under Content-Encoding "+strconv.Quote(enc))
+	}
+	var body []byte
+	if req.Body != nil && req.Body != http.NoBody {
+		b, err := io.ReadAll(req.Body)
+		if err != nil {
+			return c.bodyFailure(err)
+		}
+		body = b
+	}
+	merged, err := mergeRequestFields(body, p.Spec.RequestFields)
+	if err != nil {
+		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": requestFields: "+err.Error())
+	}
+	req.ContentLength = int64(len(merged))
+	if len(merged) == 0 {
+		req.Body, req.GetBody = http.NoBody, nil
+		return nil
+	}
+	req.Body = io.NopCloser(bytes.NewReader(merged))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(merged)), nil }
+	return nil
 }
 
 // inject writes the Provider's credential last, under its header and
@@ -552,8 +596,9 @@ func (c *call) chooseProvider(ctx context.Context) (*v1.Provider, *failure) {
 // forwardOpaque streams the caller's body to the Provider and the
 // Provider's answer back, whole and unread: the caller chose the
 // Provider and speaks its API directly, so its answer, an error status
-// included, is the caller's to read. The record carries the upstream
-// status and zero estimated tokens.
+// included, is the caller's to read. A Provider with requestFields has
+// the body read whole and merged by decorate instead. The record carries
+// the upstream status and zero estimated tokens.
 func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	c.rec.Provider, c.rec.ProviderID, c.rec.TargetDialect = p.Metadata.Name, p.Status.ID, p.Spec.Dialect
 	c.tokens = Tokens{Estimated: true}
@@ -580,7 +625,9 @@ func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	}
 	req.Header, _ = c.outboundHeaders(modePassthrough)
 	req.ContentLength = c.r.ContentLength
-	c.decorate(req, p)
+	if f := c.decorate(req, p); f != nil {
+		return f
+	}
 	client, err := c.h.o.Clients.Client(ctx, p)
 	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": client: "+err.Error())
