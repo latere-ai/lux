@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -153,6 +154,22 @@ var reservedHeaders = map[string]bool{
 	"proxy-authenticate": true, "proxy-authorization": true, "te": true,
 	"trailer": true, "transfer-encoding": true, "upgrade": true,
 }
+
+// MaxRequestFieldsBytes bounds the compact JSON encoding of a Provider's
+// spec.requestFields, because every request the gateway sends the
+// Provider carries it.
+const MaxRequestFieldsBytes = 16384
+
+// reservedRequestFields are the top-level body members a Provider's
+// requestFields may not set, compared lower-cased: the gateway writes
+// model with the target's upstream name, reads stream off the caller's
+// body to decide how the answer is read, and sets stream_options for
+// the usage a stream is metered by.
+var reservedRequestFields = []string{"model", "stream", "stream_options"}
+
+// ReservedRequestFields returns the top-level members a Provider's
+// spec.requestFields may not set, in any case.
+func ReservedRequestFields() []string { return slices.Clone(reservedRequestFields) }
 
 // checkEnvName holds a valueFrom.env to a POSIX variable name.
 func checkEnvName(s string) error {

@@ -41,16 +41,23 @@ func (p Provider) MarshalJSON() ([]byte, error) {
 // ProviderSpec is the desired state of a Provider. The bool fields carry
 // no omitempty so a default of false is visible in a resolved object, as
 // every default is.
+//
+// RequestFields is a JSON object the gateway merges into every request
+// body it sends the Provider, the Provider's value winning on every
+// member it names, so an option the upstream reads from the body holds
+// whatever the caller sent. Its values are what encoding/json decodes a
+// JSON value into: map[string]any, []any, string, float64, and bool.
 type ProviderSpec struct {
-	Dialect     Dialect           `json:"dialect,omitempty"`
-	Tunnel      bool              `json:"tunnel"`
-	BaseURL     string            `json:"baseURL,omitempty"`
-	Credential  *Credential       `json:"credential,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Discovery   Discovery         `json:"discovery,omitzero"`
-	Health      Health            `json:"health,omitzero"`
-	Timeout     Duration          `json:"timeout,omitempty"`
-	Concurrency int               `json:"concurrency"`
+	Dialect       Dialect           `json:"dialect,omitempty"`
+	Tunnel        bool              `json:"tunnel"`
+	BaseURL       string            `json:"baseURL,omitempty"`
+	Credential    *Credential       `json:"credential,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	RequestFields map[string]any    `json:"requestFields,omitempty"`
+	Discovery     Discovery         `json:"discovery,omitzero"`
+	Health        Health            `json:"health,omitzero"`
+	Timeout       Duration          `json:"timeout,omitempty"`
+	Concurrency   int               `json:"concurrency"`
 }
 
 // Credential is how the gateway authenticates toward the upstream. The

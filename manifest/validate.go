@@ -4,6 +4,7 @@
 package manifest
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -138,6 +139,9 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 			return nil, refuse(CodeInvalidField, err.Error(), path)
 		}
 	}
+	if err := checkRequestFields(s.RequestFields); err != nil {
+		return nil, err
+	}
 	if s.Discovery.Mode != "" && !s.Discovery.Mode.Valid() {
 		return nil, refuse(CodeInvalidField, strconv.Quote(string(s.Discovery.Mode))+" is not auto or none", "spec.discovery.mode")
 	}
@@ -167,6 +171,56 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 		return nil, refuse(CodeInvalidField, "concurrency is 0 or more", "spec.concurrency")
 	}
 	return warnings, nil
+}
+
+// checkRequestFields applies the requestFields row: the object is read
+// in its JSON form, the one the gateway merges, so a value of any Go type
+// is held to the same rules; a reserved top-level member is
+// reserved_prefix, and a null member value and an encoding above
+// MaxRequestFieldsBytes are invalid_field.
+func checkRequestFields(fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	const path = "spec.requestFields"
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return refuse(CodeInvalidField, "requestFields do not encode as JSON: "+err.Error(), path)
+	}
+	var tree map[string]any
+	if err := json.Unmarshal(encoded, &tree); err != nil {
+		return refuse(CodeInvalidField, "requestFields do not decode as a JSON object: "+err.Error(), path)
+	}
+	for _, k := range slices.Sorted(maps.Keys(tree)) {
+		if slices.Contains(reservedRequestFields, strings.ToLower(k)) {
+			return refuse(CodeReservedPrefix, k+" is written by the gateway on every request; "+strings.Join(reservedRequestFields, ", ")+" are the gateway's", keyPath(path, k))
+		}
+	}
+	if err := checkNoNullMember(tree, path); err != nil {
+		return err
+	}
+	if len(encoded) > MaxRequestFieldsBytes {
+		return refuse(CodeInvalidField, "requestFields encode to at most "+strconv.Itoa(MaxRequestFieldsBytes)+" bytes; these encode to "+strconv.Itoa(len(encoded)), path)
+	}
+	return nil
+}
+
+// checkNoNullMember refuses a null member value in an object the merge
+// walks: the top level and every object value under it. A list is a
+// value the merge sets whole, so what it holds is not walked.
+func checkNoNullMember(object map[string]any, path string) error {
+	for _, k := range slices.Sorted(maps.Keys(object)) {
+		p := keyPath(path, k)
+		switch v := object[k].(type) {
+		case nil:
+			return refuse(CodeInvalidField, "a request field is a value the gateway sets, and null sets none; give a value or leave the member out", p)
+		case map[string]any:
+			if err := checkNoNullMember(v, p); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // checkModel applies the Model.spec table.

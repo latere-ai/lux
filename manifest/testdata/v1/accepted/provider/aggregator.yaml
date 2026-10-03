@@ -1,0 +1,16 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: aggregator
+spec:
+  dialect: openai                      # an aggregator that routes each request to one of several vendors
+  baseURL: https://aggregator.example.com/api/v1
+  credential:
+    value: sk-aggregator-example
+  requestFields:                       # merged into every request body, the Provider's values winning
+    provider:
+      zdr: true
+      data_collection: deny
+      order: [vendor-a, vendor-b]
+  discovery:
+    mode: none
