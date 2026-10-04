@@ -16,8 +16,9 @@ import (
 	"testing"
 )
 
-// zdrFields are the requestFields an aggregator's zero data retention
-// routing is set with.
+// zdrFields are an aggregator's data terms in two members, zero data
+// retention and no data collection, so a merge writes two leaves of one
+// object.
 func zdrFields() map[string]any {
 	return map[string]any{"provider": map[string]any{"zdr": true, "data_collection": "deny"}}
 }
