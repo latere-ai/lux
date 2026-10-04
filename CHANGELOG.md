@@ -6,6 +6,19 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- A request that carries an image is reserved for as an image on every
+  model route. Through a door to a target of the same dialect, where the
+  body is forwarded as it is, the gateway took the reservation from the
+  body's length, so a page of a scan sent as base64, about a thousand
+  tokens to the model, was reserved for as tens of thousands and spent a
+  Key's `tokensPerMinute` for a whole minute: the next call of the Key
+  was refused with `rate_limited` until the minute passed. The
+  reservation is now the estimator's over the decoded request there too,
+  as it was on a translated route, and a body the codec refuses is still
+  reserved for by its length.
+
 ## v0.12.0 - 2026-10-02
 
 ### Fixed

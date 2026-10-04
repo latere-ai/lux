@@ -384,9 +384,14 @@ adjust   = reserve - settle        (a refund when positive, a further debit when
 ```
 
 `estimate` is `latere.ai/x/pkg/llmdialect/tokencount.Estimate` over
-the decoded request on translated routes, and, on a passthrough model
-route, the body's length in bytes divided by four, because no upstream
-reports a count before it answers; an opaque route reserves one request
+the request as the door's codec decodes it, on a translated route and
+on a passthrough model route alike, because no upstream reports a count
+before it answers. The estimator charges an image a flat count and not
+its bytes: a page of a scan is hundreds of kilobytes of base64 and
+about a thousand tokens, and a reservation taken from the body's length
+would be many times a Key's tokens for a minute. A body the codec
+refuses is reserved for by its length in bytes divided by 4, the one
+estimate left; an opaque route reserves one request
 and no tokens. The settle uses the measured count either way. A
 reservation is bounded by the rate, which is the bucket's burst: a
 request whose estimate is larger than a whole minute's tokens is
