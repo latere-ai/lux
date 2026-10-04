@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.13.0 - 2026-10-04
+
 ### Added
 
 - A Provider takes `spec.requestFields`, a JSON object the gateway
