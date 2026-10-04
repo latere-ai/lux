@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.12.1 - 2026-10-04
+
 ### Fixed
 
 - A request that carries an image is reserved for as an image on every
