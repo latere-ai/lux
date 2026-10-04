@@ -100,7 +100,7 @@ it off. A caller's other members, its own routing preferences beside
 yours included, still reach the upstream.
 
 For OpenRouter, this restricts every request to endpoints with zero data
-retention, run by providers that do not collect data:
+retention:
 
 ```yaml
 apiVersion: lux.latere.ai/v1beta1
@@ -113,12 +113,15 @@ spec:
   requestFields:
     provider:
       zdr: true
-      data_collection: deny
 ```
 
 A model that has no endpoint meeting the terms is refused by OpenRouter,
 and the call fails rather than reaching an endpoint that keeps the
 prompt.
+
+OpenRouter's `data_collection: deny` is a separate, narrower option: it
+leaves out the providers that may train on the data. Set it beside `zdr`
+under `provider` when you want that exclusion as well.
 
 To change the field on a running gateway, apply the Provider again with
 `lux apply -f`, or `PUT` it to `/v1/providers/{name}`; a manifest that

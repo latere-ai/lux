@@ -72,7 +72,9 @@ targets. The Gemini Models answer through the `/gemini/v1beta` door.
 The `openrouter` Provider sets no data policy, so OpenRouter routes each
 request under its account defaults. To hold every request through it to
 endpoints with zero data retention, add `spec.requestFields` with
-`provider: {zdr: true, data_collection: deny}`, as
+`provider: {zdr: true}`, as
 [`docs/security.md`](../../docs/security.md#hold-an-upstream-to-its-data-terms)
-shows; the gateway then sets those members on every request, whatever a
-caller sends.
+shows; the gateway then sets that member on every request, whatever a
+caller sends. `data_collection: deny`, which leaves out the providers
+that may train on the data, is a separate member that can sit beside
+it.

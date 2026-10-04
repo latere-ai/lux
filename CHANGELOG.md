@@ -14,9 +14,8 @@ refused before it is pushed.
   names: an object merges member by member, and any other value, a list
   included, replaces the caller's whole. A caller can then neither leave
   an upstream option out nor turn it off; for OpenRouter,
-  `provider: {zdr: true, data_collection: deny}` restricts every request
-  to endpoints with zero data retention run by providers that do not
-  collect data. The merge reaches model routes and opaque routes alike,
+  `provider: {zdr: true}` restricts every request to endpoints with zero
+  data retention. The merge reaches model routes and opaque routes alike,
   so toward such a Provider an opaque body is read whole rather than
   streamed, and a request whose body is sent under a `Content-Encoding`
   is refused `invalid_request`. `model`, `stream`, and `stream_options`
