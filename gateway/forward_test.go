@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/pkg/llmdialect/bridge"
+	"latere.ai/x/pkg/llmdialect/ir"
+
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
@@ -57,8 +60,63 @@ func TestSameDialectSameBytes(t *testing.T) {
 	if rec.Header().Get(HeaderLoss) != "" || rec.Header().Get("Content-Length") != "" && rec.Header().Get("Content-Length") != itoa(int64(len(openaiChatResponse))) {
 		t.Errorf("response headers %v", rec.Header())
 	}
-	if w.limiter.last().InputTokens != int64(len(body))/4 || w.limiter.last().OutputTokens != defaultOutputTokens {
-		t.Errorf("passthrough reservation %+v", w.limiter.last())
+	want, _, err := bridge.CountTokensFor(ir.DialectOpenAIChat, []byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.limiter.last().InputTokens != want || w.limiter.last().OutputTokens != defaultOutputTokens {
+		t.Errorf("passthrough reservation %+v, want the estimator's %d input tokens", w.limiter.last(), want)
+	}
+}
+
+// TestAPassthroughReservesAnImageAsAnImage: a body that carries an image as
+// base64 is long in bytes and short in tokens. Through the /openai door to
+// an openai target, where no codec rewrites the body, the reservation is
+// still the estimator's over the decoded request, a flat charge for the
+// image, and not the body's length divided by 4, which for a scanned page
+// is many times a Key's tokens for a minute. The provider receives the
+// bytes unchanged.
+func TestAPassthroughReservesAnImageAsAnImage(t *testing.T) {
+	w := newWorld(t)
+	w.openai.respondJSON(200, openaiChatResponse)
+	image := strings.Repeat("iVBORw0KGgoAAAANSUhEUgAA", 12000) // 288,000 base64 characters
+	body := `{"model":"gpt-4.1","max_completion_tokens":8192,"messages":[{"role":"user","content":[` +
+		`{"type":"text","text":"Read this page."},{"type":"image_url","image_url":{"url":"data:image/png;base64,` + image + `"}}]}]}`
+	if rec := w.post("/openai/v1/chat/completions", body); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if got := w.openai.last(t); string(got.Body) != body {
+		t.Error("the provider did not receive the body byte for byte")
+	}
+	res := w.limiter.last()
+	want, estimated, err := bridge.CountTokensFor(ir.DialectOpenAIChat, []byte(body))
+	if err != nil || !estimated {
+		t.Fatalf("the estimator read the body as %d, estimated %v: %v", want, estimated, err)
+	}
+	if res.InputTokens != want || res.OutputTokens != 8192 {
+		t.Errorf("the reservation is %d input and %d output tokens, want the estimator's %d and the 8192 the request asked for", res.InputTokens, res.OutputTokens, want)
+	}
+	if byLength := int64(len(body)) / 4; res.InputTokens*10 > byLength {
+		t.Errorf("the reservation is %d input tokens for a body whose length gives %d; an image is charged as an image, not by its bytes", res.InputTokens, byLength)
+	}
+}
+
+// TestAPassthroughBodyTheCodecRefusesReservesByLength: a body the door's
+// codec cannot decode still has to be reserved for before it is forwarded
+// as it is, and its length divided by 4 is the one estimate left.
+func TestAPassthroughBodyTheCodecRefusesReservesByLength(t *testing.T) {
+	w := newWorld(t)
+	w.openai.respondJSON(200, openaiChatResponse)
+	body := `{"model":"gpt-4.1","messages":"not a list of messages, and long enough to tell the 2 estimates apart"}`
+	if _, _, err := bridge.CountTokensFor(ir.DialectOpenAIChat, []byte(body)); err == nil {
+		t.Skip("the codec decodes this body; the case needs a body it refuses")
+	}
+	rec := w.post("/openai/v1/chat/completions", body)
+	if rec.Code != 200 {
+		t.Skipf("the door refuses the body before it reserves: %d", rec.Code)
+	}
+	if got := w.limiter.last().InputTokens; got != int64(len(body))/4 {
+		t.Errorf("the reservation is %d input tokens, want the body's length divided by 4, %d", got, int64(len(body))/4)
 	}
 }
 

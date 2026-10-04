@@ -396,10 +396,12 @@ func (c *call) modeFor(t Target) mode {
 
 // reserve is stage 7. The reservation is spec 007's: the input estimate
 // and the requested output, or 1024; a count and an opaque route reserve
-// zero tokens. The estimate is the estimator's over a body the door's
-// codec must decode, which is read once here and once more per attempt
-// so the loss report is that target's alone, and the byte heuristic on
-// a passthrough, whose body no codec reads.
+// zero tokens. The estimate is the estimator's over the body as the
+// door's codec decodes it, on a translated route and on a passthrough
+// alike: a body's length says little about its tokens once it carries an
+// image, whose bytes are many and whose tokens are few, and a reservation
+// taken from the length would spend a Key's whole minute on one page of a
+// scan. A body the codec refuses falls back to its length.
 func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 	if c.h.o.Limiter == nil {
 		return nil
@@ -409,11 +411,7 @@ func (c *call) reserve(ctx context.Context, res Reservation) *failure {
 		if res.OutputTokens == 0 {
 			res.OutputTokens = defaultOutputTokens
 		}
-		if c.modeFor(c.targets[0]) != modePassthrough {
-			res.InputTokens = c.inputEstimate()
-		} else {
-			res.InputTokens = int64(len(c.body)) / 4
-		}
+		res.InputTokens = c.inputEstimate()
 	}
 	lease, err := c.h.o.Limiter.Reserve(ctx, res)
 	if err != nil {
