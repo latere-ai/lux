@@ -41,7 +41,7 @@ func (s *staleKeys) Refresh(_ context.Context, hash string) (*v1.Key, error) {
 	if k, ok := s.stored[hash]; ok {
 		return k, nil
 	}
-	return s.fakeKeys.byHash[hash], nil
+	return s.byHash[hash], nil
 }
 
 // store sets the Key the store holds for value.
