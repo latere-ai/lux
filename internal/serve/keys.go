@@ -13,6 +13,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/events"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -27,9 +28,10 @@ const (
 	KeyCacheEntries = 100_000
 	// MetricKeyCacheHits counts every lookup by result: hit for a Key
 	// served from the cache, miss for one read from the store, negative
-	// for an unknown value answered from a negative entry, and stale for
-	// a Key served past its window under the grace of spec 036 because
-	// the store read that would replace it failed.
+	// for an unknown value answered from a negative entry, stale for a
+	// Key served past its window under the grace of spec 036 because the
+	// store read that would replace it failed, and refresh for a Key
+	// read past the cache before a model_not_allowed refusal (spec 044).
 	MetricKeyCacheHits = "lux_key_cache_hits_total"
 	// DefaultKeyCache is LUX_KEY_CACHE's default.
 	DefaultKeyCache = 10 * time.Second
@@ -173,7 +175,7 @@ func NewKeyCache(o KeyCacheOptions) *KeyCache {
 	}
 	c := &KeyCache{o: o, entries: map[string]*entry{}, byObject: map[string]map[string]bool{}}
 	if o.Metrics != nil {
-		c.hits = o.Metrics.Counter(MetricKeyCacheHits, "Key lookups by result: hit, miss, negative, or stale.")
+		c.hits = o.Metrics.Counter(MetricKeyCacheHits, "Key lookups by result: hit, miss, negative, stale, or refresh.")
 	}
 	return c
 }
@@ -200,6 +202,27 @@ func (c *KeyCache) ByHash(ctx context.Context, hash string) (*v1.Key, error) {
 	}
 	return e.k, nil
 }
+
+// Refresh implements gateway.KeyRefresher: the Key whose value's
+// SHA-256 is hash as the store holds it, read past the cache, with the
+// cache left holding what was read; nil and no error for a value no Key
+// has any longer. A door calls it once before it refuses a request
+// model_not_allowed, so a Key changed through another replica, whose
+// journal row this replica's tail has not read yet, is served at once.
+// Each call is one store read, a second or third only when an
+// invalidation lands while the read is in flight. A read that fails is
+// the store's error and leaves the entry as it was, so the grace of
+// spec 036 still serves it to the Key's other requests.
+func (c *KeyCache) Refresh(ctx context.Context, hash string) (*v1.Key, error) {
+	c.count("refresh")
+	e, err := c.reread(ctx, cacheKeyHash+hash, func() (*entry, error) { return c.readKey(ctx, hash) })
+	if err != nil {
+		return nil, err
+	}
+	return e.k, nil
+}
+
+var _ gateway.KeyRefresher = (*KeyCache)(nil)
 
 func (c *KeyCache) readKey(ctx context.Context, hash string) (*entry, error) {
 	id, err := c.o.Store.Keys().ByHash(ctx, hash)
@@ -258,6 +281,10 @@ const (
 	fromStale
 )
 
+// errUnsettled is a lookup that read three times and had each read
+// invalidated while it was in flight, or each outlast its window.
+var errUnsettled = errors.New("reading cached authority: concurrent invalidation or expired lookup")
+
 // lookup never returns a store answer invalidated while it was in flight.
 // TTL starts before the read, so a delayed result cannot extend authority.
 // Sustained invalidation or a store slower than TTL fails closed after three reads.
@@ -274,13 +301,7 @@ func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, 
 			}
 			return e, fromStore, nil
 		}
-		c.mu.Lock()
-		generation := c.generation
-		c.sequence++
-		sequence := c.sequence
-		expires := c.o.Now().Add(c.o.TTL)
-		c.mu.Unlock()
-		e, err := read()
+		e, ok, err := c.fetch(ctx, key, read)
 		if err != nil {
 			if ctx.Err() == nil {
 				if stale, ok := c.stale(key); ok {
@@ -289,15 +310,57 @@ func (c *KeyCache) lookup(ctx context.Context, key string, read func() (*entry, 
 			}
 			return nil, fromStore, err
 		}
-		if err := ctx.Err(); err != nil {
-			return nil, fromStore, err
-		}
-		e.key, e.expires, e.sequence = key, expires, sequence
-		if current, ok := c.publish(e, generation); ok {
-			return current, fromStore, nil
+		if ok {
+			return e, fromStore, nil
 		}
 	}
-	return nil, fromStore, errors.New("reading cached authority: concurrent invalidation or expired lookup")
+	return nil, fromStore, errUnsettled
+}
+
+// reread is lookup past the cache: every attempt reads the store, and
+// the entry the read publishes replaces the cached one. It holds
+// lookup's guarantees, an answer invalidated in flight is never
+// returned and three such reads fail closed, and a read that fails is
+// the store's error with the cached entry left in place.
+func (c *KeyCache) reread(ctx context.Context, key string, read func() (*entry, error)) (*entry, error) {
+	for range 3 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		e, ok, err := c.fetch(ctx, key, read)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return e, nil
+		}
+	}
+	return nil, errUnsettled
+}
+
+// fetch is one store read published under the generation it began in:
+// the entry the cache holds for key after it, false when an
+// invalidation landed while the read was in flight or the window passed
+// before it ended, and the read's error, or the context's when it ended
+// during the read. The window starts before the read, so a slow read
+// cannot extend authority.
+func (c *KeyCache) fetch(ctx context.Context, key string, read func() (*entry, error)) (*entry, bool, error) {
+	c.mu.Lock()
+	generation := c.generation
+	c.sequence++
+	sequence := c.sequence
+	expires := c.o.Now().Add(c.o.TTL)
+	c.mu.Unlock()
+	e, err := read()
+	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	e.key, e.expires, e.sequence = key, expires, sequence
+	current, ok := c.publish(e, generation)
+	return current, ok, nil
 }
 
 // stale is the positive entry under key whose window has passed and
