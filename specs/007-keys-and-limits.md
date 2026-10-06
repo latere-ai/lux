@@ -10,7 +10,7 @@ depends_on:
 affects: [gateway/, metering/, internal/serve/, internal/config/, cmd/luxd/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-10-06
 author: changkun
 ---
 
@@ -219,7 +219,13 @@ replica tails `Journal.Since` ([[010-state]]) and evicts the entry of
 any Key a `key.updated`, `key.rotated`, or `key.deleted` row names
 ([[012-request-log-and-events]]), so a delete, a disable, or a rotation
 is seen at the next request on a replica that has consumed the row and
-within the window on one that has not. The journal row is written for
+within the window on one that has not. A change that grants a model is
+not left to that schedule: before a door refuses `model_not_allowed`,
+`KeyCache.Refresh` reads the Key past its entry, one store read that
+replaces the entry, and the Key the store holds decides
+([044-key-reread-before-model-refusal](.archive/044-key-reread-before-model-refusal.md)), so a model
+added to `spec.models` through one replica is served at the next
+request through any other. The journal row is written for
 every mutation whether or not a sink is configured, so the tail works
 in every installation with a store; in file mode the `SIGHUP` snapshot
 swap empties the cache ([[010-state]]). A negative entry protects the
@@ -229,9 +235,10 @@ Unknown values are also subject to the door's unauthenticated rate
 `LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE` per client address
 ([[011-api]]), so guessing costs the guesser first. Every lookup counts
 once in `lux_key_cache_hits_total` with `result` `hit`, `miss`,
-`negative`, or `stale`, the last a Key served past its window while the
-store does not answer ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)'s grace,
-[[019-observability]]).
+`negative`, `stale`, a Key served past its window while the store does
+not answer ([036-catalog-in-memory](.archive/036-catalog-in-memory.md)'s grace,
+[[019-observability]]), or `refresh`, a Key read past its entry before
+a `model_not_allowed` refusal.
 
 The cache is what makes invariant 3 of [[001-architecture]] cheap: a
 hot path that touches the store once per Key per ten seconds, and a
@@ -328,7 +335,8 @@ after the Key was resolved, a discovered one or a newly declared one,
 is admitted by a selector that matches it without a re-resolve; a
 Model that was deleted stops matching because its name is no longer in
 the catalog. The refusal is `model_not_allowed`, 403, at stage 5 of
-[[004-request-path]], after `model_not_found`, so a caller learns
+[[004-request-path]], once the Key read past the cache does not match
+either, after `model_not_found`, so a caller learns
 whether the name exists before whether this Key may use it. The same
 match is what `GET /v1/models` on a door lists ([[004-request-path]])
 and what admits an opaque route's Provider: one whose Models some

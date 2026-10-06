@@ -9,7 +9,7 @@ depends_on:
 affects: [cmd/luxd/, internal/serve/, internal/api/, internal/auth/, internal/store/, internal/events/, internal/reqlog/, internal/tunnel/, gateway/, deploy/base/prometheusrule.yaml, .lateregate.yaml, docs/]
 effort: small
 created: 2026-09-13
-updated: 2026-09-27
+updated: 2026-10-06
 author: changkun
 ---
 
@@ -409,7 +409,7 @@ pod's name, then the host's, as that package derives it.
 
 | Plane | Fields |
 |---|---|
-| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
+| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
 | control | `request_id`, `route`, `action`, `kind`, `name`, `status`, `code`, `subject`, `duration_ms` |
 
 The line's message is the span's name, `lux.request` or `lux.api`, so
@@ -424,7 +424,11 @@ route has answered or the refusal is written, the file mode's public
 `/v1` included; its `status` is `ok` without a refusal, `refused` for a
 code answered under 500, and `failed` at or above; `name` is the
 `{name}` of the path, empty on a route without one; `action` and `kind`
-are what the authorizer was asked, empty when nothing was.
+are what the authorizer was asked, empty when nothing was. The data
+plane's `upstream_status` is the record's: the last attempt's HTTP
+status, `0` when no provider answered, so a provider's refusal, a
+provider's failure, and a refusal before any attempt read apart
+([043-provider-refusal-reason](.archive/043-provider-refusal-reason.md)).
 
 `route` is the route template of [[004-request-path]]'s door table or
 [[011-api]]'s route table, never the request's own path, for the reason

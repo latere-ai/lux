@@ -95,6 +95,8 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [040](.archive/040-base-path-in-the-place-of-v1.md) | The base path in the place of /v1: one version segment in every address behind a shared origin | medium | complete | 011, 014, 018, 034 |
 | [041](.archive/041-request-history-paging.md) | Request history paging: a cursor that keeps its range, and archive pages of bounded reading | small | complete | 009, 011, 012 |
 | [042](.archive/042-provider-request-fields.md) | Provider request fields: JSON members a Provider sets on every request body the gateway sends it | small | complete | 003, 004, 005, 011 |
+| [043](.archive/043-provider-refusal-reason.md) | A provider's refusal reason: the upstream status on the request log line, and every credential redacted from the developer detail | small | complete | 004, 005, 019 |
+| [044](.archive/044-key-reread-before-model-refusal.md) | A Key read past the cache before a model refusal: a model granted through one replica is served through any other at once | small | complete | 004, 007, 018 |
 
 ## Dependency graph
 
@@ -135,6 +137,8 @@ flowchart BT
   S040[040 base path in the place of /v1]
   S041[041 request history paging]
   S042[042 provider request fields]
+  S043[043 provider refusal reason]
+  S044[044 key reread before a model refusal]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -178,6 +182,8 @@ flowchart BT
   S041 --> S012
   S042 --> S005
   S042 --> S011
+  S043 --> S019
+  S044 --> S018
 ```
 
 ## Build order
@@ -201,6 +207,7 @@ flowchart BT
 | 15 | 040 | one version segment in every address behind a shared origin: the base path in the place of the control plane's `/v1`, opted into by `LUX_BASE_PATH_MODE=replace`, with the documents, the clients and the conformance suite following it |
 | 16 | 041 | a cursor that keeps the range it was issued for, so a page without `to` follows the first; archive pages that make a bounded number of bucket calls and skip the hours that hold no objects |
 | 17 | 042 | a Provider's `requestFields` merged into every request body the gateway sends it, the Provider's value winning, so an upstream option such as zero data retention routing holds whatever a caller sends |
+| 18 | 043, 044 | a provider's refusal readable on both sides: its status on the request log line and its reason, credentials redacted, in the developer detail; a model granted to a Key through one replica served through any other at once |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.

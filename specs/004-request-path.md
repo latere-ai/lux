@@ -8,7 +8,7 @@ depends_on:
 affects: [gateway/, internal/serve/, docs/]
 effort: large
 created: 2026-09-13
-updated: 2026-09-27
+updated: 2026-10-06
 author: changkun
 ---
 
@@ -237,7 +237,10 @@ flowchart TD
    JSON object or has no string `model` is `invalid_request`, 400. The
    name is resolved against the catalog by exact name; an unknown name
    is `model_not_found`, 404. A name that matches none of the Key's
-   selectors under `manifest.Match` is `model_not_allowed`, 403. A
+   selectors under `manifest.Match` is `model_not_allowed`, 403, once a
+   `KeyLookup` that is also a `KeyRefresher` has read the Key past its
+   cache and that Key does not match either
+   ([044-key-reread-before-model-refusal](.archive/044-key-reread-before-model-refusal.md)). A
    Model with `spec.disabled` true is `model_disabled`, 403
    ([039-disabled-models](.archive/039-disabled-models.md)). An opaque route skips this stage, and reaches no
    Provider through a disabled Model.
@@ -284,7 +287,9 @@ flowchart TD
    status, a `3xx`, or a retryable one on the last attempt, is
    `upstream_error`, 502; the Provider's `timeout` passing is
    `upstream_timeout`, 504. Each carries the upstream status and its
-   body's first 1 KiB in the developer detail. A Key lookup, a catalog
+   body's first 1 KiB in the developer detail, with the Provider's
+   credential and every other credential-shaped string redacted before
+   the cut ([043-provider-refusal-reason](.archive/043-provider-refusal-reason.md)). A Key lookup, a catalog
    read, a target selection, or a reservation the store could not
    answer, at whichever stage asks it, is `store_unavailable`, 503,
    [[011-api]]'s code, never a refusal that blames the caller. A body
@@ -564,6 +569,9 @@ type Options struct {
 // be nil.
 type KeyLookup interface {
 	ByHash(ctx context.Context, hash string) (*v1.Key, error) // nil, nil for an unknown hash
+}
+type KeyRefresher interface { // optional on a KeyLookup: the Key past the cache, asked before model_not_allowed (044)
+	Refresh(ctx context.Context, hash string) (*v1.Key, error)
 }
 type Catalog interface {
 	Model(ctx context.Context, name string) (*v1.Model, error) // exact name; nil, nil for none
