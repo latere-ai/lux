@@ -105,6 +105,7 @@ type call struct {
 
 	door    v1.Dialect
 	route   route
+	hash    string // the SHA-256 of the presented credential, what the Key is looked up by
 	key     *v1.Key
 	body    []byte
 	probe   bridge.Call
@@ -287,15 +288,23 @@ func (c *call) authenticate(ctx context.Context) *failure {
 	if !ok {
 		return fail(CodeUnauthenticated, "no credential: Authorization: Bearer, x-api-key, x-goog-api-key, or the query parameter key")
 	}
-	k, err := c.h.o.Keys.ByHash(ctx, hashValue(value))
+	c.hash = hashValue(value)
+	k, err := c.h.o.Keys.ByHash(ctx, c.hash)
 	if err != nil {
 		return fail(CodeStoreUnavailable, "Key lookup: "+err.Error())
 	}
 	if k == nil {
 		return fail(CodeUnauthenticated, "no Key has the presented value")
 	}
+	return c.admit(k)
+}
+
+// admit makes k the request's Key, its identity the record's, and
+// decides its state.
+func (c *call) admit(k *v1.Key) *failure {
 	c.key = k
 	c.rec.KeyID, c.rec.KeyPrefix, c.rec.Owner = k.Status.ID, k.Status.Prefix, k.Status.Owner
+	c.rec.Labels = nil
 	if len(k.Metadata.Labels) > 0 {
 		c.rec.Labels = maps.Clone(k.Metadata.Labels)
 	}
@@ -341,12 +350,52 @@ func (c *call) lookupModel(ctx context.Context, name string) (*v1.Model, *failur
 	}
 	c.rec.Model, c.rec.ModelID = m.Metadata.Name, m.Status.ID
 	if !allowed(c.key, m.Metadata.Name) {
-		return nil, fail(CodeModelNotAllowed, "none of the Key's selectors "+fmt.Sprint(c.key.Spec.Models)+" matches "+strconv.Quote(m.Metadata.Name))
+		if f := c.reread(ctx, m.Metadata.Name); f != nil {
+			return nil, f
+		}
 	}
 	if m.Spec.Disabled {
 		return nil, fail(CodeModelDisabled, "Model "+strconv.Quote(m.Metadata.Name)+" has spec.disabled true")
 	}
 	return m, nil
+}
+
+// reread is the one Key read past the cache a model_not_allowed refusal
+// costs. A replica's cached Key can select fewer models than the store
+// holds when another replica applied a change whose journal row this
+// one has not read yet (spec 007), so before refusing, the door asks a
+// KeyRefresher for the Key as the store holds it. That Key is adopted
+// and decides: its state first, then its selectors. A value no Key has
+// any longer is unauthenticated. A read that fails leaves the cached
+// Key's refusal, with the failure in its detail, because a refusal the
+// cache already decided is not the store's outage. A KeyLookup without
+// Refresh refuses on the cached Key.
+func (c *call) reread(ctx context.Context, model string) *failure {
+	notAllowed := func(k *v1.Key, why string) *failure {
+		return fail(CodeModelNotAllowed, "none of the Key's selectors "+fmt.Sprint(k.Spec.Models)+" matches "+strconv.Quote(model)+why)
+	}
+	r, ok := c.h.o.Keys.(KeyRefresher)
+	if !ok {
+		return notAllowed(c.key, "")
+	}
+	k, err := r.Refresh(ctx, c.hash)
+	switch {
+	case err != nil:
+		return notAllowed(c.key, "; rereading the Key failed: "+err.Error())
+	case k == nil:
+		// An unauthenticated record names no Key, as one refused at
+		// stage 3 does.
+		c.key = nil
+		c.rec.KeyID, c.rec.KeyPrefix, c.rec.Owner, c.rec.Labels = "", "", "", nil
+		return fail(CodeUnauthenticated, "no Key has the presented value; it was removed or rotated since this replica cached it")
+	}
+	if f := c.admit(k); f != nil {
+		return f
+	}
+	if !allowed(k, model) {
+		return notAllowed(k, "")
+	}
+	return nil
 }
 
 // selectTargets is stage 6: the Router's order, kept to the targets this

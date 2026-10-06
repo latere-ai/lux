@@ -60,6 +60,17 @@ type KeyLookup interface {
 	ByHash(ctx context.Context, hash string) (*v1.Key, error)
 }
 
+// KeyRefresher is a KeyLookup that can read a Key past its cache. A door
+// whose KeyLookup implements it asks Refresh once before it refuses a
+// request model_not_allowed, so a Key whose models were widened through
+// another replica is served before that change's invalidation reaches
+// this one (spec 044). Refresh answers as ByHash does, from the store
+// rather than a cache, and leaves its cache holding what it read. A
+// door whose KeyLookup lacks it refuses on what ByHash answered.
+type KeyRefresher interface {
+	Refresh(ctx context.Context, hash string) (*v1.Key, error)
+}
+
 // Catalog is desired state as the door reads it: a Model by its exact
 // name, declared or discovered, every Model for the list a Key may see,
 // and a Provider by name or prv_ id, without its credential value. A
