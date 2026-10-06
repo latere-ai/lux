@@ -4,6 +4,7 @@
 package conformance
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -64,6 +65,13 @@ type serverOptions struct {
 	// stubs starts the stub providers and the document; without them the
 	// suite's Providers name hosts under example.com.
 	stubs bool
+	// store, when set, is the store the server mode serves from in place
+	// of a memory store of its own, so two servers over one store stand
+	// for two replicas of one installation.
+	store store.Store
+	// keyTail and keyCache are the Key cache's journal tail interval and
+	// window; zero is the harness's 100ms and one second.
+	keyTail, keyCache time.Duration
 }
 
 // server is one running reference server.
@@ -179,7 +187,11 @@ func startServer(t testing.TB, o serverOptions) *server {
 		st = store.Instrument(files, reg)
 		identity, err = auth.New(ctx, auth.Options{HTTP: httpClient})
 	} else {
-		st = store.Instrument(memory.New(), reg)
+		backing := o.store
+		if backing == nil {
+			backing = memory.New()
+		}
+		st = store.Instrument(backing, reg)
 		s.iss = issuertest.New(t, issuertest.WithDefaultAudience(harnessAudience))
 		s.az = stub.New(t)
 		opts := auth.Options{Issuers: []string{s.iss.URL()}, Audiences: []string{harnessAudience}, HTTP: httpClient, AuthorizerTimeout: 2 * time.Second}
@@ -202,7 +214,8 @@ func startServer(t testing.TB, o serverOptions) *server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: time.Second, Tail: 100 * time.Millisecond, Metrics: reg, Logger: logger})
+	keyTail, keyCache := cmp.Or(o.keyTail, 100*time.Millisecond), cmp.Or(o.keyCache, time.Second)
+	keys := serve.NewKeyCache(serve.KeyCacheOptions{Store: st, TTL: keyCache, Tail: keyTail, Metrics: reg, Logger: logger})
 	limiter := serve.NewLimiter(serve.LimiterOptions{Store: st, Budgets: keys, Defaults: defaults, Flush: 200 * time.Millisecond, Logger: logger})
 	recorder := serve.NewRecorder(serve.RecorderOptions{Store: st, Catalog: &serve.Catalog{Objects: st.Objects()}, Limiter: limiter, Metrics: reg, Flush: 200 * time.Millisecond, Logger: logger})
 	var credentials gateway.CredentialSource = &serve.StoreCredentials{Credentials: st.Credentials(), Keys: keyring}
