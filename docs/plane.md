@@ -407,6 +407,16 @@ What the platform spends at the end of the run is `DELETE
 `LUX_KEY_CACHE` on every replica, and the usage stays readable by the
 Key's id through `GET /v1/usage`, which is the ledger line for that run.
 
+A change to the Key during the run reaches the doors on two schedules.
+A change that takes access away, a narrower `models`, `spec.disabled`,
+or a delete, is refused on every replica within `LUX_KEY_CACHE`. A
+change that grants a model is served on the next request through any
+replica: a replica whose cached Key does not select the requested model
+reads the Key from the store before it refuses `model_not_allowed`. So
+the platform can add a model to a run's Key and call it at once. The
+door's model list, `GET /openai/v1/models` and its siblings, follows the
+cache and shows the added model within `LUX_KEY_CACHE`.
+
 The composition needs no token exchange, no delegation claim, and no
 signing key shared between the two planes, because each hop carries one
 credential kind that the next hop verifies on its own terms.

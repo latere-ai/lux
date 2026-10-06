@@ -121,7 +121,10 @@ Postgres 17 on the same machine over loopback:
 The Postgres figure is on loopback; across a network each of the three
 round trips adds the network's latency, and each held one of the pool's
 connections for its length. With the catalog in memory the data plane
-reads the store for a Key once per `LUX_KEY_CACHE` and for nothing else.
+reads the store for a Key once per `LUX_KEY_CACHE`, and once more for a
+request whose cached Key does not select the model it names, before it
+refuses that request `model_not_allowed`; it reads the store for
+nothing else.
 
 ## A measured run
 

@@ -40,7 +40,7 @@ Scrape `/metrics` on the internal listener. The metrics worth watching:
 | `lux_authorizer_requests_total` | counter | `decision` | control-plane decisions; `decision` is `allow`, `deny`, `unavailable` |
 | `lux_authorizer_duration_seconds` | histogram | `decision` | authorizer latency |
 | `lux_store_operations_total` | counter | `op`, `result` | store calls; `result` is `ok`, `conflict`, `error` |
-| `lux_key_cache_hits_total` | counter | `result` | Key lookups; `result` is `hit`, `miss`, `negative`, `stale` (served past its window while the store does not answer) |
+| `lux_key_cache_hits_total` | counter | `result` | Key lookups; `result` is `hit`, `miss`, `negative`, `stale` (served past its window while the store does not answer), `refresh` (read from the store before a `model_not_allowed` refusal) |
 | `lux_circuit_open` | gauge | `provider`, `model` | `1` while a target's circuit is open |
 | `lux_events_pending` | gauge | none | events waiting for the sink |
 | `lux_requestlog_dropped_total` | counter | none | request-log records lost when the archive is unreachable |
@@ -113,13 +113,21 @@ planes apart by it.
 
 | Plane | Fields |
 |---|---|
-| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
+| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
 | control | `request_id`, `route`, `action`, `kind`, `name`, `status`, `code`, `subject`, `duration_ms` |
 
 `route` is the route's template, never the path as sent: the door's
 (`/openai/v1/chat/completions`) or the control plane's (`/v1/keys/{name}`),
 and `unmatched` for a request no route answers. The `lux.request` and
 `lux.api` spans carry the same value as `lux.route`.
+
+`upstream_status` is the HTTP status of the last provider answer, `0`
+when no provider answered. With `code` it tells a request the provider
+refused (`upstream_rejected` with a `4xx`) from one it failed
+(`upstream_error` with a `5xx` or a `429`). The provider's own reason is
+not in the log, because the log carries no body; the caller receives
+it in `Lux-Error-Detail`, the status and the start of the provider's
+answer with any credential redacted.
 
 `WARN` marks an event delivery failure, a dropped request-log batch, a
 provider health transition, and a circuit opening; `ERROR` a failed store
