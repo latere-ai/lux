@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.14.0 - 2026-10-06
+
 ### Fixed
 
 - A model added to a Key's `spec.models` is served on the next request
