@@ -458,7 +458,7 @@ var (
 	baseFields    = []string{"service", "version", "replica"}
 	joinFields    = []string{"trace_id", "span_id"}
 	encoderFields = []string{"time", "level", "msg"}
-	dataFields    = []string{"request_id", "door", "route", "model", "provider", "status", "code", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream"}
+	dataFields    = []string{"request_id", "door", "route", "model", "provider", "status", "code", "upstream_status", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream"}
 	controlFields = []string{"request_id", "route", "action", "kind", "name", "status", "code", "subject", "duration_ms"}
 )
 

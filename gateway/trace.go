@@ -166,6 +166,7 @@ func logRequest(ctx context.Context, logger *slog.Logger, rec Record) {
 		slog.String("provider", rec.Provider),
 		slog.String("status", string(rec.Status)),
 		slog.String("code", string(rec.Error)),
+		slog.Int("upstream_status", rec.UpstreamStatus),
 		slog.String("key_prefix", rec.KeyPrefix),
 		slog.String("owner", rec.Owner),
 		slog.Int64("duration_ms", rec.Latency.Milliseconds()),

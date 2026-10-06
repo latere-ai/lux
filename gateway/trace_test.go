@@ -277,7 +277,7 @@ func TestTracingOffByDefault(t *testing.T) {
 }
 
 // dataLogFields is spec 019's field row for the data plane.
-var dataLogFields = []string{"request_id", "door", "route", "model", "provider", "status", "code", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream"}
+var dataLogFields = []string{"request_id", "door", "route", "model", "provider", "status", "code", "upstream_status", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream"}
 
 // logLines parses the handler's log as one JSON object per line.
 func logLines(t *testing.T, text string) []map[string]any {
@@ -323,7 +323,7 @@ func TestRequestLineFields(t *testing.T) {
 		t.Errorf("fields %v", fields)
 	}
 	want := map[string]any{"request_id": rec.Header().Get(HeaderRequestID), "door": "openai", "route": "/openai/v1/chat/completions", "model": "gpt", "provider": "oai",
-		"status": "ok", "code": "", "key_prefix": keyValue[:12], "owner": "https://login.example.com|alice", "input_tokens": float64(10), "output_tokens": float64(3), "stream": false}
+		"status": "ok", "code": "", "upstream_status": float64(200), "key_prefix": keyValue[:12], "owner": "https://login.example.com|alice", "input_tokens": float64(10), "output_tokens": float64(3), "stream": false}
 	for k, v := range want {
 		if line[k] != v {
 			t.Errorf("%s = %v, want %v", k, line[k], v)
