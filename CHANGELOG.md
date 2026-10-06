@@ -6,6 +6,31 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- A model added to a Key's `spec.models` is served on the next request
+  through any replica. A replica that cached the Key before the change
+  used to refuse that model with `model_not_allowed` until its journal
+  tail or `LUX_KEY_CACHE` caught up, so a call made right after the
+  change through another replica than the one that applied it was
+  refused. Before it refuses `model_not_allowed`, a door now reads the
+  Key from the store once and decides on what the store holds. A Key
+  that truly lacks the model costs one store read per refused request;
+  a change that takes access away still reaches every replica within
+  `LUX_KEY_CACHE`, and the door's model list still follows the cache.
+- A provider's refusal is readable in the log and safe in the detail.
+  The `lux.request` log line gains `upstream_status`, the last provider
+  answer's HTTP status and `0` when no provider answered, so a query
+  tells a provider's `400` from a refusal Lux made itself; the field was
+  never on the line, which is why it read empty. The caller already
+  received a provider's `4xx` reason in `Lux-Error-Detail` as it does a
+  `429` or a `5xx`, the status and the first KiB of the provider's body.
+  That excerpt now has the Provider's credential replaced with
+  `[redacted]` and any other credential-shaped string, such as a bearer
+  token, a JWT, or an `sk-` key, replaced with `***` before it is cut,
+  so an upstream that echoes what it was sent no longer hands a
+  credential to the caller.
+
 ## v0.13.0 - 2026-10-04
 
 ### Added
