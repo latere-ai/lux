@@ -53,7 +53,10 @@ func TestGatewayCarriesNoCodecGlue(t *testing.T) {
 // of it; no codec, no tokencount, no httpjson, each of which the bridge
 // reaches for it. The rest is spec 004's and 008's: the kinds, the
 // circuit, the metrics, the semaphore, and the OpenTelemetry API the
-// request span and the upstream transport use.
+// request span and the upstream transport use. latere.ai/x/pkg/audit is
+// the credential redaction an upstream error body passes through before
+// it becomes a developer detail (spec 043); it is the standard library
+// alone.
 var gatewayImports = []string{
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
 	"go.opentelemetry.io/otel",
@@ -62,6 +65,7 @@ var gatewayImports = []string{
 	"go.opentelemetry.io/otel/trace",
 	module + "/manifest",
 	module + "/manifest/v1",
+	"latere.ai/x/pkg/audit",
 	"latere.ai/x/pkg/circuitbreaker",
 	"latere.ai/x/pkg/llmdialect/bridge",
 	"latere.ai/x/pkg/llmdialect/ir",

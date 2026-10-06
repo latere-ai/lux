@@ -138,6 +138,11 @@ var rootAllow = map[string]allow{
 			"latere.ai/x/pkg/semaphore",
 			"latere.ai/x/pkg/otel",
 			"latere.ai/x/pkg/metrics",
+			// An upstream error body is redacted of credential-shaped
+			// strings by latere.ai/x/pkg/audit before it becomes a
+			// developer detail (spec 043); that package is the standard
+			// library alone.
+			"latere.ai/x/pkg/audit",
 			"go.opentelemetry.io/",
 			"golang.org/x/",
 			"github.com/felixge/httpsnoop",

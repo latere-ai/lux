@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"latere.ai/x/pkg/audit"
 	"latere.ai/x/pkg/llmdialect/bridge"
 
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -224,17 +225,19 @@ func (c *call) writeRequestFields(req *http.Request, p *v1.Provider) *failure {
 // inject writes the Provider's credential last, under its header and
 // scheme, so it wins over the caller's headers and the Provider's static
 // ones. A Provider with no credential, or an empty value, gets no header.
-func (c *call) inject(ctx context.Context, req *http.Request, p *v1.Provider) error {
+// The value injected is returned, nil for none, so the developer detail
+// of an error answer can redact it should the upstream echo it.
+func (c *call) inject(ctx context.Context, req *http.Request, p *v1.Provider) ([]byte, error) {
 	cred := p.Spec.Credential
 	if cred == nil {
-		return nil
+		return nil, nil
 	}
 	value, err := c.h.o.Credentials.Credential(ctx, p.Status.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(value) == 0 {
-		return nil
+		return nil, nil
 	}
 	header, scheme := cred.Header, cred.Scheme
 	if header == "" {
@@ -248,7 +251,7 @@ func (c *call) inject(ctx context.Context, req *http.Request, p *v1.Provider) er
 		v = "Bearer " + v
 	}
 	req.Header.Set(header, v)
-	return nil
+	return value, nil
 }
 
 // hasHeader reports whether the Provider's static headers name one,
@@ -283,16 +286,36 @@ func retryable(status int) bool {
 	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500
 }
 
-// maxUpstreamDetail bounds the upstream body excerpt in a developer
-// detail.
-const maxUpstreamDetail = 1024
+// redacted is what a credential becomes in an upstream body excerpt, the
+// marker the discovery and health jobs leave in a Provider's status.
+const redacted = "[redacted]"
 
-// upstreamDetail reads the first KiB of an upstream error body for the
-// developer detail, and never for the caller's body.
-func upstreamDetail(resp *http.Response) string {
-	excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxUpstreamDetail))
+// upstreamDetail is the developer detail of an upstream error answer of
+// any status: the status and the first maxDetailBytes of the body, for
+// Lux-Error-Detail and never for the caller's body. The body is read
+// past the cap, by the credential's length and at least by the cap
+// again, so a credential that starts inside the cap is read whole and
+// redacted whole: the Provider's credential, which an upstream may echo
+// from the header it was sent, becomes redacted, and every other
+// credential-shaped string becomes what audit.Redact writes. Only then
+// is the excerpt cut. A body that fails to read keeps what arrived, and
+// the read error is named before it.
+func upstreamDetail(resp *http.Response, credential []byte) string {
+	window := maxDetailBytes + max(len(credential), maxDetailBytes)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(window)))
 	_ = resp.Body.Close()
-	return "upstream status " + strconv.Itoa(resp.StatusCode) + ": " + string(excerpt)
+	if len(credential) > 0 {
+		body = bytes.ReplaceAll(body, credential, []byte(redacted))
+	}
+	excerpt := audit.Redact(string(body))
+	if len(excerpt) > maxDetailBytes {
+		excerpt = excerpt[:maxDetailBytes]
+	}
+	status := "upstream status " + strconv.Itoa(resp.StatusCode)
+	if err != nil {
+		status += " (reading the body: " + err.Error() + ")"
+	}
+	return status + ": " + excerpt
 }
 
 // forward is stages 8 and 9: the attempt order, one attempt per target,
@@ -358,7 +381,8 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": client: "+err.Error()), false
 	}
-	if err := c.inject(ctx, req, p); err != nil {
+	credential, err := c.inject(ctx, req, p)
+	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": credential: "+err.Error()), false
 	}
 	resp, err := client.Do(req)
@@ -371,18 +395,18 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	case retryable(resp.StatusCode):
 		c.h.o.Router.RecordFailure(t)
 		c.observe(p, resp.StatusCode >= 500)
-		return fail(CodeUpstreamError, upstreamDetail(resp)), false
+		return fail(CodeUpstreamError, upstreamDetail(resp, credential)), false
 	case resp.StatusCode >= 300 && resp.StatusCode < 400, resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
 		// A redirect is not followed, and a 401 or 403 is the Provider's
 		// credential refused, which no caller's request caused: both are
 		// the provider's error, not the request's.
 		c.h.o.Router.RecordSuccess(t)
 		c.observe(p, false)
-		return fail(CodeUpstreamError, upstreamDetail(resp)), true
+		return fail(CodeUpstreamError, upstreamDetail(resp, credential)), true
 	case resp.StatusCode >= 400:
 		c.h.o.Router.RecordSuccess(t)
 		c.observe(p, false)
-		return fail(CodeUpstreamRejected, upstreamDetail(resp)), true
+		return fail(CodeUpstreamRejected, upstreamDetail(resp, credential)), true
 	}
 	c.h.o.Router.RecordSuccess(t)
 	c.observe(p, false)
@@ -632,7 +656,7 @@ func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	if err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": client: "+err.Error())
 	}
-	if err := c.inject(ctx, req, p); err != nil {
+	if _, err := c.inject(ctx, req, p); err != nil {
 		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": credential: "+err.Error())
 	}
 	resp, err := client.Do(req)
