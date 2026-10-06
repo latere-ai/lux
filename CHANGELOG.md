@@ -18,6 +18,10 @@ refused before it is pushed.
   that truly lacks the model costs one store read per refused request;
   a change that takes access away still reaches every replica within
   `LUX_KEY_CACHE`, and the door's model list still follows the cache.
+  The reread runs when the door's `KeyLookup` also implements the new
+  `gateway.KeyRefresher`, which `serve.KeyCache` does; a plane that
+  composes the gateway with a `KeyLookup` of its own and without
+  `Refresh` refuses on what `ByHash` answered, as before.
 - A provider's refusal is readable in the log and safe in the detail.
   The `lux.request` log line gains `upstream_status`, the last provider
   answer's HTTP status and `0` when no provider answered, so a query
