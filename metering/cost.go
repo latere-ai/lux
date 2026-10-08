@@ -28,6 +28,21 @@ func Cost(t Tokens, p *v1.Pricing) (v1.Money, bool) {
 	return v1.Money((n + per/2) / per), true
 }
 
+// Free reports whether p prices every token at zero: every member Cost
+// reads, input, output, cachedInput, and cacheWrite, is zero or unset,
+// so Cost answers zero for any count. It is the one test of whether a
+// request can spend, which the spend and Budget windows read to admit a
+// request whatever their remainder (spec 045). A nil p is an unpriced
+// Model, whose cost is unknown rather than zero, and is not free; one
+// member above zero makes p priced however small it is, even where
+// rounding would bill a short request at nothing.
+func Free(p *v1.Pricing) bool {
+	if p == nil {
+		return false
+	}
+	return price(p.Input) == 0 && price(p.Output) == 0 && price(p.CachedInput) == 0 && price(p.CacheWrite) == 0
+}
+
 // price is the micro-units a Pricing member quotes, 0 when it is unset.
 func price(m *v1.Money) int64 {
 	if m == nil {

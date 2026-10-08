@@ -85,6 +85,62 @@ func TestCostGolden(t *testing.T) {
 	}
 }
 
+// TestFree: a pricing is free when every price Cost reads is zero or
+// unset, a single nonzero price of any member makes it priced however
+// small, a nil pricing is unpriced and not free, and a free pricing
+// costs zero for any count.
+func TestFree(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		p    *v1.Pricing
+		want bool
+	}{
+		{"every price zero", pricing(t, "USD", 1_000_000, "0", "0", "0", "0"), true},
+		{"input and output zero, the rest unset", pricing(t, "USD", 1_000_000, "0", "0", "", ""), true},
+		{"no price named", &v1.Pricing{Currency: "USD"}, true},
+		{"a nonzero input", pricing(t, "USD", 1_000_000, "0.000001", "0", "0", "0"), false},
+		{"a nonzero output", pricing(t, "USD", 1_000_000, "0", "0.000001", "0", "0"), false},
+		{"a nonzero cached input", pricing(t, "USD", 1_000_000, "0", "0", "0.000001", "0"), false},
+		{"a nonzero cache write", pricing(t, "USD", 1_000_000, "0", "0", "0", "0.000001"), false},
+		{"unpriced", nil, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Free(c.p); got != c.want {
+				t.Fatalf("Free = %v, want %v", got, c.want)
+			}
+			if !c.want {
+				return
+			}
+			big := Tokens{Input: 1 << 40, Output: 1 << 40, CachedInput: 1 << 40, CacheWrite: 1 << 40, Reasoning: 1 << 40}
+			if cost, priced := Cost(big, c.p); cost != 0 || !priced {
+				t.Fatalf("a free pricing costs %s, priced %v", cost, priced)
+			}
+		})
+	}
+	// Every price member of Pricing is a term of Free: one set to the
+	// least amount alone, the others zero, is priced, so a member added
+	// to Pricing cannot be left out of the rule.
+	typ := reflect.TypeFor[v1.Pricing]()
+	moneyPtr := reflect.TypeFor[*v1.Money]()
+	members := 0
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		if f.Type != moneyPtr {
+			continue
+		}
+		members++
+		p := pricing(t, "USD", 1_000_000, "0", "0", "0", "0")
+		least := v1.Money(1)
+		reflect.ValueOf(p).Elem().Field(i).Set(reflect.ValueOf(&least))
+		if Free(p) {
+			t.Errorf("a pricing whose %s alone is nonzero reads as free", f.Name)
+		}
+	}
+	if members != 4 {
+		t.Errorf("Pricing has %d price members; Free and Cost read four", members)
+	}
+}
+
 // TestCachedInputIsNotBilledTwice: the cached count is a term at the
 // cached price alone, because Input already excludes it on every
 // dialect, so a request with cached tokens costs less than the same
