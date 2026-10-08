@@ -38,6 +38,7 @@ var keysCases = []testCase{
 	{group: "keys", name: "case037AnchoredWindow", spec: 37, bearer: true, key: true, fn: case037AnchoredWindow},
 	{group: "keys", name: "case037Restart", spec: 37, bearer: true, key: true, stubs: true, fn: case037Restart},
 	{group: "keys", name: "case039DisabledModel", spec: 39, bearer: true, key: true, fn: case039DisabledModel},
+	{group: "keys", name: "case045ZeroPricedOnASpentBudget", spec: 45, bearer: true, key: true, stubs: true, fn: case045ZeroPricedOnASpentBudget},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -392,6 +393,48 @@ func case037Restart(t testing.TB, c *client) {
 		read := c.read(t, v1.KindBudget, id).json(t)
 		return str(read, "status.spent") == "0.0015" && str(read, "status.resetsAt") == before,
 			"status.spent is " + strconv.Quote(str(read, "status.spent")) + ", status.resetsAt " + str(read, "status.resetsAt") + " was " + before
+	})
+}
+
+// case045ZeroPricedOnASpentBudget: a hard Budget the request that
+// crossed carried past its amount is still refused budget_exhausted for
+// a priced Model, and serves a Model whose every price is zero, whose
+// record costs zero in the pricing's currency and whose request adds
+// nothing to the Budget's status.spent.
+func case045ZeroPricedOnASpentBudget(t testing.TB, c *client) {
+	free := c.object(t, v1.KindModel, "zero-priced", c.modelSpec(map[string]any{"currency": "USD", "per": 1000000, "input": "0", "output": "0", "cachedInput": "0", "cacheWrite": "0"}, [2]string{"openai", "tokens-1000-500"}))
+	defer c.mustDelete(t, v1.KindModel, str(free, "status.id"))
+	b := c.object(t, v1.KindBudget, "spent", map[string]any{"amount": "0.001", "currency": "USD", "window": "1h", "hard": true})
+	defer c.mustDelete(t, v1.KindBudget, str(b, "status.id"))
+	k := c.object(t, v1.KindKey, "on-empty", c.keySpec(map[string]any{"budget": c.name("spent")}))
+	id, value := str(k, "status.id"), str(k, "status.value")
+	defer c.mustDelete(t, v1.KindKey, id)
+	// One output token keeps the estimate under the amount; the stub
+	// answers 1500 tokens, 0.0015, so the request that crosses leaves
+	// the Budget past its 0.001.
+	crossing := chat(c.name("tokens"), false)
+	crossing["max_tokens"] = 1
+	if first := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", crossing, value); first.Status != http.StatusOK {
+		t.Fatalf("the request that crosses: %d %s", first.Status, excerpt(first.Body))
+	}
+	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodPost, "/v1/chat/completions", crossing, value), "budget_exhausted")
+	var served *response
+	c.eventually(t, revocationTimeout, "the zero-priced Model is served on the spent Budget", func() (bool, string) {
+		served = c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("zero-priced"), false), value)
+		if served.Status == http.StatusOK {
+			return true, ""
+		}
+		return false, "the door answers " + strconv.Itoa(served.Status) + " " + strconv.Quote(c.doorCode(t, "openai", served))
+	})
+	rec := c.recordOf(t, id, served.ID)
+	if num(rec, "cost.amount") != 0 || str(rec, "cost.currency") != "USD" || field(rec, "cost.priced") != true {
+		t.Errorf("the zero-priced request's cost %s", canonical(t, rec["cost"]))
+	}
+	c.expectDoor(t, "openai", c.door(t, "openai", http.MethodPost, "/v1/chat/completions", crossing, value), "budget_exhausted")
+	c.eventually(t, 15*time.Second, "the Budget's status.spent is the priced request's alone", func() (bool, string) {
+		read := c.read(t, v1.KindBudget, str(b, "status.id")).json(t)
+		return str(read, "status.spent") == "0.0015" && str(read, "status.state") == "Exhausted",
+			"status.spent is " + strconv.Quote(str(read, "status.spent")) + ", status.state " + strconv.Quote(str(read, "status.state"))
 	})
 }
 
