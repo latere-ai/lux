@@ -280,7 +280,9 @@ underlying facts, not from the cached word. `Disabled` is
 the clock, so a Key expires on every replica at the same instant
 without a write. `Exhausted` is the Key's spend window at or over its
 amount, refused `spend_exceeded`, or the hard Budget it draws from at
-or over its amount, refused `budget_exhausted`; it is decided at stage
+or over its amount, refused `budget_exhausted`, except for a Model whose
+every price is zero, which an `Exhausted` Key is still served
+([045-zero-priced-requests-on-a-spent-window](.archive/045-zero-priced-requests-on-a-spent-window.md)); it is decided at stage
 7 of the pipeline from the current counters, so a window that has reset
 serves at once. A refusal can precede the state: a window is refused
 when the request's estimate would carry it over the amount, so a Key
@@ -465,8 +467,19 @@ draws from, one in `spec.budget` or up to four in `spec.budgets`
 known     = the store's counter as of the last flush
 pending   = this replica's unflushed delta
 projected = known + pending + estimated cost of this request
-refuse when projected > amount
+refuse when projected > amount, unless metering.Free(pricing)
 ```
+
+`metering.Free` is true when the Model's every price, `input`, `output`,
+`cachedInput`, and `cacheWrite`, is zero ([[009-usage-and-metering]]).
+Such a request cannot move the window, and a window is often already
+past its amount, because a hard window lets the request that crosses
+run; refusing it there would refuse a request that costs nothing. It is
+admitted whatever the window holds, counted under every window as any
+admitted request is, and settles at zero; the rate windows before it,
+`model_unpriced`, and `currency_mismatch` apply to it unchanged. An
+unpriced Model is not free: its cost is unknown, not zero
+([045-zero-priced-requests-on-a-spent-window](.archive/045-zero-priced-requests-on-a-spent-window.md)).
 
 The estimated cost is the reservation's tokens priced by the Model's
 `pricing` through `metering.Cost` ([[009-usage-and-metering]]), whose
@@ -495,7 +508,8 @@ interval.
 
 The order of refusals is the pipeline's: `rate_limited` before any
 money question, then `model_unpriced`, `currency_mismatch`,
-`spend_exceeded`, `budget_exhausted`. `Retry-After` on the last two is
+`spend_exceeded`, `budget_exhausted`, the last two never for a
+zero-priced Model. `Retry-After` on the last two is
 the seconds until the window resets, or absent for a `none` window,
 which never does.
 

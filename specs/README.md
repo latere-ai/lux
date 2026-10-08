@@ -97,6 +97,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [042](.archive/042-provider-request-fields.md) | Provider request fields: JSON members a Provider sets on every request body the gateway sends it | small | complete | 003, 004, 005, 011 |
 | [043](.archive/043-provider-refusal-reason.md) | A provider's refusal reason: the upstream status on the request log line, and every credential redacted from the developer detail | small | complete | 004, 005, 019 |
 | [044](.archive/044-key-reread-before-model-refusal.md) | A Key read past the cache before a model refusal: a model granted through one replica is served through any other at once | small | complete | 004, 007, 018 |
+| [045](.archive/045-zero-priced-requests-on-a-spent-window.md) | A zero-priced request on a spent window: a Model whose every price is zero is served whatever a spend limit or a Budget has left | small | complete | 004, 007, 009, 018 |
 
 ## Dependency graph
 
@@ -139,6 +140,7 @@ flowchart BT
   S042[042 provider request fields]
   S043[043 provider refusal reason]
   S044[044 key reread before a model refusal]
+  S045[045 zero-priced requests on a spent window]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -184,6 +186,8 @@ flowchart BT
   S042 --> S011
   S043 --> S019
   S044 --> S018
+  S045 --> S009
+  S045 --> S018
 ```
 
 ## Build order

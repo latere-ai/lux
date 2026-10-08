@@ -320,7 +320,7 @@ the discovered one.
 | `window` | window | `month` | no | the window rule below |
 | `anchor` | timestamp | absent | no | RFC 3339, stored in UTC: a duration window starts at the anchor plus whole periods instead of the epoch, and `month` on the anchor's day and time of day, clamped to the month's last day ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)); `invalid_field` under `none` |
 | `restartedAt` | timestamp | absent | yes | RFC 3339: when it lies inside the current window and not after now, the window starts there instead and its reset is unchanged, so the spend counts from the restart ([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)) |
-| `hard` | bool | `true` | yes | `true` refuses with `budget_exhausted` at the limit; `false` emits `budget.exhausted` once per window and continues |
+| `hard` | bool | `true` | yes | `true` refuses with `budget_exhausted` at the limit, except a request for a Model whose every price is zero, which spends nothing; `false` emits `budget.exhausted` once per window and continues |
 
 Shared rules:
 

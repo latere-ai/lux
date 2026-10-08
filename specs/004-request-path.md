@@ -264,7 +264,10 @@ flowchart TD
    which is unpriced by construction; the Budget's currency against the
    Model's, `currency_mismatch`, 400; the Key's spend window,
    `spend_exceeded`, 429; the Budget's window, `budget_exhausted`, 429;
-   each with `Retry-After` naming the window's reset. The spend
+   each with `Retry-After` naming the window's reset. Neither money
+   window refuses a Model whose every price is zero, which spends
+   nothing however far past its amount the window stands
+   ([045-zero-priced-requests-on-a-spent-window](.archive/045-zero-priced-requests-on-a-spent-window.md)). The spend
    estimate needs the Model's pricing, which is why this stage follows
    stage 5 and not the reverse order [[001-architecture]]'s sketch
    draws.

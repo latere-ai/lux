@@ -207,6 +207,14 @@ empty block otherwise. A price the Pricing does not name is `0`, and a
 `per` of `0`, which the resolver never leaves but a caller might, reads
 as `1`.
 
+`Free(p)` is true when every member `Cost` reads is zero or unset, so
+`Cost(t, p)` is zero for any `t`; a nil `p` is unpriced and not free,
+and one member above zero makes `p` priced however small it is. The
+spend and Budget windows of [[007-keys-and-limits]] read it to admit a
+request whatever their remainder, so the gate and the meter decide
+"costs nothing" from the same members and cannot disagree
+([045-zero-priced-requests-on-a-spent-window](.archive/045-zero-priced-requests-on-a-spent-window.md)).
+
 ### Windows and counters
 
 A window is the arithmetic of [[003-manifest-contract]], restated as
@@ -445,8 +453,10 @@ The windows, the counter keys, `Counters`, and `Claim` are as
 
 // Cost prices t under p per Per tokens, one rounding half up over the
 // whole sum; nil p is unpriced. Charged is the record's cost block.
+// Free is whether p prices every token at zero.
 func Cost(t Tokens, p *v1.Pricing) (v1.Money, bool)
 func Charged(t Tokens, p *v1.Pricing) Charge
+func Free(p *v1.Pricing) bool
 
 // Dimension is key, model, provider, owner, door, status, or
 // label:<name>; Interval is none, hour, day, or month, and Bucket is
