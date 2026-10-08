@@ -7,7 +7,7 @@ depends_on:
   - specs/007-keys-and-limits.md
   - specs/009-usage-and-metering.md
   - specs/018-conformance-suite.md
-affects: [metering/, internal/serve/, examples/plane/, test/conformance/, docs/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/009-usage-and-metering.md]
+affects: [metering/, gateway/, internal/serve/, examples/plane/, test/conformance/, docs/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/009-usage-and-metering.md]
 effort: small
 created: 2026-10-08
 updated: 2026-10-08
