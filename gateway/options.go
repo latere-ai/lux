@@ -125,7 +125,9 @@ type Reservation struct {
 // Limiter is the windows of spec 007: the Key's rate windows, the
 // Model's pricing against the Key's allowUnpriced, the Budget's
 // currency, the Key's spend window, and the Budget's window, in that
-// order. Reserve admits the request and returns the Lease its settle
+// order. Neither money window refuses a Model whose pricing
+// metering.Free reports free, since such a request spends nothing
+// (spec 045). Reserve admits the request and returns the Lease its settle
 // runs through, or a *Refusal carrying the code, the Retry-After, and
 // the developer detail; any other error is the store's failure.
 type Limiter interface {
