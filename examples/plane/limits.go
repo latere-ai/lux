@@ -139,6 +139,10 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		}
 	}
 	le.pricing, le.estimate = pricing, estimate
+	// A Model that prices every token at zero spends nothing, so no money
+	// window refuses it, however far past its amount the window is; it is
+	// still counted, and settles at zero.
+	free := metering.Free(pricing)
 	le.countRows = []row{{key: metering.TotalKey(metering.ScopeKeyRequests, id)}}
 	le.tokenRows = []row{{key: metering.TotalKey(metering.ScopeKeyTokens, id)}}
 	le.spendRows = []row{{key: metering.TotalKey(metering.ScopeKeySpend, id)}}
@@ -146,7 +150,7 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		_, resetsAt := metering.Window(spend.Window, now, k.Status.CreatedAt)
 		key := metering.CounterKey(metering.ScopeKeySpend, id, spend.Window, now, k.Status.CreatedAt)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*spend.Amount)) {
+		if !free && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*spend.Amount)) {
 			return &gateway.Refusal{Code: gateway.CodeSpendExceeded, RetryAfter: metering.RetryAfter(now, resetsAt),
 				Detail: "Key " + id + " has spent " + v1.Money(known+pending).String() + " of " + spend.Amount.String() + " " + spend.Currency + " in its " + string(spend.Window) + " window"}
 		}
@@ -166,7 +170,7 @@ func (l *limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		_, resetsAt := metering.BudgetWindow(b, now)
 		key := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if hard && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
+		if hard && !free && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
 			detail := "Budget " + b.Metadata.Name + " has spent " + v1.Money(known+pending).String() + " of " + b.Spec.Amount.String() + " " + b.Spec.Currency + " in its " + string(b.Spec.Window) + " window"
 			if refusing == nil {
 				refusing = &gateway.Refusal{Code: gateway.CodeBudgetExhausted, Detail: detail}

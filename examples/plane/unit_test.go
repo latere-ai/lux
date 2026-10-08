@@ -425,6 +425,54 @@ func TestTheWindowsRefuseInThePipelinesOrder(t *testing.T) {
 	}
 }
 
+// TestAZeroPricedModelPassesASpentWindow: a Key's spend window and a
+// hard Budget, each carried past its amount by the request that crossed,
+// admit a request for a Model whose every price is zero and refuse a
+// priced one as before.
+func TestAZeroPricedModelPassesASpentWindow(t *testing.T) {
+	s := newStore()
+	l := newLimiter(s, manifest.Defaults{}, time.Second, time.Now)
+	usd, zero := v1.Money(1_000_000), v1.Money(0)
+	priced := &v1.Model{Metadata: v1.ObjectMeta{Name: "priced"}}
+	priced.Spec.Pricing = &v1.Pricing{Currency: "USD", Per: 1_000_000, Input: &usd, Output: &usd}
+	free := &v1.Model{Metadata: v1.ObjectMeta{Name: "free"}}
+	free.Spec.Pricing = &v1.Pricing{Currency: "USD", Per: 1_000_000, Input: &zero, Output: &zero, CachedInput: &zero, CacheWrite: &zero}
+	amount := v1.Money(2_000)
+	hard := &v1.Budget{Metadata: v1.ObjectMeta{Name: "hard"}, Spec: v1.BudgetSpec{Amount: &amount, Currency: "USD", Window: v1.Window("1h")}}
+	hard.Status.ID = "bud_hard"
+	if _, err := s.put(hard, 0); err != nil {
+		t.Fatal(err)
+	}
+	spender := newKey("key_spend")
+	spender.Spec.Limits.Spend = &v1.Spend{Amount: &amount, Currency: "USD", Window: v1.Window("1h")}
+	drawer := newKey("key_drawer")
+	drawer.Status.Budget = &v1.BudgetRef{Name: "hard", ID: "bud_hard"}
+	for _, c := range []struct {
+		key  *v1.Key
+		code gateway.Code
+	}{{spender, gateway.CodeSpendExceeded}, {drawer, gateway.CodeBudgetExhausted}} {
+		// Two thousand micro-units reserved land on the amount; settled
+		// at five thousand, the window is past it.
+		lease, err := l.Reserve(t.Context(), gateway.Reservation{Key: c.key, Model: priced, InputTokens: 1000, OutputTokens: 1000})
+		if err != nil {
+			t.Fatalf("%s: the request that crosses: %v", c.key.Status.ID, err)
+		}
+		lease.Settle(t.Context(), gateway.Tokens{Input: 2500, Output: 2500})
+		lease, err = l.Reserve(t.Context(), gateway.Reservation{Key: c.key, Model: free, InputTokens: 1000, OutputTokens: 1000})
+		if err != nil {
+			t.Fatalf("%s: a zero-priced request on the spent window: %v", c.key.Status.ID, err)
+		}
+		lease.Settle(t.Context(), gateway.Tokens{Input: 1000, Output: 1000})
+		assertRefusal(t, l, gateway.Reservation{Key: c.key, Model: priced, InputTokens: 1, OutputTokens: 1}, c.code)
+	}
+	if got := l.counters.Total(metering.TotalKey(metering.ScopeKeySpend, "key_spend")); got != 5_000 {
+		t.Errorf("the spend counter is %d, want the priced request's 5000", got)
+	}
+	if got := l.counters.Total(metering.TotalKey(metering.ScopeKeyRequests, "key_drawer")); got != 2 {
+		t.Errorf("the drawer counted %d requests, want 2", got)
+	}
+}
+
 // newKey is one Key of an id, with a created time the windows are
 // measured from.
 func newKey(id string) *v1.Key {
