@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.14.1 - 2026-10-08
+
 ### Fixed
 
 - A Model whose every price is zero is served when the Key's Budget or
