@@ -57,7 +57,8 @@ type LimiterOptions struct {
 // the Key's two rate buckets, which are this replica's alone, then the
 // money questions in the pipeline's order, model_unpriced,
 // currency_mismatch, spend_exceeded, budget_exhausted, against the
-// store's counters as this replica sees them. A request that is
+// store's counters as this replica sees them; the last two never refuse
+// a Model metering.Free calls free. A request that is
 // admitted holds a Lease whose Settle replaces the reservation with the
 // measured count and cost, or refunds it whole when nothing was
 // measured. Flush writes the deltas, announces a soft Budget's
@@ -251,11 +252,17 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		}
 	}
 	le.pricing, le.estimate = pricing, estimate
+	// A Model that prices every token at zero cannot move a money window,
+	// so neither the spend window nor a Budget refuses it, however far
+	// past its amount the window already is: a hard window lets the
+	// request that crosses run, so a spent window is often over. The
+	// request is still counted under every window and settles at zero.
+	free := metering.Free(pricing)
 	if spend != nil {
 		_, resetsAt := metering.Window(spend.Window, now, k.Status.CreatedAt)
 		key := metering.CounterKey(metering.ScopeKeySpend, id, spend.Window, now, k.Status.CreatedAt)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*spend.Amount)) {
+		if !free && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*spend.Amount)) {
 			l.announceKey(ctx, k, spend, resetsAt, v1.Money(known+pending), now)
 			return &gateway.Refusal{Code: gateway.CodeSpendExceeded, RetryAfter: metering.RetryAfter(now, resetsAt),
 				Detail: "Key " + id + " has spent " + v1.Money(known+pending).String() + " of " + spend.Amount.String() + " " + spend.Currency + " in its " + string(spend.Window) + " window, and this request is estimated at " + estimate.String()}
@@ -275,7 +282,7 @@ func (l *Limiter) reserveSpend(ctx context.Context, r gateway.Reservation, le *l
 		_, resetsAt := metering.BudgetWindow(b, now)
 		key := metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, now)
 		known, pending := l.counters.Known(key), l.counters.Pending(key)
-		if isHard(b) && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
+		if isHard(b) && !free && metering.Exceeds(metering.Projected(known, pending, int64(estimate)), int64(*b.Spec.Amount)) {
 			l.announceBudget(ctx, b, now, resetsAt, v1.Money(known+pending), now)
 			refusing = append(refusing, "Budget "+b.Metadata.Name+" has spent "+v1.Money(known+pending).String()+" of "+b.Spec.Amount.String()+" "+b.Spec.Currency+" in its "+string(b.Spec.Window)+" window")
 			if resetsAt.IsZero() {
