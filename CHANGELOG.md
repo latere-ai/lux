@@ -6,6 +6,23 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- A Model whose every price is zero is served when the Key's Budget or
+  spend limit is used up. A hard window lets the request that crosses
+  its amount run, so a spent Budget is often past its amount, and from
+  then on every request on the Key was refused `budget_exhausted`, or
+  `spend_exceeded` for the Key's own limit, a free one included. A
+  request costs nothing when the Model's `input`, `output`,
+  `cachedInput`, and `cacheWrite` prices are all zero, the same prices
+  the meter bills from; such a request is now admitted whatever the
+  window has left, counted, and recorded at a cost of `0`. Rate limits,
+  `currency_mismatch`, and every check before them still apply to it. A
+  request for a priced Model on a spent window is refused as before,
+  with the same code, detail, and `Retry-After`. An unpriced Model is
+  not free and is refused as before. The new `metering.Free` reports
+  whether a pricing is free, for a plane with a Limiter of its own.
+
 ## v0.14.0 - 2026-10-06
 
 ### Fixed
