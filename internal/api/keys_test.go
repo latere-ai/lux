@@ -15,6 +15,7 @@ import (
 
 	"latere.ai/x/pkg/authz/stub"
 
+	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/serve"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -505,4 +506,68 @@ func TestKeyListsBudgets(t *testing.T) {
 	if rec := h.request(http.MethodPut, "/v1/budgets/week", `{"spec": {"amount": "5", "window": "168h", "anchor": "2026-09-14T00:00:00Z", "restartedAt": "2026-09-14T10:00:00Z"}}`); rec.Code != http.StatusOK {
 		t.Fatalf("a restart: %d %s", rec.Code, rec.Body.String())
 	}
+}
+
+// TestKeyListsSixBudgets is spec 046 through the API: a Key listing six
+// Budgets is created with budget.draw asked once for each, status.budgets
+// carries each name and id in the order written, and each Budget counts
+// the Key; a seventh is invalid_field at spec.budgets, refused before
+// any Budget is asked for, and no Key is written.
+func TestKeyListsSixBudgets(t *testing.T) {
+	h := newHarness(t, nil)
+	h.seed()
+	names := []string{"team", "weekly", "monthly", "daily", "session", "own", "spare"}
+	for _, name := range names[1:] {
+		if rec := h.request(http.MethodPut, "/v1/budgets/"+name, budgetJSON); rec.Code != http.StatusCreated {
+			t.Fatalf("PUT %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	listing := func(names []string) string {
+		list, err := json.Marshal(names)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return `{"spec": {"models": ["gpt-5"], "budgets": ` + string(list) + `}}`
+	}
+	draws := func() (n int) {
+		for _, action := range h.actionsAsked() {
+			if action == authorizer.ActionBudgetDraw {
+				n++
+			}
+		}
+		return n
+	}
+	six := names[:6]
+	h.stub.ClearRequests()
+	created := h.request(http.MethodPut, "/v1/keys/agent", listing(six))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("PUT a Key listing six Budgets: %d %s", created.Code, created.Body.String())
+	}
+	if n := draws(); n != 6 {
+		t.Errorf("budget.draw was asked %d times for six Budgets", n)
+	}
+	list, _ := status(t, created)["budgets"].([]any)
+	if len(list) != 6 {
+		t.Fatalf("status.budgets %v", status(t, created)["budgets"])
+	}
+	for i, name := range six {
+		ref := list[i].(map[string]any)
+		if ref["name"] != name || !strings.HasPrefix(ref["id"].(string), "bud_") {
+			t.Errorf("status.budgets[%d] = %v", i, ref)
+		}
+		if read := h.request(http.MethodGet, "/v1/budgets/"+name, ""); status(t, read)["keys"] != float64(1) {
+			t.Errorf("%s status.keys %v", name, status(t, read)["keys"])
+		}
+	}
+	h.stub.ClearRequests()
+	details := wantCode(t, h.request(http.MethodPut, "/v1/keys/crowded", listing(names)), "invalid_field")
+	if got := paths(details); !reflect.DeepEqual(got, []string{"spec.budgets"}) {
+		t.Errorf("a seventh Budget is refused at %v", got)
+	}
+	if n := draws(); n != 0 {
+		t.Errorf("budget.draw was asked %d times for a list past the bound", n)
+	}
+	wantCode(t, h.request(http.MethodGet, "/v1/keys/crowded", ""), CodeNotFound)
+	// An update is held to the same bound.
+	wantCode(t, h.request(http.MethodPut, "/v1/keys/agent", listing(names)), "invalid_field")
 }
