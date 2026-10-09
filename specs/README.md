@@ -99,6 +99,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [044](.archive/044-key-reread-before-model-refusal.md) | A Key read past the cache before a model refusal: a model granted through one replica is served through any other at once | small | complete | 004, 007, 018 |
 | [045](.archive/045-zero-priced-requests-on-a-spent-window.md) | A zero-priced request on a spent window: a Model whose every price is zero is served whatever a spend limit or a Budget has left | small | complete | 004, 007, 009, 018 |
 | [046](.archive/046-six-budgets-per-key.md) | Six Budgets per Key: the bound on spec.budgets raised from four | small | complete | 003, 007, 018, 037 |
+| [046](046-zero-retention-keys.md) | Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request | medium | drafted | 003, 004, 005, 007, 011 |
 
 ## Dependency graph
 
@@ -143,6 +144,7 @@ flowchart BT
   S044[044 key reread before a model refusal]
   S045[045 zero-priced requests on a spent window]
   S046[046 six budgets per key]
+  S046[046 zero-retention keys]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -191,6 +193,9 @@ flowchart BT
   S045 --> S009
   S045 --> S018
   S046 --> S037
+  S046 --> S005
+  S046 --> S007
+  S046 --> S011
 ```
 
 ## Build order
@@ -215,6 +220,7 @@ flowchart BT
 | 16 | 041 | a cursor that keeps the range it was issued for, so a page without `to` follows the first; archive pages that make a bounded number of bucket calls and skip the hours that hold no objects |
 | 17 | 042 | a Provider's `requestFields` merged into every request body the gateway sends it, the Provider's value winning, so an upstream option such as zero data retention routing holds whatever a caller sends |
 | 18 | 043, 044 | a provider's refusal readable on both sides: its status on the request log line and its reason, credentials redacted, in the developer detail; a model granted to a Key through one replica served through any other at once |
+| 19 | 046 | a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request, with their zero-retention request fields written into every request |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.
