@@ -1,0 +1,16 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "session-run"
+  },
+  "spec": {
+    "amount": "5",
+    "currency": "USD",
+    "window": "none",
+    "hard": true
+  },
+  "status": {
+    "warnings": []
+  }
+}

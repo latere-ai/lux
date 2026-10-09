@@ -123,6 +123,7 @@ func TestFieldSyntax(t *testing.T) {
 		{"target model control character", v1.KindModel, "spec:\n  targets:\n    - {provider: openai, model: \"a\\u0007b\"}\n", CodeInvalidField, "spec.targets[0].model"},
 		{"target model too long", v1.KindModel, "spec:\n  targets:\n    - {provider: openai, model: \"" + strings.Repeat("m", 257) + "\"}\n", CodeInvalidField, "spec.targets[0].model"},
 		{"budget reference shape", v1.KindKey, "spec:\n  models: [gpt-5]\n  budget: Team/Research\n", CodeInvalidField, "spec.budget"},
+		{"too many budgets", v1.KindKey, "spec:\n  models: [gpt-5]\n  budgets: [" + selectors(7) + "]\n", CodeInvalidField, "spec.budgets"},
 		{"env name", v1.KindProvider, minProvider + "  credential: {valueFrom: {env: 9LIVES}}\n", CodeInvalidField, "spec.credential.valueFrom.env"},
 		{"key env name", v1.KindKey, "spec:\n  models: [gpt-5]\n  valueFrom: {env: \"a-b\"}\n", CodeInvalidField, "spec.valueFrom.env"},
 		{"credential value empty", v1.KindProvider, minProvider + "  credential: {value: \"\"}\n", CodeInvalidField, "spec.credential.value"},
@@ -156,15 +157,22 @@ func TestFieldSyntax(t *testing.T) {
 			head(v1.KindProvider, "p") + minProvider + "  credential:\n    value: \"" + strings.Repeat("s", 4096) + "\"\n",
 			head(v1.KindModel, "m") + "spec:\n  targets:\n    - {provider: prv_01J9ZK2P7Q8R9S0T1U2V3W4X5Y, weight: 1000, priority: 9}\n" + "  pricing: {per: 1, input: \"0\", output: \"999999999999.999999\"}\n",
 			head(v1.KindKey, "k") + "spec:\n  models: [" + selectors(64) + "]\n  budget: bud_01J9ZK2P7Q8R9S0T1U2V3W4X61\n  ttl: 1m\n",
+			head(v1.KindKey, "k") + "spec:\n  models: [gpt-5]\n  budgets: [" + selectors(6) + "]\n",
 			head(v1.KindBudget, "b") + "spec:\n  amount: \"0.000001\"\n  window: 8760h\n",
 			head(v1.KindBudget, "b") + "spec:\n  amount: \"1\"\n  window: 1m\n",
 			"apiVersion: lux.latere.ai/v1beta1\nkind: Budget\nmetadata:\n  name: n\n  labels:\n    example.com/tier: paid\n    tier: \"\"\n  annotations:\n    example.com/note: \"" + strings.Repeat("x", 4096) + "\"\nspec:\n  amount: \"1\"\n",
 		} {
-			o2 := o
-			o2.Lookup = &stubLookup{
+			lookup := &stubLookup{
 				providers: map[string]*v1.Provider{"openai": {}, "prv_01J9ZK2P7Q8R9S0T1U2V3W4X5Y": {}},
 				budgets:   map[string]*v1.Budget{"bud_01J9ZK2P7Q8R9S0T1U2V3W4X61": {}},
 			}
+			// The Key at the bound lists six Budgets, named as selectors
+			// names its entries.
+			for i := range 6 {
+				lookup.budgets["m"+itoa(i)] = &v1.Budget{}
+			}
+			o2 := o
+			o2.Lookup = lookup
 			mustResolve(t, body, o2)
 		}
 	})

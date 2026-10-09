@@ -1,0 +1,8 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Budget
+metadata:
+  name: agent-daily
+spec:
+  amount: "20"
+  currency: USD
+  window: 24h                          # a day, from 00:00 UTC

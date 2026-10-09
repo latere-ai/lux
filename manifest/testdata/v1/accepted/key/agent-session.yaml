@@ -1,0 +1,8 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: agent-session
+spec:
+  models: ["gpt-5"]
+  # six Budgets, the most a Key lists; every call must fit each of them
+  budgets: [team-research, member-weekly, agent-daily, agent-monthly, session-run, caller-key]

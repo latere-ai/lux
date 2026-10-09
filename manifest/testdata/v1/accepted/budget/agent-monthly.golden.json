@@ -1,0 +1,17 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "agent-monthly"
+  },
+  "spec": {
+    "amount": "200",
+    "currency": "USD",
+    "window": "month",
+    "anchor": "2026-09-15T00:00:00Z",
+    "hard": true
+  },
+  "status": {
+    "warnings": []
+  }
+}

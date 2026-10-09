@@ -129,8 +129,11 @@ type BudgetRef struct {
 	ID   string `json:"id,omitempty"`
 }
 
-// MaxKeyBudgets is how many Budgets one Key may list in spec.budgets.
-const MaxKeyBudgets = 4
+// MaxKeyBudgets is how many Budgets one Key may list in spec.budgets:
+// spec 037's four, raised by spec 046. Validation alone reads it, so
+// the bound is held when a Key is written and every reader takes the
+// list at the length it has.
+const MaxKeyBudgets = 6
 
 // KeyBudgets is every Budget the Key draws from, in the order written:
 // status.budgets for a Key that lists them, status.budget for one that
