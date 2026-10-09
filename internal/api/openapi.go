@@ -448,9 +448,17 @@ var enums = map[reflect.Type][]string{
 
 // fieldSchemas are the members whose shape is not their type's: a
 // record's targetDialect is the dialect set plus the empty string, which
-// a refused request carries because no target was chosen (spec 009).
+// a refused request carries because no target was chosen (spec 009);
+// the others carry the description their rule needs.
 var fieldSchemas = map[reflect.Type]map[string]ordered{
+	reflect.TypeFor[v1.KeySpec](): {
+		"ZeroRetention": obj("type", "boolean", "description", "True asks that no request on this Key reach an upstream that may keep it: a request is sent only to a Provider that declares zeroRetention, with that declaration's requestFields merged into its body, and a Model none of whose targets names such a Provider is refused zero_retention_unavailable. An opaque route reaches only a Provider that declares zeroRetention as {}."),
+	},
+	reflect.TypeFor[v1.ZeroRetention](): {
+		"RequestFields": obj("type", "object", "additionalProperties", true, "description", "JSON members merged into the body of every request on a Key with zeroRetention, after the Provider's requestFields and by the same rule, winning on every member both name; no other request carries them. Not secret: every read returns them. The rules of requestFields apply: the top-level members "+strings.Join(manifest.ReservedRequestFields(), ", ")+" are refused, as is a null member, and the compact encoding is at most "+strconv.Itoa(manifest.MaxRequestFieldsBytes)+" bytes."),
+	},
 	reflect.TypeFor[v1.ProviderSpec](): {
+		"ZeroRetention": obj("$ref", "#/components/schemas/ZeroRetention", "description", "The operator's statement that the upstream keeps nothing of a request sent with it. Absent, a request on a Key with zeroRetention is never sent to this Provider; {} sends such a request as any request is sent; with requestFields, those fields are merged into it."),
 		"RequestFields": obj("type", "object", "additionalProperties", true, "description", "JSON members merged into every request body the gateway sends this Provider, the Provider's value winning on every member it names: an object value is merged member by member, any other value, a list included, replaces the caller's whole, and the caller's other members are kept. Not secret: every read returns it. The top-level members "+strings.Join(manifest.ReservedRequestFields(), ", ")+" are refused, as is a null member, and the compact encoding is at most "+strconv.Itoa(manifest.MaxRequestFieldsBytes)+" bytes."),
 	},
 	reflect.TypeFor[metering.Record](): {
@@ -525,6 +533,7 @@ func (s *schemas) properties(t reflect.Type) ordered {
 			continue
 		}
 		if sc, ok := fieldSchemas[t][f.Name]; ok {
+			s.of(f.Type) // registers the component a $ref in sc names
 			props = append(props, member{name, sc})
 			continue
 		}
