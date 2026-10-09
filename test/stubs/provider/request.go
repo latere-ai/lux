@@ -78,12 +78,7 @@ func parseRequest(d v1.Dialect, rt routeKind, r *http.Request, body []byte) pars
 	var doc map[string]any
 	_ = json.Unmarshal(body, &doc)
 	if rt == routeGemini {
-		tail := r.PathValue("model")
-		if i := strings.LastIndexByte(tail, ':'); i >= 0 {
-			p.model, p.verb = tail[:i], tail[i+1:]
-		} else {
-			p.model = tail
-		}
+		p.model, p.verb, _ = strings.CutLast(r.PathValue("model"), ":")
 		p.stream = p.verb == "streamGenerateContent"
 		p.sse = r.URL.Query().Get("alt") == "sse"
 	} else {
