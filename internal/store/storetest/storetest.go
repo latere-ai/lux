@@ -76,6 +76,7 @@ func optimisticConcurrency(t *testing.T, s store.Store) {
 
 	p.Spec.BaseURL = "https://api.example.com/v2"
 	p.Spec.RequestFields = map[string]any{"provider": map[string]any{"zdr": true, "order": []any{"a", "b"}, "max_price": map[string]any{"prompt": 1.5}}}
+	p.Spec.ZeroRetention = &v1.ZeroRetention{RequestFields: map[string]any{"provider": map[string]any{"zdr": true, "data_collection": "deny"}}}
 	v, err = s.Objects().Put(ctx, p, 1)
 	noErr(t, err, "update at the current version")
 	equal(t, v, 2, "version after update")
@@ -88,6 +89,7 @@ func optimisticConcurrency(t *testing.T, s store.Store) {
 	equal(t, gv, 2, "Get version")
 	equal(t, as[*v1.Provider](t, got).Spec.BaseURL, "https://api.example.com/v2", "Get spec")
 	truth(t, reflect.DeepEqual(as[*v1.Provider](t, got).Spec.RequestFields, p.Spec.RequestFields), "Get spec.requestFields")
+	truth(t, reflect.DeepEqual(as[*v1.Provider](t, got).Spec.ZeroRetention, p.Spec.ZeroRetention), "Get spec.zeroRetention")
 	equal(t, as[*v1.Provider](t, got).Status.Version, 2, "Get status.version")
 
 	// Two writers at one version: exactly one succeeds.
@@ -672,6 +674,7 @@ func putKeepsNoValue(t *testing.T, s store.Store) {
 	k := key("run-42")
 	k.Spec.SetValue("lux_supplied_value_that_must_never_be_a_row_0000000")
 	k.Status.Value = "lux_minted_value_that_is_the_response_alone_000000"
+	k.Spec.ZeroRetention = true
 	_, err := s.Objects().Put(ctx, k, 0)
 	noErr(t, err, "Put Key")
 	got, _, err := s.Objects().Get(ctx, v1.KindKey, k.Status.ID)
@@ -679,10 +682,12 @@ func putKeepsNoValue(t *testing.T, s store.Store) {
 	_, set := as[*v1.Key](t, got).Spec.Value()
 	truth(t, !set, "the supplied value is not stored")
 	equal(t, as[*v1.Key](t, got).Status.Value, "", "status.value is not stored")
+	truth(t, as[*v1.Key](t, got).Spec.ZeroRetention, "spec.zeroRetention is stored")
 
 	p := provider("openai")
 	p.Spec.Credential = &v1.Credential{Header: "Authorization", Scheme: v1.SchemeBearer}
 	p.Spec.Credential.SetValue("sk-live-credential-that-must-never-be-a-row")
+	p.Spec.ZeroRetention = &v1.ZeroRetention{}
 	_, err = s.Objects().Put(ctx, p, 0)
 	noErr(t, err, "Put Provider")
 	got, _, err = s.Objects().Get(ctx, v1.KindProvider, p.Status.ID)
@@ -690,6 +695,7 @@ func putKeepsNoValue(t *testing.T, s store.Store) {
 	_, set = as[*v1.Provider](t, got).Spec.Credential.Value()
 	truth(t, !set, "the credential value is not stored")
 	equal(t, as[*v1.Provider](t, got).Spec.Credential.Header, "Authorization", "the credential's other members are")
+	truth(t, as[*v1.Provider](t, got).Spec.ZeroRetention != nil, "an empty spec.zeroRetention is stored as a declaration")
 
 	// What a read returns is the caller's: changing it changes no row.
 	as[*v1.Provider](t, got).Spec.BaseURL = "https://changed.example.com"

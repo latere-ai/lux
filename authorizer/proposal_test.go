@@ -22,11 +22,13 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 	key.Spec.Disabled = true
 	key.Spec.Passthrough = true
 	key.Spec.AllowUnpriced = true
+	key.Spec.ZeroRetention = true
 	provider := fixtureProvider()
 	provider.Spec.Credential = &v1.Credential{Header: "X-API-Key"}
 	provider.Spec.Credential.SetValue("provider-secret-canary")
 	provider.Spec.Headers = map[string]string{"X-Private": "header-secret-canary"}
 	provider.Spec.RequestFields = map[string]any{"provider": map[string]any{"zdr": true}}
+	provider.Spec.ZeroRetention = &v1.ZeroRetention{RequestFields: map[string]any{"provider": map[string]any{"data_collection": "deny"}}}
 	for _, obj := range []v1.Object{key, provider, fixtureModel(), fixtureBudget(t)} {
 		proposal, err := Proposal(obj, "issuer|target")
 		if err != nil {
@@ -47,7 +49,7 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 		spec := proposal["spec"].(map[string]any)
 		switch obj.Kind() {
 		case v1.KindKey:
-			if spec["disabled"] != true || spec["passthrough"] != true || spec["allowUnpriced"] != true || spec["models"] == nil || spec["budget"] == nil {
+			if spec["disabled"] != true || spec["passthrough"] != true || spec["allowUnpriced"] != true || spec["zeroRetention"] != true || spec["models"] == nil || spec["budget"] == nil {
 				t.Fatal("key policy missing")
 			}
 		case v1.KindProvider:
@@ -60,6 +62,10 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 			}
 			if fields, _ := spec["requestFields"].(map[string]any); fields["provider"].(map[string]any)["zdr"] != true {
 				t.Fatalf("request fields missing: %v", spec["requestFields"])
+			}
+			zero, _ := spec["zeroRetention"].(map[string]any)
+			if fields, _ := zero["requestFields"].(map[string]any); fields["provider"].(map[string]any)["data_collection"] != "deny" {
+				t.Fatalf("zero-retention fields missing: %v", spec["zeroRetention"])
 			}
 		}
 	}

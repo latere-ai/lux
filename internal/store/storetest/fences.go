@@ -100,6 +100,7 @@ func fencedKeyCleanup(t *testing.T, s store.Store) {
 		"budget identity": func(k *v1.Key) { k.Status.Budget = &v1.BudgetRef{Name: "other", ID: "bud_other"} },
 		"unpriced":        func(k *v1.Key) { k.Spec.AllowUnpriced = true },
 		"passthrough":     func(k *v1.Key) { k.Spec.Passthrough = true },
+		"zero retention":  func(k *v1.Key) { k.Spec.ZeroRetention = true },
 		"limits":          func(k *v1.Key) { n := 100; k.Spec.Limits.RequestsPerMinute = &n },
 	}
 	for name, change := range changes {

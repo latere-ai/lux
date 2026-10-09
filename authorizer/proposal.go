@@ -19,8 +19,9 @@ import (
 // Proposal is the desired owner, metadata and spec of a mutation, with status,
 // credential values, supplied Key hashes, and Provider header values excluded.
 // It is additive to the existing-object fields of an update resource. Header
-// names, credential presence, and a Provider's requestFields, which are not
-// secret, remain visible for admission policy.
+// names, credential presence, a Provider's requestFields and zeroRetention,
+// and a Key's zeroRetention, none of which is secret, remain visible for
+// admission policy.
 func Proposal(obj v1.Object, owner string) (map[string]any, error) {
 	var metadata v1.ObjectMeta
 	var spec any
