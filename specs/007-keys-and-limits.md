@@ -225,7 +225,11 @@ not left to that schedule: before a door refuses `model_not_allowed`,
 replaces the entry, and the Key the store holds decides
 ([044-key-reread-before-model-refusal](.archive/044-key-reread-before-model-refusal.md)), so a model
 added to `spec.models` through one replica is served at the next
-request through any other. The journal row is written for
+request through any other. A change to `spec.zeroRetention` is not
+reread that way: it takes the journal's schedule, so a replica may send
+the Key's requests as it cached it until it consumes the row, and up to
+`LUX_KEY_CACHE_GRACE` past its window while the store does not answer
+([047-zero-retention-keys](047-zero-retention-keys.md)). The journal row is written for
 every mutation whether or not a sink is configured, so the tail works
 in every installation with a store; in file mode the `SIGHUP` snapshot
 swap empties the cache ([[010-state]]). A negative entry protects the
