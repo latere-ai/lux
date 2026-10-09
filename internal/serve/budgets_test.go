@@ -135,6 +135,79 @@ func TestSeveralBudgetsRetryAfter(t *testing.T) {
 	}
 }
 
+// TestSixBudgets is spec 046's stage 7 at the bound: a Key listing six
+// hard Budgets is admitted while each has room, its estimate and then
+// its settled cost landing in all six; with the sixth alone at its
+// amount the next request is refused budget_exhausted, the detail and
+// the one budget.exhausted row naming the sixth alone, Retry-After its
+// reset, and nothing added to the five that had room.
+func TestSixBudgets(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	cache := h.cache(h.st, nil, time.Hour)
+	l := h.limiter(h.st, cache, manifest.Defaults{})
+	p := priced("p", "0.01", "0", "USD")
+	listed := []*v1.Budget{
+		h.budget(t, "org", "1", "USD", v1.WindowMonth, true),
+		h.budget(t, "weekly", "1", "USD", "168h", true),
+		h.budget(t, "monthly", "1", "USD", v1.WindowMonth, true),
+		h.budget(t, "daily", "1", "USD", "24h", true),
+		h.budget(t, "session", "1", "USD", v1.WindowNone, true),
+		h.budget(t, "own", "0.02", "USD", "1h", true),
+	}
+	own := listed[5]
+	k, _ := h.key(t, "agent", drawsAll(listed...))
+	holds := func(when string, want v1.Money) {
+		t.Helper()
+		l.Flush(ctx)
+		keys := make([]string, len(listed))
+		for i, b := range listed {
+			keys[i] = metering.BudgetCounterKey(metering.ScopeBudgetSpend, b, h.clock())
+		}
+		stored, err := h.st.Counters().Read(ctx, keys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, b := range listed {
+			if got := stored[keys[i]]; got != int64(want) {
+				t.Fatalf("%s, Budget %s holds %d, want %d", when, b.Metadata.Name, got, int64(want))
+			}
+		}
+	}
+	// Two cents reserved land on the sixth's amount and are admitted;
+	// settled at one, a second cent fits every one of the six.
+	lease, ref := reserve(t, l, k, p, 2, 0)
+	if ref != nil {
+		t.Fatalf("under six Budgets with room: %+v", ref)
+	}
+	holds("admitted", 2*cent)
+	lease.Settle(ctx, gateway.Tokens{Input: 1})
+	holds("settled", cent)
+	if ref := spendOne(t, l, k, p); ref != nil {
+		t.Fatalf("the second cent: %+v", ref)
+	}
+	ref = spendOne(t, l, k, p)
+	if ref == nil || ref.Code != gateway.CodeBudgetExhausted || !strings.Contains(ref.Detail, "Budget own") {
+		t.Fatalf("the third cent = %+v", ref)
+	}
+	for _, b := range listed[:5] {
+		if strings.Contains(ref.Detail, "Budget "+b.Metadata.Name) {
+			t.Errorf("the detail names Budget %s, which had room: %s", b.Metadata.Name, ref.Detail)
+		}
+	}
+	_, reset := metering.BudgetWindow(own, h.clock())
+	if ref.RetryAfter != reset.Sub(h.clock()) {
+		t.Errorf("Retry-After = %s, want the sixth's reset in %s", ref.RetryAfter, reset.Sub(h.clock()))
+	}
+	holds("refused", 2*cent)
+	if n := len(h.events(t, eventBudgetExhausted)); n != 1 {
+		t.Errorf("%d budget.exhausted rows, want the sixth's one", n)
+	}
+	if err := RenderKey(ctx, h.st, k, h.clock()); err != nil || k.Status.State != v1.KeyExhausted {
+		t.Errorf("the Key under an exhausted sixth Budget = %s, %v", k.Status.State, err)
+	}
+}
+
 // TestBudgetAmountRaisedRearms: a Budget exhausted, raised, and exhausted
 // again inside one window announces twice, once per amount.
 func TestBudgetAmountRaisedRearms(t *testing.T) {
