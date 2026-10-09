@@ -141,6 +141,89 @@ call. The object cannot set `model`, `stream`, or `stream_options`,
 which the gateway writes itself; the `ProviderSpec` schema in
 [`api/openapi.yaml`](../api/openapi.yaml) has the full rule.
 
+### Keep a workload's requests from upstreams that may keep them
+
+`spec.requestFields` holds every caller of a Provider to the same terms.
+When only some workloads need their requests kept from upstreams that
+may store them, set `spec.zeroRetention: true` on the Keys those
+workloads hold, and declare on each Provider whose upstream keeps
+nothing of a request how it does so:
+
+| The Provider's `spec.zeroRetention` | A request on a zero-retention Key |
+|---|---|
+| absent | is never sent to the Provider |
+| `{}` | is sent as any request is: you state that the upstream keeps nothing of any request |
+| `requestFields: {...}` | is sent with these fields merged into the body after `spec.requestFields`, winning on every member both name |
+
+Requests on other Keys reach the same Providers as before and never
+carry the zero-retention fields. For OpenRouter, the declaration carries
+its routing option, so only the zero-retention Keys' requests are held
+to endpoints with zero data retention:
+
+```yaml
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: openrouter
+spec:
+  dialect: openai
+  baseURL: https://openrouter.ai/api/v1
+  zeroRetention:
+    requestFields:
+      provider:
+        zdr: true
+```
+
+`data_collection: deny` can sit beside `zdr` under `provider`, as it can
+in `spec.requestFields`. A Provider whose upstream keeps nothing of any
+request, a model you serve yourself or one under a contract with no
+retention, declares `zeroRetention: {}`. A direct API that keeps a
+response for later retrieval unless the request says otherwise carries
+that member, such as `requestFields: {store: false}`. The declaration is
+your statement about the upstream's terms; the gateway holds requests to
+it and cannot check the terms themselves.
+
+The Key asks for it:
+
+```yaml
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: private-agent
+spec:
+  models: ["openrouter/*"]
+  zeroRetention: true
+```
+
+A request on such a Key is sent only to the targets of its Model whose
+Provider declares `spec.zeroRetention`, and falls over only among them.
+A Model with no such target is refused `zero_retention_unavailable`,
+403, before any upstream is called, and the same request keeps being
+refused until a target's Provider declares it. When declaring targets
+exist and none can be tried now, the answer is `provider_unavailable`,
+as for any request with no target left. A caller cannot turn the fields
+off: they win over the caller's members as `spec.requestFields` does,
+and a body they cannot be written into, one that is not a JSON object or
+carries a `Content-Encoding` other than `identity`, is refused
+`invalid_request`.
+
+An opaque route, open to a Key with `passthrough`, reaches the
+upstream's own API, whose storage endpoints, files, batches, threads,
+and stored conversations, keep what they are sent whatever a routing
+option says. A zero-retention Key's opaque request is served only toward
+a Provider that declares `{}`, and refused `zero_retention_unavailable`
+toward any other.
+
+The flag can be set or cleared on an existing Key with `lux apply -f`.
+Every replica serves the change at its next read of the journal, one
+second by default, and until then may serve the Key as it was. A
+replica cut off from the store keeps serving the Keys it has cached for
+up to `LUX_KEY_CACHE_GRACE` past `LUX_KEY_CACHE`, and a change reaches
+it when the store answers again. If you build a platform whose users
+turn the flag on, tell them this bound. Each request's record, its log
+line, and its `lux.upstream` span say whether it was on a zero-retention
+Key, so `lux requests` answers whether a past request was sent that way.
+
 ### Verify released artifacts
 
 Every release is signed by the release workflow's own identity. Verify

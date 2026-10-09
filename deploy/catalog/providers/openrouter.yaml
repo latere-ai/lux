@@ -10,5 +10,9 @@ spec:
   credential:
     valueFrom:
       env: OPENROUTER_API_KEY
+  zeroRetention:        # a request on a Key with spec.zeroRetention is held to endpoints with zero data retention
+    requestFields:
+      provider:
+        zdr: true
   discovery:
     mode: none          # the catalog's Models are declared and priced; auto would add the vendor's other models unpriced

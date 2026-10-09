@@ -113,7 +113,7 @@ planes apart by it.
 
 | Plane | Fields |
 |---|---|
-| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
+| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream`, `zero_retention` |
 | control | `request_id`, `route`, `action`, `kind`, `name`, `status`, `code`, `subject`, `duration_ms` |
 
 `route` is the route's template, never the path as sent: the door's
@@ -128,6 +128,11 @@ refused (`upstream_rejected` with a `4xx`) from one it failed
 not in the log, because the log carries no body; the caller receives
 it in `Lux-Error-Detail`, the status and the start of the provider's
 answer with any credential redacted.
+
+`zero_retention` is `true` for a request on a Key with
+`spec.zeroRetention`, as the Key stood when the request arrived, so the
+line says whether that request could reach only Providers that declare
+how they keep nothing of it, whatever the Key says later.
 
 `WARN` marks an event delivery failure, a dropped request-log batch, a
 provider health transition, and a circuit opening; `ERROR` a failed store
@@ -151,7 +156,9 @@ span with a `lux.upstream` child per target tried; a control-plane
 request is `lux.api` with `lux.authorizer` and `lux.store` children.
 `lux.request` and `lux.api` carry `lux.request_id`, which joins the trace
 to the log line and the usage record, and `lux.request` carries the
-resolved model and provider.
+resolved model and provider. Each `lux.upstream` carries
+`lux.zero_retention`, `true` when the attempt sends a zero-retention
+Key's request.
 
 No span carries a subject, owner, Key, or caller address: the server
 span has no client address, peer address, or user agent, so a tracing

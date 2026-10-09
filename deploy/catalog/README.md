@@ -69,10 +69,17 @@ models, which arrive without a price. A Model routes to its one target
 and does not fall back; to fall back across vendors, give a Model more
 targets. The Gemini Models answer through the `/gemini/v1beta` door.
 
-The `openrouter` Provider sets no data policy, so OpenRouter routes each
-request under its account defaults. To hold every request through it to
-endpoints with zero data retention, add `spec.requestFields` with
-`provider: {zdr: true}`, as
+The `openrouter` Provider sets no data policy for most requests, so
+OpenRouter routes each under its account defaults. A request on a Key
+with `spec.zeroRetention` is the exception: the Provider declares
+`spec.zeroRetention` with `provider: {zdr: true}`, so such a request
+reaches OpenRouter only with that option, held to endpoints with zero
+data retention, as
+[`docs/security.md`](../../docs/security.md#keep-a-workloads-requests-from-upstreams-that-may-keep-them)
+explains. The other Providers declare nothing, so a zero-retention Key
+reaches none of their Models until you add a declaration that matches
+the vendor's terms. To hold every request through OpenRouter to those
+endpoints, add `spec.requestFields` with `provider: {zdr: true}`, as
 [`docs/security.md`](../../docs/security.md#hold-an-upstream-to-its-data-terms)
 shows; the gateway then sets that member on every request, whatever a
 caller sends. `data_collection: deny`, which leaves out the providers

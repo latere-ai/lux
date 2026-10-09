@@ -163,5 +163,6 @@ provider, the Provider was deleted, or the token expired with no
 | `rate_limited`, `spend_exceeded`, `budget_exhausted` | wait the seconds the extra line names |
 | `model_not_allowed` | the Key's `spec.models` does not match the model |
 | `model_disabled` | the Model's `spec.disabled` is true; an operator stopped it, and the Key works again once it is re-enabled |
+| `zero_retention_unavailable` | the Key has `spec.zeroRetention` true and no Provider behind the Model declares `spec.zeroRetention`; call a Model whose Provider does, or ask whoever administers the gateway |
 
 Every other code is exit 1 with its own sentence; `-v` adds the detail.
