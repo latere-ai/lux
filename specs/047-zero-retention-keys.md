@@ -1,6 +1,6 @@
 ---
 title: "Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request, with the Provider's zero-retention request fields written into every request"
-status: drafted
+status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -8,7 +8,7 @@ depends_on:
   - specs/005-providers.md
   - specs/007-keys-and-limits.md
   - specs/011-api.md
-affects: [manifest/, gateway/, internal/api/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/016-security-and-threat-model.md]
+affects: [manifest/, gateway/, metering/, authorizer/, internal/api/, internal/serve/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, examples/plane/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md, specs/016-security-and-threat-model.md, specs/019-observability.md]
 effort: medium
 created: 2026-10-09
 updated: 2026-10-09
@@ -184,3 +184,69 @@ it stands now. A refusal is recorded with its code as any refusal is.
 | 8 | A Key update that sets the flag reaches the gateway at the next journal read | `internal/serve` key cache test |
 | 9 | The OpenAPI document carries both members and the code | `TestOpenAPIIsCurrent` |
 | 10 | The conformance suite holds criteria 3 to 5 over the wire | `test/conformance` |
+
+## Outcome
+
+Built on 2026-10-09 as designed, at `testing`: every criterion has a
+passing test in the tree. The Postgres half of criteria 1 and 2 runs in
+the Postgres tier, `make test-postgres`, which the gate does not start;
+it passed against Postgres 17 for this build.
+
+| # | Test |
+|---|---|
+| 1 | the corpus entry `accepted/key/zero-retention`, which renders `zeroRetention: true`, and every other accepted Key, which renders `false`; `refused/invalid_field/key-zero-retention`; `TestZeroRetentionRules`, `manifest`, for the default and the rendering; `TestZeroRetentionRoundTrip`, `internal/api`, which sets, reads, and clears the flag through `/v1`; `TestPutKeepsNoValue` of `storetest` against the memory store and in the Postgres tier; `TestFencedKeyCleanup`, which holds a fenced Key's flag as a policy write; `TestMutationProposalExcludesSecretsAndIncludesPolicy`, which holds the authorizer's proposal to carrying it |
+| 2 | the corpus entries `accepted/provider/zero-retention` and `accepted/provider/keeps-nothing`, `refused/unknown_field/provider-zero-retention-member`, `refused/reserved_prefix/zero-retention-field-model`, and `refused/invalid_field/zero-retention-field-null`; `TestZeroRetentionRules`, every rule of `requestFields` at its path under `spec.zeroRetention.requestFields`, the two encodings at the bound side by side, and the Go form; `TestZeroRetentionRoundTrip`; `TestOptimisticConcurrency` and `TestPutKeepsNoValue` of `storetest`, a declaration with fields and `{}` |
+| 3 | `TestZeroRetentionFieldsReachTheUpstream`, over passthrough on all four dialects and translation in both directions between `openai` and `anthropic`, stream and not, with `GetBody` compared with what the upstream read, a caller's `provider` member sent as `{"zdr": false}`, `{"ZDR": false}`, `null`, a string, under `Provider`, and twice, and a Provider with zero-retention fields and no `requestFields`; `case047ZeroRetention` over the wire |
+| 4 | `TestZeroRetentionFieldsReachTheUpstream`, every case sent again on a Key without the flag; `case047ZeroRetention` |
+| 5 | `TestZeroRetentionRouting`: the refusal with no upstream, limit, or Router reached, a Provider the catalog does not hold, failover between two declaring targets past a non-declaring one, both failing without reaching it, and both excluded by the Router answering `provider_unavailable`; `case047ZeroRetention`, where an open circuit is the outage |
+| 6 | `TestZeroRetentionOnOpaqueRoutes`, with no reservation taken by a refusal; `TestZeroRetentionRefusesWhatCannotCarryTheFields`; `TestZeroRetentionDecorateChecksAgain`, which hands the handler a Router that ignores the Model it is given |
+| 7 | `TestZeroRetentionDeclaringNothingAdded`; `TestZeroRetentionRouting`, whose `{}` target reads the caller's bytes |
+| 7a | `TestZeroRetentionIsRecorded`, the record, the log line, and the span, a refused request included; `TestZeroRetentionRereadClearsTheFlag`; `TestRecordSaysZeroRetention`, `internal/serve`, the record in the request history; `TestSpansCarryNoIdentity` and `TestLogFieldsAreTheTable`, `cmd/luxd`, against spec 019's rows; `case047ZeroRetention` reads `zeroRetention` from `GET /v1/requests` |
+| 8 | `TestZeroRetentionReachesTheDoorAtTheNextTail`, two replicas over one store: the one that tails at the commit refuses at once, the other serves the Key as cached until its own tail |
+| 9 | `TestOpenAPIIsCurrent`; the members carry descriptions, and `zero_retention_unavailable` is a row of `x-lux-errors` |
+| 10 | `case047ZeroRetention`, against the reference server with stubs; the example plane's run has none and skips it |
+
+Decided while building:
+
+- The spec was drafted as 046 while 046, six Budgets per Key, shipped in
+  v0.15.0, so it is 047.
+- `selectTargets` hands the Router a copy of the Model whose targets are
+  the declaring ones, so the order, the weights, and the circuits are
+  the Router's as for any Model. Whether any target declares is read
+  from the Model's spec targets through the catalog, so a refusal never
+  depends on health.
+- An opaque route is refused after its Provider is chosen and before the
+  reservation, so a refused request takes no rate slot; the choice
+  itself is unchanged, `provider_required` included.
+- `{"requestFields": {}}` resolves to `{}` and is treated as one.
+- A body that is not a JSON object cannot reach the merge through a
+  door today, because `bridge.Probe` refuses it `invalid_request` at
+  stage 5; the rule in `writeRequestFields` holds a builder that would
+  produce one, and is tested on the function.
+- Every value of `Content-Encoding`, and every coding a value lists, is
+  read for `spec.requestFields` too; spec 042 read the first line only.
+- `spec.zeroRetention` on a Key renders `false`, without `omitempty`, as
+  the design says. A Key from an earlier release therefore reads back
+  with one member more: the conformance suite's previous-release group
+  compares it with the member at its default, which spec 003's promise
+  admits, the same object defaults aside, and the release promise
+  counts the six changed Key goldens as major rows, which before
+  v1.0.0 a minor release carries. Spec 039 made the other choice for a
+  Model's `spec.disabled`, rendered only when true.
+- The record's flag is the Key's as the request was admitted, the Key a
+  reread before `model_not_allowed` adopted included, so a refused
+  request carries it. A request `decorate` refuses on a model route,
+  which only a Router that ignores the Model it is handed can produce,
+  is recorded `failed` with its attempt, as spec 042's refusal of an
+  encoded body is.
+- The catalog's `openrouter` Provider declares
+  `provider: {zdr: true}`; no other catalog Provider declares anything,
+  because each vendor's terms are the operator's to state.
+- Specs 003, 004, 007, 011, 016, and 019 name the members, the code, the
+  key cache schedule, the threat, and the two observability fields.
+
+What the gateway cannot hold: the declaration is the operator's
+statement about the upstream's terms, and the gateway does not check
+them; and a change to the flag reaches a replica at its next journal
+read, or after `LUX_KEY_CACHE_GRACE` while the store does not answer.
+

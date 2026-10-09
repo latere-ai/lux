@@ -99,7 +99,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [044](.archive/044-key-reread-before-model-refusal.md) | A Key read past the cache before a model refusal: a model granted through one replica is served through any other at once | small | complete | 004, 007, 018 |
 | [045](.archive/045-zero-priced-requests-on-a-spent-window.md) | A zero-priced request on a spent window: a Model whose every price is zero is served whatever a spend limit or a Budget has left | small | complete | 004, 007, 009, 018 |
 | [046](.archive/046-six-budgets-per-key.md) | Six Budgets per Key: the bound on spec.budgets raised from four | small | complete | 003, 007, 018, 037 |
-| [047](047-zero-retention-keys.md) | Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request | medium | drafted | 003, 004, 005, 007, 011 |
+| [047](047-zero-retention-keys.md) | Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request | medium | testing | 003, 004, 005, 007, 011 |
 
 ## Dependency graph
 
