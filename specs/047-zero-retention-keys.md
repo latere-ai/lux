@@ -8,7 +8,7 @@ depends_on:
   - specs/005-providers.md
   - specs/007-keys-and-limits.md
   - specs/011-api.md
-affects: [manifest/, gateway/, metering/, authorizer/, internal/api/, internal/serve/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, examples/plane/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md, specs/016-security-and-threat-model.md, specs/019-observability.md]
+affects: [manifest/, gateway/, metering/, authorizer/, internal/api/, internal/serve/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, examples/plane/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md, specs/016-security-and-threat-model.md, specs/018-conformance-suite.md, specs/019-observability.md]
 effort: medium
 created: 2026-10-09
 updated: 2026-10-09
@@ -243,7 +243,9 @@ Decided while building:
   `provider: {zdr: true}`; no other catalog Provider declares anything,
   because each vendor's terms are the operator's to state.
 - Specs 003, 004, 007, 011, 016, and 019 name the members, the code, the
-  key cache schedule, the threat, and the two observability fields.
+  key cache schedule, the threat, and the two observability fields, and
+  spec 018 names the previous-release comparison with a member added
+  since at its default.
 
 What the gateway cannot hold: the declaration is the operator's
 statement about the upstream's terms, and the gateway does not check

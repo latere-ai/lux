@@ -260,7 +260,7 @@ flowchart TD
    which can be tried now are `provider_unavailable`. An opaque route on
    such a Key is `zero_retention_unavailable` toward a Provider that
    declares nothing or declares `requestFields`, and served toward one
-   that declares `{}` ([047-zero-retention-keys](047-zero-retention-keys.md)). This stage precedes
+   that declares `{}` ([[047-zero-retention-keys]]). This stage precedes
    the limits so that a refusal no retry can fix, and one that needs no
    counter, is answered without touching a window: the counters are
    debited only for a request that has somewhere to go.
@@ -354,7 +354,7 @@ The outbound request toward the target's `baseURL`:
   `requestFields` by the same rule, winning on every member both name,
   and a body that is not a JSON object is `invalid_request` rather than
   sent without them. `decorate` refuses such a Key toward a Provider it
-  may not reach before it writes anything ([047-zero-retention-keys](047-zero-retention-keys.md)).
+  may not reach before it writes anything ([[047-zero-retention-keys]]).
 - Hop-by-hop headers are removed in both directions: `Connection`,
   `Keep-Alive`, `Proxy-Connection`, `Transfer-Encoding`, `TE`,
   `Trailer`, `Upgrade`, and every header `Connection` names. `Host` is
@@ -534,7 +534,7 @@ is the developer detail, truncated.
 | `model_not_found` | 404 | no Model of that name |
 | `model_not_allowed` | 403 | no selector matches |
 | `model_disabled` | 403 | the Model has `spec.disabled` true ([039-disabled-models](.archive/039-disabled-models.md)) |
-| `zero_retention_unavailable` | 403 | a Key with `spec.zeroRetention` and a Model none of whose targets names a Provider that declares `spec.zeroRetention`, or an opaque route toward a Provider that declares nothing or declares `requestFields` ([047-zero-retention-keys](047-zero-retention-keys.md)) |
+| `zero_retention_unavailable` | 403 | a Key with `spec.zeroRetention` and a Model none of whose targets names a Provider that declares `spec.zeroRetention`, or an opaque route toward a Provider that declares nothing or declares `requestFields` ([[047-zero-retention-keys]]) |
 | `provider_unavailable` | 503 | no admitted target, or the last attempt failed at the transport before a response line |
 | `dialect_unsupported` | 400 | the door and the target cannot be bridged |
 | `provider_required` | 400 | an opaque route with no `Lux-Provider` and more than one candidate |

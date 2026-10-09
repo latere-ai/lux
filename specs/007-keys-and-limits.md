@@ -229,7 +229,7 @@ request through any other. A change to `spec.zeroRetention` is not
 reread that way: it takes the journal's schedule, so a replica may send
 the Key's requests as it cached it until it consumes the row, and up to
 `LUX_KEY_CACHE_GRACE` past its window while the store does not answer
-([047-zero-retention-keys](047-zero-retention-keys.md)). The journal row is written for
+([[047-zero-retention-keys]]). The journal row is written for
 every mutation whether or not a sink is configured, so the tail works
 in every installation with a store; in file mode the `SIGHUP` snapshot
 swap empties the cache ([[010-state]]). A negative entry protects the

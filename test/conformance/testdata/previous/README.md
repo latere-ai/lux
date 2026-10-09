@@ -8,7 +8,8 @@ back through `GET /v1/{kind}s/{name}`, and the run's request records as
 
 The `fixture` group of the conformance suite reads every directory
 here on every push: it applies each manifest under the run's prefix and
-holds the read-back's `spec` to the fixture's, and decodes each record
+holds the read-back's `spec` to the fixture's, a member a later release
+added at its default aside, and decodes each record
 with the current `metering.Record` and holds every member to the same
 value after a round trip. That is the schema evolution promise of the
 manifest contract and the record additivity promise of the usage record

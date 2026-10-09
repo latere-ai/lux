@@ -346,7 +346,7 @@ The attribute names are constants beside the spans that write them:
   time from the attempt's start to the response line, are set when a
   response line arrived and absent when none did; `lux.zero_retention`
   is true when the attempt carries a request on a Key with
-  `spec.zeroRetention` ([047-zero-retention-keys](047-zero-retention-keys.md)).
+  `spec.zeroRetention` ([[047-zero-retention-keys]]).
 - `lux.authorizer` is one per question asked, the request's own action
   and each of Resolve's lookups alike, with `lux.decision` in the
   metric's vocabulary, `allow`, `deny`, or `unavailable`.
@@ -433,7 +433,7 @@ provider's failure, and a refusal before any attempt read apart
 ([043-provider-refusal-reason](.archive/043-provider-refusal-reason.md)).
 Its `zero_retention` is the record's: the Key's `spec.zeroRetention`
 when the request arrived
-([047-zero-retention-keys](047-zero-retention-keys.md)).
+([[047-zero-retention-keys]]).
 
 `route` is the route template of [[004-request-path]]'s door table or
 [[011-api]]'s route table, never the request's own path, for the reason

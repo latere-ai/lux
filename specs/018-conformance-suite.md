@@ -339,7 +339,11 @@ tagged release produced: one resolved manifest per kind as
 bucket of archived records as `records.ndjson`
 ([[012-request-log-and-events]]). The fixture group applies each
 manifest under a prefix of its release, `conf-<run>-<version>-`, and
-asserts the read-back's `spec` equals the fixture's, and decodes each
+asserts the read-back's `spec` equals the fixture's, with a member a
+later release added at the default it renders, which the release did not
+carry, set to that default first (the same object defaults aside, as
+[[003-manifest-contract]] promises; a Key's `spec.zeroRetention`,
+[[047-zero-retention-keys]]), and decodes each
 record with the current `metering.Record` and asserts every member the
 fixture carries is still present with the same value after a round
 trip. The prefix carries the version because a release seeds the names
@@ -497,7 +501,7 @@ whose own scenario is [[014-agent-client]]'s.
 | Without `LUX_TEST_URL` the suite skips with one line and exits zero | `TestContractSkipsWithoutAURL` | passing |
 | Each mutation reddens exactly the cases its row names and no others | `TestSuiteCatchesADroppedCapability`, table-driven over the mutation table | passing, eight rows |
 | Every object the suite creates carries the run label and is gone after the run, and no object created before the run is touched | `TestSuiteCleansUpExactlyItsOwn` | passing |
-| The previous release's manifests read back with an equal `spec` and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over the releases [release and installation](.archive/017-release-and-installation.md)'s pipeline wrote, and over a synthetic one in `TestFixtureGroupReadsAPreviousRelease` and `TestFixtureGroupNamesEachReleaseApart` |
+| The previous release's manifests read back with an equal `spec`, a member added since at its default aside, and its archived records decode with every field preserved | `case003PreviousReleaseManifests`, `case009PreviousReleaseRecords` | passing over the releases [release and installation](.archive/017-release-and-installation.md)'s pipeline wrote, and over a synthetic one in `TestFixtureGroupReadsAPreviousRelease` and `TestFixtureGroupNamesEachReleaseApart` |
 | Every group but `fixture` is green against a server that is not `luxd` and holds none of this repository's state | `TestExamplePlaneConforms` ([[020-building-a-plane]]) | not built, [[020-building-a-plane]]'s |
 | The suite mints its own Key through `/v1` before the door cases, deletes it at teardown, and skips the `doors` and `keys` groups naming `read_only` against a `file` mode server | `case007SuiteMintsItsKey`, `TestFileModeSkipList` | passing |
 | Every response the suite receives validates against the server's own `GET /v1/openapi.json` | `case011OpenAPIValidatesEveryResponse` | passing as a check on every `/v1` answer; against `luxd` it finds the one drift the Outcome names, owed by [[011-api]] |
