@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.15.0 - 2026-10-09
+
 ### Changed
 
 - A Key can list up to six Budgets in `spec.budgets`, up from four. A
