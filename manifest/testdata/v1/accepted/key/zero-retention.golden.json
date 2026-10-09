@@ -2,33 +2,30 @@
   "apiVersion": "lux.latere.ai/v1beta1",
   "kind": "Key",
   "metadata": {
-    "name": "fixed-name-0000"
+    "name": "zero-retention"
   },
   "spec": {
     "models": [
-      "anthropic/*"
+      "gpt-5"
     ],
     "limits": {
       "requestsPerMinute": 0,
       "tokensPerMinute": 0
     },
-    "ttl": "1h",
     "allowUnpriced": false,
-    "passthrough": true,
-    "zeroRetention": false,
+    "passthrough": false,
+    "zeroRetention": true,
     "disabled": false
   },
   "status": {
     "selectors": [
       {
-        "selector": "anthropic/*",
+        "selector": "gpt-5",
         "matched": [
-          "anthropic/claude-opus-4",
-          "anthropic/claude-sonnet-4"
+          "gpt-5"
         ]
       }
     ],
-    "expiresAt": "2026-09-13T11:00:00Z",
     "warnings": []
   }
 }

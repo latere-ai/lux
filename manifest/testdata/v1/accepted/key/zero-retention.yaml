@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: zero-retention
+spec:
+  models: ["gpt-5"]
+  zeroRetention: true                  # each request reaches only a Provider that declares spec.zeroRetention

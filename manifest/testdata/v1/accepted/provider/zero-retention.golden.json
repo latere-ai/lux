@@ -1,0 +1,42 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "zero-retention"
+  },
+  "spec": {
+    "dialect": "openai",
+    "tunnel": false,
+    "baseURL": "https://aggregator.example.com/api/v1",
+    "credential": {
+      "header": "Authorization",
+      "scheme": "bearer"
+    },
+    "requestFields": {
+      "provider": {
+        "order": [
+          "vendor-a",
+          "vendor-b"
+        ]
+      }
+    },
+    "zeroRetention": {
+      "requestFields": {
+        "provider": {
+          "zdr": true
+        }
+      }
+    },
+    "discovery": {
+      "mode": "none"
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "warnings": []
+  }
+}

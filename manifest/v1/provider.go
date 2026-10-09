@@ -47,6 +47,10 @@ func (p Provider) MarshalJSON() ([]byte, error) {
 // member it names, so an option the upstream reads from the body holds
 // whatever the caller sent. Its values are what encoding/json decodes a
 // JSON value into: map[string]any, []any, string, float64, and bool.
+//
+// ZeroRetention is the operator's statement that the upstream keeps
+// nothing of a request sent with it. Nil, a request on a Key with
+// spec.zeroRetention is never sent to the Provider.
 type ProviderSpec struct {
 	Dialect       Dialect           `json:"dialect,omitempty"`
 	Tunnel        bool              `json:"tunnel"`
@@ -54,10 +58,22 @@ type ProviderSpec struct {
 	Credential    *Credential       `json:"credential,omitempty"`
 	Headers       map[string]string `json:"headers,omitempty"`
 	RequestFields map[string]any    `json:"requestFields,omitempty"`
+	ZeroRetention *ZeroRetention    `json:"zeroRetention,omitempty"`
 	Discovery     Discovery         `json:"discovery,omitzero"`
 	Health        Health            `json:"health,omitzero"`
 	Timeout       Duration          `json:"timeout,omitempty"`
 	Concurrency   int               `json:"concurrency"`
+}
+
+// ZeroRetention is how a Provider keeps nothing of a request on a Key
+// with spec.zeroRetention. Empty, the upstream keeps nothing of any
+// request and such a request is sent as any other is. RequestFields, a
+// JSON object under every rule of ProviderSpec.RequestFields, is merged
+// into the body of such a request after ProviderSpec.RequestFields, its
+// value winning on every member both name; it is written into no other
+// request.
+type ZeroRetention struct {
+	RequestFields map[string]any `json:"requestFields,omitempty"`
 }
 
 // Credential is how the gateway authenticates toward the upstream. The

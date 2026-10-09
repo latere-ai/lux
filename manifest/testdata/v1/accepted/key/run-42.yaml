@@ -18,6 +18,7 @@ spec:
   ttl: 168h                            # or expiresAt; from createdAt; absent is never
   allowUnpriced: false                 # an unpriced Model under a spend limit or a Budget
   passthrough: false                   # routes the gateway does not translate
+  zeroRetention: false                 # true sends every request only to a Provider that declares spec.zeroRetention
   disabled: false
 status:
   id: key_01J9ZK2P7Q8R9S0T1U2V3W4X60

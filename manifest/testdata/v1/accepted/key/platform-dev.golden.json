@@ -15,6 +15,7 @@
     "expiresAt": "2027-01-01T00:00:00Z",
     "allowUnpriced": true,
     "passthrough": false,
+    "zeroRetention": false,
     "disabled": false
   },
   "status": {

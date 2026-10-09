@@ -122,3 +122,83 @@ func TestRequestFieldsInGoForm(t *testing.T) {
 		t.Errorf("the rendered Provider %s", raw)
 	}
 }
+
+// TestZeroRetentionRules: Provider.spec.zeroRetention decodes absent,
+// empty, and with requestFields; its requestFields are held to every
+// rule of spec.requestFields at paths under
+// spec.zeroRetention.requestFields; a member other than requestFields is
+// unknown_field; and Key.spec.zeroRetention is a boolean, false by
+// default and rendered either way.
+func TestZeroRetentionRules(t *testing.T) {
+	o := corpusOptions(t)
+	provider := func(block string) string {
+		return head(v1.KindProvider, "p") + minProvider + "  zeroRetention:\n" + block
+	}
+	fields := func(members string) string { return provider("    requestFields:\n" + members) }
+	fill := MaxRequestFieldsBytes - len(`{"k":""}`)
+	refused := []struct {
+		name, body string
+		code       Code
+		path       string
+	}{
+		{"model", fields("      model: gpt-5\n"), CodeReservedPrefix, `spec.zeroRetention.requestFields["model"]`},
+		{"stream in another case", fields("      Stream: false\n"), CodeReservedPrefix, `spec.zeroRetention.requestFields["Stream"]`},
+		{"stream_options", fields("      stream_options: {include_usage: false}\n"), CodeReservedPrefix, `spec.zeroRetention.requestFields["stream_options"]`},
+		{"a null member", fields("      user: null\n"), CodeInvalidField, `spec.zeroRetention.requestFields["user"]`},
+		{"a nested member left empty", fields("      provider:\n        zdr:\n"), CodeInvalidField, `spec.zeroRetention.requestFields["provider"]["zdr"]`},
+		{"a list", provider("    requestFields: [1, 2]\n"), CodeInvalidField, "spec.zeroRetention.requestFields"},
+		{"one byte above the bound", fields("      k: \"" + strings.Repeat("x", fill+1) + "\"\n"), CodeInvalidField, "spec.zeroRetention.requestFields"},
+		{"an unknown member", provider("    zdr: true\n"), CodeUnknownField, "spec.zeroRetention.zdr"},
+		{"not an object", head(v1.KindProvider, "p") + minProvider + "  zeroRetention: true\n", CodeInvalidField, "spec.zeroRetention"},
+		{"a Key's flag as a string", head(v1.KindKey, "k") + minKey + "  zeroRetention: \"true\"\n", CodeInvalidField, "spec.zeroRetention"},
+	}
+	for _, c := range refused {
+		t.Run(c.name, func(t *testing.T) {
+			e := resolveErr(t, c.body, o)
+			wantErr(t, e, c.code, c.path)
+			if e.Detail == "" {
+				t.Error("no developer detail")
+			}
+		})
+	}
+	t.Run("the general fields at the bound and the zero-retention fields at the bound", func(t *testing.T) {
+		at := "k: \"" + strings.Repeat("x", fill) + "\"\n"
+		mustResolve(t, head(v1.KindProvider, "p")+minProvider+"  requestFields:\n    "+at+"  zeroRetention:\n    requestFields:\n      "+at, o)
+	})
+	declared := func(body string) *v1.ZeroRetention {
+		t.Helper()
+		return mustResolve(t, body, o).Object.(*v1.Provider).Spec.ZeroRetention
+	}
+	if z := declared(head(v1.KindProvider, "p") + minProvider); z != nil {
+		t.Errorf("absent resolves to %+v", z)
+	}
+	for _, body := range []string{provider("    {}\n"), provider("    requestFields: {}\n")} {
+		if z := declared(body); z == nil || z.RequestFields != nil {
+			t.Errorf("an empty declaration resolves to %+v\n%s", z, body)
+		}
+	}
+	if z := declared(fields("      provider: {zdr: true}\n")); z == nil || !reflect.DeepEqual(z.RequestFields, map[string]any{"provider": map[string]any{"zdr": true}}) {
+		t.Errorf("a declaration with fields resolves to %+v", z)
+	}
+	r, err := Resolve(context.Background(), &v1.Provider{Metadata: v1.ObjectMeta{Name: "p"}, Spec: v1.ProviderSpec{
+		Dialect: v1.DialectOpenAI, BaseURL: "https://api.example.com/v1",
+		ZeroRetention: &v1.ZeroRetention{RequestFields: map[string]any{"provider": map[string]bool{"zdr": true}}},
+	}}, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(r.Object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"zeroRetention":{"requestFields":{"provider":{"zdr":true}}}`) {
+		t.Errorf("the rendered Provider %s", raw)
+	}
+	key := mustResolve(t, head(v1.KindKey, "k")+minKey, o).Object.(*v1.Key)
+	if key.Spec.ZeroRetention {
+		t.Error("a Key that does not name the flag asks for zero retention")
+	}
+	if raw, err := json.Marshal(key); err != nil || !strings.Contains(string(raw), `"zeroRetention":false`) {
+		t.Errorf("a Key renders %s (%v)", raw, err)
+	}
+}

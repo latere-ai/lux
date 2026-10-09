@@ -139,8 +139,13 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 			return nil, refuse(CodeInvalidField, err.Error(), path)
 		}
 	}
-	if err := checkRequestFields(s.RequestFields); err != nil {
+	if err := checkRequestFields(s.RequestFields, "spec.requestFields"); err != nil {
 		return nil, err
+	}
+	if z := s.ZeroRetention; z != nil {
+		if err := checkRequestFields(z.RequestFields, "spec.zeroRetention.requestFields"); err != nil {
+			return nil, err
+		}
 	}
 	if s.Discovery.Mode != "" && !s.Discovery.Mode.Valid() {
 		return nil, refuse(CodeInvalidField, strconv.Quote(string(s.Discovery.Mode))+" is not auto or none", "spec.discovery.mode")
@@ -173,16 +178,17 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 	return warnings, nil
 }
 
-// checkRequestFields applies the requestFields row: the object is read
-// in its JSON form, the one the gateway merges, so a value of any Go type
-// is held to the same rules; a reserved top-level member is
-// reserved_prefix, and a null member value and an encoding above
-// MaxRequestFieldsBytes are invalid_field.
-func checkRequestFields(fields map[string]any) error {
+// checkRequestFields applies the requestFields row to the object at
+// path, spec.requestFields or spec.zeroRetention.requestFields, which
+// the gateway merges by one rule: the object is read in its JSON form,
+// the one the gateway merges, so a value of any Go type is held to the
+// same rules; a reserved top-level member is reserved_prefix, and a null
+// member value and an encoding above MaxRequestFieldsBytes are
+// invalid_field.
+func checkRequestFields(fields map[string]any, path string) error {
 	if len(fields) == 0 {
 		return nil
 	}
-	const path = "spec.requestFields"
 	encoded, err := json.Marshal(fields)
 	if err != nil {
 		return refuse(CodeInvalidField, "requestFields do not encode as JSON: "+err.Error(), path)

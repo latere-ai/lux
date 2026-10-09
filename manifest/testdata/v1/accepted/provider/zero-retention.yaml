@@ -1,0 +1,18 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: zero-retention
+spec:
+  dialect: openai                      # an aggregator that routes each request to one of several vendors
+  baseURL: https://aggregator.example.com/api/v1
+  credential:
+    value: sk-aggregator-example
+  requestFields:                       # merged into every request body
+    provider:
+      order: [vendor-a, vendor-b]
+  zeroRetention:                       # a request on a Key with spec.zeroRetention may be sent here
+    requestFields:                     # merged after requestFields into those requests alone, winning on every member both name
+      provider:
+        zdr: true
+  discovery:
+    mode: none
