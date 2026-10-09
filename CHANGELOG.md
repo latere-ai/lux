@@ -6,6 +6,52 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- A Key can ask that none of its requests reach an upstream that may
+  keep them, with `spec.zeroRetention: true`, and a Provider declares
+  how its upstream keeps nothing of a request with `spec.zeroRetention`:
+  `{}` when the upstream keeps nothing of any request, or
+  `requestFields`, merged into such a request's body after
+  `spec.requestFields` and winning on every member both name, for an
+  upstream that takes the option per request, such as OpenRouter's
+  `provider: {zdr: true}`. A request on a zero-retention Key reaches
+  only declaring Providers and falls over only among them. A Model with
+  no declaring target refuses it with the new code
+  `zero_retention_unavailable`, 403, before any upstream is called;
+  declaring targets that cannot be tried now answer
+  `provider_unavailable`. An opaque route on such a Key is served only
+  toward a Provider that declares `{}`. A body the fields cannot be
+  written into is `invalid_request`. Requests on other Keys are routed
+  and sent as before. The request record (`zeroRetention` in
+  `GET /v1/requests`), the request log line (`zero_retention`), and each
+  `lux.upstream` span (`lux.zero_retention`) say whether a request was
+  on such a Key. A change to the flag reaches each replica at its next
+  read of the journal. The catalog's `openrouter` Provider declares
+  `provider: {zdr: true}`, and `docs/security.md` walks the case. For
+  the packages: `v1.KeySpec.ZeroRetention`, `v1.ProviderSpec.ZeroRetention`
+  and `v1.ZeroRetention`, `gateway.CodeZeroRetentionUnavailable`,
+  `gateway.AttrZeroRetention`, and `ZeroRetention` on `gateway.Record`
+  and `metering.Record`, which a platform's own `Recorder` copies across.
+
+### Changed
+
+- Every Key renders `spec.zeroRetention`, `false` unless set, as it
+  renders its other booleans, so a Key read back after the upgrade
+  carries one member more than it was applied with, and the six
+  accepted Keys of the golden corpus change that way. A manifest without
+  the member keeps the default. The conformance suite's previous-release
+  group reads a Key from an earlier release with the member at its
+  default.
+
+### Fixed
+
+- A request toward a Provider with `spec.requestFields` is refused
+  `invalid_request` when any value of its `Content-Encoding` header, or
+  any coding a value lists, is other than `identity`. Only the first
+  header line was read, so a body under a second line naming `gzip`
+  reached the upstream without the fields.
+
 ## v0.15.0 - 2026-10-09
 
 ### Changed
