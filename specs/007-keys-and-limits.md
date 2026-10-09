@@ -460,8 +460,9 @@ key. A Budget's spend counter takes the same two adds. The Recorder of
 adds to none of these.
 
 At stage 7, for each of the Key's spend window and every Budget it
-draws from, one in `spec.budget` or up to four in `spec.budgets`
-([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md)), any one of which refuses the request:
+draws from, one in `spec.budget` or up to six in `spec.budgets`
+([037-several-budgets-per-key](.archive/037-several-budgets-per-key.md), the bound
+[046-six-budgets-per-key](.archive/046-six-budgets-per-key.md)), any one of which refuses the request:
 
 ```
 known     = the store's counter as of the last flush

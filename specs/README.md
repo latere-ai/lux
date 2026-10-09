@@ -98,6 +98,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [043](.archive/043-provider-refusal-reason.md) | A provider's refusal reason: the upstream status on the request log line, and every credential redacted from the developer detail | small | complete | 004, 005, 019 |
 | [044](.archive/044-key-reread-before-model-refusal.md) | A Key read past the cache before a model refusal: a model granted through one replica is served through any other at once | small | complete | 004, 007, 018 |
 | [045](.archive/045-zero-priced-requests-on-a-spent-window.md) | A zero-priced request on a spent window: a Model whose every price is zero is served whatever a spend limit or a Budget has left | small | complete | 004, 007, 009, 018 |
+| [046](.archive/046-six-budgets-per-key.md) | Six Budgets per Key: the bound on spec.budgets raised from four | small | complete | 003, 007, 018, 037 |
 
 ## Dependency graph
 
@@ -141,6 +142,7 @@ flowchart BT
   S043[043 provider refusal reason]
   S044[044 key reread before a model refusal]
   S045[045 zero-priced requests on a spent window]
+  S046[046 six budgets per key]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -188,6 +190,7 @@ flowchart BT
   S044 --> S018
   S045 --> S009
   S045 --> S018
+  S046 --> S037
 ```
 
 ## Build order
