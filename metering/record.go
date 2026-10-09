@@ -90,6 +90,8 @@ type Record struct {
 	Key   KeyRef `json:"key"`
 	Owner string `json:"owner"`
 
+	ZeroRetention bool `json:"zeroRetention"` // the Key's spec.zeroRetention when the request arrived
+
 	Model         Ref    `json:"model"`
 	Provider      Ref    `json:"provider"`
 	UpstreamModel string `json:"upstreamModel"`

@@ -996,3 +996,37 @@ func TestRecorderToleratesTheStore(t *testing.T) {
 		t.Fatalf("the failed run dropped its row")
 	}
 }
+
+// TestRecordSaysZeroRetention: the usage record of a request on a Key
+// with spec.zeroRetention says so, served or refused, and one on a Key
+// without it does not.
+func TestRecordSaysZeroRetention(t *testing.T) {
+	h := newHarness(t)
+	p := h.plane(t, nil)
+	declaring, _ := p.upstream(t, "keeps-nothing", v1.DialectOpenAI, openaiChatResponse)
+	declaring.Spec.ZeroRetention = &v1.ZeroRetention{}
+	if _, err := h.st.Objects().Put(t.Context(), declaring, declaring.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	plain, _ := p.upstream(t, "plain", v1.DialectOpenAI, openaiChatResponse)
+	p.model(t, "private", declaring.Metadata.Name, "gpt-4.1", nil)
+	p.model(t, "public", plain.Metadata.Name, "gpt-4.1", nil)
+	_, zr := h.key(t, "zr", func(k *v1.Key) { k.Spec.ZeroRetention = true })
+	_, other := h.key(t, "other", nil)
+	for _, c := range []struct {
+		value, model string
+		status       int
+		flag         bool
+	}{
+		{zr, "private", http.StatusOK, true},
+		{zr, "public", http.StatusForbidden, true},
+		{other, "public", http.StatusOK, false},
+	} {
+		if rec := p.do("POST", "/openai/v1/chat/completions", c.value, chat(c.model), nil); rec.Code != c.status {
+			t.Fatalf("%s: %d %s", c.model, rec.Code, rec.Body.String())
+		}
+		if r := p.records(t)[0]; r.ZeroRetention != c.flag || r.Model.Name != c.model {
+			t.Errorf("%s: record model %q zeroRetention %v, want %v", c.model, r.Model.Name, r.ZeroRetention, c.flag)
+		}
+	}
+}

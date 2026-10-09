@@ -171,7 +171,7 @@ func (r *Recorder) convert(rec gateway.Record) metering.Record {
 	m := metering.Record{
 		ID: rec.ID, At: rec.At.UTC(), EndedAt: rec.EndedAt.UTC(),
 		Key:   metering.KeyRef{ID: rec.KeyID, Prefix: rec.KeyPrefix},
-		Owner: rec.Owner,
+		Owner: rec.Owner, ZeroRetention: rec.ZeroRetention,
 		Model: metering.Ref{Name: rec.Model, ID: rec.ModelID}, Provider: metering.Ref{Name: rec.Provider, ID: rec.ProviderID},
 		UpstreamModel: rec.UpstreamModel,
 		Door:          rec.Door, TargetDialect: rec.TargetDialect, Route: rec.Route, Translated: rec.Translated,

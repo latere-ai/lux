@@ -462,6 +462,7 @@ var fieldSchemas = map[reflect.Type]map[string]ordered{
 		"RequestFields": obj("type", "object", "additionalProperties", true, "description", "JSON members merged into every request body the gateway sends this Provider, the Provider's value winning on every member it names: an object value is merged member by member, any other value, a list included, replaces the caller's whole, and the caller's other members are kept. Not secret: every read returns it. The top-level members "+strings.Join(manifest.ReservedRequestFields(), ", ")+" are refused, as is a null member, and the compact encoding is at most "+strconv.Itoa(manifest.MaxRequestFieldsBytes)+" bytes."),
 	},
 	reflect.TypeFor[metering.Record](): {
+		"ZeroRetention": obj("type", "boolean", "description", "True for a request on a Key with spec.zeroRetention, as the Key stood when the request arrived."),
 		"TargetDialect": obj("type", "string", "enum", append([]string{""}, enums[reflect.TypeFor[v1.Dialect]()]...), "description", "The dialect of the target that answered; empty when no target was chosen, as on a refused request."),
 	},
 }

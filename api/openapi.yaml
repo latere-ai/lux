@@ -2004,6 +2004,7 @@ components:
       - endedAt
       - key
       - owner
+      - zeroRetention
       - model
       - provider
       - upstreamModel
@@ -2036,6 +2037,9 @@ components:
           $ref: "#/components/schemas/KeyRef"
         owner:
           type: string
+        zeroRetention:
+          type: boolean
+          description: True for a request on a Key with spec.zeroRetention, as the Key stood when the request arrived.
         model:
           $ref: "#/components/schemas/Ref"
         provider:
