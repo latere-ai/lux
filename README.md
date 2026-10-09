@@ -180,7 +180,7 @@ release on a cluster, see [Install](docs/install.md).
   on every door at once.
 - Keys with model selectors, per-minute request and token limits, an
   expiry, and a value shown once; budgets several keys draw from, with
-  windows anchored where you choose, and up to four budgets on one key
+  windows anchored where you choose, and up to six budgets on one key
   that a call must fit together.
 - Streaming in every dialect, translated as it arrives rather than
   buffered.
