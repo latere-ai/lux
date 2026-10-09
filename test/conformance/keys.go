@@ -39,6 +39,7 @@ var keysCases = []testCase{
 	{group: "keys", name: "case037Restart", spec: 37, bearer: true, key: true, stubs: true, fn: case037Restart},
 	{group: "keys", name: "case039DisabledModel", spec: 39, bearer: true, key: true, fn: case039DisabledModel},
 	{group: "keys", name: "case045ZeroPricedOnASpentBudget", spec: 45, bearer: true, key: true, stubs: true, fn: case045ZeroPricedOnASpentBudget},
+	{group: "keys", name: "case046SixBudgets", spec: 46, bearer: true, key: true, stubs: true, fn: case046SixBudgets},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -436,6 +437,57 @@ func case045ZeroPricedOnASpentBudget(t testing.TB, c *client) {
 		return str(read, "status.spent") == "0.0015" && str(read, "status.state") == "Exhausted",
 			"status.spent is " + strconv.Quote(str(read, "status.spent")) + ", status.state " + strconv.Quote(str(read, "status.state"))
 	})
+}
+
+// case046SixBudgets: a Key lists six Budgets, the most it may, five
+// wide and the sixth tight. Its first request is served and the second
+// is budget_exhausted on the sixth alone, Retry-After its daily reset,
+// and each of the six holds the one request's spend and counts the Key.
+func case046SixBudgets(t testing.TB, c *client) {
+	listed := []struct{ suffix, amount, window string }{
+		{"six-org", "1", "month"},
+		{"six-weekly", "1", "168h"},
+		{"six-monthly", "1", "month"},
+		{"six-yearly", "1", "8760h"},
+		{"six-session", "1", "none"},
+		{"six-own", "0.002", "24h"},
+	}
+	var names, ids []string
+	defer func() {
+		for _, id := range slices.Backward(ids) {
+			c.mustDelete(t, v1.KindBudget, id)
+		}
+	}()
+	for _, b := range listed {
+		made := c.object(t, v1.KindBudget, b.suffix, map[string]any{"amount": b.amount, "currency": "USD", "window": b.window})
+		names, ids = append(names, c.name(b.suffix)), append(ids, str(made, "status.id"))
+	}
+	k := c.object(t, v1.KindKey, "six-budgets", c.keySpec(map[string]any{"budgets": names}))
+	defer c.mustDelete(t, v1.KindKey, str(k, "status.id"))
+	refs := arr(k, "status.budgets")
+	if len(refs) != len(listed) {
+		t.Fatalf("status.budgets %v", refs)
+	}
+	for i, ref := range refs {
+		if str(ref, "name") != names[i] || str(ref, "id") != ids[i] {
+			t.Errorf("status.budgets[%d] is %v, want %s %s", i, ref, names[i], ids[i])
+		}
+	}
+	value := str(k, "status.value")
+	if first := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value); first.Status != http.StatusOK {
+		t.Fatalf("the first request: %d %s", first.Status, excerpt(first.Body))
+	}
+	second := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("tokens"), false), value)
+	c.expectDoor(t, "openai", second, "budget_exhausted")
+	if retry, err := strconv.Atoi(second.Header.Get("Retry-After")); err != nil || retry < 1 || retry > 24*3600 {
+		t.Errorf("Retry-After %q is not the sixth Budget's daily reset", second.Header.Get("Retry-After"))
+	}
+	for _, id := range ids {
+		c.eventually(t, 15*time.Second, "status.spent of "+id+" carries the one request", func() (bool, string) {
+			read := c.read(t, v1.KindBudget, id).json(t)
+			return str(read, "status.spent") == "0.0015" && num(read, "status.keys") == 1, "status.spent is " + strconv.Quote(str(read, "status.spent"))
+		})
+	}
 }
 
 // case039DisabledModel: a Model with spec.disabled true is refused
