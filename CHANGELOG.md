@@ -6,6 +6,23 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- A Key can list up to six Budgets in `spec.budgets`, up from four. A
+  platform that gives each API key it issues a Budget of its own, beside
+  an organization's balance, an agent's two limits, and a session's own
+  Budget, needs five; the sixth is spare. A Key listing five or six was
+  refused `invalid_field` at `spec.budgets` and is now accepted, and a
+  seventh is refused as a fifth was. Every listed Budget is still a gate
+  of its own at the door, held from memory on each request, and
+  `budget.draw` is asked once per entry only when the Key is written.
+  `v1.MaxKeyBudgets` is `6`. A Key listing more than four can be written
+  once every replica runs this release: a replica on an earlier one
+  refuses to write it, and serves one another replica wrote. In the
+  golden corpus the refused case `key-budgets-five` is now
+  `key-budgets-seven`, and the accepted Key `agent-session` lists six
+  Budgets, four of them new accepted cases.
+
 ### Security
 
 - Built with Go 1.27.2 and golang.org/x/net v0.60.0, which fix GO-2026-6611, GO-2026-6612, GO-2026-6613 and GO-2026-6617.
