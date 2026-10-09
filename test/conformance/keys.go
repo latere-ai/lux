@@ -40,6 +40,7 @@ var keysCases = []testCase{
 	{group: "keys", name: "case039DisabledModel", spec: 39, bearer: true, key: true, fn: case039DisabledModel},
 	{group: "keys", name: "case045ZeroPricedOnASpentBudget", spec: 45, bearer: true, key: true, stubs: true, fn: case045ZeroPricedOnASpentBudget},
 	{group: "keys", name: "case046SixBudgets", spec: 46, bearer: true, key: true, stubs: true, fn: case046SixBudgets},
+	{group: "keys", name: "case047ZeroRetention", spec: 47, bearer: true, key: true, stubs: true, fn: case047ZeroRetention},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -542,4 +543,160 @@ func case039DisabledModel(t testing.TB, c *client) {
 	if after := str(c.read(t, v1.KindKey, id).json(t), "status.version"); after != version {
 		t.Errorf("the Key changed from version %s to %s", version, after)
 	}
+}
+
+// case047ZeroRetention: a Key with spec.zeroRetention reaches only the
+// Providers that declare spec.zeroRetention. Its request carries the
+// declaration's requestFields merged after the Provider's own
+// requestFields, winning over them and over the caller's members, stream
+// and not, while a Key without the flag reaches the same Provider with
+// the general fields alone. A Model with no declaring target refuses it
+// zero_retention_unavailable before any upstream; a Model with a
+// declaring and a non-declaring target serves it through the declaring
+// targets alone, failing over among them; and declaring targets whose
+// circuit is open answer provider_unavailable. The request history says
+// which requests were on such a Key.
+func case047ZeroRetention(t testing.TB, c *client) {
+	if !slices.Contains(c.well.Dialects, "openai") {
+		t.Skip("the server has no openai door")
+	}
+	stub := c.stubs.Providers["openai"]
+	keeps := c.providerSpec("openai", "10s")
+	keeps["requestFields"] = map[string]any{"provider": map[string]any{"zdr": false, "order": []string{"vendor-b"}}}
+	keeps["zeroRetention"] = map[string]any{"requestFields": map[string]any{"provider": map[string]any{"zdr": true}}}
+	down := c.providerSpec("openai", "10s")
+	down["zeroRetention"] = map[string]any{}
+	var cleanup []func()
+	defer func() {
+		for _, f := range slices.Backward(cleanup) {
+			f()
+		}
+	}()
+	create := func(kind, suffix string, spec map[string]any) map[string]any {
+		obj := c.object(t, kind, suffix, spec)
+		cleanup = append(cleanup, func() { c.mustDelete(t, kind, str(obj, "status.id")) })
+		return obj
+	}
+	create(v1.KindProvider, "zr-keeps", keeps)
+	create(v1.KindProvider, "zr-plain", c.providerSpec("openai", "10s"))
+	create(v1.KindProvider, "zr-down", down)
+	create(v1.KindModel, "zr-private", c.modelSpec(nil, [2]string{"zr-keeps", "stub-gpt"}))
+	create(v1.KindModel, "zr-public", c.modelSpec(nil, [2]string{"zr-plain", "stub-gpt"}))
+	create(v1.KindModel, "zr-mixed", c.modelSpec(nil, [2]string{"zr-plain", "stub-gpt"}, [2]string{"zr-keeps", "fail-500"}, [2]string{"zr-keeps", "stub-gpt"}))
+	create(v1.KindModel, "zr-down", c.modelSpec(nil, [2]string{"zr-down", "fail-500"}))
+	zr := create(v1.KindKey, "zr", c.keySpec(map[string]any{"zeroRetention": true}))
+	if field(zr, "spec.zeroRetention") != true {
+		t.Fatalf("spec.zeroRetention reads %v", field(zr, "spec.zeroRetention"))
+	}
+	plain := create(v1.KindKey, "zr-without", c.keySpec(nil))
+	zrValue, plainValue := str(zr, "status.value"), str(plain, "status.value")
+	if field(plain, "spec.zeroRetention") != false {
+		t.Errorf("an unset spec.zeroRetention reads %v", field(plain, "spec.zeroRetention"))
+	}
+
+	// provider is the provider member of every request the stub read
+	// since it was cleared, and the upstream model each named.
+	provider := func() ([]map[string]any, []string) {
+		t.Helper()
+		var members []map[string]any
+		var models []string
+		for _, r := range c.received(t, stub) {
+			var body map[string]any
+			if err := decodeJSON(r.Body, &body); err != nil {
+				t.Fatalf("the stub read a body that is not JSON: %v\n%s", err, excerpt([]byte(r.Body)))
+			}
+			m, _ := body["provider"].(map[string]any)
+			members = append(members, m)
+			models = append(models, str(body, "model"))
+		}
+		return members, models
+	}
+	send := func(model, value string, stream bool) *response {
+		body := chat(c.name(model), stream)
+		body["provider"] = map[string]any{"zdr": false, "ZDR": false, "allow_fallbacks": true}
+		return c.door(t, "openai", http.MethodPost, "/v1/chat/completions", body, value)
+	}
+
+	// The fields reach the upstream, stream and not, over the caller's
+	// and the Provider's general ones; without the flag the general ones
+	// alone.
+	for _, stream := range []bool{false, true} {
+		c.clearReceived(t, stub)
+		if resp := send("zr-private", zrValue, stream); resp.Status != http.StatusOK {
+			t.Fatalf("stream %v: %d %s", stream, resp.Status, excerpt(resp.Body))
+		}
+		members, _ := provider()
+		if len(members) != 1 || members[0]["zdr"] != true || members[0]["allow_fallbacks"] != true || members[0]["ZDR"] != nil || !slices.Equal(strs(members[0]["order"]), []string{"vendor-b"}) {
+			t.Errorf("stream %v: the upstream read provider %v", stream, members)
+		}
+	}
+	c.clearReceived(t, stub)
+	if resp := send("zr-private", plainValue, false); resp.Status != http.StatusOK {
+		t.Fatalf("without the flag: %d %s", resp.Status, excerpt(resp.Body))
+	}
+	if members, _ := provider(); len(members) != 1 || members[0]["zdr"] != false {
+		t.Errorf("without the flag the upstream read provider %v", members)
+	}
+
+	// A Model with no declaring target is refused before any upstream.
+	c.clearReceived(t, stub)
+	refused := send("zr-public", zrValue, false)
+	c.expectDoor(t, "openai", refused, "zero_retention_unavailable")
+	if got := c.received(t, stub); len(got) != 0 {
+		t.Errorf("the refused request reached the upstream %d times", len(got))
+	}
+	if resp := send("zr-public", plainValue, false); resp.Status != http.StatusOK {
+		t.Errorf("without the flag: %d %s", resp.Status, excerpt(resp.Body))
+	}
+
+	// The declaring targets alone, failover included.
+	c.clearReceived(t, stub)
+	served := send("zr-mixed", zrValue, false)
+	if served.Status != http.StatusOK {
+		t.Fatalf("the mixed Model: %d %s", served.Status, excerpt(served.Body))
+	}
+	members, models := provider()
+	if !slices.Equal(models, []string{"fail-500", "stub-gpt"}) {
+		t.Errorf("attempts named %v, want the declaring targets alone", models)
+	}
+	for i, m := range members {
+		if m["zdr"] != true {
+			t.Errorf("attempt %d read provider %v", i, m)
+		}
+	}
+	c.clearReceived(t, stub)
+	if resp := send("zr-mixed", plainValue, false); resp.Status != http.StatusOK {
+		t.Fatalf("the mixed Model without the flag: %d %s", resp.Status, excerpt(resp.Body))
+	}
+	if _, models := provider(); !slices.Equal(models, []string{"stub-gpt"}) {
+		t.Errorf("without the flag the attempts named %v, want the first target", models)
+	}
+
+	// A declaring target whose circuit opened is an outage, not a
+	// refusal: the requests fail until the circuit opens, on every
+	// replica the requests reach.
+	c.eventually(t, revocationTimeout, "the declaring target's open circuit answers provider_unavailable", func() (bool, string) {
+		resp := send("zr-down", zrValue, false)
+		code := c.doorCode(t, "openai", resp)
+		return code == "provider_unavailable", "the door answers " + strconv.Quote(code)
+	})
+
+	rec := c.recordOf(t, str(zr, "status.id"), refused.ID)
+	if field(rec, "zeroRetention") != true || str(rec, "error") != "zero_retention_unavailable" {
+		t.Errorf("the refused request's record: zeroRetention %v, error %q", field(rec, "zeroRetention"), str(rec, "error"))
+	}
+	if rec := c.recordOf(t, str(zr, "status.id"), served.ID); field(rec, "zeroRetention") != true {
+		t.Errorf("the served request's record: zeroRetention %v", field(rec, "zeroRetention"))
+	}
+}
+
+// strs reads a decoded JSON list of strings.
+func strs(v any) []string {
+	list, _ := v.([]any)
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		s, _ := item.(string)
+		out = append(out, s)
+	}
+	return out
 }
