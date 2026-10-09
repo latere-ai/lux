@@ -92,16 +92,26 @@ For a request on a zero-retention Key:
 
 - **Model routes.** `selectTargets` drops every target whose Provider
   does not declare `spec.zeroRetention`, before ordering, so no
-  failover reaches one. With no target left the request is refused
-  `zero_retention_unavailable`, 403, and no upstream is called. A
-  Model with a declaring target and a non-declaring one serves the Key
-  through the first alone.
-- **Opaque routes.** A Provider named with `Lux-Provider`, or the only
-  one the Key's selectors reach, that does not declare
-  `spec.zeroRetention` is refused `zero_retention_unavailable`.
+  failover reaches one. When no target of the Model's spec names a
+  declaring Provider, the request is refused `zero_retention_unavailable`,
+  403, and no upstream is called: that answer is permanent for the Key
+  and the Model. When declaring targets exist and none can be tried now
+  (unhealthy, or its circuit open), the request is answered as any
+  request with no target left is, `provider_unavailable`. A Model with a
+  declaring target and a non-declaring one serves the Key through the
+  first alone.
+- **Opaque routes** are refused `zero_retention_unavailable` toward a
+  Provider whose `spec.zeroRetention` names `requestFields`: an opaque
+  route reaches the upstream's own API, whose storage endpoints (threads,
+  files, batches, stored conversations) keep what they are sent whatever
+  a routing option says. Toward a Provider that declares `{}`, whose
+  upstream keeps nothing of any request, an opaque route is served as
+  today. A Provider that declares nothing is refused as on a model
+  route.
 - **Every route.** `decorate` checks again before it writes, so no
   builder of an upstream request reaches a non-declaring Provider with
-  such a Key.
+  such a Key, and it writes the zero-retention fields whether or not the
+  Provider has `spec.requestFields`.
 
 A request on a Key without `zeroRetention` is routed as today, to
 declaring and non-declaring Providers alike, and its body never takes
@@ -111,17 +121,17 @@ the zero-retention fields.
 
 `decorate` writes `spec.requestFields`, then, for a zero-retention Key,
 `spec.zeroRetention.requestFields`, both by spec 042's merge. Where the
-zero-retention fields name members:
+zero-retention fields name members, on a model route (opaque routes are
+refused above):
 
-- a body that is not a JSON object and is not empty is refused
-  `invalid_request`, because the fields cannot be written into it and
-  an upstream reading it would read it without them (spec 042 sends
-  such a body unchanged; a zero-retention Key does not). A multipart
-  upload and a form body on an opaque route are such bodies;
-- a body under a `Content-Encoding` other than `identity` is
-  `invalid_request`, as spec 042 already answers;
-- an empty body, a `GET` among them, is sent as it is: it carries
-  nothing an upstream could keep.
+- a body that is not a JSON object is refused `invalid_request`, because
+  the fields cannot be written into it and an upstream reading it would
+  read it without them (spec 042 sends such a body unchanged; a
+  zero-retention Key does not);
+- a request carrying any `Content-Encoding` value other than `identity`,
+  every value of the header read, is `invalid_request`;
+- `GetBody` returns the body with both sets of fields, as spec 042's
+  does with one.
 
 ### When the Key changes
 
@@ -135,10 +145,11 @@ bound to whoever relies on it.
 
 ### The record
 
-The request record, the request log line and the `lux.upstream` span
-carry nothing new: which Provider served a request is already
-recorded, and the Key's spec is readable at the API. A refusal is
-recorded with its code as any refusal is.
+The request record and the request log line carry `zeroRetention`, true
+for a request on a zero-retention Key, and the `lux.upstream` span the
+attribute `lux.zero_retention`, so whether a given request was sent
+with the fields is read from the request itself, not from the Key as
+it stands now. A refusal is recorded with its code as any refusal is.
 
 ### Validation
 
@@ -164,11 +175,12 @@ recorded with its code as any refusal is.
 |---|---|---|
 | 1 | `Key.spec.zeroRetention` decodes, defaults to false, renders, resolves to a fixed point, is mutable, and survives a store round trip | corpus entries; `internal/api` apply test; `storetest` |
 | 2 | `Provider.spec.zeroRetention` decodes absent, `{}` and with `requestFields`; its fields are refused under spec 042's rules at their own paths; an unknown member is refused | corpus entries under `accepted/` and `refused/`; `manifest` validation test |
-| 3 | A request on a zero-retention Key reaches the upstream with the zero-retention fields merged after `requestFields`, winning over the caller's and the Provider's general fields, on passthrough and translation, stream and not | `gateway` forward test against a stub upstream |
+| 3 | A request on a zero-retention Key reaches the upstream with the zero-retention fields merged after `requestFields`, winning over the caller's and the Provider's general fields, on passthrough and translation, stream and not, with `GetBody` returning the same body; a Provider with no `requestFields` and only zero-retention fields writes them too | `gateway` forward test against a stub upstream |
 | 4 | A request on a Key without the flag reaches the same Provider without the zero-retention fields | the same test |
-| 5 | A Model whose targets declare nothing refuses a zero-retention Key `zero_retention_unavailable`, 403, with no upstream called; a Model with a declaring and a non-declaring target serves it through the declaring one alone, failover included | `gateway` routing test |
-| 6 | On an opaque route a non-declaring Provider is refused; a non-empty body that is not a JSON object is `invalid_request` where fields are to be written; an empty body is sent | `gateway` opaque test |
+| 5 | A Model whose spec targets declare nothing refuses a zero-retention Key `zero_retention_unavailable`, 403, with no upstream called; a Model with a declaring and a non-declaring target serves it through the declaring one alone, failover included; declaring targets that cannot be tried now answer `provider_unavailable` | `gateway` routing test |
+| 6 | An opaque route on a zero-retention Key is refused toward a Provider with zero-retention fields and toward one that declares nothing, and served toward one that declares `{}`; a model-route body that is not a JSON object and a non-identity encoding in any header value are `invalid_request` | `gateway` opaque and forward tests |
 | 7 | A Provider declaring `{}` serves a zero-retention Key with nothing added | `gateway` forward test |
+| 7a | The record, the log line and the span say whether a request was on a zero-retention Key | `gateway` record test |
 | 8 | A Key update that sets the flag reaches the gateway at the next journal read | `internal/serve` key cache test |
 | 9 | The OpenAPI document carries both members and the code | `TestOpenAPIIsCurrent` |
 | 10 | The conformance suite holds criteria 3 to 5 over the wire | `test/conformance` |
