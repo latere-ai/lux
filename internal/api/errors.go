@@ -26,52 +26,53 @@ type Code string
 
 // The codes, in the table's order.
 const (
-	CodeMalformedBody         Code = "malformed_body"
-	CodeMultiDocument         Code = "multi_document"
-	CodeUnsupportedVersion    Code = "unsupported_version"
-	CodeUnsupportedKind       Code = "unsupported_kind"
-	CodeUnknownField          Code = "unknown_field"
-	CodeMissingField          Code = "missing_field"
-	CodeInvalidField          Code = "invalid_field"
-	CodeReservedPrefix        Code = "reserved_prefix"
-	CodeExclusiveFields       Code = "exclusive_fields"
-	CodeDuplicateTarget       Code = "duplicate_target"
-	CodeInvalidRequest        Code = "invalid_request"
-	CodeUpstreamRejected      Code = "upstream_rejected"
-	CodeDialectUnsupported    Code = "dialect_unsupported"
-	CodeProviderRequired      Code = "provider_required"
-	CodeCurrencyMismatch      Code = "currency_mismatch"
-	CodeUnauthenticated       Code = "unauthenticated"
-	CodeForbidden             Code = "forbidden"
-	CodeKeyDisabled           Code = "key_disabled"
-	CodeKeyExpired            Code = "key_expired"
-	CodeRouteNotAllowed       Code = "route_not_allowed"
-	CodeModelNotAllowed       Code = "model_not_allowed"
-	CodeModelDisabled         Code = "model_disabled"
-	CodeModelUnpriced         Code = "model_unpriced"
-	CodeNotFound              Code = "not_found"
-	CodeModelNotFound         Code = "model_not_found"
-	CodeDoorNotFound          Code = "door_not_found"
-	CodeReadOnly              Code = "read_only"
-	CodeAlreadyExists         Code = "already_exists"
-	CodeConflict              Code = "conflict"
-	CodeKeyFenced             Code = "key_fenced"
-	CodeFenceConflict         Code = "fence_conflict"
-	CodeImmutableField        Code = "immutable_field"
-	CodeBudgetInUse           Code = "budget_in_use"
-	CodeProviderInUse         Code = "provider_in_use"
-	CodeBodyTooLarge          Code = "body_too_large"
-	CodeUnsupportedMediaType  Code = "unsupported_media_type"
-	CodeCeilingExceeded       Code = "ceiling_exceeded"
-	CodeRateLimited           Code = "rate_limited"
-	CodeSpendExceeded         Code = "spend_exceeded"
-	CodeBudgetExhausted       Code = "budget_exhausted"
-	CodeInternal              Code = "internal"
-	CodeUpstreamError         Code = "upstream_error"
-	CodeAuthorizerUnavailable Code = "authorizer_unavailable"
-	CodeStoreUnavailable      Code = "store_unavailable"
-	CodeProviderUnavailable   Code = "provider_unavailable"
-	CodeUpstreamTimeout       Code = "upstream_timeout"
+	CodeMalformedBody            Code = "malformed_body"
+	CodeMultiDocument            Code = "multi_document"
+	CodeUnsupportedVersion       Code = "unsupported_version"
+	CodeUnsupportedKind          Code = "unsupported_kind"
+	CodeUnknownField             Code = "unknown_field"
+	CodeMissingField             Code = "missing_field"
+	CodeInvalidField             Code = "invalid_field"
+	CodeReservedPrefix           Code = "reserved_prefix"
+	CodeExclusiveFields          Code = "exclusive_fields"
+	CodeDuplicateTarget          Code = "duplicate_target"
+	CodeInvalidRequest           Code = "invalid_request"
+	CodeUpstreamRejected         Code = "upstream_rejected"
+	CodeDialectUnsupported       Code = "dialect_unsupported"
+	CodeProviderRequired         Code = "provider_required"
+	CodeCurrencyMismatch         Code = "currency_mismatch"
+	CodeUnauthenticated          Code = "unauthenticated"
+	CodeForbidden                Code = "forbidden"
+	CodeKeyDisabled              Code = "key_disabled"
+	CodeKeyExpired               Code = "key_expired"
+	CodeRouteNotAllowed          Code = "route_not_allowed"
+	CodeModelNotAllowed          Code = "model_not_allowed"
+	CodeModelDisabled            Code = "model_disabled"
+	CodeModelUnpriced            Code = "model_unpriced"
+	CodeZeroRetentionUnavailable Code = "zero_retention_unavailable"
+	CodeNotFound                 Code = "not_found"
+	CodeModelNotFound            Code = "model_not_found"
+	CodeDoorNotFound             Code = "door_not_found"
+	CodeReadOnly                 Code = "read_only"
+	CodeAlreadyExists            Code = "already_exists"
+	CodeConflict                 Code = "conflict"
+	CodeKeyFenced                Code = "key_fenced"
+	CodeFenceConflict            Code = "fence_conflict"
+	CodeImmutableField           Code = "immutable_field"
+	CodeBudgetInUse              Code = "budget_in_use"
+	CodeProviderInUse            Code = "provider_in_use"
+	CodeBodyTooLarge             Code = "body_too_large"
+	CodeUnsupportedMediaType     Code = "unsupported_media_type"
+	CodeCeilingExceeded          Code = "ceiling_exceeded"
+	CodeRateLimited              Code = "rate_limited"
+	CodeSpendExceeded            Code = "spend_exceeded"
+	CodeBudgetExhausted          Code = "budget_exhausted"
+	CodeInternal                 Code = "internal"
+	CodeUpstreamError            Code = "upstream_error"
+	CodeAuthorizerUnavailable    Code = "authorizer_unavailable"
+	CodeStoreUnavailable         Code = "store_unavailable"
+	CodeProviderUnavailable      Code = "provider_unavailable"
+	CodeUpstreamTimeout          Code = "upstream_timeout"
 )
 
 // Row is one code's status and fixed user sentence.
@@ -84,52 +85,53 @@ type Row struct {
 // status, and its one user sentence, never built from an underlying
 // error. The developer detail travels in details.detail apart.
 var table = map[Code]Row{
-	CodeMalformedBody:         {http.StatusBadRequest, "The request body is not valid JSON or YAML."},
-	CodeMultiDocument:         {http.StatusBadRequest, "Send one manifest per request."},
-	CodeUnsupportedVersion:    {http.StatusBadRequest, "This server serves lux.latere.ai/v1beta1."},
-	CodeUnsupportedKind:       {http.StatusBadRequest, "This server does not serve that kind."},
-	CodeUnknownField:          {http.StatusBadRequest, "The manifest has a field this schema does not know."},
-	CodeMissingField:          {http.StatusBadRequest, "A required field is missing."},
-	CodeInvalidField:          {http.StatusBadRequest, "A field has a value it cannot take."},
-	CodeReservedPrefix:        {http.StatusBadRequest, "That name is reserved for the gateway."},
-	CodeExclusiveFields:       {http.StatusBadRequest, "Two fields that cannot be set together are set."},
-	CodeDuplicateTarget:       {http.StatusBadRequest, "Two targets name the same provider and model."},
-	CodeInvalidRequest:        {http.StatusBadRequest, "The request body is not valid for this request."},
-	CodeUpstreamRejected:      {http.StatusBadRequest, "The provider rejected this request."},
-	CodeDialectUnsupported:    {http.StatusBadRequest, "This door cannot reach the provider that serves this model."},
-	CodeProviderRequired:      {http.StatusBadRequest, "Name a provider with the Lux-Provider header."},
-	CodeCurrencyMismatch:      {http.StatusBadRequest, "The budget and the model are priced in different currencies."},
-	CodeUnauthenticated:       {http.StatusUnauthorized, "This request needs a valid credential."},
-	CodeForbidden:             {http.StatusForbidden, "You do not have permission to do this."},
-	CodeKeyDisabled:           {http.StatusForbidden, "This key is disabled."},
-	CodeKeyExpired:            {http.StatusForbidden, "This key has expired."},
-	CodeRouteNotAllowed:       {http.StatusForbidden, "This key may not use this route."},
-	CodeModelNotAllowed:       {http.StatusForbidden, "This key may not use that model."},
-	CodeModelDisabled:         {http.StatusForbidden, "This model is disabled."},
-	CodeModelUnpriced:         {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
-	CodeNotFound:              {http.StatusNotFound, "There is no such object."},
-	CodeModelNotFound:         {http.StatusNotFound, "There is no model of that name."},
-	CodeDoorNotFound:          {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
-	CodeReadOnly:              {http.StatusMethodNotAllowed, "This server reads its manifests from a directory and cannot change them."},
-	CodeAlreadyExists:         {http.StatusConflict, "An object of this kind already has that name."},
-	CodeKeyFenced:             {http.StatusConflict, "This key name is permanently closed to credential changes."},
-	CodeFenceConflict:         {http.StatusConflict, "The key fence identity does not match."},
-	CodeConflict:              {http.StatusConflict, "The object changed since you read it; read it again and retry."},
-	CodeImmutableField:        {http.StatusConflict, "This field cannot be changed after the object is created."},
-	CodeBudgetInUse:           {http.StatusConflict, "Keys still draw from this budget."},
-	CodeProviderInUse:         {http.StatusConflict, "Models still target this provider."},
-	CodeBodyTooLarge:          {http.StatusRequestEntityTooLarge, "The request body is larger than this server accepts."},
-	CodeUnsupportedMediaType:  {http.StatusUnsupportedMediaType, "Send the manifest as JSON or YAML."},
-	CodeCeilingExceeded:       {http.StatusUnprocessableEntity, "The value is above what you may ask for."},
-	CodeRateLimited:           {http.StatusTooManyRequests, "Too many requests; wait and retry."},
-	CodeSpendExceeded:         {http.StatusTooManyRequests, "This key has spent its limit for the window."},
-	CodeBudgetExhausted:       {http.StatusTooManyRequests, "The budget has nothing left for the window."},
-	CodeInternal:              {http.StatusInternalServerError, "Something went wrong on this server."},
-	CodeUpstreamError:         {http.StatusBadGateway, "The provider returned an error."},
-	CodeAuthorizerUnavailable: {http.StatusServiceUnavailable, "The permission service is unavailable; retry shortly."},
-	CodeStoreUnavailable:      {http.StatusServiceUnavailable, "This server cannot reach its store; retry shortly."},
-	CodeProviderUnavailable:   {http.StatusServiceUnavailable, "No provider for this model is available right now."},
-	CodeUpstreamTimeout:       {http.StatusGatewayTimeout, "The provider did not answer in time."},
+	CodeMalformedBody:            {http.StatusBadRequest, "The request body is not valid JSON or YAML."},
+	CodeMultiDocument:            {http.StatusBadRequest, "Send one manifest per request."},
+	CodeUnsupportedVersion:       {http.StatusBadRequest, "This server serves lux.latere.ai/v1beta1."},
+	CodeUnsupportedKind:          {http.StatusBadRequest, "This server does not serve that kind."},
+	CodeUnknownField:             {http.StatusBadRequest, "The manifest has a field this schema does not know."},
+	CodeMissingField:             {http.StatusBadRequest, "A required field is missing."},
+	CodeInvalidField:             {http.StatusBadRequest, "A field has a value it cannot take."},
+	CodeReservedPrefix:           {http.StatusBadRequest, "That name is reserved for the gateway."},
+	CodeExclusiveFields:          {http.StatusBadRequest, "Two fields that cannot be set together are set."},
+	CodeDuplicateTarget:          {http.StatusBadRequest, "Two targets name the same provider and model."},
+	CodeInvalidRequest:           {http.StatusBadRequest, "The request body is not valid for this request."},
+	CodeUpstreamRejected:         {http.StatusBadRequest, "The provider rejected this request."},
+	CodeDialectUnsupported:       {http.StatusBadRequest, "This door cannot reach the provider that serves this model."},
+	CodeProviderRequired:         {http.StatusBadRequest, "Name a provider with the Lux-Provider header."},
+	CodeCurrencyMismatch:         {http.StatusBadRequest, "The budget and the model are priced in different currencies."},
+	CodeUnauthenticated:          {http.StatusUnauthorized, "This request needs a valid credential."},
+	CodeForbidden:                {http.StatusForbidden, "You do not have permission to do this."},
+	CodeKeyDisabled:              {http.StatusForbidden, "This key is disabled."},
+	CodeKeyExpired:               {http.StatusForbidden, "This key has expired."},
+	CodeRouteNotAllowed:          {http.StatusForbidden, "This key may not use this route."},
+	CodeModelNotAllowed:          {http.StatusForbidden, "This key may not use that model."},
+	CodeModelDisabled:            {http.StatusForbidden, "This model is disabled."},
+	CodeModelUnpriced:            {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
+	CodeZeroRetentionUnavailable: {http.StatusForbidden, "This key asks for zero retention, which no provider for this request offers."},
+	CodeNotFound:                 {http.StatusNotFound, "There is no such object."},
+	CodeModelNotFound:            {http.StatusNotFound, "There is no model of that name."},
+	CodeDoorNotFound:             {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
+	CodeReadOnly:                 {http.StatusMethodNotAllowed, "This server reads its manifests from a directory and cannot change them."},
+	CodeAlreadyExists:            {http.StatusConflict, "An object of this kind already has that name."},
+	CodeKeyFenced:                {http.StatusConflict, "This key name is permanently closed to credential changes."},
+	CodeFenceConflict:            {http.StatusConflict, "The key fence identity does not match."},
+	CodeConflict:                 {http.StatusConflict, "The object changed since you read it; read it again and retry."},
+	CodeImmutableField:           {http.StatusConflict, "This field cannot be changed after the object is created."},
+	CodeBudgetInUse:              {http.StatusConflict, "Keys still draw from this budget."},
+	CodeProviderInUse:            {http.StatusConflict, "Models still target this provider."},
+	CodeBodyTooLarge:             {http.StatusRequestEntityTooLarge, "The request body is larger than this server accepts."},
+	CodeUnsupportedMediaType:     {http.StatusUnsupportedMediaType, "Send the manifest as JSON or YAML."},
+	CodeCeilingExceeded:          {http.StatusUnprocessableEntity, "The value is above what you may ask for."},
+	CodeRateLimited:              {http.StatusTooManyRequests, "Too many requests; wait and retry."},
+	CodeSpendExceeded:            {http.StatusTooManyRequests, "This key has spent its limit for the window."},
+	CodeBudgetExhausted:          {http.StatusTooManyRequests, "The budget has nothing left for the window."},
+	CodeInternal:                 {http.StatusInternalServerError, "Something went wrong on this server."},
+	CodeUpstreamError:            {http.StatusBadGateway, "The provider returned an error."},
+	CodeAuthorizerUnavailable:    {http.StatusServiceUnavailable, "The permission service is unavailable; retry shortly."},
+	CodeStoreUnavailable:         {http.StatusServiceUnavailable, "This server cannot reach its store; retry shortly."},
+	CodeProviderUnavailable:      {http.StatusServiceUnavailable, "No provider for this model is available right now."},
+	CodeUpstreamTimeout:          {http.StatusGatewayTimeout, "The provider did not answer in time."},
 }
 
 // codes is the table in its order.
@@ -138,7 +140,7 @@ var codes = []Code{
 	CodeMissingField, CodeInvalidField, CodeReservedPrefix, CodeExclusiveFields, CodeDuplicateTarget,
 	CodeInvalidRequest, CodeUpstreamRejected, CodeDialectUnsupported, CodeProviderRequired, CodeCurrencyMismatch,
 	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeRouteNotAllowed, CodeModelNotAllowed,
-	CodeModelDisabled, CodeModelUnpriced, CodeNotFound, CodeModelNotFound, CodeDoorNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
+	CodeModelDisabled, CodeModelUnpriced, CodeZeroRetentionUnavailable, CodeNotFound, CodeModelNotFound, CodeDoorNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
 	CodeImmutableField, CodeBudgetInUse, CodeProviderInUse, CodeBodyTooLarge, CodeUnsupportedMediaType,
 	CodeCeilingExceeded, CodeRateLimited, CodeSpendExceeded, CodeBudgetExhausted, CodeInternal, CodeUpstreamError,
 	CodeAuthorizerUnavailable, CodeStoreUnavailable, CodeProviderUnavailable, CodeUpstreamTimeout,

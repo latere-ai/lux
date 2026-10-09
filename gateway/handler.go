@@ -304,6 +304,7 @@ func (c *call) authenticate(ctx context.Context) *failure {
 func (c *call) admit(k *v1.Key) *failure {
 	c.key = k
 	c.rec.KeyID, c.rec.KeyPrefix, c.rec.Owner = k.Status.ID, k.Status.Prefix, k.Status.Owner
+	c.rec.ZeroRetention = k.Spec.ZeroRetention
 	c.rec.Labels = nil
 	if len(k.Metadata.Labels) > 0 {
 		c.rec.Labels = maps.Clone(k.Metadata.Labels)
@@ -387,6 +388,7 @@ func (c *call) reread(ctx context.Context, model string) *failure {
 		// stage 3 does.
 		c.key = nil
 		c.rec.KeyID, c.rec.KeyPrefix, c.rec.Owner, c.rec.Labels = "", "", "", nil
+		c.rec.ZeroRetention = false
 		return fail(CodeUnauthenticated, "no Key has the presented value; it was removed or rotated since this replica cached it")
 	}
 	if f := c.admit(k); f != nil {
@@ -401,9 +403,18 @@ func (c *call) reread(ctx context.Context, model string) *failure {
 // selectTargets is stage 6: the Router's order, kept to the targets this
 // door can reach on this route. None admitted is provider_unavailable;
 // none reachable is dialect_unsupported, so the caller learns which of
-// the two problems it has.
+// the two problems it has. On a zero-retention Key the Router orders
+// only the targets whose Provider declares spec.zeroRetention.
 func (c *call) selectTargets(ctx context.Context) *failure {
-	targets, err := c.h.o.Router.Targets(ctx, c.model)
+	m := c.model
+	if c.zeroRetention() {
+		kept, f := c.zeroRetentionModel(ctx)
+		if f != nil {
+			return f
+		}
+		m = kept
+	}
+	targets, err := c.h.o.Router.Targets(ctx, m)
 	if err != nil {
 		return fail(CodeStoreUnavailable, "target selection: "+err.Error())
 	}
@@ -421,6 +432,59 @@ func (c *call) selectTargets(ctx context.Context) *failure {
 	}
 	if len(c.targets) == 0 {
 		return fail(CodeDialectUnsupported, "the /"+string(c.door)+" door cannot reach "+c.route.template+" on a target of dialect "+strings.Join(dialects, ", "))
+	}
+	return nil
+}
+
+// zeroRetention reports whether the request is on a Key with
+// spec.zeroRetention.
+func (c *call) zeroRetention() bool { return c.key != nil && c.key.Spec.ZeroRetention }
+
+// zeroRetentionModel is the called Model with its targets kept to those
+// whose Provider declares spec.zeroRetention, the Model the Router
+// orders for a request on a zero-retention Key, so no attempt and no
+// failover reaches another Provider (spec 047). A target whose Provider
+// the catalog does not hold declares nothing. When no target is left the
+// request is zero_retention_unavailable, a refusal that holds for the
+// Key and the Model whatever any Provider's health, unlike the
+// provider_unavailable of declaring targets the Router cannot try now.
+func (c *call) zeroRetentionModel(ctx context.Context) (*v1.Model, *failure) {
+	var kept []v1.Target
+	for _, t := range c.model.Spec.Targets {
+		p, err := c.h.o.Catalog.Provider(ctx, t.Provider)
+		if err != nil {
+			return nil, fail(CodeStoreUnavailable, "Provider lookup: "+err.Error())
+		}
+		if p != nil && p.Spec.ZeroRetention != nil {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) == 0 {
+		return nil, fail(CodeZeroRetentionUnavailable, "Key "+c.key.Status.ID+" has spec.zeroRetention true, and no target of Model "+strconv.Quote(c.model.Metadata.Name)+" names a Provider that declares spec.zeroRetention")
+	}
+	m := *c.model
+	m.Spec.Targets = kept
+	return &m, nil
+}
+
+// zeroRetentionRefusal is the refusal a request on a zero-retention Key
+// meets toward p, and nil when p may be sent it or the Key does not ask
+// for zero retention. A Provider that declares no spec.zeroRetention is
+// never sent such a request. On an opaque route neither is one whose
+// declaration names requestFields: an opaque route reaches the
+// upstream's own API, whose storage endpoints keep what they are sent
+// whatever a routing option in the body says; a declaration of {}
+// states that the upstream keeps nothing of any request.
+func (c *call) zeroRetentionRefusal(p *v1.Provider) *failure {
+	if !c.zeroRetention() {
+		return nil
+	}
+	z := p.Spec.ZeroRetention
+	switch {
+	case z == nil:
+		return fail(CodeZeroRetentionUnavailable, "Key "+c.key.Status.ID+" has spec.zeroRetention true, and Provider "+p.Metadata.Name+" declares no spec.zeroRetention")
+	case c.route.class == ClassOpaque && len(z.RequestFields) > 0:
+		return fail(CodeZeroRetentionUnavailable, "Key "+c.key.Status.ID+" has spec.zeroRetention true, and Provider "+p.Metadata.Name+" holds it through spec.zeroRetention.requestFields, which an opaque route to the upstream's own API does not")
 	}
 	return nil
 }

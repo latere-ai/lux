@@ -172,33 +172,48 @@ func (c *call) passthroughTarget(t Target) string {
 
 // decorate adds what every outbound request carries: the Provider's
 // static headers, the User-Agent, the request id, and the Provider's
-// requestFields in the body. Both builders of an upstream request,
-// outbound and forwardOpaque, call it, so it is the one place
-// requestFields are written and no route reaches a Provider without
-// them (spec 042).
+// requestFields in the body, followed on a zero-retention Key by its
+// spec.zeroRetention.requestFields. Both builders of an upstream
+// request, outbound and forwardOpaque, call it, so it is the one place
+// the fields are written and no route reaches a Provider without them
+// (specs 042 and 047). It refuses first a request on a zero-retention
+// Key that the Provider may not be sent, so no builder sends one,
+// whatever chose the Provider.
 func (c *call) decorate(req *http.Request, p *v1.Provider) *failure {
+	if f := c.zeroRetentionRefusal(p); f != nil {
+		return f
+	}
 	for name, value := range p.Spec.Headers {
 		req.Header.Set(name, value)
 	}
 	req.Header.Set("User-Agent", c.h.ua)
 	req.Header.Set(HeaderRequestID, c.id)
-	if len(p.Spec.RequestFields) == 0 {
+	var zero map[string]any
+	if c.zeroRetention() {
+		zero = p.Spec.ZeroRetention.RequestFields
+	}
+	if len(p.Spec.RequestFields) == 0 && len(zero) == 0 {
 		return nil
 	}
-	return c.writeRequestFields(req, p)
+	return c.writeRequestFields(req, p, zero)
 }
 
 // writeRequestFields replaces the outbound body with itself merged with
-// the Provider's requestFields: on a model route the body outbound
-// built, on an opaque route the caller's, read whole here under the body
-// limit instead of streamed. A body under a Content-Encoding other than
-// identity is invalid_request, because the fields cannot be written into
-// it and an upstream that decodes it would read it without them. GetBody
-// returns the merged body, so a transport that sends the request again
-// on a new connection sends it merged.
-func (c *call) writeRequestFields(req *http.Request, p *v1.Provider) *failure {
-	if enc := strings.TrimSpace(req.Header.Get("Content-Encoding")); enc != "" && !strings.EqualFold(enc, "identity") {
-		return fail(CodeInvalidRequest, "Provider "+p.Metadata.Name+" sets requestFields, which cannot be written into a body under Content-Encoding "+strconv.Quote(enc))
+// the Provider's requestFields and then with zero, the zero-retention
+// fields of a request on a zero-retention Key, each by
+// mergeRequestFields, so zero wins on every member both name: on a model
+// route the body outbound built, on an opaque route the caller's, read
+// whole here under the body limit instead of streamed. A body under a
+// Content-Encoding other than identity is invalid_request, because the
+// fields cannot be written into it and an upstream that decodes it would
+// read it without them. A body that is not a JSON object is sent
+// unchanged under requestFields alone, and is invalid_request when zero
+// names a member, because an upstream would read it without them.
+// GetBody returns the merged body, so a transport that sends the request
+// again on a new connection sends it merged.
+func (c *call) writeRequestFields(req *http.Request, p *v1.Provider, zero map[string]any) *failure {
+	if enc, ok := contentEncoding(req.Header); ok {
+		return fail(CodeInvalidRequest, "Provider "+p.Metadata.Name+" sets request fields, which cannot be written into a body under Content-Encoding "+strconv.Quote(enc))
 	}
 	var body []byte
 	if req.Body != nil && req.Body != http.NoBody {
@@ -208,9 +223,23 @@ func (c *call) writeRequestFields(req *http.Request, p *v1.Provider) *failure {
 		}
 		body = b
 	}
-	merged, err := mergeRequestFields(body, p.Spec.RequestFields)
-	if err != nil {
-		return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": requestFields: "+err.Error())
+	merged := body
+	if len(p.Spec.RequestFields) > 0 {
+		b, err := mergeRequestFields(merged, p.Spec.RequestFields)
+		if err != nil {
+			return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": requestFields: "+err.Error())
+		}
+		merged = b
+	}
+	if len(zero) > 0 {
+		if _, ok := jsonObject(merged); !ok {
+			return fail(CodeInvalidRequest, "the body is not a JSON object, so the spec.zeroRetention.requestFields of Provider "+p.Metadata.Name+" cannot be written into it")
+		}
+		b, err := mergeRequestFields(merged, zero)
+		if err != nil {
+			return fail(CodeProviderUnavailable, "Provider "+p.Metadata.Name+": zeroRetention.requestFields: "+err.Error())
+		}
+		merged = b
 	}
 	req.ContentLength = int64(len(merged))
 	if len(merged) == 0 {
@@ -220,6 +249,21 @@ func (c *call) writeRequestFields(req *http.Request, p *v1.Provider) *failure {
 	req.Body = io.NopCloser(bytes.NewReader(merged))
 	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(merged)), nil }
 	return nil
+}
+
+// contentEncoding is the first coding of a request's Content-Encoding
+// other than identity, read across every value of the header and every
+// coding a value lists, and whether there is one: an upstream decodes
+// every coding named, so any one of them hides the body from a merge.
+func contentEncoding(h http.Header) (string, bool) {
+	for _, value := range h.Values("Content-Encoding") {
+		for coding := range strings.SplitSeq(value, ",") {
+			if coding = strings.TrimSpace(coding); coding != "" && !strings.EqualFold(coding, "identity") {
+				return coding, true
+			}
+		}
+	}
+	return "", false
 }
 
 // inject writes the Provider's credential last, under its header and
@@ -357,7 +401,7 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	// One lux.upstream span per target tried, the parent of the client
 	// span the instrumented transport opens; it ends with the attempt,
 	// which on a stream is the stream's end.
-	sctx, span := startUpstream(parent, p.Metadata.Name, len(c.rec.Attempts)+1, c.r.Method, c.urlTemplate(t, m))
+	sctx, span := startUpstream(parent, p.Metadata.Name, len(c.rec.Attempts)+1, c.r.Method, c.urlTemplate(t, m), c.zeroRetention())
 	var ttfb time.Duration
 	defer func() {
 		at.Duration = c.h.now().Sub(started)
@@ -569,6 +613,9 @@ func (c *call) opaque(ctx context.Context) *failure {
 	if f != nil {
 		return f
 	}
+	if f := c.zeroRetentionRefusal(p); f != nil {
+		return f
+	}
 	if f := c.reserve(ctx, Reservation{Key: c.key, Opaque: true}); f != nil {
 		return f
 	}
@@ -621,14 +668,16 @@ func (c *call) chooseProvider(ctx context.Context) (*v1.Provider, *failure) {
 // Provider's answer back, whole and unread: the caller chose the
 // Provider and speaks its API directly, so its answer, an error status
 // included, is the caller's to read. A Provider with requestFields has
-// the body read whole and merged by decorate instead. The record carries
-// the upstream status and zero estimated tokens.
+// the body read whole and merged by decorate instead. A zero-retention
+// Key reaches only a Provider that declares spec.zeroRetention as {},
+// which opaque checks before the reservation and decorate again. The
+// record carries the upstream status and zero estimated tokens.
 func (c *call) forwardOpaque(parent context.Context, p *v1.Provider) *failure {
 	c.rec.Provider, c.rec.ProviderID, c.rec.TargetDialect = p.Metadata.Name, p.Status.ID, p.Spec.Dialect
 	c.tokens = Tokens{Estimated: true}
 	// The one lux.upstream span of an opaque request, under the route's
 	// template rather than the caller's path, which is the caller's own.
-	sctx, span := startUpstream(parent, p.Metadata.Name, 1, c.r.Method, c.route.template)
+	sctx, span := startUpstream(parent, p.Metadata.Name, 1, c.r.Method, c.route.template, c.zeroRetention())
 	started := c.h.now()
 	at := Attempt{Provider: p.Metadata.Name, ProviderID: p.Status.ID, Status: StatusOK}
 	var ttfb time.Duration

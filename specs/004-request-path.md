@@ -253,7 +253,14 @@ flowchart TD
    provider from the `Lux-Provider` header, by name, a Provider of the
    door's dialect that one of the Key's selectors reaches through some
    Model; without the header, the one such Provider when there is
-   exactly one; otherwise `provider_required`, 400. This stage precedes
+   exactly one; otherwise `provider_required`, 400. On a Key with
+   `spec.zeroRetention` the Router orders only the targets whose
+   Provider declares `spec.zeroRetention`; a Model with none is
+   `zero_retention_unavailable`, 403, and declaring targets none of
+   which can be tried now are `provider_unavailable`. An opaque route on
+   such a Key is `zero_retention_unavailable` toward a Provider that
+   declares nothing or declares `requestFields`, and served toward one
+   that declares `{}` ([047-zero-retention-keys](047-zero-retention-keys.md)). This stage precedes
    the limits so that a refusal no retry can fix, and one that needs no
    counter, is answered without touching a window: the counters are
    debited only for a request that has somewhere to go.
@@ -339,8 +346,15 @@ The outbound request toward the target's `baseURL`:
   member by member, and a body that is not a JSON object is sent
   unchanged. Toward such a Provider an opaque body is read whole under
   `LUX_MAX_BODY_BYTES` instead of streamed, and a request under a
-  `Content-Encoding` other than `identity` is `invalid_request`
+  `Content-Encoding` other than `identity`, in any value of the header,
+  is `invalid_request`
   ([042-provider-request-fields](.archive/042-provider-request-fields.md)).
+- On a Key with `spec.zeroRetention`, the Provider's
+  `spec.zeroRetention.requestFields` are merged after its
+  `requestFields` by the same rule, winning on every member both name,
+  and a body that is not a JSON object is `invalid_request` rather than
+  sent without them. `decorate` refuses such a Key toward a Provider it
+  may not reach before it writes anything ([047-zero-retention-keys](047-zero-retention-keys.md)).
 - Hop-by-hop headers are removed in both directions: `Connection`,
   `Keep-Alive`, `Proxy-Connection`, `Transfer-Encoding`, `TE`,
   `Trailer`, `Upgrade`, and every header `Connection` names. `Host` is
@@ -520,6 +534,7 @@ is the developer detail, truncated.
 | `model_not_found` | 404 | no Model of that name |
 | `model_not_allowed` | 403 | no selector matches |
 | `model_disabled` | 403 | the Model has `spec.disabled` true ([039-disabled-models](.archive/039-disabled-models.md)) |
+| `zero_retention_unavailable` | 403 | a Key with `spec.zeroRetention` and a Model none of whose targets names a Provider that declares `spec.zeroRetention`, or an opaque route toward a Provider that declares nothing or declares `requestFields` ([047-zero-retention-keys](047-zero-retention-keys.md)) |
 | `provider_unavailable` | 503 | no admitted target, or the last attempt failed at the transport before a response line |
 | `dialect_unsupported` | 400 | the door and the target cannot be bridged |
 | `provider_required` | 400 | an opaque route with no `Lux-Provider` and more than one candidate |

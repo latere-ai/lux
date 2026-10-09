@@ -306,7 +306,7 @@ carries no valid span context.
 | Span | Parent | Attributes |
 |---|---|---|
 | `lux.request` | the listener's server span; without one, the caller's context, when it propagated one | `lux.door`, `lux.route`, `lux.model`, `lux.provider`, `lux.status`, `lux.code`, `lux.request_id`, `lux.stream`, `lux.translated` |
-| `lux.upstream` | `lux.request` | `lux.provider`, `lux.attempt`, `http.request.method`, `url.template`, `http.response.status_code`, `lux.ttfb_ms` |
+| `lux.upstream` | `lux.request` | `lux.provider`, `lux.attempt`, `http.request.method`, `url.template`, `lux.zero_retention`, `http.response.status_code`, `lux.ttfb_ms` |
 | `lux.api` | the listener's server span; without one, the caller's context | `lux.route`, `lux.action`, `lux.kind`, `lux.status`, `lux.code`, `lux.request_id` |
 | `lux.authorizer` | `lux.api` | `lux.action`, `lux.decision` |
 | `lux.store` | `lux.api` or `lux.request` | `lux.op`, `lux.kind`, `lux.result` |
@@ -344,7 +344,9 @@ The attribute names are constants beside the spans that write them:
   opaque route, so it is bounded by the route table and never the
   caller's own path; `http.response.status_code` and `lux.ttfb_ms`, the
   time from the attempt's start to the response line, are set when a
-  response line arrived and absent when none did.
+  response line arrived and absent when none did; `lux.zero_retention`
+  is true when the attempt carries a request on a Key with
+  `spec.zeroRetention` ([047-zero-retention-keys](047-zero-retention-keys.md)).
 - `lux.authorizer` is one per question asked, the request's own action
   and each of Resolve's lookups alike, with `lux.decision` in the
   metric's vocabulary, `allow`, `deny`, or `unavailable`.
@@ -409,7 +411,7 @@ pod's name, then the host's, as that package derives it.
 
 | Plane | Fields |
 |---|---|
-| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream` |
+| data | `request_id`, `door`, `route`, `model`, `provider`, `status`, `code`, `upstream_status`, `key_prefix`, `owner`, `duration_ms`, `ttfb_ms`, `input_tokens`, `output_tokens`, `stream`, `zero_retention` |
 | control | `request_id`, `route`, `action`, `kind`, `name`, `status`, `code`, `subject`, `duration_ms` |
 
 The line's message is the span's name, `lux.request` or `lux.api`, so
@@ -429,6 +431,9 @@ plane's `upstream_status` is the record's: the last attempt's HTTP
 status, `0` when no provider answered, so a provider's refusal, a
 provider's failure, and a refusal before any attempt read apart
 ([043-provider-refusal-reason](.archive/043-provider-refusal-reason.md)).
+Its `zero_retention` is the record's: the Key's `spec.zeroRetention`
+when the request arrived
+([047-zero-retention-keys](047-zero-retention-keys.md)).
 
 `route` is the route template of [[004-request-path]]'s door table or
 [[011-api]]'s route table, never the request's own path, for the reason

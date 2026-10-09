@@ -1859,6 +1859,7 @@ components:
               - model_not_allowed
               - model_disabled
               - model_unpriced
+              - zero_retention_unavailable
               - not_found
               - model_not_found
               - door_not_found
@@ -2269,6 +2270,9 @@ x-lux-errors:
 - code: model_unpriced
   status: 403
   message: This model has no price, and this key spends under a limit.
+- code: zero_retention_unavailable
+  status: 403
+  message: This key asks for zero retention, which no provider for this request offers.
 - code: not_found
   status: 404
   message: There is no such object.

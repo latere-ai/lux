@@ -23,29 +23,30 @@ type Code string
 // read the store could not answer, and ClientClosed, which appears in a
 // Record and never in a response.
 const (
-	CodeNotFound            Code = "not_found"
-	CodeBodyTooLarge        Code = "body_too_large"
-	CodeUnauthenticated     Code = "unauthenticated"
-	CodeKeyDisabled         Code = "key_disabled"
-	CodeKeyExpired          Code = "key_expired"
-	CodeRouteNotAllowed     Code = "route_not_allowed"
-	CodeInvalidRequest      Code = "invalid_request"
-	CodeModelNotFound       Code = "model_not_found"
-	CodeDoorNotFound        Code = "door_not_found"
-	CodeModelNotAllowed     Code = "model_not_allowed"
-	CodeModelDisabled       Code = "model_disabled"
-	CodeProviderUnavailable Code = "provider_unavailable"
-	CodeDialectUnsupported  Code = "dialect_unsupported"
-	CodeProviderRequired    Code = "provider_required"
-	CodeRateLimited         Code = "rate_limited"
-	CodeModelUnpriced       Code = "model_unpriced"
-	CodeCurrencyMismatch    Code = "currency_mismatch"
-	CodeSpendExceeded       Code = "spend_exceeded"
-	CodeBudgetExhausted     Code = "budget_exhausted"
-	CodeUpstreamRejected    Code = "upstream_rejected"
-	CodeUpstreamError       Code = "upstream_error"
-	CodeUpstreamTimeout     Code = "upstream_timeout"
-	CodeStoreUnavailable    Code = "store_unavailable"
+	CodeNotFound                 Code = "not_found"
+	CodeBodyTooLarge             Code = "body_too_large"
+	CodeUnauthenticated          Code = "unauthenticated"
+	CodeKeyDisabled              Code = "key_disabled"
+	CodeKeyExpired               Code = "key_expired"
+	CodeRouteNotAllowed          Code = "route_not_allowed"
+	CodeInvalidRequest           Code = "invalid_request"
+	CodeModelNotFound            Code = "model_not_found"
+	CodeDoorNotFound             Code = "door_not_found"
+	CodeModelNotAllowed          Code = "model_not_allowed"
+	CodeModelDisabled            Code = "model_disabled"
+	CodeZeroRetentionUnavailable Code = "zero_retention_unavailable"
+	CodeProviderUnavailable      Code = "provider_unavailable"
+	CodeDialectUnsupported       Code = "dialect_unsupported"
+	CodeProviderRequired         Code = "provider_required"
+	CodeRateLimited              Code = "rate_limited"
+	CodeModelUnpriced            Code = "model_unpriced"
+	CodeCurrencyMismatch         Code = "currency_mismatch"
+	CodeSpendExceeded            Code = "spend_exceeded"
+	CodeBudgetExhausted          Code = "budget_exhausted"
+	CodeUpstreamRejected         Code = "upstream_rejected"
+	CodeUpstreamError            Code = "upstream_error"
+	CodeUpstreamTimeout          Code = "upstream_timeout"
+	CodeStoreUnavailable         Code = "store_unavailable"
 
 	// ClientClosed is the record's error when the caller disconnected
 	// before the response was finished. There is nobody left to answer,
@@ -63,29 +64,30 @@ type codeRow struct {
 // The sentence is the one user sentence of the code, never built from an
 // underlying error; the developer detail travels apart.
 var table = map[Code]codeRow{
-	CodeNotFound:            {http.StatusNotFound, "There is no such object."},
-	CodeBodyTooLarge:        {http.StatusRequestEntityTooLarge, "The request body is larger than this server accepts."},
-	CodeUnauthenticated:     {http.StatusUnauthorized, "This request needs a valid credential."},
-	CodeKeyDisabled:         {http.StatusForbidden, "This key is disabled."},
-	CodeKeyExpired:          {http.StatusForbidden, "This key has expired."},
-	CodeRouteNotAllowed:     {http.StatusForbidden, "This key may not use this route."},
-	CodeInvalidRequest:      {http.StatusBadRequest, "The request body is not valid for this request."},
-	CodeModelNotFound:       {http.StatusNotFound, "There is no model of that name."},
-	CodeDoorNotFound:        {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
-	CodeModelNotAllowed:     {http.StatusForbidden, "This key may not use that model."},
-	CodeModelDisabled:       {http.StatusForbidden, "This model is disabled."},
-	CodeProviderUnavailable: {http.StatusServiceUnavailable, "No provider for this model is available right now."},
-	CodeDialectUnsupported:  {http.StatusBadRequest, "This door cannot reach the provider that serves this model."},
-	CodeProviderRequired:    {http.StatusBadRequest, "Name a provider with the Lux-Provider header."},
-	CodeRateLimited:         {http.StatusTooManyRequests, "Too many requests; wait and retry."},
-	CodeModelUnpriced:       {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
-	CodeCurrencyMismatch:    {http.StatusBadRequest, "The budget and the model are priced in different currencies."},
-	CodeSpendExceeded:       {http.StatusTooManyRequests, "This key has spent its limit for the window."},
-	CodeBudgetExhausted:     {http.StatusTooManyRequests, "The budget has nothing left for the window."},
-	CodeUpstreamRejected:    {http.StatusBadRequest, "The provider rejected this request."},
-	CodeUpstreamError:       {http.StatusBadGateway, "The provider returned an error."},
-	CodeUpstreamTimeout:     {http.StatusGatewayTimeout, "The provider did not answer in time."},
-	CodeStoreUnavailable:    {http.StatusServiceUnavailable, "This server cannot reach its store; retry shortly."},
+	CodeNotFound:                 {http.StatusNotFound, "There is no such object."},
+	CodeBodyTooLarge:             {http.StatusRequestEntityTooLarge, "The request body is larger than this server accepts."},
+	CodeUnauthenticated:          {http.StatusUnauthorized, "This request needs a valid credential."},
+	CodeKeyDisabled:              {http.StatusForbidden, "This key is disabled."},
+	CodeKeyExpired:               {http.StatusForbidden, "This key has expired."},
+	CodeRouteNotAllowed:          {http.StatusForbidden, "This key may not use this route."},
+	CodeInvalidRequest:           {http.StatusBadRequest, "The request body is not valid for this request."},
+	CodeModelNotFound:            {http.StatusNotFound, "There is no model of that name."},
+	CodeDoorNotFound:             {http.StatusNotFound, "This path is under no door; the doors are /openai, /anthropic, /gemini, and /lux."},
+	CodeModelNotAllowed:          {http.StatusForbidden, "This key may not use that model."},
+	CodeModelDisabled:            {http.StatusForbidden, "This model is disabled."},
+	CodeZeroRetentionUnavailable: {http.StatusForbidden, "This key asks for zero retention, which no provider for this request offers."},
+	CodeProviderUnavailable:      {http.StatusServiceUnavailable, "No provider for this model is available right now."},
+	CodeDialectUnsupported:       {http.StatusBadRequest, "This door cannot reach the provider that serves this model."},
+	CodeProviderRequired:         {http.StatusBadRequest, "Name a provider with the Lux-Provider header."},
+	CodeRateLimited:              {http.StatusTooManyRequests, "Too many requests; wait and retry."},
+	CodeModelUnpriced:            {http.StatusForbidden, "This model has no price, and this key spends under a limit."},
+	CodeCurrencyMismatch:         {http.StatusBadRequest, "The budget and the model are priced in different currencies."},
+	CodeSpendExceeded:            {http.StatusTooManyRequests, "This key has spent its limit for the window."},
+	CodeBudgetExhausted:          {http.StatusTooManyRequests, "The budget has nothing left for the window."},
+	CodeUpstreamRejected:         {http.StatusBadRequest, "The provider rejected this request."},
+	CodeUpstreamError:            {http.StatusBadGateway, "The provider returned an error."},
+	CodeUpstreamTimeout:          {http.StatusGatewayTimeout, "The provider did not answer in time."},
+	CodeStoreUnavailable:         {http.StatusServiceUnavailable, "This server cannot reach its store; retry shortly."},
 }
 
 // Codes lists every code a door can answer, in the table's order.
@@ -93,7 +95,7 @@ func Codes() []Code {
 	return []Code{
 		CodeNotFound, CodeBodyTooLarge, CodeUnauthenticated, CodeKeyDisabled,
 		CodeKeyExpired, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound, CodeDoorNotFound,
-		CodeModelNotAllowed, CodeModelDisabled, CodeProviderUnavailable, CodeDialectUnsupported,
+		CodeModelNotAllowed, CodeModelDisabled, CodeZeroRetentionUnavailable, CodeProviderUnavailable, CodeDialectUnsupported,
 		CodeProviderRequired, CodeRateLimited, CodeModelUnpriced, CodeCurrencyMismatch,
 		CodeSpendExceeded, CodeBudgetExhausted, CodeUpstreamRejected, CodeUpstreamError,
 		CodeUpstreamTimeout, CodeStoreUnavailable,

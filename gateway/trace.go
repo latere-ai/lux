@@ -41,20 +41,21 @@ const tracerScope = "latere.ai/x/lux/gateway"
 
 // The attribute keys of the two spans, spec 019's table.
 const (
-	AttrDoor       = "lux.door"
-	AttrRoute      = "lux.route"
-	AttrModel      = "lux.model"
-	AttrProvider   = "lux.provider"
-	AttrStatus     = "lux.status"
-	AttrCode       = "lux.code"
-	AttrRequestID  = "lux.request_id"
-	AttrStream     = "lux.stream"
-	AttrTranslated = "lux.translated"
-	AttrAttempt    = "lux.attempt"
-	AttrTTFBMs     = "lux.ttfb_ms"
-	AttrMethod     = "http.request.method"
-	AttrTemplate   = "url.template"
-	AttrHTTPStatus = "http.response.status_code"
+	AttrDoor          = "lux.door"
+	AttrRoute         = "lux.route"
+	AttrModel         = "lux.model"
+	AttrProvider      = "lux.provider"
+	AttrStatus        = "lux.status"
+	AttrCode          = "lux.code"
+	AttrRequestID     = "lux.request_id"
+	AttrStream        = "lux.stream"
+	AttrTranslated    = "lux.translated"
+	AttrZeroRetention = "lux.zero_retention"
+	AttrAttempt       = "lux.attempt"
+	AttrTTFBMs        = "lux.ttfb_ms"
+	AttrMethod        = "http.request.method"
+	AttrTemplate      = "url.template"
+	AttrHTTPStatus    = "http.response.status_code"
 )
 
 // startRequest opens the lux.request span under the request's context.
@@ -73,13 +74,15 @@ func startRequest(ctx context.Context, h http.Header) (context.Context, trace.Sp
 	return otel.Tracer(tracerScope).Start(ctx, SpanRequest, trace.WithSpanKind(kind))
 }
 
-// startUpstream opens one lux.upstream child for an attempt.
-func startUpstream(ctx context.Context, provider string, attempt int, method, template string) (context.Context, trace.Span) {
+// startUpstream opens one lux.upstream child for an attempt, which says
+// whether the attempt carries a zero-retention Key's request (spec 047).
+func startUpstream(ctx context.Context, provider string, attempt int, method, template string, zeroRetention bool) (context.Context, trace.Span) {
 	return otel.Tracer(tracerScope).Start(ctx, SpanUpstream, trace.WithAttributes(
 		attribute.String(AttrProvider, provider),
 		attribute.Int(AttrAttempt, attempt),
 		attribute.String(AttrMethod, method),
 		attribute.String(AttrTemplate, template),
+		attribute.Bool(AttrZeroRetention, zeroRetention),
 	))
 }
 
@@ -174,5 +177,6 @@ func logRequest(ctx context.Context, logger *slog.Logger, rec Record) {
 		slog.Int64("input_tokens", rec.Tokens.Input),
 		slog.Int64("output_tokens", rec.Tokens.Output),
 		slog.Bool("stream", rec.Stream),
+		slog.Bool("zero_retention", rec.ZeroRetention),
 	)
 }

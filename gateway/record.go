@@ -62,10 +62,11 @@ type Record struct {
 	At      time.Time // when the request arrived
 	EndedAt time.Time // when the response was finished or refused
 
-	KeyID     string
-	KeyPrefix string
-	Owner     string
-	Labels    map[string]string // the Key's metadata.labels
+	KeyID         string
+	KeyPrefix     string
+	Owner         string
+	Labels        map[string]string // the Key's metadata.labels
+	ZeroRetention bool              // the Key's spec.zeroRetention when the request was admitted
 
 	Model         string // the resolved Model's name; empty when none resolved
 	ModelID       string

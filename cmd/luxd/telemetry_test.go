@@ -397,7 +397,7 @@ func TestTelemetryCarriesNoSecrets(t *testing.T) {
 // in the table is the shared library's and carries http.* attributes.
 var spanTable = map[string][]string{
 	"lux.request":    {"lux.door", "lux.route", "lux.model", "lux.provider", "lux.status", "lux.code", "lux.request_id", "lux.stream", "lux.translated"},
-	"lux.upstream":   {"lux.provider", "lux.attempt", "http.request.method", "url.template", "http.response.status_code", "lux.ttfb_ms"},
+	"lux.upstream":   {"lux.provider", "lux.attempt", "http.request.method", "url.template", "lux.zero_retention", "http.response.status_code", "lux.ttfb_ms"},
 	"lux.api":        {"lux.route", "lux.action", "lux.kind", "lux.status", "lux.code", "lux.request_id"},
 	"lux.authorizer": {"lux.action", "lux.decision"},
 	"lux.store":      {"lux.op", "lux.kind", "lux.result"},
@@ -458,7 +458,7 @@ var (
 	baseFields    = []string{"service", "version", "replica"}
 	joinFields    = []string{"trace_id", "span_id"}
 	encoderFields = []string{"time", "level", "msg"}
-	dataFields    = []string{"request_id", "door", "route", "model", "provider", "status", "code", "upstream_status", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream"}
+	dataFields    = []string{"request_id", "door", "route", "model", "provider", "status", "code", "upstream_status", "key_prefix", "owner", "duration_ms", "ttfb_ms", "input_tokens", "output_tokens", "stream", "zero_retention"}
 	controlFields = []string{"request_id", "route", "action", "kind", "name", "status", "code", "subject", "duration_ms"}
 )
 
