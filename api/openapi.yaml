@@ -1542,7 +1542,6 @@ components:
       required:
       - allowUnpriced
       - passthrough
-      - zeroRetention
       - disabled
       properties:
         models:

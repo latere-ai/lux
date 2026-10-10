@@ -71,8 +71,8 @@ func TestZeroRetentionRoundTrip(t *testing.T) {
 	if rec := h.request(http.MethodPut, "/v1/keys/zr", keyJSON); rec.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
 	}
-	if got := readKey(); got != false {
-		t.Errorf("an unset flag reads %v", got)
+	if got := readKey(); got != nil {
+		t.Errorf("an unset flag is written, as %v", got)
 	}
 	with := strings.Replace(keyJSON, `"budget"`, `"zeroRetention": true, "budget"`, 1)
 	if rec := h.request(http.MethodPut, "/v1/keys/zr", with); rec.Code != http.StatusOK {
@@ -84,8 +84,8 @@ func TestZeroRetentionRoundTrip(t *testing.T) {
 	if rec := h.request(http.MethodPut, "/v1/keys/zr", keyJSON); rec.Code != http.StatusOK {
 		t.Fatalf("update without: %d %s", rec.Code, rec.Body.String())
 	}
-	if got := readKey(); got != false {
-		t.Errorf("after an apply without the flag it reads %v", got)
+	if got := readKey(); got != nil {
+		t.Errorf("after an apply without the flag it is written, as %v", got)
 	}
 
 	provider := func(declaration string) string {
