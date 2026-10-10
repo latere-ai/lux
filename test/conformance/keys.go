@@ -590,8 +590,10 @@ func case047ZeroRetention(t testing.TB, c *client) {
 	}
 	plain := create(v1.KindKey, "zr-without", c.keySpec(nil))
 	zrValue, plainValue := str(zr, "status.value"), str(plain, "status.value")
-	if field(plain, "spec.zeroRetention") != false {
-		t.Errorf("an unset spec.zeroRetention reads %v", field(plain, "spec.zeroRetention"))
+	// The member is written only when set; a reader takes a Key without
+	// it, and one that says false, as a Key that does not ask.
+	if unset := field(plain, "spec.zeroRetention"); unset != nil && unset != false {
+		t.Errorf("an unset spec.zeroRetention reads %v", unset)
 	}
 
 	// provider is the provider member of every request the stub read

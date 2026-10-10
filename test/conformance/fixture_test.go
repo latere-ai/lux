@@ -75,8 +75,9 @@ func TestFixtureGroupReadsAPreviousRelease(t *testing.T) {
 	if f := drive(t, "fixture/manifests", manifests); !f.Failed() {
 		t.Error("a release with a manifest missing passed")
 	}
-	// A Key from before spec.zeroRetention reads back with it at its
-	// default, which the promise admits; a release that carried the member
+	// A Key from before spec.zeroRetention reads back as it was written,
+	// without the member. A release that rendered the member unset
+	// resolved the same Key, which the promise admits, and one that set it
 	// is held to the value it carried.
 	release["testdata/previous/v0.0.1/key.json"] = &fstest.MapFile{Data: []byte(`{"kind":"Key","metadata":{"name":"k"},"spec":{"models":["*"],"limits":{"requestsPerMinute":60,"tokensPerMinute":100000},"allowUnpriced":false,"passthrough":false,"disabled":false}}`)}
 	if f := drive(t, "fixture/manifests", manifests); f.Failed() || f.Skipped() {
@@ -84,7 +85,11 @@ func TestFixtureGroupReadsAPreviousRelease(t *testing.T) {
 	}
 	release["testdata/previous/v0.0.1/key.json"] = &fstest.MapFile{Data: []byte(`{"kind":"Key","metadata":{"name":"k"},"spec":{"models":["*"],"limits":{"requestsPerMinute":60,"tokensPerMinute":100000},"allowUnpriced":false,"passthrough":false,"zeroRetention":false,"disabled":false}}`)}
 	if f := drive(t, "fixture/manifests", manifests); f.Failed() || f.Skipped() {
-		t.Errorf("a Key carrying spec.zeroRetention did not read back:\n%s", f.output())
+		t.Errorf("a Key that rendered spec.zeroRetention unset did not read back:\n%s", f.output())
+	}
+	release["testdata/previous/v0.0.1/key.json"] = &fstest.MapFile{Data: []byte(`{"kind":"Key","metadata":{"name":"k"},"spec":{"models":["*"],"limits":{"requestsPerMinute":60,"tokensPerMinute":100000},"allowUnpriced":false,"passthrough":false,"zeroRetention":true,"disabled":false}}`)}
+	if f := drive(t, "fixture/manifests", manifests); f.Failed() || f.Skipped() {
+		t.Errorf("a Key that set spec.zeroRetention did not read back:\n%s", f.output())
 	}
 	release["testdata/previous/v0.0.1/key.json"] = &fstest.MapFile{Data: []byte(`{"kind":"Key","metadata":{"name":"k"},"spec":{"models":["*"],"ttl":"1h","expiresAt":"2030-01-01T00:00:00Z"}}`)}
 	if f := drive(t, "fixture/manifests", manifests); !f.Failed() {

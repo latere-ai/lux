@@ -75,28 +75,27 @@ func (c *client) releasePrefix(version string) string {
 	return "conf-" + c.run + "-" + strings.Trim(string(slug), "-") + "-"
 }
 
-// addedDefaults are the spec members added to a kind after the first
-// release, each with the default that keeps the earlier behavior and
-// that the schema renders even at its default. A release before the
-// member resolved its manifest without it and the read-back carries it,
-// which spec 003's promise admits, the same object defaults aside, so
-// the release's spec is compared with the member set to its default
-// where the release did not carry it. Any other value, and any member
-// the release carried, is compared as written.
-var addedDefaults = map[string]map[string]any{
+// writtenWhenSet are the spec members a kind writes only when they are
+// set, each with the value it is left out at. A release that rendered
+// such a member at that value resolved the object the read-back now
+// carries without it, which spec 003's promise admits, the same object
+// defaults aside, so the release's spec is compared without the member
+// where the release carried it at that value. Any other value, and
+// every other member the release carried, is compared as written.
+var writtenWhenSet = map[string]map[string]any{
 	v1.KindKey: {"zeroRetention": false},
 }
 
-// withAddedDefaults sets every member of addedDefaults the release's
-// spec of kind does not carry to its default.
-func withAddedDefaults(kind string, spec any) any {
+// withoutUnset drops every member of writtenWhenSet the release's spec
+// of kind carries at the value it is left out at.
+func withoutUnset(kind string, spec any) any {
 	members, ok := spec.(map[string]any)
 	if !ok {
 		return spec
 	}
-	for name, value := range addedDefaults[kind] {
-		if _, carried := members[name]; !carried {
-			members[name] = value
+	for name, unset := range writtenWhenSet[kind] {
+		if value, carried := members[name]; carried && value == unset {
+			delete(members, name)
 		}
 	}
 	return members
@@ -104,8 +103,8 @@ func withAddedDefaults(kind string, spec any) any {
 
 // case003PreviousReleaseManifests applies each release's resolved
 // manifests under a prefix of that release's own and holds the
-// read-back's spec to the fixture's, with the members added since the
-// release at their defaults.
+// read-back's spec to the fixture's, without the members that are now
+// written only when set where the release rendered them unset.
 func case003PreviousReleaseManifests(t testing.TB, c *client) {
 	versions := c.releases(t)
 	if len(versions) == 0 {
@@ -124,7 +123,7 @@ func case003PreviousReleaseManifests(t testing.TB, c *client) {
 			if err := json.Unmarshal(data, &tree); err != nil {
 				t.Fatalf("%s/%s.json: %v", version, kind, err)
 			}
-			golden := map[string]any{"metadata": deepCopy(t, tree["metadata"]), "spec": withAddedDefaults(kind, deepCopy(t, tree["spec"]))}
+			golden := map[string]any{"metadata": deepCopy(t, tree["metadata"]), "spec": withoutUnset(kind, deepCopy(t, tree["spec"]))}
 			c.renameUnder(tree, kind, prefix)
 			c.renameUnder(golden, kind, prefix)
 			name := str(tree, "metadata.name")
