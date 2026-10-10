@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.17.0 - 2026-10-10
+
 ### Changed
 
 - A Key's `spec.zeroRetention` is written only when it is true. v0.16.0
