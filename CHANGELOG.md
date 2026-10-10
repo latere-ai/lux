@@ -6,6 +6,19 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- A Key's `spec.zeroRetention` is written only when it is true. v0.16.0
+  wrote `zeroRetention: false` on every Key, in a read, in the store,
+  and in the proposal an authorizer is asked about, so an authorizer or
+  a client built against v0.15.0 that holds a Key to the members it
+  knows refused every Key, whether it used the member or not. A Key
+  that does not ask is now the same on the wire as in v0.15.0. Read a
+  Key without the member as one that does not ask; a typed client that
+  requires the member needs that change. `false`, written in a manifest,
+  is still accepted. The OpenAPI document no longer lists the member as
+  required.
+
 ## v0.16.0 - 2026-10-10
 
 ### Added

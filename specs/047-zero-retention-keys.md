@@ -11,7 +11,7 @@ depends_on:
 affects: [manifest/, gateway/, metering/, authorizer/, internal/api/, internal/serve/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, examples/plane/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md, specs/016-security-and-threat-model.md, specs/018-conformance-suite.md, specs/019-observability.md]
 effort: medium
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-10
 author: changkun
 ---
 
@@ -58,8 +58,8 @@ On 2026-10-09:
 
 ### The Key
 
-`Key.spec.zeroRetention`, a boolean, false by default, written without
-`omitempty` as every boolean of a spec is, mutable. A Key that sets it
+`Key.spec.zeroRetention`, a boolean, false by default, written only when
+set (the amendment of 2026-10-10 below), mutable. A Key that sets it
 asks that no request on it reach an upstream that may keep it. It is
 not secret and the authorizer's proposal carries it.
 
@@ -194,7 +194,7 @@ it passed against Postgres 17 for this build.
 
 | # | Test |
 |---|---|
-| 1 | the corpus entry `accepted/key/zero-retention`, which renders `zeroRetention: true`, and every other accepted Key, which renders `false`; `refused/invalid_field/key-zero-retention`; `TestZeroRetentionRules`, `manifest`, for the default and the rendering; `TestZeroRetentionRoundTrip`, `internal/api`, which sets, reads, and clears the flag through `/v1`; `TestPutKeepsNoValue` of `storetest` against the memory store and in the Postgres tier; `TestFencedKeyCleanup`, which holds a fenced Key's flag as a policy write; `TestMutationProposalExcludesSecretsAndIncludesPolicy`, which holds the authorizer's proposal to carrying it |
+| 1 | the corpus entry `accepted/key/zero-retention`, which renders `zeroRetention: true`, and every other accepted Key, which renders no such member; `refused/invalid_field/key-zero-retention`; `TestZeroRetentionRules`, `manifest`, for the default and the rendering; `TestZeroRetentionRoundTrip`, `internal/api`, which sets, reads, and clears the flag through `/v1`; `TestPutKeepsNoValue` of `storetest` against the memory store and in the Postgres tier; `TestFencedKeyCleanup`, which holds a fenced Key's flag as a policy write; `TestMutationProposalExcludesSecretsAndIncludesPolicy`, which holds the authorizer's proposal to carrying it |
 | 2 | the corpus entries `accepted/provider/zero-retention` and `accepted/provider/keeps-nothing`, `refused/unknown_field/provider-zero-retention-member`, `refused/reserved_prefix/zero-retention-field-model`, and `refused/invalid_field/zero-retention-field-null`; `TestZeroRetentionRules`, every rule of `requestFields` at its path under `spec.zeroRetention.requestFields`, the two encodings at the bound side by side, and the Go form; `TestZeroRetentionRoundTrip`; `TestOptimisticConcurrency` and `TestPutKeepsNoValue` of `storetest`, a declaration with fields and `{}` |
 | 3 | `TestZeroRetentionFieldsReachTheUpstream`, over passthrough on all four dialects and translation in both directions between `openai` and `anthropic`, stream and not, with `GetBody` compared with what the upstream read, a caller's `provider` member sent as `{"zdr": false}`, `{"ZDR": false}`, `null`, a string, under `Provider`, and twice, and a Provider with zero-retention fields and no `requestFields`; `case047ZeroRetention` over the wire |
 | 4 | `TestZeroRetentionFieldsReachTheUpstream`, every case sent again on a Key without the flag; `case047ZeroRetention` |
@@ -225,14 +225,11 @@ Decided while building:
   produce one, and is tested on the function.
 - Every value of `Content-Encoding`, and every coding a value lists, is
   read for `spec.requestFields` too; spec 042 read the first line only.
-- `spec.zeroRetention` on a Key renders `false`, without `omitempty`, as
-  the design says. A Key from an earlier release therefore reads back
-  with one member more: the conformance suite's previous-release group
-  compares it with the member at its default, which spec 003's promise
-  admits, the same object defaults aside, and the release promise
-  counts the six changed Key goldens as major rows, which before
-  v1.0.0 a minor release carries. Spec 039 made the other choice for a
-  Model's `spec.disabled`, rendered only when true.
+- `spec.zeroRetention` on a Key rendered `false`, without `omitempty`,
+  in v0.16.0, as the design then said, and a Key from an earlier release
+  read back with one member more. The amendment of 2026-10-10 below
+  renders it only when true, the choice spec 039 made for a Model's
+  `spec.disabled`.
 - The record's flag is the Key's as the request was admitted, the Key a
   reread before `model_not_allowed` adopted included, so a refused
   request carries it. A request `decorate` refuses on a model route,
@@ -244,11 +241,58 @@ Decided while building:
   because each vendor's terms are the operator's to state.
 - Specs 003, 004, 007, 011, 016, and 019 name the members, the code, the
   key cache schedule, the threat, and the two observability fields, and
-  spec 018 names the previous-release comparison with a member added
-  since at its default.
+  spec 018 names the previous-release comparison, which leaves aside a
+  member written only when set where a release rendered it unset.
 
 What the gateway cannot hold: the declaration is the operator's
 statement about the upstream's terms, and the gateway does not check
 them; and a change to the flag reaches a replica at its next journal
 read, or after `LUX_KEY_CACHE_GRACE` while the store does not answer.
 
+
+## Amendment, 2026-10-10: the Key's flag is written only when set
+
+v0.16.0 rendered `spec.zeroRetention: false` on every Key, as every other
+boolean of a Key's spec is rendered. That changed the wire form of every
+Key, whether it asked for zero retention or not: a read, a stored row,
+and the proposal the authorizer is asked about all carried one member
+more.
+
+A deployment whose authorizer holds a proposed Key to the spec it
+registered, member for member, and was built against v0.15.0, refused
+every Key the day its core moved to v0.16.0: the proposal named a member
+the registration did not. A client that decodes a Key strictly meets the
+same refusal. The member said nothing in those Keys, and its presence
+was the whole difference.
+
+`spec.zeroRetention` is now written only when true. A Key that does not
+ask is the same on the wire as it was in v0.15.0, so a reader built
+against that release still reads it, and only a Key that uses the member
+needs a reader that knows it. A reader takes a Key without the member as
+one that does not ask. Decoding is unchanged: `false`, written out, is
+accepted and resolves to the same Key.
+
+What follows from it:
+
+- `KeySpec` in the OpenAPI document no longer lists `zeroRetention`
+  among its required members.
+- The six accepted Key goldens that do not ask render no such member,
+  which the release promise counts as it counted their change in
+  v0.16.0.
+- The conformance suite's previous-release group compares a release's
+  Key without the member where that release rendered it `false`, and
+  `case047ZeroRetention` takes a Key without the member, and one that
+  says `false`, as a Key that does not ask.
+
+`allowUnpriced`, `passthrough`, and `disabled` are still rendered
+whatever they hold, as every release has rendered them. The rule for a
+member added after this one is not decided here: a boolean rendered
+whatever it holds changes every object of its kind for a reader that
+compares or decodes strictly, and one rendered only when set does not.
+
+Tests: `TestZeroRetentionRules`, `manifest`, for the rendering both
+ways; `TestZeroRetentionRoundTrip`, `internal/api`, for a read after an
+apply with and without the flag; the corpus goldens; and
+`TestFixtureGroupReadsAPreviousRelease`, `test/conformance`, for a
+release that never carried the member, one that rendered it unset, and
+one that set it.
