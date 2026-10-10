@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.16.0 - 2026-10-10
+
 ### Added
 
 - A Key can ask that none of its requests reach an upstream that may
