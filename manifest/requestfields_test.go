@@ -198,7 +198,13 @@ func TestZeroRetentionRules(t *testing.T) {
 	if key.Spec.ZeroRetention {
 		t.Error("a Key that does not name the flag asks for zero retention")
 	}
-	if raw, err := json.Marshal(key); err != nil || !strings.Contains(string(raw), `"zeroRetention":false`) {
-		t.Errorf("a Key renders %s (%v)", raw, err)
+	// Written only when set: a Key that does not ask renders as it did
+	// before the member existed.
+	if raw, err := json.Marshal(key); err != nil || strings.Contains(string(raw), "zeroRetention") {
+		t.Errorf("a Key that does not ask renders %s (%v)", raw, err)
+	}
+	key.Spec.ZeroRetention = true
+	if raw, err := json.Marshal(key); err != nil || !strings.Contains(string(raw), `"zeroRetention":true`) {
+		t.Errorf("a Key that asks renders %s (%v)", raw, err)
 	}
 }

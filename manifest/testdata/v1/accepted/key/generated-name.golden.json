@@ -15,7 +15,6 @@
     "ttl": "1h",
     "allowUnpriced": false,
     "passthrough": true,
-    "zeroRetention": false,
     "disabled": false
   },
   "status": {

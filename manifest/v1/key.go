@@ -46,7 +46,11 @@ func (k Key) MarshalJSON() ([]byte, error) {
 // ZeroRetention asks that no request on the Key reach an upstream that
 // may keep it: the gateway sends such a request only to a Provider that
 // declares spec.zeroRetention, with that declaration's requestFields
-// written into the body.
+// written into the body. It is written only when set. A Key that does
+// not ask is then the same on the wire as before the member existed, so
+// an authorizer or a client built against an earlier release, which
+// holds a Key to the members it knows, still reads every Key that does
+// not use it.
 type KeySpec struct {
 	Models        []string   `json:"models,omitempty"`
 	value         writeOnly  `writeonly:"value"`
@@ -59,7 +63,7 @@ type KeySpec struct {
 	ExpiresAt     time.Time  `json:"expiresAt,omitzero"`
 	AllowUnpriced bool       `json:"allowUnpriced"`
 	Passthrough   bool       `json:"passthrough"`
-	ZeroRetention bool       `json:"zeroRetention"`
+	ZeroRetention bool       `json:"zeroRetention,omitempty"`
 	Disabled      bool       `json:"disabled"`
 }
 

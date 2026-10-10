@@ -18,7 +18,6 @@
     ],
     "allowUnpriced": false,
     "passthrough": false,
-    "zeroRetention": false,
     "disabled": false
   },
   "status": {
