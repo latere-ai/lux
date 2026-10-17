@@ -26,6 +26,12 @@ import (
 // context every request carries rather than hoped for.
 const runTimeout = 5 * time.Minute
 
+// rateWaitLimit bounds how long one request waits out the control
+// plane's rate refusals: a minute refills a subject's bucket at any
+// rate, so a request still refused after it is refused for another
+// reason than the requests this run sent.
+const rateWaitLimit = time.Minute
+
 // The kinds' path segments under /v1, spec 011's plurals.
 var plurals = map[string]string{
 	v1.KindProvider: "providers", v1.KindModel: "models", v1.KindKey: "keys", v1.KindBudget: "budgets",
@@ -201,9 +207,54 @@ func encode(t testing.TB, body any) []byte {
 // the server under test carries Lux-Request-Id, which is asserted here
 // for both planes, and a JSON answer under /v1 is held to the OpenAPI
 // document once Run has fetched it.
+//
+// A control plane refusal of rate_limited is waited out for its
+// Retry-After and the request sent again, for at most rateWaitLimit. A
+// subject's rate is the operator's to set (spec 011), and the requests
+// one run sends grow by twelve with every release the fixture group
+// reads, so the rate is no finding; the doors' rate refusal is, and
+// case007RateLimited asserts it, so a door's answer is never retried.
 func (c *client) request(t testing.TB, method, rawURL string, body any, opts ...reqOpt) *response {
 	t.Helper()
 	data := encode(t, body)
+	var waited time.Duration
+	for {
+		out := c.send(t, method, rawURL, data, opts)
+		wait, limited := c.rateLimited(rawURL, out)
+		if !limited || waited+wait > rateWaitLimit {
+			return out
+		}
+		waited += wait
+		t.Logf("%s %s: rate_limited; waiting %s, its Retry-After, and sending it again", method, rawURL, wait)
+		timer := time.NewTimer(wait)
+		select {
+		case <-c.ctx.Done():
+			timer.Stop()
+			return out
+		case <-timer.C:
+		}
+	}
+}
+
+// rateLimited reports whether out is the control plane's rate refusal
+// and how long its Retry-After asks the caller to wait. A refusal
+// without a Retry-After of at least a second is answered as it came.
+func (c *client) rateLimited(rawURL string, out *response) (time.Duration, bool) {
+	if out.Status != http.StatusTooManyRequests || out.Header.Get(gateway.HeaderError) != "rate_limited" || !c.controlPlane(rawURL) {
+		return 0, false
+	}
+	seconds, err := strconv.Atoi(out.Header.Get("Retry-After"))
+	if err != nil || seconds < 1 {
+		return 0, false
+	}
+	return time.Duration(seconds) * time.Second, true
+}
+
+// send is one attempt of request: the request built from the encoded
+// body, its answer read whole, its request id asserted and a control
+// plane answer held to the document.
+func (c *client) send(t testing.TB, method, rawURL string, data []byte, opts []reqOpt) *response {
+	t.Helper()
 	var rd io.Reader
 	if data != nil {
 		rd = bytes.NewReader(data)

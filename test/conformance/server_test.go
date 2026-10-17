@@ -239,9 +239,14 @@ func startServer(t testing.TB, o serverOptions) *server {
 	if !o.fileMode {
 		apiKeys = keyring
 	}
+	// The control plane's rate is ten thousand a minute, over twelve
+	// times the 791 requests one run sent with twenty-three releases
+	// under testdata/previous/, so the package's own runs never wait on
+	// it; a run against a server at LUX_REQUESTS_PER_MINUTE's 600 waits
+	// out the refusals (client.request).
 	control := api.New(api.Options{
 		Store: st, Auth: identity, Authorizer: authorizer, PublicURL: publicURL, Version: "conformance",
-		RequestsPerMinute: 600, Defaults: defaults, AllowPrivateUpstreams: true, Keys: apiKeys, Clients: clients,
+		RequestsPerMinute: 10_000, Defaults: defaults, AllowPrivateUpstreams: true, Keys: apiKeys, Clients: clients,
 		ReadOnlyDir: o.dir, Metrics: reg, Logger: logger,
 	})
 

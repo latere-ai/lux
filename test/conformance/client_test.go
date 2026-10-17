@@ -5,7 +5,12 @@ package conformance
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"latere.ai/x/lux/gateway"
 )
 
 // crafted is one answer built by hand for the readers below.
@@ -112,5 +117,62 @@ func TestEnvelopeReadsTheRefusal(t *testing.T) {
 	}
 	if f := drive(t, "listed status", func(t testing.TB) { listedNames(t, "openai", crafted(500, "req_1", nil, `{}`)) }); !f.Failed() {
 		t.Error("a list that is not a 200 passed")
+	}
+}
+
+// TestRequestWaitsOutTheControlPlanesRate: a control plane refusal of
+// rate_limited is sent again after its Retry-After, a door's is answered
+// as it came, since case007RateLimited asserts it, and a Retry-After
+// past rateWaitLimit is answered without a wait.
+func TestRequestWaitsOutTheControlPlanesRate(t *testing.T) {
+	var sent atomic.Int64
+	retryAfter := "1"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := sent.Add(1)
+		w.Header().Set(gateway.HeaderRequestID, "req_1")
+		w.Header().Set("Content-Type", "application/json")
+		if n == 1 || r.URL.Path == "/openai/v1/models" || retryAfter != "1" {
+			w.Header().Set(gateway.HeaderError, "rate_limited")
+			w.Header().Set("Retry-After", retryAfter)
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"code":"rate_limited","message":"Too many requests; wait and retry.","details":{"request_id":"req_1"}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := &client{
+		cfg: Config{URL: srv.URL}, http: srv.Client(), ctx: t.Context(), api: srv.URL + "/v1",
+		well: wellKnown{Doors: map[string]string{"openai": srv.URL + "/openai"}}, rep: newReport("crafted"),
+		sentences: map[string]string{}, violations: map[string]bool{},
+	}
+
+	start := time.Now()
+	if resp := c.request(t, http.MethodGet, srv.URL+"/v1/self", nil); resp.Status != http.StatusOK {
+		t.Fatalf("the control plane answered %d after its refusal was waited out", resp.Status)
+	}
+	if got := sent.Load(); got != 2 {
+		t.Errorf("%d requests sent, want the refused one and its second sending", got)
+	}
+	if waited := time.Since(start); waited < time.Second {
+		t.Errorf("the second sending came %s after the refusal, before its Retry-After of a second", waited)
+	}
+
+	sent.Store(1)
+	if resp := c.request(t, http.MethodGet, srv.URL+"/openai/v1/models", nil); resp.Status != http.StatusTooManyRequests {
+		t.Errorf("a door's rate refusal answered %d, want the 429 as it came", resp.Status)
+	}
+	if got := sent.Load(); got != 2 {
+		t.Errorf("a door's rate refusal was sent %d times, want once", got-1)
+	}
+
+	retryAfter = "61"
+	sent.Store(1)
+	start = time.Now()
+	if resp := c.request(t, http.MethodGet, srv.URL+"/v1/self", nil); resp.Status != http.StatusTooManyRequests {
+		t.Errorf("a refusal past rateWaitLimit answered %d, want the 429 as it came", resp.Status)
+	}
+	if got, waited := sent.Load(), time.Since(start); got != 2 || waited > rateWaitLimit/2 {
+		t.Errorf("a refusal past rateWaitLimit was sent %d times over %s, want once and no wait", got-1, waited)
 	}
 }
