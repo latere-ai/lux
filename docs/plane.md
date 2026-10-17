@@ -506,6 +506,12 @@ Every object the suite creates is named `conf-<run>-*` under the label
 `conformance=<run>` and is deleted at teardown, so a run against a
 serving installation touches nothing it did not create.
 
+A front's control plane rate does not fail a run. A run sends some 800
+requests to `/v1`, more than the 600 a minute `luxd` admits a subject by
+default, and the suite waits out each `rate_limited` refusal for its
+`Retry-After` before it sends the request again, so a run against a
+front at that rate takes longer and its verdict is the same.
+
 What a front has to pass, by group:
 
 | Group | Required of any front | Why |
