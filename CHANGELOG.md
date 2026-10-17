@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.17.1 - 2026-10-17
+
 ### Fixed
 
 - An Anthropic model routed to an `openai` Provider that serves it under
