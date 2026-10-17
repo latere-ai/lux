@@ -14,7 +14,11 @@ refused before it is pushed.
   `/anthropic` or `/lux` door is translated with each breakpoint as
   `cache_control` on the part it follows; before, every breakpoint was
   dropped and reported in `Lux-Loss`, and an agent paid full input price
-  on every turn. Other models on an `openai` Provider are sent as before.
+  on every turn. A Qwen model served under the `qwen` vendor, such as
+  `qwen/qwen3.6-plus`, keeps its breakpoints the same way, because
+  Alibaba, which serves it, caches only what is marked. Other models on
+  an `openai` Provider are sent as before: their providers cache a
+  repeated prefix on their own.
 - The cache writes an `openai` Provider reports in
   `prompt_tokens_details.cache_write_tokens`, as OpenRouter does, are
   metered and priced as cache writes. They were counted as fresh input.
