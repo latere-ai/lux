@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- The release is published. v0.17.1 was tagged, but its release workflow
+  stopped before publishing anything: the step that records the next
+  release's fixture read the control plane right after the conformance
+  suite had spent its rate for the minute, and the 429 failed the step.
+  The step now waits out the refusal. v0.17.2 carries everything v0.17.1
+  lists.
+
 ## v0.17.1 - 2026-10-17
 
 ### Fixed

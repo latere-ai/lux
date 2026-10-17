@@ -319,11 +319,13 @@ jobs:
           done
           dir="out/fixture/${GITHUB_REF_NAME}"
           mkdir -p "$dir"
+          # The suite before this step may have spent the control plane's
+          # rate for the minute; --retry waits out its 429 by Retry-After.
           for pair in provider:openai budget:dev model:stub-openai key:dev; do
             kind=${pair%%:*}; name=${pair#*:}
-            curl -fsS "${LUX_URL}/v1/${kind}s/${name}" -H "Authorization: Bearer $TOKEN" | jq . > "$dir/${kind}.json"
+            curl -fsS --retry 5 "${LUX_URL}/v1/${kind}s/${name}" -H "Authorization: Bearer $TOKEN" | jq . > "$dir/${kind}.json"
           done
-          curl -fsS "${LUX_URL}/v1/requests?limit=1000" -H "Authorization: Bearer $TOKEN" | jq -c '.items[]' > "$dir/records.ndjson"
+          curl -fsS --retry 5 "${LUX_URL}/v1/requests?limit=1000" -H "Authorization: Bearer $TOKEN" | jq -c '.items[]' > "$dir/records.ndjson"
           [ -s "$dir/records.ndjson" ] || { echo "the run produced no record" >&2; exit 1; }
           ls -l "$dir"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
