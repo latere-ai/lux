@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.17.2 - 2026-10-17
+
 ### Fixed
 
 - The release is published. v0.17.1 was tagged, but its release workflow
