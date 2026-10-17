@@ -6,6 +6,17 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- The conformance suite waits out the control plane's rate. A
+  `rate_limited` refusal under `/v1` is sent again after its
+  `Retry-After`, for at most a minute of waiting per request, so a run
+  against a server at the default `LUX_REQUESTS_PER_MINUTE` of 600
+  passes where it failed once its requests passed the rate. A door's
+  `rate_limited` is still the answer `case007RateLimited` asserts and is
+  never sent again. The `fixture` group reads every release from v0.1.0
+  to v0.17.0 again.
+
 ## v0.17.0 - 2026-10-10
 
 ### Changed
