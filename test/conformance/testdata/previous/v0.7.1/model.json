@@ -1,0 +1,51 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Model",
+  "metadata": {
+    "name": "stub-openai"
+  },
+  "spec": {
+    "targets": [
+      {
+        "provider": "openai",
+        "model": "stub-openai",
+        "weight": 100,
+        "priority": 0
+      }
+    ],
+    "fallback": "onError",
+    "pricing": {
+      "currency": "USD",
+      "per": 1000000,
+      "input": "2.5",
+      "output": "10",
+      "cachedInput": "2.5",
+      "cacheWrite": "2.5"
+    },
+    "modalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    }
+  },
+  "status": {
+    "id": "mdl_01M39Q5TMXE2YPZJVG61GNP8F7",
+    "version": 1,
+    "owner": "http://127.0.0.1:9106|dev",
+    "source": "declared",
+    "available": true,
+    "targets": [
+      {
+        "provider": "openai",
+        "model": "stub-openai",
+        "health": "Healthy"
+      }
+    ],
+    "createdAt": "2026-09-24T12:45:18.876579634Z",
+    "updatedAt": "2026-09-24T12:45:18.877070993Z",
+    "warnings": []
+  }
+}
