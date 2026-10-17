@@ -9,7 +9,7 @@ depends_on:
 affects: [test/conformance/, internal/serve/, docs/]
 effort: large
 created: 2026-09-13
-updated: 2026-09-14
+updated: 2026-10-17
 author: changkun
 ---
 
@@ -324,6 +324,18 @@ honest answer for a front that admits less than the contract. Two
 concurrent runs share one thing they cannot: the authorizer outage of
 `case006AuthorizerUnavailable` takes the stub authorizer down for every
 caller, so `TestConcurrentRuns` runs its two without stubs.
+
+A control plane refusal of `rate_limited` is not a refusal of that
+kind. A subject's rate is the operator's to set ([[011-api]]), and a run
+sends twelve more requests with every release the fixture group reads,
+791 with twenty-three of them, past the 600 a minute
+`LUX_REQUESTS_PER_MINUTE` admits by default. The suite waits for the
+refusal's `Retry-After` and sends the request again, for at most a
+minute of waiting per request, the time a subject's bucket takes to
+fill at any rate. A door's `rate_limited` is the answer
+`case007RateLimited` asserts, so a door's answer is never sent again.
+The package's own reference server admits ten thousand a minute, so its
+runs never wait.
 
 A door's model list carries a Model once the server's health tick has
 filled its availability ([[005-providers]]), which is `LUX_HEALTH_INTERVAL`
