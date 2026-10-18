@@ -36,12 +36,17 @@ type Query struct {
 }
 
 // RecordQuery is GET /v1/requests: the same range and filters over
-// records, plus the record's own status, error code, and stream flag.
+// records, plus the record's own status, error code, and stream flag,
+// and RequestLabels, pairs the record's requestLabels must all carry
+// (spec 048). RequestLabels is not a member of Query, so Intersect and
+// the authorizer's filter never read or widen it: it only narrows what
+// the rest of the query already selects.
 type RecordQuery struct {
 	Query
-	Status Status
-	Error  string
-	Stream *bool
+	Status        Status
+	Error         string
+	Stream        *bool
+	RequestLabels map[string]string
 }
 
 // QueryError is a parameter the query refuses, with the parameter's
@@ -141,6 +146,11 @@ func (q RecordQuery) Matches(r Record) bool {
 	}
 	if q.Stream != nil && r.Stream != *q.Stream {
 		return false
+	}
+	for name, value := range q.RequestLabels {
+		if have, ok := r.RequestLabels[name]; !ok || have != value {
+			return false
+		}
 	}
 	return true
 }

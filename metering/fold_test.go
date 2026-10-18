@@ -468,3 +468,48 @@ func TestUsageFilterNarrows(t *testing.T) {
 		t.Fatal("an unknown Key matched")
 	}
 }
+
+// TestRecordQueryRequestLabels: a record matches a query's request-label
+// pairs when its requestLabels carry every one, byte for byte; a record
+// missing a pair, carrying another value, or carrying the pair only
+// among the Key's labels does not; and a query naming no pair selects
+// as it did before the member existed (spec 048).
+func TestRecordQueryRequestLabels(t *testing.T) {
+	at := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
+	q := RecordQuery{From: at.Add(-time.Hour), To: at.Add(time.Hour)}
+	rec := func(key, request map[string]string) Record {
+		return Record{ID: "req_1", At: at, Labels: key, RequestLabels: request}
+	}
+	both := rec(nil, map[string]string{"trial": "t-1", "run": "r-9"})
+	for _, r := range []Record{both, rec(nil, nil), rec(map[string]string{"trial": "t-1"}, nil)} {
+		if !q.Matches(r) {
+			t.Fatalf("a query without pairs refused %+v", r)
+		}
+	}
+	cases := []struct {
+		pairs map[string]string
+		r     Record
+		want  bool
+	}{
+		{map[string]string{"trial": "t-1"}, both, true},
+		{map[string]string{"trial": "t-1", "run": "r-9"}, both, true},
+		{map[string]string{"trial": "t-2"}, both, false},
+		{map[string]string{"trial": "T-1"}, both, false},
+		{map[string]string{"trial": "t-1", "run": "r-8"}, both, false},
+		{map[string]string{"trial": "t-1", "seed": "1"}, both, false},
+		{map[string]string{"trial": "t-1"}, rec(nil, nil), false},
+		{map[string]string{"trial": "t-1"}, rec(map[string]string{"trial": "t-1"}, nil), false},
+	}
+	for _, c := range cases {
+		q.RequestLabels = c.pairs
+		if got := q.Matches(c.r); got != c.want {
+			t.Errorf("pairs %v over requestLabels %v, labels %v: %v, want %v", c.pairs, c.r.RequestLabels, c.r.Labels, got, c.want)
+		}
+	}
+	// The Key-label filter is the other map: the same pair there reads
+	// the record's labels and not its requestLabels.
+	keyed := RecordQuery{From: q.From, To: q.To, Labels: map[string]string{"trial": "t-1"}}
+	if keyed.Matches(both) {
+		t.Error("a Key-label filter matched a pair the record carries among its request labels alone")
+	}
+}
