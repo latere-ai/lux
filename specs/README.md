@@ -100,8 +100,8 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [045](.archive/045-zero-priced-requests-on-a-spent-window.md) | A zero-priced request on a spent window: a Model whose every price is zero is served whatever a spend limit or a Budget has left | small | complete | 004, 007, 009, 018 |
 | [046](.archive/046-six-budgets-per-key.md) | Six Budgets per Key: the bound on spec.budgets raised from four | small | complete | 003, 007, 018, 037 |
 | [047](047-zero-retention-keys.md) | Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request | medium | testing | 003, 004, 005, 007, 011 |
-| [048](048-request-label-filter.md) | Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has | small | drafted | 007, 009, 011, 012 |
-| [049](049-key-doors.md) | Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key | small | drafted | 003, 004, 007, 011 |
+| [048](048-request-label-filter.md) | Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has | small | testing | 007, 009, 011, 012 |
+| [049](049-key-doors.md) | Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key | small | testing | 003, 004, 007, 011 |
 
 ## Dependency graph
 

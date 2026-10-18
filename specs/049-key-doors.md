@@ -1,6 +1,6 @@
 ---
 title: "Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key, without a store read"
-status: drafted
+status: testing
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -141,3 +141,42 @@ OpenAPI document describes `spec.doors` with its four values, and
 | 7 | `lux keys create -doors` writes the list, and `-dry-run` prints it | `internal/luxcli` test |
 | 8 | The OpenAPI document carries the member and the code, and the code is one row of spec 011's table | `TestOpenAPIIsCurrent`, `TestErrorTable` |
 | 9 | Over the wire, a Key naming one door is served there and refused on another, and the request history carries the refusal | `test/conformance` |
+
+## Outcome
+
+Built on 2026-10-18 as designed, at `testing`: every criterion has a
+passing test in the tree. The Postgres half of criterion 1 runs in the
+Postgres tier, `make test-postgres`, which the gate does not start; it
+passed against Postgres 17 for this build.
+
+| # | Test |
+|---|---|
+| 1 | the corpus entry `accepted/key/doors`, which renders `doors: [lux]`, and every other accepted Key, which renders no such member; `TestKeyDoorsRules`, `manifest`, for the default, the rendering, the order, the fixed point through JSON, an update that changes, adds, and drops the list, and a disabled Key with doors; `TestKeyDoorsRoundTrip`, `internal/api`, which sets, changes, and clears the list through `/v1`; `TestPutKeepsNoValue` of `storetest` against the memory store and in the Postgres tier |
+| 2 | `refused/invalid_field/key-doors-unknown`, `key-doors-twice`, and `key-doors-empty`; `TestKeyDoorsRules` for a door spelled as its path or in another case, a string, a list of numbers, and an empty list in JSON; `TestKeyDoorsRoundTrip` for the refusals through `/v1`, which change nothing stored |
+| 3 | `TestMutationProposalExcludesSecretsAndIncludesPolicy`, `authorizer` |
+| 4 | `TestKeyDoors`, `gateway`: a Key on `lux` alone, with and without `passthrough`, over a model route, the model list, the model read, and an opaque route on each other door, each refusal in that door's shape with no upstream called; a disabled and an expired Key answer their state first; a Key without the member is served on all four doors |
+| 5 | `TestKeyDoorsRecorded`, `gateway`: the record and the `lux_requests_total` series with door, status, and code |
+| 6 | `TestKeyDoorsOnReread`, `gateway`: a reread Key without the door is refused, and one with it is served |
+| 7 | `TestFlagFormsBuildTheManifest` and `TestDryRunAppliesNothing`, `internal/luxcli`; `TestCLIDocIsCurrent` |
+| 8 | `TestOpenAPIIsCurrent`, the member with its four values and `door_not_allowed` a row of `x-lux-errors`; `TestErrorTable`, the code one row of spec 011's table and of spec 004's with the same status |
+| 9 | `case049KeyDoors`, against the reference server and the example plane |
+
+Decided while building:
+
+- The member is a list and not one door: a Key that a program uses
+  through two dialects names both, and one door is a list of one. Absent
+  is every door; an empty list is refused rather than read as every
+  door, so a writer that meant no door is told so.
+- The rule is `KeySpec.OpensDoor`, which `admit` calls after
+  `keyState`, so the first decision and the reread before
+  `model_not_allowed` both apply it.
+- The `/lux` door has no opaque route, so its row in `TestKeyDoors` has
+  three operations.
+- The user sentence is "This key may not use this door.", beside
+  `route_not_allowed`'s "This key may not use this route."; the
+  developer detail names the Key's doors and the door of the request as
+  paths.
+- No reread past the cache on this refusal, and no span attribute: the
+  record's `door` and `error` already say which door a Key was refused
+  on.
+

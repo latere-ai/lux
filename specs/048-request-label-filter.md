@@ -1,6 +1,6 @@
 ---
 title: "Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has"
-status: drafted
+status: testing
 track: core
 depends_on:
   - specs/007-keys-and-limits.md
@@ -155,3 +155,43 @@ well. Without an archive the source is the replica's own ring, which
 | 7 | `lux requests -request-label k=v` sends `request_label`, and a value without `=` is refused before any request | `internal/luxcli` test |
 | 8 | The OpenAPI document lists the parameter | `TestOpenAPIIsCurrent` |
 | 9 | Over the wire, two requests on one Key with different `Lux-Labels` are told apart by `request_label` | `test/conformance` |
+
+## Outcome
+
+Built on 2026-10-18 as designed, at `testing`: every criterion has a
+passing test in the tree. The Postgres half of criterion 2 runs in the
+Postgres tier, `make test-postgres`, which the gate does not start; it
+passed against Postgres 17 for this build.
+
+| # | Test |
+|---|---|
+| 1 | `TestRecordQueryRequestLabels`, `metering`: every pair, another value, another case, a pair more, a record without pairs, and a pair carried only among the Key's labels |
+| 2 | `TestRecordsByRequestLabel` of `storetest`, over the memory store and, in the Postgres tier, the direct, pooled, and exec-mode Postgres stores: newest first, pages of three, a cursor refused under another pair, the Key joined, and none for an unknown value, a Key label, or a pair more |
+| 3 | `TestRecordCursorBindsRequestLabels`, `internal/store`: a query without pairs mints the bytes v0.17.3 minted, an empty map mints the same, and a cursor under pairs decodes under the same pairs in any order and is refused under none, another value, one pair less, and one pair more |
+| 4 | `TestRequestLabelFilter`, `internal/api`: both encodings of `=`, two pairs, a pair twice, the Key, the Key-label filter, an unknown value; a page of one followed to the end; a cursor from another pair; two values for one name answered without a store read; a value without `=`, an empty name, an empty value, a name and a value outside the alphabet or the lengths, and a ninth name, each at `request_label`; and `GET /v1/usage?request_label=` |
+| 5 | `TestRequestLabelFilter`: under a filter of one owner, the other owner's record carrying the pair is not answered, by the pair or by the other owner's Key, and the `usage.read` resource is `keys` and `owners` alone |
+| 6 | `TestArchiveRequestLabelFilter`, `internal/reqlog`: an object from before partitioning and three partitions, a page of two followed to the end against the unpaged walk, a cursor refused under another pair, a partition-label filter joined, and none for an unknown value |
+| 7 | `TestCommandTable` and `TestUnknownCommandAndFlagAreUsageErrors`, `internal/luxcli`; `TestCLIDocIsCurrent` for `docs/cli.md` |
+| 8 | `TestOpenAPIIsCurrent`; the parameter's description builds its bound from `gateway.MaxRequestLabels` |
+| 9 | `case048RequestLabelFilter`, against the reference server and the example plane |
+
+Decided while building:
+
+- The syntax check and the bound are the gateway's, exported as
+  `gateway.ValidRequestLabel` and `gateway.MaxRequestLabels`, and the
+  header parser now calls the same check. `internal/api` already imports
+  `gateway`, and `gateway` imports nothing new.
+- `RecordQuery.RequestLabels` is a member of `RecordQuery` and not of
+  `Query`, so `metering.Intersect`, which reads the authorizer's filter,
+  cannot reach it, and `GET /v1/usage`, which builds a `Query`, cannot
+  carry it.
+- The record digest's new member is omitted when empty, the rule every
+  member already follows, so a query without pairs digests as before;
+  the test pins the bytes of v0.17.3.
+- The archive reader walks an hour object by object across its roots,
+  so inside an hour its order is by object and not strictly newest
+  first, as for every archive query; the test compares the records as
+  a set and the pages with the unpaged walk.
+- The example plane's request history (spec 020) takes `request_label`
+  too, since the conformance case runs against it.
+
