@@ -69,6 +69,26 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 			}
 		}
 	}
+	// spec.doors is policy too (spec 049): the proposal carries the list
+	// when the Key sets it and no such member when it does not, so an
+	// authorizer that holds a Key to the members it knows reads a Key
+	// without doors as before.
+	plain, err := Proposal(fixtureKey(), "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := plain["spec"].(map[string]any)["doors"]; ok {
+		t.Fatalf("a Key without doors proposes %v", plain["spec"])
+	}
+	doored := fixtureKey()
+	doored.Spec.Doors = []v1.Dialect{v1.DialectLux}
+	withDoors, err := Proposal(doored, "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doors, _ := withDoors["spec"].(map[string]any)["doors"].([]any); len(doors) != 1 || doors[0] != "lux" {
+		t.Fatalf("a Key with doors proposes %v", withDoors["spec"])
+	}
 	if got, _ := provider.Spec.Credential.Value(); got != "provider-secret-canary" {
 		t.Fatal("proposal mutated credential")
 	}

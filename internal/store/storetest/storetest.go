@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -676,6 +677,7 @@ func putKeepsNoValue(t *testing.T, s store.Store) {
 	k.Spec.SetValue("lux_supplied_value_that_must_never_be_a_row_0000000")
 	k.Status.Value = "lux_minted_value_that_is_the_response_alone_000000"
 	k.Spec.ZeroRetention = true
+	k.Spec.Doors = []v1.Dialect{v1.DialectLux, v1.DialectAnthropic}
 	_, err := s.Objects().Put(ctx, k, 0)
 	noErr(t, err, "Put Key")
 	got, _, err := s.Objects().Get(ctx, v1.KindKey, k.Status.ID)
@@ -684,6 +686,7 @@ func putKeepsNoValue(t *testing.T, s store.Store) {
 	truth(t, !set, "the supplied value is not stored")
 	equal(t, as[*v1.Key](t, got).Status.Value, "", "status.value is not stored")
 	truth(t, as[*v1.Key](t, got).Spec.ZeroRetention, "spec.zeroRetention is stored")
+	truth(t, slices.Equal(as[*v1.Key](t, got).Spec.Doors, k.Spec.Doors), "spec.doors is stored in its order")
 
 	p := provider("openai")
 	p.Spec.Credential = &v1.Credential{Header: "Authorization", Scheme: v1.SchemeBearer}
