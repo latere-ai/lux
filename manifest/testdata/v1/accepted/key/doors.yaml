@@ -1,0 +1,7 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Key
+metadata:
+  name: doors
+spec:
+  models: ["gpt-5"]
+  doors: [lux]                         # opens the /lux door alone; any other door is door_not_allowed

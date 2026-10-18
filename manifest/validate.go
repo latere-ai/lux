@@ -346,6 +346,9 @@ func checkKey(k *v1.Key, o Options, now time.Time) error {
 		}
 		seen[sel] = true
 	}
+	if err := checkDoors(s.Doors); err != nil {
+		return err
+	}
 	value, set := s.Value()
 	hash, hashed := s.ValueSHA256()
 	// A Key's value arrives in one of three forms and never two, so the
@@ -449,6 +452,27 @@ func checkKey(k *v1.Key, o Options, now time.Time) error {
 	}
 	if !s.ExpiresAt.IsZero() && !s.ExpiresAt.After(now) {
 		return refuse(CodeInvalidField, "expiresAt "+s.ExpiresAt.UTC().Format(time.RFC3339)+" is not after now, "+now.UTC().Format(time.RFC3339), "spec.expiresAt")
+	}
+	return nil
+}
+
+// checkDoors applies spec 049's rules to a Key's spec.doors: each item a
+// door name, none twice, and the list, when present, not empty. An
+// empty list is refused rather than read as every door, because a writer
+// that sends one most likely means no door, and every door would widen
+// the Key without a word; a Key meant to open every door leaves the
+// member out.
+func checkDoors(doors []v1.Dialect) error {
+	if doors != nil && len(doors) == 0 {
+		return refuse(CodeInvalidField, "doors lists no door; leave it out for a Key that opens every door", "spec.doors")
+	}
+	for i, d := range doors {
+		if !d.Valid() {
+			return refuse(CodeInvalidField, strconv.Quote(string(d))+" is not a door: openai, anthropic, gemini, or lux", indexPath("spec.doors", i))
+		}
+		if slices.Contains(doors[:i], d) {
+			return refuse(CodeInvalidField, string(d)+" appears twice", indexPath("spec.doors", i))
+		}
 	}
 	return nil
 }

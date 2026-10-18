@@ -5,6 +5,7 @@ package v1
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 )
 
@@ -51,6 +52,11 @@ func (k Key) MarshalJSON() ([]byte, error) {
 // an authorizer or a client built against an earlier release, which
 // holds a Key to the members it knows, still reads every Key that does
 // not use it.
+//
+// Doors names the doors the Key opens, each spelled as its dialect, the
+// way a record's door is; a request on any other door is refused
+// door_not_allowed. Absent, the Key opens every door. It is written only
+// when set, for the reason ZeroRetention is.
 type KeySpec struct {
 	Models        []string   `json:"models,omitempty"`
 	value         writeOnly  `writeonly:"value"`
@@ -64,7 +70,14 @@ type KeySpec struct {
 	AllowUnpriced bool       `json:"allowUnpriced"`
 	Passthrough   bool       `json:"passthrough"`
 	ZeroRetention bool       `json:"zeroRetention,omitempty"`
+	Doors         []Dialect  `json:"doors,omitempty"`
 	Disabled      bool       `json:"disabled"`
+}
+
+// OpensDoor reports whether the Key may be used on door: every door when
+// spec.doors is absent, and the doors it lists otherwise.
+func (s *KeySpec) OpensDoor(door Dialect) bool {
+	return len(s.Doors) == 0 || slices.Contains(s.Doors, door)
 }
 
 // Value returns the supplied value the manifest carried and whether it
