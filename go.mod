@@ -17,7 +17,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	google.golang.org/protobuf v1.36.12
-	latere.ai/x/pkg v0.99.0
+	latere.ai/x/pkg v0.101.0
 )
 
 require (
