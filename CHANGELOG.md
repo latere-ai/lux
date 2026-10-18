@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.18.0 - 2026-10-18
+
 ### Added
 
 - `GET /v1/requests` filters by a request's own labels with
