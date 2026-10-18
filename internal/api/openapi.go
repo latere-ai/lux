@@ -18,6 +18,7 @@ import (
 	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/lux/authorizer"
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/auth"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/manifest"
@@ -217,7 +218,7 @@ func openAPIDocument() ordered {
 		member{"/v1/usage/redact", obj("post", operation("redactUsage", "Redact usage owner", "Every hourly and monthly usage row of the owner, and every record of this replica's ring, loses the owner; each row's sums are added into the row with the same other dimensions and no owner, so totals are kept.", authorizer.ActionUsageRedact,
 			[]any{}, obj("required", true, "content", obj("application/json", obj("schema", ref("schemas", "UsageRedaction")))), response("200", "The rows rewritten.", "UsageRedacted")))},
 		member{"/v1/requests", obj("get", operation("listRequests", "List requests", "Usage records over a range, newest first, paged by limit and cursor, with the record set that answered beside them. A cursor keeps the range of its first page, so a follow-up page that leaves from or to open reads that range. A page read from the archive ends after a bounded amount of reading and may hold fewer records than limit, or none, while next_cursor is present; follow next_cursor until it is absent.", authorizer.ActionUsageRead,
-			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
+			[]any{ref("parameters", "from"), ref("parameters", "to"), ref("parameters", "usageKey"), ref("parameters", "usageModel"), ref("parameters", "usageProvider"), ref("parameters", "usageOwner"), ref("parameters", "usageLabel"), ref("parameters", "requestLabel"), ref("parameters", "status"), ref("parameters", "error"), ref("parameters", "stream"), ref("parameters", "recordLimit"), ref("parameters", "cursor")},
 			nil, response("200", "One page of records.", "RecordList")))},
 		member{"/v1/self", obj("get", operation("readSelf", "Read caller identity", "The caller's identity, who decides permission, and what this replica remembers granting the subject.", "none", nil, nil, response("200", "The caller.", "Self")))},
 		member{"/v1/openapi.json", obj("get", operation("readOpenAPI", "Read OpenAPI document", "This document as JSON; no bearer.", "none", []any{}, nil, obj("200", obj("description", "The document.", "content", obj("application/json", obj("schema", obj("type", "object"))))))).set("security", []any{})},
@@ -342,6 +343,7 @@ func parameters() ordered {
 		"usageProvider", query("provider", "A Provider by name or prv_ id, repeatable.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
 		"usageOwner", query("owner", "A rendered subject, repeatable; intersected with the authorizer's filter, so one outside it is an empty items.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
 		"usageLabel", query("label", "name=value over the Key's labels, repeatable; every pair must match.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
+		"requestLabel", query("request_label", "name=value over the request's own labels, the record's requestLabels a caller sent in Lux-Labels, repeatable; every pair must match. Each pair is in the Lux-Labels syntax, a name of 1 to 64 characters of A-Z, a-z, 0-9, '.', '_', '-' and a value of 1 to 128 that may also hold ':' and '/', and at most "+strconv.Itoa(gateway.MaxRequestLabels)+" names, the most a record keeps; anything else is invalid_field. Two values for one name are an empty items. It narrows what the authorizer's filter already lets the caller read.", obj("type", "array", "items", obj("type", "string"))).set("style", "form").set("explode", true),
 		"status", query("status", "Records of one outcome.", obj("type", "string", "enum", []string{string(metering.StatusOK), string(metering.StatusRefused), string(metering.StatusFailed)})),
 		"error", query("error", "Records carrying one error code of x-lux-errors.", obj("type", "string")),
 		"stream", query("stream", "Streamed records alone, or unstreamed alone.", obj("type", "boolean")),

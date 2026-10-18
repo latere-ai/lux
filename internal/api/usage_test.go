@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"latere.ai/x/pkg/authz/stub"
 	"latere.ai/x/pkg/s3/s3test"
 
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/reqlog"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -651,4 +653,136 @@ func TestRedactUsage(t *testing.T) {
 	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `{"owner": "`+owner+`", "keys": []}`), CodeInvalidRequest)
 	wantCode(t, h.request(http.MethodPost, "/v1/usage/redact", `owner: x`, "Content-Type", "application/yaml"), CodeUnsupportedMediaType)
 	wantCode(t, h.request(http.MethodGet, "/v1/usage/redact", ""), CodeNotFound)
+}
+
+// TestRequestLabelFilter: GET /v1/requests?request_label= answers the
+// records whose request labels carry every pair, joined with the other
+// filters and paged by cursor; refuses a value without =, a pair outside
+// the Lux-Labels syntax, and a name past gateway.MaxRequestLabels with
+// invalid_field at request_label; answers one name with two values with
+// an empty items and no question for the store; reads the same pair
+// twice as one; and GET /v1/usage, where a request label is no
+// dimension, refuses the parameter. Under an authorizer whose filter
+// names one owner, another owner's record carrying the pair is not
+// returned, and the usage.read resource carries keys and owners alone.
+// Spec 048's criteria 4 and 5.
+func TestRequestLabelFilter(t *testing.T) {
+	h := newUsageHarness(t)
+	for i, r := range []struct {
+		id, key, owner string
+		labels         map[string]string
+	}{
+		{"req_E", h.keyID, h.subject(), map[string]string{"trial": "t-1"}},
+		{"req_F", h.keyID, h.subject(), map[string]string{"trial": "t-2"}},
+		{"req_G", h.keyID, h.subject(), map[string]string{"trial": "t-1", "run": "r-1"}},
+		{"req_H", h.bobKeyID, h.bob, map[string]string{"trial": "t-1"}},
+	} {
+		at := h.at.Add(time.Duration(10+i) * time.Minute)
+		team := map[string]string{"team": "research"}
+		if r.owner == h.bob {
+			team = map[string]string{"team": "ops"}
+		}
+		rec := metering.Record{ID: r.id, At: at, EndedAt: at.Add(time.Second), Key: metering.KeyRef{ID: r.key}, Owner: r.owner, Door: v1.DialectOpenAI, Status: metering.StatusOK, Labels: team, RequestLabels: r.labels}
+		if err := h.st.Usage().AppendRecord(bg(), rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		{"request_label=trial%3Dt-1", []string{"req_H", "req_G", "req_E"}},
+		{"request_label=trial=t-1", []string{"req_H", "req_G", "req_E"}},
+		{"request_label=trial%3Dt-1&request_label=run%3Dr-1", []string{"req_G"}},
+		{"request_label=trial%3Dt-1&request_label=trial%3Dt-1", []string{"req_H", "req_G", "req_E"}},
+		{"request_label=trial%3Dt-1&key=run-42", []string{"req_G", "req_E"}},
+		{"request_label=trial%3Dt-1&label=team%3Dops", []string{"req_H"}},
+		{"request_label=trial%3Dt-3", nil},
+		{"request_label=team%3Dresearch", nil},
+	} {
+		got := ids(t, h.request(http.MethodGet, "/v1/requests?"+tc.query, ""))
+		if len(got) != len(tc.want) || (len(got) > 0 && !reflect.DeepEqual(got, tc.want)) {
+			t.Errorf("%s: %v, want %v", tc.query, got, tc.want)
+		}
+	}
+
+	// One page at a time, the cursor bound to the pairs.
+	var seen []string
+	cursor := ""
+	for range 4 {
+		q := "/v1/requests?request_label=trial%3Dt-1&limit=1"
+		if cursor != "" {
+			q += "&cursor=" + url.QueryEscape(cursor)
+		}
+		rec := h.request(http.MethodGet, q, "")
+		seen = append(seen, ids(t, rec)...)
+		next, _ := body(t, rec)["next_cursor"].(string)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if !reflect.DeepEqual(seen, []string{"req_H", "req_G", "req_E"}) {
+		t.Errorf("paged: %v", seen)
+	}
+	first := h.request(http.MethodGet, "/v1/requests?request_label=trial%3Dt-1&limit=1", "")
+	next, _ := body(t, first)["next_cursor"].(string)
+	if d := wantCode(t, h.request(http.MethodGet, "/v1/requests?request_label=trial%3Dt-2&limit=1&cursor="+url.QueryEscape(next), ""), CodeInvalidField); !reflect.DeepEqual(paths(d), []string{"cursor"}) {
+		t.Errorf("a cursor from another pair: paths %v", paths(d))
+	}
+
+	// Two values for one name: an empty items, and the store is asked
+	// nothing.
+	before := h.counts.records
+	if got := ids(t, h.request(http.MethodGet, "/v1/requests?request_label=trial%3Dt-1&request_label=trial%3Dt-2", "")); len(got) != 0 || h.counts.records != before {
+		t.Errorf("two values for one name: %v, %d queries", got, h.counts.records-before)
+	}
+
+	// The refusals, each at request_label; a request label is no
+	// dimension of /v1/usage.
+	pairs := func(n int) string {
+		out := make([]string, 0, n)
+		for i := range n {
+			out = append(out, "request_label=k"+strconv.Itoa(i)+"%3Dv")
+		}
+		return strings.Join(out, "&")
+	}
+	if got := ids(t, h.request(http.MethodGet, "/v1/requests?"+pairs(gateway.MaxRequestLabels), "")); len(got) != 0 {
+		t.Errorf("as many names as a record keeps, none carried: %v", got)
+	}
+	nine := pairs(gateway.MaxRequestLabels + 1)
+	for _, tc := range []struct{ route, query, path string }{
+		{"/v1/requests", "?request_label=trial", "request_label"},
+		{"/v1/requests", "?request_label=%3Dt-1", "request_label"},
+		{"/v1/requests", "?request_label=trial%3D", "request_label"},
+		{"/v1/requests", "?request_label=a%20b%3Dc", "request_label"},
+		{"/v1/requests", "?request_label=k%3Dv%2Cw", "request_label"},
+		{"/v1/requests", "?request_label=k%3D" + strings.Repeat("v", 129), "request_label"},
+		{"/v1/requests", "?request_label=" + strings.Repeat("k", 65) + "%3Dv", "request_label"},
+		{"/v1/requests", "?" + nine, "request_label"},
+		{"/v1/usage", "?request_label=trial%3Dt-1", "request_label"},
+	} {
+		rec := h.request(http.MethodGet, tc.route+tc.query, "")
+		if d := wantCode(t, rec, CodeInvalidField); !reflect.DeepEqual(paths(d), []string{tc.path}) {
+			t.Errorf("%s%s: paths %v, detail %v", tc.route, tc.query, paths(d), d["detail"])
+		}
+	}
+
+	// The authorizer's filter: alice reads her own records alone, and
+	// the resource is the Key ids and owners, without the pairs.
+	h.stub.Allow(stub.Rule{Action: "usage.read", Filter: &authz.Filter{Owners: []string{h.subject()}}})
+	h.stub.ClearRequests()
+	if got := ids(t, h.request(http.MethodGet, "/v1/requests?request_label=trial%3Dt-1", "")); !reflect.DeepEqual(got, []string{"req_G", "req_E"}) {
+		t.Errorf("under the owner filter: %v", got)
+	}
+	if got := ids(t, h.request(http.MethodGet, "/v1/requests?request_label=trial%3Dt-1&key="+h.bobKeyID, "")); len(got) != 0 {
+		t.Errorf("another owner's Key under the owner filter: %v", got)
+	}
+	reqs := h.stub.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the authorizer was asked %d times", len(reqs))
+	}
+	if req := reqs[0]; req.Action != "usage.read" || !reflect.DeepEqual(req.Resource.Fields, map[string]any{"keys": []any{}, "owners": []any{}}) {
+		t.Errorf("asked %s with %v", req.Action, req.Resource.Fields)
+	}
 }

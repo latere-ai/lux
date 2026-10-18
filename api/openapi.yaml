@@ -776,6 +776,7 @@ paths:
       - $ref: "#/components/parameters/usageProvider"
       - $ref: "#/components/parameters/usageOwner"
       - $ref: "#/components/parameters/usageLabel"
+      - $ref: "#/components/parameters/requestLabel"
       - $ref: "#/components/parameters/status"
       - $ref: "#/components/parameters/error"
       - $ref: "#/components/parameters/stream"
@@ -1025,6 +1026,17 @@ components:
       in: query
       required: false
       description: name=value over the Key's labels, repeatable; every pair must match.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    requestLabel:
+      name: request_label
+      in: query
+      required: false
+      description: name=value over the request's own labels, the record's requestLabels a caller sent in Lux-Labels, repeatable; every pair must match. Each pair is in the Lux-Labels syntax, a name of 1 to 64 characters of A-Z, a-z, 0-9, '.', '_', '-' and a value of 1 to 128 that may also hold ':' and '/', and at most 8 names, the most a record keeps; anything else is invalid_field. Two values for one name are an empty items. It narrows what the authorizer's filter already lets the caller read.
       schema:
         type: array
         items:

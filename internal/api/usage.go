@@ -18,6 +18,7 @@ import (
 	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/lux/authorizer"
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -284,7 +285,8 @@ func usageError(err error) *Error {
 // route and refuses any other, or a value outside its rule, with
 // invalid_field at the parameter's name, the same strictness a list
 // has. records selects GET /v1/requests, whose table carries status,
-// error, stream, limit, and cursor and carries no by or interval.
+// error, stream, request_label, limit, and cursor and carries no by or
+// interval.
 func parseUsageQuery(values url.Values, records bool) (usageQuery, *Error) {
 	out := usageQuery{}
 	out.q.Labels = map[string]string{}
@@ -334,6 +336,10 @@ func parseUsageQuery(values url.Values, records bool) (usageQuery, *Error) {
 				}
 				q.Labels[key] = val
 			}
+		case name == "request_label" && records:
+			if err := addRequestLabels(&out, vals); err != nil {
+				return out, err
+			}
 		case name == "status" && records:
 			switch metering.Status(value) {
 			case metering.StatusOK, metering.StatusRefused, metering.StatusFailed:
@@ -369,4 +375,38 @@ func parseUsageQuery(values url.Values, records bool) (usageQuery, *Error) {
 		q.Labels = nil
 	}
 	return out, nil
+}
+
+// addRequestLabels reads the request_label values of GET /v1/requests
+// into the query's RequestLabels (spec 048): each name=value, split at
+// the first =, in the Lux-Labels syntax the gateway keeps, and at most
+// gateway.MaxRequestLabels distinct names, since a record carries no
+// pair outside the syntax and no more pairs than that, so such a filter
+// could select nothing. One name with two values selects nothing and
+// marks the query empty, as two values for one label name do.
+func addRequestLabels(out *usageQuery, vals []string) *Error {
+	q := &out.q
+	if q.RequestLabels == nil {
+		q.RequestLabels = map[string]string{}
+	}
+	for _, v := range vals {
+		name, value, ok := strings.Cut(v, "=")
+		if !ok || name == "" {
+			return refuse(CodeInvalidField, "request_label "+strconv.Quote(v)+" is not name=value", "request_label")
+		}
+		if !gateway.ValidRequestLabel(name, value) {
+			return refuse(CodeInvalidField, "request_label "+strconv.Quote(v)+" is outside the Lux-Labels syntax: a name of 1 to 64 characters of A-Z, a-z, 0-9, '.', '_', '-', and a value of 1 to 128 that may also hold ':' and '/'; the gateway keeps no such pair", "request_label")
+		}
+		if have, dup := q.RequestLabels[name]; dup {
+			if have != value {
+				out.empty = true
+			}
+			continue
+		}
+		if len(q.RequestLabels) == gateway.MaxRequestLabels {
+			return refuse(CodeInvalidField, "request_label names more than "+strconv.Itoa(gateway.MaxRequestLabels)+" names; a record keeps at most "+strconv.Itoa(gateway.MaxRequestLabels)+" request labels", "request_label")
+		}
+		q.RequestLabels[name] = value
+	}
+	return nil
 }
