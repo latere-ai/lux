@@ -45,6 +45,7 @@ const (
 	CodeForbidden                Code = "forbidden"
 	CodeKeyDisabled              Code = "key_disabled"
 	CodeKeyExpired               Code = "key_expired"
+	CodeDoorNotAllowed           Code = "door_not_allowed"
 	CodeRouteNotAllowed          Code = "route_not_allowed"
 	CodeModelNotAllowed          Code = "model_not_allowed"
 	CodeModelDisabled            Code = "model_disabled"
@@ -104,6 +105,7 @@ var table = map[Code]Row{
 	CodeForbidden:                {http.StatusForbidden, "You do not have permission to do this."},
 	CodeKeyDisabled:              {http.StatusForbidden, "This key is disabled."},
 	CodeKeyExpired:               {http.StatusForbidden, "This key has expired."},
+	CodeDoorNotAllowed:           {http.StatusForbidden, "This key may not use this door."},
 	CodeRouteNotAllowed:          {http.StatusForbidden, "This key may not use this route."},
 	CodeModelNotAllowed:          {http.StatusForbidden, "This key may not use that model."},
 	CodeModelDisabled:            {http.StatusForbidden, "This model is disabled."},
@@ -139,7 +141,7 @@ var codes = []Code{
 	CodeMalformedBody, CodeMultiDocument, CodeUnsupportedVersion, CodeUnsupportedKind, CodeUnknownField,
 	CodeMissingField, CodeInvalidField, CodeReservedPrefix, CodeExclusiveFields, CodeDuplicateTarget,
 	CodeInvalidRequest, CodeUpstreamRejected, CodeDialectUnsupported, CodeProviderRequired, CodeCurrencyMismatch,
-	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeRouteNotAllowed, CodeModelNotAllowed,
+	CodeUnauthenticated, CodeForbidden, CodeKeyDisabled, CodeKeyExpired, CodeDoorNotAllowed, CodeRouteNotAllowed, CodeModelNotAllowed,
 	CodeModelDisabled, CodeModelUnpriced, CodeZeroRetentionUnavailable, CodeNotFound, CodeModelNotFound, CodeDoorNotFound, CodeReadOnly, CodeAlreadyExists, CodeKeyFenced, CodeFenceConflict, CodeConflict,
 	CodeImmutableField, CodeBudgetInUse, CodeProviderInUse, CodeBodyTooLarge, CodeUnsupportedMediaType,
 	CodeCeilingExceeded, CodeRateLimited, CodeSpendExceeded, CodeBudgetExhausted, CodeInternal, CodeUpstreamError,

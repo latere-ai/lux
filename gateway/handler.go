@@ -300,7 +300,8 @@ func (c *call) authenticate(ctx context.Context) *failure {
 }
 
 // admit makes k the request's Key, its identity the record's, and
-// decides its state.
+// decides its state and then its doors (spec 049): a Key that names its
+// doors is refused on any other, from the cached Key and the path alone.
 func (c *call) admit(k *v1.Key) *failure {
 	c.key = k
 	c.rec.KeyID, c.rec.KeyPrefix, c.rec.Owner = k.Status.ID, k.Status.Prefix, k.Status.Owner
@@ -309,7 +310,23 @@ func (c *call) admit(k *v1.Key) *failure {
 	if len(k.Metadata.Labels) > 0 {
 		c.rec.Labels = maps.Clone(k.Metadata.Labels)
 	}
-	return keyState(k, c.h.now())
+	if f := keyState(k, c.h.now()); f != nil {
+		return f
+	}
+	if !k.Spec.OpensDoor(c.door) {
+		return fail(CodeDoorNotAllowed, "Key "+k.Status.ID+" opens the doors "+doorList(k.Spec.Doors)+" and this request is on /"+string(c.door))
+	}
+	return nil
+}
+
+// doorList renders a Key's doors for a developer detail, each as its
+// path.
+func doorList(doors []v1.Dialect) string {
+	paths := make([]string, len(doors))
+	for i, d := range doors {
+		paths[i] = "/" + string(d)
+	}
+	return strings.Join(paths, ", ")
 }
 
 // resolveModel is stage 5: the name from the path or the probe, the

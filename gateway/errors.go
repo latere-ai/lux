@@ -28,6 +28,7 @@ const (
 	CodeUnauthenticated          Code = "unauthenticated"
 	CodeKeyDisabled              Code = "key_disabled"
 	CodeKeyExpired               Code = "key_expired"
+	CodeDoorNotAllowed           Code = "door_not_allowed"
 	CodeRouteNotAllowed          Code = "route_not_allowed"
 	CodeInvalidRequest           Code = "invalid_request"
 	CodeModelNotFound            Code = "model_not_found"
@@ -69,6 +70,7 @@ var table = map[Code]codeRow{
 	CodeUnauthenticated:          {http.StatusUnauthorized, "This request needs a valid credential."},
 	CodeKeyDisabled:              {http.StatusForbidden, "This key is disabled."},
 	CodeKeyExpired:               {http.StatusForbidden, "This key has expired."},
+	CodeDoorNotAllowed:           {http.StatusForbidden, "This key may not use this door."},
 	CodeRouteNotAllowed:          {http.StatusForbidden, "This key may not use this route."},
 	CodeInvalidRequest:           {http.StatusBadRequest, "The request body is not valid for this request."},
 	CodeModelNotFound:            {http.StatusNotFound, "There is no model of that name."},
@@ -94,7 +96,7 @@ var table = map[Code]codeRow{
 func Codes() []Code {
 	return []Code{
 		CodeNotFound, CodeBodyTooLarge, CodeUnauthenticated, CodeKeyDisabled,
-		CodeKeyExpired, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound, CodeDoorNotFound,
+		CodeKeyExpired, CodeDoorNotAllowed, CodeRouteNotAllowed, CodeInvalidRequest, CodeModelNotFound, CodeDoorNotFound,
 		CodeModelNotAllowed, CodeModelDisabled, CodeZeroRetentionUnavailable, CodeProviderUnavailable, CodeDialectUnsupported,
 		CodeProviderRequired, CodeRateLimited, CodeModelUnpriced, CodeCurrencyMismatch,
 		CodeSpendExceeded, CodeBudgetExhausted, CodeUpstreamRejected, CodeUpstreamError,
