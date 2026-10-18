@@ -1272,6 +1272,10 @@ func (c *call) requests(ctx context.Context) *apiError {
 	q := metering.Query{}
 	limit := defaultLimit
 	var status, errCode string
+	// The request-label pairs of spec 048, applied after the
+	// authorizer's filter; two values for one name select nothing.
+	var pairs map[string]string
+	contradicts := false
 	for name, vals := range c.r.URL.Query() {
 		var err *apiError
 		switch name {
@@ -1291,6 +1295,24 @@ func (c *call) requests(ctx context.Context) *apiError {
 			status = last(vals)
 		case "error":
 			errCode = last(vals)
+		case "request_label":
+			if pairs == nil {
+				pairs = map[string]string{}
+			}
+			for _, v := range vals {
+				k, val, ok := strings.Cut(v, "=")
+				if !ok || !gateway.ValidRequestLabel(k, val) {
+					return refuse(codeInvalidField, "request_label "+strconv.Quote(v)+" is not a Lux-Labels pair k=v", "request_label")
+				}
+				if have, dup := pairs[k]; dup {
+					contradicts = contradicts || have != val
+					continue
+				}
+				if len(pairs) == gateway.MaxRequestLabels {
+					return refuse(codeInvalidField, "request_label names more than "+strconv.Itoa(gateway.MaxRequestLabels)+" names", "request_label")
+				}
+				pairs[k] = val
+			}
 		case "limit":
 			n, aerr := strconv.Atoi(last(vals))
 			if aerr != nil || n < 1 || n > maxRecords {
@@ -1316,12 +1338,15 @@ func (c *call) requests(ctx context.Context) *apiError {
 		owners, labels = d.Filter.Owners, d.Filter.Labels
 	}
 	q, ok := metering.Intersect(q, owners, labels)
-	if !ok {
+	if !ok || contradicts {
 		return c.writeJSON(http.StatusOK, recordsAnswer{Items: []metering.Record{}, Source: "memory"}, 0)
 	}
 	q = q.WithDefaults(c.p.now())
 	items := make([]metering.Record, 0, limit)
 	for _, r := range c.matching(q) {
+		if !carries(r.RequestLabels, pairs) {
+			continue
+		}
 		if status != "" && string(r.Status) != status {
 			continue
 		}
@@ -1334,6 +1359,16 @@ func (c *call) requests(ctx context.Context) *apiError {
 		items = append(items, r)
 	}
 	return c.writeJSON(http.StatusOK, recordsAnswer{Items: items, Source: "memory"}, 0)
+}
+
+// carries reports whether labels hold every pair.
+func carries(labels, pairs map[string]string) bool {
+	for k, v := range pairs {
+		if have, ok := labels[k]; !ok || have != v {
+			return false
+		}
+	}
+	return true
 }
 
 // precondition is what If-Match and If-None-Match asked.
