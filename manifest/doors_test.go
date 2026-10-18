@@ -6,6 +6,7 @@ package manifest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -50,8 +51,8 @@ func TestKeyDoorsRules(t *testing.T) {
 		if err == nil {
 			_, err = Resolve(context.Background(), obj, o)
 		}
-		e, ok := err.(*Error)
-		if !ok {
+		var e *Error
+		if !errors.As(err, &e) {
 			t.Fatalf("Resolve = %v, want an *Error", err)
 		}
 		wantErr(t, e, CodeInvalidField, "spec.doors")
