@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- A picture a tool returns reaches the model when a request is translated
+  to OpenAI chat completions or Responses, as every request through the
+  Anthropic door to an OpenRouter model is. It was dropped and recorded as
+  `tool_result.image` loss. The Responses door also takes a
+  `function_call_output` whose output is a list of text and image parts.
+  (latere.ai/x/pkg v0.101.0)
+
 ## v0.17.2 - 2026-10-17
 
 ### Fixed
