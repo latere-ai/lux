@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.17.3 - 2026-10-18
+
 ### Fixed
 
 - A picture a tool returns reaches the model when a request is translated
