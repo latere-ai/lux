@@ -118,3 +118,32 @@ func TestRequestLabels(t *testing.T) {
 		t.Error("a key outside the alphabet is kept")
 	}
 }
+
+// TestValidRequestLabel: the exported check is the parser's rule, so a
+// pair it accepts is one the parser keeps and a pair it refuses is one
+// the parser drops (spec 048).
+func TestValidRequestLabel(t *testing.T) {
+	for _, c := range []struct {
+		name, value string
+		ok          bool
+	}{
+		{"trial", "t_01jb/2:x", true},
+		{"ok.k_1-2", "v", true},
+		{strings.Repeat("k", 64), strings.Repeat("v", 128), true},
+		{"", "v", false},
+		{"k", "", false},
+		{strings.Repeat("k", 65), "v", false},
+		{"k", strings.Repeat("v", 129), false},
+		{"x:y", "v", false},
+		{"k", "a b", false},
+		{"k", "a=b", false},
+	} {
+		if got := ValidRequestLabel(c.name, c.value); got != c.ok {
+			t.Errorf("ValidRequestLabel(%q, %q) = %v, want %v", c.name, c.value, got, c.ok)
+		}
+		kept := requestLabels(c.name + "=" + c.value)
+		if _, in := kept[c.name]; in != c.ok {
+			t.Errorf("the parser keeps %q=%q: %v, the check says %v", c.name, c.value, in, c.ok)
+		}
+	}
+}

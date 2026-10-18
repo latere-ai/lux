@@ -68,12 +68,22 @@ func allowed(k *v1.Key, name string) bool {
 	return false
 }
 
-// The bounds of a Lux-Labels header of spec 007.
+// MaxRequestLabels is how many Lux-Labels pairs a request keeps, spec
+// 007's bound, and so how many request-label pairs a GET /v1/requests
+// query may name (spec 048): a record never carries more.
+const MaxRequestLabels = 8
+
+// The bounds of one Lux-Labels pair of spec 007.
 const (
-	maxRequestLabels    = 8
 	maxLabelKeyLength   = 64
 	maxLabelValueLength = 128
 )
+
+// ValidRequestLabel reports whether name=value is a pair the gateway
+// keeps from a Lux-Labels header, the syntax requestLabels applies. The
+// request history's request-label filter holds its pairs to it, since a
+// pair outside it is on no record.
+func ValidRequestLabel(name, value string) bool { return labelKey(name) && labelValue(value) }
 
 // requestLabels parses the Lux-Labels header: comma separated k=v pairs,
 // at most eight, each key 1 to 64 characters of [A-Za-z0-9._-] and each
@@ -86,11 +96,11 @@ func requestLabels(header string) map[string]string {
 	}
 	out := map[string]string{}
 	for pair := range strings.SplitSeq(header, ",") {
-		if len(out) == maxRequestLabels {
+		if len(out) == MaxRequestLabels {
 			break
 		}
 		k, v, ok := strings.Cut(strings.TrimSpace(pair), "=")
-		if !ok || !labelKey(k) || !labelValue(v) {
+		if !ok || !ValidRequestLabel(k, v) {
 			continue
 		}
 		if _, dup := out[k]; dup {
