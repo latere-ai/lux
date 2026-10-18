@@ -109,12 +109,14 @@ lux list models --source discovered --provider openai
 lux whoami
 lux usage --since 24h --by model
 lux requests --status refused --limit 20
+lux requests --request-label run=r-42
 lux delete key research-agent
 ```
 
 `<kind>` is `provider`, `model`, `key`, or `budget`, singular or
 plural. `lux list` follows every page and prints one list; `--limit n`
-stops after `n` items.
+stops after `n` items. `lux requests --request-label k=v` reads the
+requests that carried the label in their `Lux-Labels` header.
 
 ## Calling a model
 
@@ -129,7 +131,11 @@ lux models
 ```
 
 The answer is the OpenAI list shape, `{"object":"list","data":[...]}`,
-with one entry per model this Key may call now.
+with one entry per model this Key may call now. A Key whose
+`spec.doors` lists doors opens those alone (`lux keys create --doors
+lux`). A request may carry `Lux-Labels: k=v,k2=v2`, at most eight
+pairs, to label itself in the request history, where `lux requests
+--request-label k=v` finds it.
 
 ## Attaching a runtime on this machine
 
@@ -161,6 +167,7 @@ provider, the Provider was deleted, or the token expired with no
 | `already_exists` | the name is taken; pick another or `lux get` it |
 | `conflict` | the object changed since you read it; `lux get` it and apply again |
 | `rate_limited`, `spend_exceeded`, `budget_exhausted` | wait the seconds the extra line names |
+| `door_not_allowed` | the Key's `spec.doors` does not name this door; set the base URL to a door the Key names |
 | `model_not_allowed` | the Key's `spec.models` does not match the model |
 | `model_disabled` | the Model's `spec.disabled` is true; an operator stopped it, and the Key works again once it is re-enabled |
 | `zero_retention_unavailable` | the Key has `spec.zeroRetention` true and no Provider behind the Model declares `spec.zeroRetention`; call a Model whose Provider does, or ask whoever administers the gateway |

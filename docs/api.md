@@ -128,6 +128,13 @@ Two credentials, one per surface, and neither works on the other.
 A Key on `/v1` and a token on a door are each `unauthenticated`.
 `/v1/openapi.json` and `/.well-known/lux` need no credential.
 
+A Key opens every door unless its `spec.doors` lists the doors it opens,
+such as `doors: [lux]` for a Key handed to a program that speaks the lux
+dialect alone. On any other door, its model list included, the Key is
+refused `door_not_allowed`, 403, in that door's error shape, and the
+request history records the refusal. The list is not secret, so an
+authorizer sees it in a Key's proposal.
+
 ## Errors
 
 Every refusal is one JSON envelope, on both planes:
@@ -158,6 +165,18 @@ every page. Read from a request log archive, a page ends after a bounded
 amount of reading, so it may hold fewer records than `limit`, or none,
 while `next_cursor` is present: keep following `next_cursor` until it is
 absent.
+
+`GET /v1/requests?request_label=k=v` reads the requests that carried the
+pair in their `Lux-Labels` header, the record's `requestLabels`, so a
+harness that labels each call with the run it belongs to reads a run's
+calls without keeping their request ids. The parameter repeats, every
+pair must match, and it joins the other filters; `label` is the other
+map, the Key's labels. It narrows what the caller may already read and
+never widens it. A pair outside the `Lux-Labels` syntax, or more names
+than the eight a request keeps, is `invalid_field`. The archive is partitioned by a Key
+label and not by a request label, so a query by request label alone
+reads every partition: follow `next_cursor`, or name the Key or the
+owner as well to read less.
 
 With `LUX_AUTHORIZE_LIST_ITEMS=1`, each candidate must also pass its
 `provider.read`, `model.read`, `key.read`, or `budget.read` decision. Denied
