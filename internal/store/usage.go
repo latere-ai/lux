@@ -112,7 +112,9 @@ func DecodeRecordCursor(cursor string, q metering.RecordQuery) (at time.Time, id
 // recordDigest is the 8 hex characters of SHA-256 over the query's
 // canonical JSON: members in a fixed order, lists sorted, labels by
 // sorted key, so two queries that select the same records encode the
-// same bytes.
+// same bytes. Every member is omitted when empty, so a member added
+// later leaves the digest of a query that does not use it, and the
+// cursors already issued for it, unchanged.
 func recordDigest(q metering.RecordQuery) string {
 	sorted := func(s []string) []string {
 		out := slices.Clone(s)
@@ -130,7 +132,8 @@ func recordDigest(q metering.RecordQuery) string {
 		Status    metering.Status   `json:"status,omitempty"`
 		Error     string            `json:"error,omitempty"`
 		Stream    *bool             `json:"stream,omitempty"`
-	}{q.From.UTC(), q.To.UTC(), sorted(q.Keys), sorted(q.Models), sorted(q.Providers), sorted(q.Owners), q.Labels, q.Status, q.Error, q.Stream})
+		Request   map[string]string `json:"requestLabels,omitempty"`
+	}{q.From.UTC(), q.To.UTC(), sorted(q.Keys), sorted(q.Models), sorted(q.Providers), sorted(q.Owners), q.Labels, q.Status, q.Error, q.Stream, q.RequestLabels})
 	if err != nil {
 		panic("store: a RecordQuery of strings and times does not encode: " + err.Error())
 	}

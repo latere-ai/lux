@@ -953,3 +953,84 @@ func TestArchivePartitionedByLabel(t *testing.T) {
 		t.Fatalf("no label is one partition: %d", len(got))
 	}
 }
+
+// TestArchiveRequestLabelFilter: the archive reader answers the records
+// whose request labels carry every pair of the query, across every
+// partition and the objects written before partitioning, joined with a
+// partition-label filter when the query names one, a page at a time with
+// the same cursor, and none for a value no record carries; a cursor
+// minted under one pair is refused under another (spec 048).
+func TestArchiveRequestLabelFilter(t *testing.T) {
+	h := newHarness(t)
+	old := h.exporter(func(o *ExporterOptions) { o.Replica = "replica-a" })
+	first := record(0, h.c.Now())
+	first.RequestLabels = map[string]string{"trial": "t-1"}
+	old.Append(first)
+	if err := old.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	e := h.exporter(func(o *ExporterOptions) { o.Replica = "replica-a"; o.PartitionLabel = "context" })
+	want := []string{first.ID}
+	var personal []string
+	for i := 1; i <= 12; i++ {
+		r := record(i, h.c.Now().Add(time.Duration(i)*time.Second))
+		r.Labels = map[string]string{"context": []string{"personal", "team", "lab"}[i%3]}
+		r.RequestLabels = map[string]string{"trial": "t-" + strconv.Itoa(1+i%2), "seed": strconv.Itoa(i)}
+		if i%2 == 0 {
+			want = append(want, r.ID)
+			if i%3 == 0 {
+				personal = append(personal, r.ID)
+			}
+		}
+		e.Append(r)
+	}
+	if err := e.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	// Inside an hour the reader goes object by object across the roots,
+	// so the records are compared as a set, and the pages with the
+	// unpaged walk.
+	sorted := func(recs []metering.Record) []string { return slices.Sorted(slices.Values(ids(recs))) }
+	rd := NewReader(h.srv.Client(true), "lux/", "context")
+	from := h.c.Now().Truncate(time.Hour)
+	q := metering.RecordQuery{From: from, To: from.Add(time.Hour), RequestLabels: map[string]string{"trial": "t-1"}}
+	all, next, err := rd.List(t.Context(), q, store.Page{})
+	if err != nil || next != "" || !slices.Equal(sorted(all), want) {
+		t.Fatalf("every partition = %v, %q, %v; want %v", ids(all), next, err, want)
+	}
+	var paged []metering.Record
+	page := store.Page{Limit: 2}
+	for {
+		got, next, err := rd.List(t.Context(), q, page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paged = append(paged, got...)
+		if next == "" {
+			break
+		}
+		page.Cursor = next
+	}
+	if !slices.Equal(ids(paged), ids(all)) {
+		t.Fatalf("paged %v, unpaged %v", ids(paged), ids(all))
+	}
+	_, cursor, err := rd.List(t.Context(), q, store.Page{Limit: 1})
+	if err != nil || cursor == "" {
+		t.Fatalf("a first page of one: %q, %v", cursor, err)
+	}
+	other := q
+	other.RequestLabels = map[string]string{"trial": "t-2"}
+	if _, _, err := rd.List(t.Context(), other, store.Page{Limit: 1, Cursor: cursor}); !errors.Is(err, store.ErrInvalidCursor) {
+		t.Fatalf("a cursor from another pair: %v", err)
+	}
+	inPartition := q
+	inPartition.Labels = map[string]string{"context": "personal"}
+	if got, _, err := rd.List(t.Context(), inPartition, store.Page{}); err != nil || !slices.Equal(sorted(got), personal) {
+		t.Fatalf("one partition = %v, %v; want %v", ids(got), err, personal)
+	}
+	none := q
+	none.RequestLabels = map[string]string{"trial": "t-9"}
+	if got, _, err := rd.List(t.Context(), none, store.Page{}); err != nil || len(got) != 0 {
+		t.Fatalf("a value no record carries = %v, %v", ids(got), err)
+	}
+}

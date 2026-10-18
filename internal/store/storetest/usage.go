@@ -5,6 +5,7 @@ package storetest
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -248,6 +249,78 @@ func recordsRingIsBounded(t *testing.T, s store.Store) {
 	_, _, err = s.Usage().Records(ctx, all, store.Page{Limit: 10, Cursor: store.EncodeCursor(store.JournalKind, store.Filter{}, "x")})
 	wantErr(t, err, store.ErrInvalidCursor, "a journal cursor")
 	truth(t, s.Usage().AppendRecord(ctx, metering.Record{Key: metering.KeyRef{ID: "key_ring"}}) != nil, "a record without an id is refused")
+}
+
+// recordsByRequestLabel: Records filtered by request-label pairs answers
+// the records whose requestLabels carry every pair, newest first, pages
+// them by cursor without a gap or a repeat, joins the pairs with the
+// other filters, and answers none for a value no record carries or for a
+// pair that is only a Key label (spec 048).
+func recordsByRequestLabel(t *testing.T, s store.Store) {
+	ctx := t.Context()
+	recs := usageRecords(60)
+	for _, r := range recs {
+		noErr(t, s.Usage().AppendRecord(ctx, r), "AppendRecord")
+	}
+	all := metering.Query{From: usageStart.Add(-time.Hour), To: usageStart.Add(4 * time.Hour)}
+	var want []string
+	for _, r := range slices.SortedFunc(slices.Values(recs), store.NewerFirst) {
+		if r.RequestLabels["run"] == "r1" {
+			want = append(want, r.ID)
+		}
+	}
+	truth(t, len(want) > 0 && len(want) < len(recs), "the corpus labels some records r1 and not all")
+	q := metering.RecordQuery{Query: all, RequestLabels: map[string]string{"run": "r1"}}
+	got, next, err := s.Usage().Records(ctx, q, store.Page{})
+	noErr(t, err, "Records by request label")
+	equal(t, next, "", "no cursor when every row is answered")
+	truth(t, slices.Equal(ids(got), want), "the records labelled r1, newest first")
+	var paged []string
+	cursor := ""
+	for range len(want) {
+		page, n, err := s.Usage().Records(ctx, q, store.Page{Limit: 3, Cursor: cursor})
+		noErr(t, err, "Records by request label, a page")
+		paged = append(paged, ids(page)...)
+		if n == "" {
+			break
+		}
+		cursor = n
+	}
+	truth(t, slices.Equal(paged, want), "the pages equal the whole, in order")
+	// A cursor minted under one pair is refused under another.
+	_, n, err := s.Usage().Records(ctx, q, store.Page{Limit: 1})
+	noErr(t, err, "Records first page")
+	other := q
+	other.RequestLabels = map[string]string{"run": "r2"}
+	_, _, err = s.Usage().Records(ctx, other, store.Page{Limit: 1, Cursor: n})
+	wantErr(t, err, store.ErrInvalidCursor, "a cursor from another request label")
+	// The pairs join the other filters.
+	keyed := q
+	keyed.Keys = []string{"key_A"}
+	joined, _, err := s.Usage().Records(ctx, keyed, store.Page{})
+	noErr(t, err, "Records by request label and Key")
+	for _, r := range joined {
+		truth(t, r.Key.ID == "key_A" && r.RequestLabels["run"] == "r1", "a joined record passes both filters")
+	}
+	truth(t, len(joined) > 0 && len(joined) < len(want), "the Key narrows the request label")
+	for name, pairs := range map[string]map[string]string{
+		"a value no record carries": {"run": "r9"},
+		"a Key label":               {"team": "red"},
+		"one pair more":             {"run": "r1", "seed": "1"},
+	} {
+		none, _, err := s.Usage().Records(ctx, metering.RecordQuery{Query: all, RequestLabels: pairs}, store.Page{})
+		noErr(t, err, "Records "+name)
+		equal(t, len(none), 0, name)
+	}
+}
+
+// ids is the ids of records, in order.
+func ids(recs []metering.Record) []string {
+	out := make([]string, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.ID)
+	}
+	return out
 }
 
 // sumOf is the requests and cost of rows, the totals a fold keeps.

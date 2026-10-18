@@ -55,6 +55,7 @@ func Run(t *testing.T, newStore Factory) {
 		{"TestAggregatesMatchTheRecords", aggregatesMatchTheRecords},
 		{"TestNoCurrencyIsSummed", noCurrencyIsSummed},
 		{"TestRecordsRingIsBounded", recordsRingIsBounded},
+		{"TestRecordsByRequestLabel", recordsByRequestLabel},
 		{"TestUsageRollUp", usageRollUp},
 		{"TestUsageRedactOwner", usageRedactOwner},
 		{"TestReadyAndClose", readyAndClose},

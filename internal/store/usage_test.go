@@ -66,6 +66,53 @@ func TestRecordCursorBindsTheQuery(t *testing.T) {
 	}
 }
 
+// TestRecordCursorBindsRequestLabels: a record cursor is bound to the
+// query's request-label pairs, so a cursor minted under one set decodes
+// under the same set however it was built and is refused under another
+// set or none; and a query naming no pair mints the bytes it minted
+// before the member existed, so a cursor an earlier release issued keeps
+// working (spec 048).
+func TestRecordCursorBindsRequestLabels(t *testing.T) {
+	at := time.Date(2026, 9, 14, 10, 0, 0, 123456789, time.UTC)
+	q := metering.RecordQuery{From: at.Add(-time.Hour), To: at.Add(time.Hour), Keys: []string{"key_b", "key_a"}, Labels: map[string]string{"team": "red"}, Error: "upstream_error"}
+	last := metering.Record{ID: "req_1", At: at}
+	// The bytes of v0.17.3, before RecordQuery carried request labels.
+	const before = "cmVjb3Jkc3wwZWRjMjFkMnwxNzg5Mzc2NDAwMTIzNDU2Nzg5fDE3ODkzODM2MDAxMjM0NTY3ODl8MTc4OTM4MDAwMDEyMzQ1Njc4OXxyZXFfMQ"
+	if got := store.EncodeRecordCursor(q, last); got != before {
+		t.Fatalf("a query without request labels mints %s, want the earlier release's %s", got, before)
+	}
+	empty := q
+	empty.RequestLabels = map[string]string{}
+	if got := store.EncodeRecordCursor(empty, last); got != before {
+		t.Fatalf("an empty request-label map mints %s, want %s", got, before)
+	}
+	labelled := q
+	labelled.RequestLabels = map[string]string{"trial": "t-1", "run": "r-9"}
+	cursor := store.EncodeRecordCursor(labelled, last)
+	if cursor == before {
+		t.Fatal("the request-label pairs do not reach the cursor")
+	}
+	rebuilt := q
+	rebuilt.RequestLabels = map[string]string{"run": "r-9", "trial": "t-1"}
+	if _, _, err := store.DecodeRecordCursor(cursor, rebuilt); err != nil {
+		t.Fatalf("the same pairs built in another order: %v", err)
+	}
+	for name, other := range map[string]map[string]string{
+		"no pairs":      nil,
+		"another value": {"trial": "t-2", "run": "r-9"},
+		"one pair less": {"trial": "t-1"},
+		"one pair more": {"trial": "t-1", "run": "r-9", "seed": "1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			q2 := q
+			q2.RequestLabels = other
+			if _, _, err := store.DecodeRecordCursor(cursor, q2); !errors.Is(err, store.ErrInvalidCursor) {
+				t.Fatalf("Decode = %v, want ErrInvalidCursor", err)
+			}
+		})
+	}
+}
+
 // TestQueryCursorWindow: the range of a query cursor reads back
 // whatever its kind, at the nanosecond, and a cursor that does not
 // decode, has too few fields, or carries a range end that is not a count
