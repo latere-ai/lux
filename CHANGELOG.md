@@ -24,8 +24,8 @@ refused before it is pushed.
   Key label, so a query by request label alone reads every partition and
   its pages may hold fewer records than `limit` while `next_cursor` is
   present. `lux requests -request-label k=v` sends it. For the packages:
-  `metering.RecordQuery.RequestLabels`, `gateway.MaxRequestLabels`, and
-  `gateway.ValidRequestLabel`.
+  `metering.RecordQuery.RequestLabels`, `gateway.MaxRequestLabels`,
+  `gateway.ValidRequestLabel`, and `gateway.RequestLabelSyntax`.
 - A Key can name the doors it opens with `spec.doors`, a list of
   `openai`, `anthropic`, `gemini`, and `lux`. A request on any other door
   is refused with the new code `door_not_allowed`, 403, in that door's
