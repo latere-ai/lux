@@ -41,6 +41,11 @@ func TestFlagFormsBuildTheManifest(t *testing.T) {
 			"apiVersion: lux.latere.ai/v1beta1\nkind: Key\nmetadata:\n  name: agent\nspec:\n  models: [sonnet]\n",
 		},
 		{
+			[]string{"keys", "create", "agent", "--models", "sonnet", "--doors", "lux, anthropic"},
+			"/v1/keys/agent",
+			"apiVersion: lux.latere.ai/v1beta1\nkind: Key\nmetadata:\n  name: agent\nspec:\n  models: [sonnet]\n  doors: [lux, anthropic]\n",
+		},
+		{
 			[]string{"providers", "create", "anthropic", "--dialect", "anthropic", "--base-url", "https://api.example.com", "--header", "X-Team=research"},
 			"/v1/providers/anthropic",
 			"apiVersion: lux.latere.ai/v1beta1\nkind: Provider\nmetadata:\n  name: anthropic\nspec:\n  dialect: anthropic\n  baseURL: https://api.example.com\n  headers: {X-Team: research}\n",
@@ -132,6 +137,11 @@ func TestDryRunAppliesNothing(t *testing.T) {
 	obj, err := manifest.Decode([]byte(r.stdout), manifest.MediaJSON, manifest.Hint{})
 	if err != nil || obj.Kind() != "Key" || obj.Name() != "agent" || strings.Contains(r.stdout, `"status"`) {
 		t.Fatalf("dry-run json %q: %v", r.stdout, err)
+	}
+	// A Key's doors are in the printed manifest (spec 049).
+	r = run(t, env, "keys", "create", "agent", "--models", "sonnet", "--doors", "lux", "--dry-run", "-o", "yaml")
+	if r.code != 0 || len(f.requests()) != 0 || !strings.Contains(r.stdout, "  doors:\n  - lux\n") {
+		t.Fatalf("dry-run with doors:\n%s\nstderr %q", r.stdout, r.stderr)
 	}
 	r = run(t, env, "providers", "create", "anthropic", "--dialect", "anthropic", "--base-url", "https://api.example.com", "--credential-from-env", "ANTHROPIC_API_KEY", "--dry-run", "-o", "yaml")
 	if r.code != 0 || len(f.requests()) != 0 || !strings.HasPrefix(r.stdout, "apiVersion: lux.latere.ai/v1beta1\nkind: Provider\n") || strings.Contains(r.stdout, canaryCred) || strings.Contains(r.stdout, "status") {

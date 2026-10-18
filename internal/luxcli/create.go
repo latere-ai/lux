@@ -21,6 +21,7 @@ import (
 
 type keysCreateOptions struct {
 	models, spend, budget, ttl string
+	doors                      string
 	rpm, tpm                   int
 	labels                     multi
 	passthrough, dryRun        bool
@@ -36,6 +37,7 @@ func keysCreateFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	fs.StringVar(&o.ttl, "ttl", "", "how long the Key lives, a duration such as 720h")
 	fs.Var(&o.labels, "label", "a label, k=v; repeatable")
 	fs.BoolVar(&o.passthrough, "passthrough", false, "let the Key call any route the dialect has, translated or not")
+	fs.StringVar(&o.doors, "doors", "", "the doors the Key opens, comma separated: openai, anthropic, gemini, lux; every door when unset")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "print the manifest and send nothing")
 	return func(args []string) error { return runKeysCreate(a, o, args) }
 }
@@ -89,6 +91,11 @@ func runKeysCreate(a *app, o *keysCreateOptions, args []string) error {
 		k.Spec.TTL = v1.Duration(o.ttl)
 	}
 	k.Spec.Passthrough = o.passthrough
+	for d := range strings.SplitSeq(o.doors, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			k.Spec.Doors = append(k.Spec.Doors, v1.Dialect(d))
+		}
+	}
 	return a.create(k, "keys", args[0], o.dryRun, "")
 }
 

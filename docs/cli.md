@@ -371,6 +371,8 @@ file gets written.
 Flags:
   -budget string
     	the Budget the Key draws from, or several, comma separated, each of which every call must fit
+  -doors string
+    	the doors the Key opens, comma separated: openai, anthropic, gemini, lux; every door when unset
   -dry-run
     	print the manifest and send nothing
   -key string
