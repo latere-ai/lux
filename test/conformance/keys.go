@@ -41,6 +41,7 @@ var keysCases = []testCase{
 	{group: "keys", name: "case045ZeroPricedOnASpentBudget", spec: 45, bearer: true, key: true, stubs: true, fn: case045ZeroPricedOnASpentBudget},
 	{group: "keys", name: "case046SixBudgets", spec: 46, bearer: true, key: true, stubs: true, fn: case046SixBudgets},
 	{group: "keys", name: "case047ZeroRetention", spec: 47, bearer: true, key: true, stubs: true, fn: case047ZeroRetention},
+	{group: "keys", name: "case049KeyDoors", spec: 49, bearer: true, key: true, fn: case049KeyDoors},
 }
 
 // revocationTimeout bounds the wait for a rotated, disabled, or deleted
@@ -689,6 +690,52 @@ func case047ZeroRetention(t testing.TB, c *client) {
 	}
 	if rec := c.recordOf(t, str(zr, "status.id"), served.ID); field(rec, "zeroRetention") != true {
 		t.Errorf("the served request's record: zeroRetention %v", field(rec, "zeroRetention"))
+	}
+}
+
+// case049KeyDoors: a Key whose spec.doors names one door reads the list
+// back, is served on that door, and is refused door_not_allowed on every
+// other door the server has, its model list included, in that door's
+// own shape; the refusal is in the request history with its door; a Key
+// without the member reads no such member back and opens every door.
+func case049KeyDoors(t testing.TB, c *client) {
+	if !slices.Contains(c.well.Dialects, "lux") || len(c.well.Dialects) < 2 {
+		t.Skip("the server has no lux door and another to refuse on")
+	}
+	k := c.object(t, v1.KindKey, "doors", c.keySpec(map[string]any{"doors": []string{"lux"}}))
+	id, value := str(k, "status.id"), str(k, "status.value")
+	defer c.mustDelete(t, v1.KindKey, id)
+	if doors := strs(field(k, "spec.doors")); !slices.Equal(doors, []string{"lux"}) {
+		t.Fatalf("spec.doors reads %v", field(k, "spec.doors"))
+	}
+	if suite := c.read(t, v1.KindKey, c.key.id); suite.Status != http.StatusOK || field(suite.json(t), "spec.doors") != nil {
+		t.Errorf("the suite's Key, without doors: %d %s", suite.Status, excerpt(suite.Body))
+	}
+	models := map[string]string{"openai": "/v1/models", "anthropic": "/v1/models", "gemini": "/v1beta/models", "lux": "/v1/models"}
+	if resp := c.door(t, "lux", http.MethodGet, models["lux"], nil, value); resp.Status != http.StatusOK {
+		t.Fatalf("its own door: %d %s", resp.Status, excerpt(resp.Body))
+	}
+	var refused *response
+	for _, d := range c.well.Dialects {
+		path, ok := models[d]
+		if d == "lux" || !ok {
+			continue
+		}
+		resp := c.door(t, d, http.MethodGet, path, nil, value)
+		c.expectDoor(t, d, resp, "door_not_allowed")
+		if open := c.door(t, d, http.MethodGet, path, nil, c.key.value); open.Status != http.StatusOK {
+			t.Errorf("a Key without doors on %s: %d %s", d, open.Status, excerpt(open.Body))
+		}
+		if d == "openai" || refused == nil {
+			refused = resp
+		}
+	}
+	if refused == nil {
+		t.Fatal("no other door to refuse on")
+	}
+	rec := c.recordOf(t, id, refused.ID)
+	if str(rec, "status") != "refused" || str(rec, "error") != "door_not_allowed" || str(rec, "door") == "lux" || len(arr(rec, "attempts")) != 0 {
+		t.Errorf("the refusal's record: %s", canonical(t, rec))
 	}
 }
 

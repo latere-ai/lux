@@ -6,6 +6,8 @@ package conformance
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ var usageCases = []testCase{
 	{group: "usage", name: "case009RecordHasTheStubsTokens", spec: 9, bearer: true, key: true, stubs: true, fn: case009RecordHasTheStubsTokens},
 	{group: "usage", name: "case009UsageAggregates", spec: 9, bearer: true, key: true, fn: case009UsageAggregates},
 	{group: "usage", name: "case038RedactUsage", spec: 38, bearer: true, mode: serverMode, fn: case038RedactUsage},
+	{group: "usage", name: "case048RequestLabelFilter", spec: 48, bearer: true, key: true, fn: case048RequestLabelFilter},
 }
 
 // recordTimeout bounds the wait for a record or an aggregate row, which
@@ -227,4 +230,64 @@ func case038RedactUsage(t testing.TB, c *client) {
 	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", map[string]any{"owner": "not-a-subject"}), "invalid_field")
 	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", map[string]any{"owner": owner, "keys": []string{}}), "invalid_request")
 	c.expect(t, c.v1(t, http.MethodPost, "/usage/redact", "owner: x", header("Content-Type", "application/yaml")), "unsupported_media_type")
+}
+
+// case048RequestLabelFilter: two requests on one Key that carry
+// different Lux-Labels are told apart by request_label on GET
+// /v1/requests: a pair selects the records that carry it, two pairs
+// select the records that carry both, and a value no request carried
+// selects none; a pair outside the Lux-Labels syntax is invalid_field at
+// request_label, and GET /v1/usage, where a request label is no
+// dimension, refuses the parameter.
+func case048RequestLabelFilter(t testing.TB, c *client) {
+	if !slices.Contains(c.well.Dialects, "openai") {
+		t.Skip("the server has no openai door")
+	}
+	k := c.object(t, v1.KindKey, "request-labels", c.keySpec(nil))
+	id, value := str(k, "status.id"), str(k, "status.value")
+	defer c.mustDelete(t, v1.KindKey, id)
+	trial := func(s string) string { return c.run + "-" + s }
+	send := func(labels string) *response {
+		resp := c.door(t, "openai", http.MethodPost, "/v1/chat/completions", chat(c.name("nobody"), false), value, header("Lux-Labels", labels))
+		c.expectDoor(t, "openai", resp, "model_not_found")
+		return resp
+	}
+	a := send("conf.trial=" + trial("a") + ",conf.seed=1")
+	b := send("conf.trial=" + trial("b") + ",conf.seed=1")
+	read := func(query string) []string {
+		t.Helper()
+		resp := c.v1(t, http.MethodGet, "/requests?key="+id+"&limit=100&"+query, nil)
+		if resp.Status != http.StatusOK {
+			t.Fatalf("GET /requests?%s: %d %s", query, resp.Status, excerpt(resp.Body))
+		}
+		var got []string
+		for _, it := range arr(resp.json(t), "items") {
+			rec, _ := it.(map[string]any)
+			got = append(got, str(rec, "id"))
+		}
+		return got
+	}
+	byTrial := "request_label=" + url.QueryEscape("conf.trial="+trial("a"))
+	c.eventually(t, recordTimeout, "both records", func() (bool, string) {
+		got := read("")
+		return slices.Contains(got, a.ID) && slices.Contains(got, b.ID), "the Key's records are " + strings.Join(got, ", ")
+	})
+	if got := read(byTrial); !slices.Equal(got, []string{a.ID}) {
+		t.Errorf("by one trial: %v, want %s", got, a.ID)
+	}
+	if got := read(byTrial + "&request_label=conf.seed%3D1"); !slices.Equal(got, []string{a.ID}) {
+		t.Errorf("by the trial and the seed: %v, want %s", got, a.ID)
+	}
+	if got := read("request_label=conf.seed%3D1"); len(got) != 2 {
+		t.Errorf("by the seed both carry: %v", got)
+	}
+	if got := read(byTrial + "&request_label=conf.seed%3D2"); len(got) != 0 {
+		t.Errorf("a value no request carried: %v", got)
+	}
+	for _, path := range []string{"/requests?request_label=" + url.QueryEscape("conf trial=a"), "/usage?" + byTrial} {
+		e := c.expect(t, c.v1(t, http.MethodGet, path, nil), "invalid_field")
+		if !slices.Equal(e.paths, []string{"request_label"}) {
+			t.Errorf("%s: paths %v", path, e.paths)
+		}
+	}
 }
