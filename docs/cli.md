@@ -256,6 +256,8 @@ Flags:
     	an owner; repeatable
   -provider value
     	a Provider, by name or id; repeatable
+  -request-label value
+    	a request label the caller sent in Lux-Labels, k=v; repeatable, every pair must match
   -since string
     	a duration back from now, such as 24h; the same as -from now-24h
   -status string

@@ -11,10 +11,11 @@ import (
 )
 
 // usageOptions are the filters both usage routes take, and the members
-// each adds: by and interval for usage, status, error, and limit for
-// requests.
+// each adds: by and interval for usage, status, error, request labels,
+// and limit for requests.
 type usageOptions struct {
 	keys, models, providers, owners, labels, by multi
+	requestLabels                               multi
 	since, from, to, interval                   string
 	status, errorCode                           string
 	limit                                       int
@@ -44,6 +45,7 @@ func requestsFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := usageFilters(fs)
 	fs.StringVar(&o.status, "status", "", "ok, refused, or failed")
 	fs.StringVar(&o.errorCode, "error", "", "records refused or failed with this code")
+	fs.Var(&o.requestLabels, "request-label", "a request label the caller sent in Lux-Labels, k=v; repeatable, every pair must match")
 	fs.IntVar(&o.limit, "limit", 0, "stop after this many records; 0 is every record")
 	return func(args []string) error { return runRequests(a, o, args) }
 }
@@ -115,6 +117,14 @@ func runRequests(a *app, o *usageOptions, args []string) error {
 	}
 	if o.errorCode != "" {
 		q.Set("error", o.errorCode)
+	}
+	for _, l := range o.requestLabels {
+		if !strings.Contains(l, "=") {
+			return &usageError{msg: "-request-label takes k=v, not " + quote(l) + "."}
+		}
+	}
+	if len(o.requestLabels) > 0 {
+		q["request_label"] = o.requestLabels
 	}
 	if o.limit < 0 {
 		return &usageError{msg: "-limit is a count of records and cannot be negative."}

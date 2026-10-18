@@ -58,6 +58,7 @@ func TestCommandTable(t *testing.T) {
 			method: "GET", path: "/v1/usage", query: url.Values{"key": {"k1", "key_01J"}, "model": {"gpt-5"}, "provider": {"openai"}, "owner": {"alice"}, "from": {"2026-09-01T00:00:00Z"}, "to": {"2026-09-14T00:00:00Z"}, "by": {"model", "key"}, "interval": {"day"}, "label": {"team=a"}}},
 		{args: []string{"usage", "--since", "24h"}, method: "GET", path: "/v1/usage", query: url.Values{"from": {"2026-09-13T12:00:00Z"}}},
 		{args: []string{"requests", "--status", "refused", "--error", "rate_limited", "--limit", "2", "--key", "k1"}, method: "GET", path: "/v1/requests", query: url.Values{"status": {"refused"}, "error": {"rate_limited"}, "key": {"k1"}}},
+		{args: []string{"requests", "--request-label", "trial=t-1", "--request-label", "run=r-9", "--label", "team=a"}, method: "GET", path: "/v1/requests", query: url.Values{"request_label": {"trial=t-1", "run=r-9"}, "label": {"team=a"}}},
 		{args: []string{"models"}, env: map[string]string{"LUX_TOKEN": "", "LUX_KEY": "lux_abc"}, method: "GET", path: "/lux/v1/models", auth: "Bearer lux_abc"},
 		{args: []string{"whoami"}, method: "GET", path: "/v1/self"},
 		{args: []string{"keys", "create", "agent", "--models", "gpt-5,anthropic/*", "--budget", "team"}, method: "PUT", path: "/v1/keys/agent", ctype: "application/json", body: `"kind":"Key"`},

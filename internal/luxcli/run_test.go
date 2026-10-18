@@ -117,6 +117,7 @@ func TestUnknownCommandAndFlagAreUsageErrors(t *testing.T) {
 		{[]string{"list", "keys", "-limit", "x"}, `invalid value "x" for flag -limit: parse error.`},
 		{[]string{"list", "keys", "-limit", "-1"}, "-limit is a count of items and cannot be negative."},
 		{[]string{"list", "keys", "-l", "team"}, `-l takes k=v, not "team".`},
+		{[]string{"requests", "-request-label", "trial"}, `-request-label takes k=v, not "trial".`},
 		{[]string{"delete", "key", "x", "-if-match", "seven"}, `-if-match takes a version above zero or *, not "seven".`},
 		{[]string{"whoami", "extra"}, "lux whoami takes no argument."},
 		{[]string{"models", "extra"}, "lux models takes no argument."},
