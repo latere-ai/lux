@@ -274,7 +274,7 @@ func recordsByRequestLabel(t *testing.T, s store.Store) {
 	got, next, err := s.Usage().Records(ctx, q, store.Page{})
 	noErr(t, err, "Records by request label")
 	equal(t, next, "", "no cursor when every row is answered")
-	truth(t, slices.Equal(ids(got), want), "the records labelled r1, newest first")
+	truth(t, slices.Equal(ids(got), want), "the records labeled r1, newest first")
 	var paged []string
 	cursor := ""
 	for range len(want) {

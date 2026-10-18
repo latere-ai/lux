@@ -86,9 +86,9 @@ func TestRecordCursorBindsRequestLabels(t *testing.T) {
 	if got := store.EncodeRecordCursor(empty, last); got != before {
 		t.Fatalf("an empty request-label map mints %s, want %s", got, before)
 	}
-	labelled := q
-	labelled.RequestLabels = map[string]string{"trial": "t-1", "run": "r-9"}
-	cursor := store.EncodeRecordCursor(labelled, last)
+	labeled := q
+	labeled.RequestLabels = map[string]string{"trial": "t-1", "run": "r-9"}
+	cursor := store.EncodeRecordCursor(labeled, last)
 	if cursor == before {
 		t.Fatal("the request-label pairs do not reach the cursor")
 	}
