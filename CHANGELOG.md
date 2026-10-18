@@ -6,6 +6,40 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- `GET /v1/requests` filters by a request's own labels with
+  `request_label=<name>=<value>`, repeatable, every pair matched against
+  the record's `requestLabels`, the pairs a caller sent in `Lux-Labels`.
+  A harness that labels each call with the run it belongs to reads a
+  run's records without keeping their request ids. It is a second filter
+  beside `label`, which still reads the Key's labels, and it narrows what
+  the authorizer's filter already lets the caller read: the `usage.read`
+  resource is unchanged. A pair outside the `Lux-Labels` syntax, or more
+  names than the eight a request keeps, is `invalid_field` at
+  `request_label`; two values for one name are an empty list.
+  `GET /v1/usage` refuses the parameter, since a request label is never
+  an aggregate dimension. A cursor is bound to the pairs, and one issued
+  for a query without them keeps working. The archive is partitioned by a
+  Key label, so a query by request label alone reads every partition and
+  its pages may hold fewer records than `limit` while `next_cursor` is
+  present. `lux requests -request-label k=v` sends it. For the packages:
+  `metering.RecordQuery.RequestLabels`, `gateway.MaxRequestLabels`, and
+  `gateway.ValidRequestLabel`.
+- A Key can name the doors it opens with `spec.doors`, a list of
+  `openai`, `anthropic`, `gemini`, and `lux`. A request on any other door
+  is refused with the new code `door_not_allowed`, 403, in that door's
+  error shape, on every route of the door, its model list included,
+  before any Model, Provider, window, or upstream is read, and recorded
+  as a refused request. A Key without the member opens every door, and
+  renders as it did before, so an authorizer or a client built against
+  an earlier release reads it unchanged; the authorizer's proposal
+  carries the list when it is set. An empty list, an unknown door, and a
+  door named twice are `invalid_field`. A change to the list reaches each
+  replica at its next read of the journal. `lux keys create -doors`
+  writes it. For the packages: `v1.KeySpec.Doors`,
+  `v1.KeySpec.OpensDoor`, and `gateway.CodeDoorNotAllowed`.
+
 ## v0.17.3 - 2026-10-18
 
 ### Fixed
