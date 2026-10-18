@@ -201,7 +201,7 @@ flowchart TD
   H --> I[stream the response back in the door's dialect]
   I --> J[settle the windows; one record]
   B -. body_too_large .-> J
-  C -. unauthenticated, key_disabled, key_expired .-> J
+  C -. unauthenticated, key_disabled, key_expired, door_not_allowed .-> J
   D -. route_not_allowed .-> J
   E -. invalid_request, model_not_found, model_not_allowed .-> J
   F -. provider_unavailable, dialect_unsupported, provider_required .-> J
@@ -225,7 +225,10 @@ flowchart TD
 3. Key: extracted and looked up as above. `status.state` `Disabled` is
    `key_disabled`; `Expired` is `key_expired`; both 403. `Exhausted` is
    decided at stage 7 with the current window, not from the cached
-   state, so a window that has reset serves again at once.
+   state, so a window that has reset serves again at once. Then a Key
+   whose `spec.doors` does not name the door is `door_not_allowed`, 403,
+   on every route of the door, read from the cached Key and the path
+   alone ([[049-key-doors]]).
 4. Class: an opaque route for a Key without `passthrough` is
    `route_not_allowed`, 403.
 5. Model: the name is read from the path, or from the body by a JSON
@@ -529,6 +532,7 @@ is the developer detail, truncated.
 | `unauthenticated` | 401 | no credential, or a credential whose hash names no Key |
 | `key_disabled` | 403 | `spec.disabled` |
 | `key_expired` | 403 | `status.expiresAt` has passed |
+| `door_not_allowed` | 403 | a Key whose `spec.doors` does not name the door ([[049-key-doors]]) |
 | `route_not_allowed` | 403 | an opaque route without `passthrough` |
 | `invalid_request` | 400 | a body that is not a JSON object or names no `model`; on translation, a body the door's codec cannot decode |
 | `model_not_found` | 404 | no Model of that name |

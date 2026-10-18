@@ -107,9 +107,9 @@ may meet the old list for that window.
 A refused request is recorded as every Key refusal is: `status`
 `refused`, `error` `door_not_allowed`, the record's `door`, the Key's
 id, prefix, owner, and labels, the request's labels, no attempt, zero
-tokens, and zero cost. `lux_refusals_total{code="door_not_allowed"}`
-counts it and the request log line carries it, as for every code
-([[019-observability]]).
+tokens, and zero cost. `lux_requests_total` counts it with its door,
+`status="refused"`, and `code="door_not_allowed"`, and the request log
+line carries it, as for every code ([[019-observability]]).
 
 ### The command and the document
 
@@ -136,7 +136,7 @@ OpenAPI document describes `spec.doors` with its four values, and
 | 2 | An item that is not a door name, an item named twice, and an empty list are `invalid_field` at their paths | corpus entries under `refused/`; `manifest` test |
 | 3 | The authorizer's proposal of a Key carries `spec.doors` when set and no such member when not | `authorizer` test |
 | 4 | A Key naming one door is served on it and refused `door_not_allowed`, 403, in each other door's error shape, with no upstream called; the door's model list, its model read, and an opaque route are refused alike, the door's refusal before `route_not_allowed`; a disabled or expired Key answers its state first; a Key without the member is served on every door | `gateway` test |
-| 5 | The refusal's record says `refused` with the code, the door, and the Key, with no attempt, and the refusal counter counts it | `gateway` test |
+| 5 | The refusal's record says `refused` with the code, the door, the Key, and the request's labels, with no attempt, and `lux_requests_total` counts it under its door and code | `gateway` test |
 | 6 | A Key reread before `model_not_allowed` whose doors no longer name the door is refused `door_not_allowed` | `gateway` test |
 | 7 | `lux keys create -doors` writes the list, and `-dry-run` prints it | `internal/luxcli` test |
 | 8 | The OpenAPI document carries the member and the code, and the code is one row of spec 011's table | `TestOpenAPIIsCurrent`, `TestErrorTable` |

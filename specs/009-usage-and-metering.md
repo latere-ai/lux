@@ -396,7 +396,9 @@ micro-units, as in the record. The rows are ordered by bucket, then
 each `by` value, then currency.
 
 `GET /v1/requests` answers records, newest first, with `from`, `to`,
-the same filters, plus `status`, `error`, and `stream`, a `cursor`, and
+the same filters, plus `status`, `error`, and `stream`, `request_label`,
+`<name>=<value>` repeatable over the record's `requestLabels` and never
+over the Key's labels ([[048-request-label-filter]]), a `cursor`, and
 a `limit` of at most 1000. The response carries the records and a
 `source` of `archive` or `memory`: `archive` when the request log
 exporter of [[012-request-log-and-events]] is configured, which is the
