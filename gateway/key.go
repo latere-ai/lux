@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -84,6 +85,10 @@ const (
 // request history's request-label filter holds its pairs to it, since a
 // pair outside it is on no record.
 func ValidRequestLabel(name, value string) bool { return labelKey(name) && labelValue(value) }
+
+// RequestLabelSyntax is ValidRequestLabel's rule in words, built from its
+// bounds, for a refusal's developer detail and the API document.
+var RequestLabelSyntax = "a name of 1 to " + strconv.Itoa(maxLabelKeyLength) + " characters of A-Z, a-z, 0-9, '.', '_', and '-', and a value of 1 to " + strconv.Itoa(maxLabelValueLength) + " that may also hold ':' and '/'"
 
 // requestLabels parses the Lux-Labels header: comma separated k=v pairs,
 // at most eight, each key 1 to 64 characters of [A-Za-z0-9._-] and each

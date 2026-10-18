@@ -395,7 +395,7 @@ func addRequestLabels(out *usageQuery, vals []string) *Error {
 			return refuse(CodeInvalidField, "request_label "+strconv.Quote(v)+" is not name=value", "request_label")
 		}
 		if !gateway.ValidRequestLabel(name, value) {
-			return refuse(CodeInvalidField, "request_label "+strconv.Quote(v)+" is outside the Lux-Labels syntax: a name of 1 to 64 characters of A-Z, a-z, 0-9, '.', '_', '-', and a value of 1 to 128 that may also hold ':' and '/'; the gateway keeps no such pair", "request_label")
+			return refuse(CodeInvalidField, "request_label "+strconv.Quote(v)+" is outside the Lux-Labels syntax, "+gateway.RequestLabelSyntax+"; the gateway keeps no such pair", "request_label")
 		}
 		if have, dup := q.RequestLabels[name]; dup {
 			if have != value {
