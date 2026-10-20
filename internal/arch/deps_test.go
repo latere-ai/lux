@@ -153,6 +153,13 @@ var rootAllow = map[string]allow{
 			// path helpers; the same row admits it for luxd in
 			// .lateregate.yaml (spec 004).
 			"github.com/google/uuid",
+			// The lux dialect's types, which llmdialect/lux and
+			// llmdialect/ir alias, are defined once in the Go SDK's
+			// llm/wire so the public client and this codec cannot drift.
+			// That package imports the standard library alone and sends
+			// nothing; the rest of the SDK, its HTTP client and token
+			// exchange, stays out.
+			"latere.ai/x/sdk-go/llm/wire",
 		},
 		noStd: []string{"database/sql", "os/exec"},
 	},

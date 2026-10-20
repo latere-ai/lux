@@ -79,8 +79,9 @@ depcheck:
     latere.ai/x/lux/cmd/luxd:
       decision: >-
         the gateway reaches latere.ai/x/pkg and the standard library, the
-        YAML decoder of spec 003, and the OpenTelemetry SDK with what it
-        pulls in, which joined with spec 006 through the shared verifier's
+        YAML decoder of spec 003, the lux dialect's types in the Go SDK's
+        llm/wire, which latere.ai/x/pkg/llmdialect aliases, and the
+        OpenTelemetry SDK with what it pulls in, which joined with spec 006 through the shared verifier's
         tracing transport; the Postgres driver joins with spec 010's
         Postgres store, and nothing else does without a row here (spec 001)
       allow:
@@ -103,6 +104,11 @@ depcheck:
           the YAML decoder spec 003 names, reached through manifest by the
           file mode of spec 010, which decodes a directory of manifests at
           start
+        latere.ai/x/sdk-go/llm/wire: >-
+          the lux dialect's types, defined once in the Go SDK so its client
+          and this gateway's codec cannot drift, and aliased by
+          latere.ai/x/pkg/llmdialect; it imports the standard library alone
+          and sends nothing, and the rest of the SDK stays out
         # The Postgres store of spec 010: the driver, its pool, and the
         # three small packages it reads a connection string with, and the
         # migrator pgxmigrate runs, whose pgx5 database driver reads the

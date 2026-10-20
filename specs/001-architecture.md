@@ -6,7 +6,7 @@ depends_on: []
 affects: [manifest/, gateway/, metering/, authorizer/, client/, internal/, cmd/luxd/, cmd/lux/, docs/]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-10-20
 author: changkun
 ---
 
@@ -347,8 +347,10 @@ server reads are `LUX_*`.
 The build list of `./cmd/luxd` reaches the standard library,
 `latere.ai/x/pkg`, the YAML decoder `manifest` uses
 ([[003-manifest-contract]]), the Postgres driver and the migration
-library of the store ([[010-state]]), and the OpenTelemetry SDK, and
-nothing else: no cloud SDK, no web framework, no ORM, no Redis client.
+library of the store ([[010-state]]), the OpenTelemetry SDK, and the Lux
+dialect's types in the Go SDK's `latere.ai/x/sdk-go/llm/wire`, which
+`latere.ai/x/pkg/llmdialect` aliases so the public client and the
+gateway's codec cannot drift, and nothing else: no cloud SDK, no web framework, no ORM, no Redis client.
 `./cmd/lux` reaches the standard library, the error envelope, and this
 module's `manifest` and `manifest/v1` with the YAML decoder they use
 ([[014-agent-client]]). The `depcheck` gate holds each list, and a new entry is
