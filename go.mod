@@ -17,7 +17,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	google.golang.org/protobuf v1.36.12
-	latere.ai/x/pkg v0.104.0
+	latere.ai/x/pkg v0.104.1-0.20261020142014-8356b71432d2
 )
 
 require (
@@ -52,5 +52,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.83.1 // indirect
 	latere.ai/x/ci-gate v0.54.0 // indirect
-	latere.ai/x/sdk-go v0.0.0-20261020132337-a96fb9a47778 // indirect
+	latere.ai/x/sdk-go v0.1.0 // indirect
 )
