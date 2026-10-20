@@ -45,9 +45,10 @@ const (
 )
 
 // The environment variables the command reads, and the two fallbacks a
-// door command reads after them, which are latere.ai/x/pkg/luxsdk's
-// EnvBaseURL and EnvAPIKey spelled here so the binary does not carry
-// that package.
+// door command reads after them: the variables the Go client
+// latere.ai/x/pkg/luxsdk read, kept so a script that exports them for
+// that client still reaches a door. Its successor, latere.ai/x/sdk-go/llm,
+// reads LATERE_KEY and LATERE_BASE_URL instead.
 const (
 	EnvURL       = "LUX_URL"
 	EnvToken     = "LUX_TOKEN"
