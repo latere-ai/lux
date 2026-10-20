@@ -52,4 +52,12 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.83.1 // indirect
 	latere.ai/x/ci-gate v0.54.0 // indirect
+	latere.ai/x/sdk-go v0.0.0-00010101000000-000000000000 // indirect
+)
+
+// pkg's llm-types branch and the SDK's llm package are unreleased; these
+// point at their working trees until both are tagged.
+replace (
+	latere.ai/x/pkg => ../pkg-llm
+	latere.ai/x/sdk-go => ../sdk-llm
 )
