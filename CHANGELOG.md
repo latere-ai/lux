@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.18.1 - 2026-10-20
+
 ### Added
 
 - With `OTEL_EXPORTER_OTLP_ENDPOINT` set, `luxd` also exports the Go
