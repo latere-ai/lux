@@ -140,11 +140,7 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 latere.ai/x/ci-gate v0.54.0 h1:LnrEu0GZbSSInCYZZxRoG3vwUHXO0M8zlbt9YtB9Nrg=
 latere.ai/x/ci-gate v0.54.0/go.mod h1:zDYdDAkxB9ahnbjcbdgtDup4ruowqmGLBqMu29B6wXg=
-latere.ai/x/pkg v0.104.0 h1:IjZOjmj2S5kCWG2dpItuPfQYRpDXQme4Dp1V1lJCqN4=
-latere.ai/x/pkg v0.104.0/go.mod h1:3oanw99VSSSPtTo+u1RJpe6AZm8rrv7bEJKHrqDBNmY=
 latere.ai/x/pkg v0.104.1-0.20261020142014-8356b71432d2 h1:M6kktgutuGdbdngNWEtOUV4jOS4wFzrSmIoTc7YbAFo=
 latere.ai/x/pkg v0.104.1-0.20261020142014-8356b71432d2/go.mod h1:ZW9edO3xPivxbDJ3kPWCxM4ZLEatMtIl65jCZi5KCWQ=
-latere.ai/x/sdk-go v0.0.0-20261020132337-a96fb9a47778 h1:1FHkoa2irOcyT0Atd08nG5BAU1jGlEtnKl234bFBE78=
-latere.ai/x/sdk-go v0.0.0-20261020132337-a96fb9a47778/go.mod h1:F6605Qld46Dzv7Ux76JW0zqZoq/oPtzDHt0fL6wVn/w=
 latere.ai/x/sdk-go v0.1.0 h1:I0+KgpGuDSKaVfJEc4M9Jx/FhA7hGywO7aJjZcGrykI=
 latere.ai/x/sdk-go v0.1.0/go.mod h1:F6605Qld46Dzv7Ux76JW0zqZoq/oPtzDHt0fL6wVn/w=
