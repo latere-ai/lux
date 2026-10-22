@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.18.3 - 2026-10-22
+
 ### Fixed
 
 - **An `anthropic` Provider's models are discovered.** Discovery and the
