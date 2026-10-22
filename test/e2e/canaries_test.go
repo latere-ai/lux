@@ -79,7 +79,7 @@ func TestE2EEveryRequestHasOneUsageRecord(t *testing.T) {
 	}{
 		{"/openai/v1/chat/completions", `{"model":"openai-model","messages":[{"role":"user","content":"a"}]}`, jsonBearer(key), "ok"},
 		{"/openai/v1/chat/completions", `{"model":"openai-model","stream":true,"messages":[{"role":"user","content":"b"}]}`, jsonBearer(key), "ok"},
-		{"/anthropic/v1/messages", `{"model":"anthropic-model","max_tokens":8,"messages":[{"role":"user","content":"c"}]}`, http.Header{"x-api-key": {key}, "Content-Type": {"application/json"}}, "ok"},
+		{"/anthropic/v1/messages", `{"model":"anthropic-model","max_tokens":8,"messages":[{"role":"user","content":"c"}]}`, http.Header{"x-api-key": {key}, "anthropic-version": {"2023-06-01"}, "Content-Type": {"application/json"}}, "ok"},
 		{"/gemini/v1beta/models/gemini-model:generateContent", `{"contents":[{"parts":[{"text":"d"}]}]}`, http.Header{"x-goog-api-key": {key}, "Content-Type": {"application/json"}}, "ok"},
 		{"/lux/v1/generate", `{"model":"lux-model","messages":[{"role":"user","blocks":[{"type":"text","text":"e"}]}]}`, jsonBearer(key), "ok"},
 		{"/openai/v1/chat/completions", `{"model":"no-such-model","messages":[]}`, jsonBearer(key), "refused"},

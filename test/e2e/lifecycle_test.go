@@ -41,7 +41,7 @@ func TestE2ELifecycle(t *testing.T) {
 		header                 http.Header
 	}{
 		{"openai", "/openai/v1/chat/completions", `{"model":"chat","messages":[{"role":"user","content":"hi"}]}`, provider.Content("openai", "gpt-stub", "hi"), jsonBearer(key)},
-		{"anthropic", "/anthropic/v1/messages", `{"model":"claude","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, provider.Content("anthropic", "claude-stub", "hi"), http.Header{"x-api-key": {key}, "Content-Type": {"application/json"}}},
+		{"anthropic", "/anthropic/v1/messages", `{"model":"claude","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, provider.Content("anthropic", "claude-stub", "hi"), http.Header{"x-api-key": {key}, "anthropic-version": {"2023-06-01"}, "Content-Type": {"application/json"}}},
 		{"gemini", "/gemini/v1beta/models/gem:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, provider.Content("gemini", "gemini-stub", "hi"), http.Header{"x-goog-api-key": {key}, "Content-Type": {"application/json"}}},
 		{"lux", "/lux/v1/generate", `{"model":"lx","messages":[{"role":"user","blocks":[{"type":"text","text":"hi"}]}]}`, provider.Content("lux", "lux-stub", "hi"), jsonBearer(key)},
 	} {
