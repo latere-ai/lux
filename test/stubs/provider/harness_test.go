@@ -52,6 +52,15 @@ func credential(d v1.Dialect, h http.Header, value string) {
 	h.Set(d.CredentialHeader(), value)
 }
 
+// required writes what every request of the dialect carries beside its
+// credential, as a real client sends it: anthropic-version toward the
+// Anthropic API, which refuses every route without it.
+func required(d v1.Dialect, h http.Header) {
+	if d == v1.DialectAnthropic && h.Get("anthropic-version") == "" {
+		h.Set("anthropic-version", "2023-06-01")
+	}
+}
+
 // response is one answer read whole.
 type response struct {
 	status int
@@ -81,6 +90,7 @@ func sendCtx(t *testing.T, ctx context.Context, srv *server, method, path, body 
 	if req.Header.Get(srv.stub.Dialect().CredentialHeader()) == "" {
 		credential(srv.stub.Dialect(), req.Header, DefaultCredential)
 	}
+	required(srv.stub.Dialect(), req.Header)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {

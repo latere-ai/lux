@@ -97,6 +97,15 @@ func (u upstream) get(ctx context.Context, p *v1.Provider, rawURL string) (*http
 		return nil, nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	// The Provider's static headers, and toward an anthropic Provider the
+	// anthropic-version every route of its API requires, as a forwarded
+	// request carries them: without the version the list is refused.
+	for name, v := range p.Spec.Headers {
+		req.Header.Set(name, v)
+	}
+	if p.Spec.Dialect == v1.DialectAnthropic && req.Header.Get("anthropic-version") == "" {
+		req.Header.Set("anthropic-version", gateway.AnthropicVersion)
+	}
 	gateway.InjectCredential(req.Header, p, value)
 	resp, err := client.Do(req)
 	if err != nil {

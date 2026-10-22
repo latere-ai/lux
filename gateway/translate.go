@@ -16,9 +16,10 @@ import (
 )
 
 // AnthropicVersion is the anthropic-version a translated request toward
-// an anthropic target carries, because the Messages API requires the
-// header and the codec sets none. A Provider whose headers name the
-// header wins over it.
+// an anthropic target, and a discovery or health list of an anthropic
+// Provider's models, carries, because every route of the API requires
+// the header and neither sets one of its own. A Provider whose headers
+// name the header wins over it.
 const AnthropicVersion = "2023-06-01"
 
 // OpenAIReasoningFamily is spec 008's predicate over an openai target's

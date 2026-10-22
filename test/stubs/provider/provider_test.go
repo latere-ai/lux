@@ -251,6 +251,7 @@ func checkRow(t *testing.T, srv *server, d v1.Dialect, path, body string, header
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+path, strings.NewReader(body))
 		maps.Copy(req.Header, header)
 		credential(d, req.Header, DefaultCredential)
+		required(d, req.Header)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("the headers never arrived: %v", err)
@@ -369,6 +370,34 @@ func TestProviderStubChecksTheCredential(t *testing.T) {
 	credential(v1.DialectOpenAI, h, "sk-custom")
 	if resp := send(t, custom, http.MethodGet, "/v1/models", "", h); resp.status != http.StatusOK {
 		t.Fatalf("the configured credential = %d", resp.status)
+	}
+}
+
+// TestProviderStubRequiresAnthropicVersion: the anthropic stub refuses a
+// request without anthropic-version on every route, the model list
+// included, with the 400 the Anthropic API answers.
+func TestProviderStubRequiresAnthropicVersion(t *testing.T) {
+	srv := start(t, v1.DialectAnthropic)
+	path, body := primary(v1.DialectAnthropic, "m", "hi", false)
+	for _, r := range []struct{ method, path, body string }{{http.MethodPost, path, body}, {http.MethodGet, modelsPath(v1.DialectAnthropic), ""}} {
+		var rd io.Reader
+		if r.body != "" {
+			rd = strings.NewReader(r.body)
+		}
+		req, _ := http.NewRequestWithContext(t.Context(), r.method, srv.URL+r.path, rd)
+		credential(v1.DialectAnthropic, req.Header, DefaultCredential)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(data), "anthropic-version: header is required") {
+			t.Fatalf("%s %s without anthropic-version = %d %s", r.method, r.path, resp.StatusCode, data)
+		}
+	}
+	if resp := send(t, srv, http.MethodGet, modelsPath(v1.DialectAnthropic), "", nil); resp.status != http.StatusOK {
+		t.Fatalf("the model list with anthropic-version = %d %s", resp.status, resp.body)
 	}
 }
 

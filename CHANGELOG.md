@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- **An `anthropic` Provider's models are discovered.** Discovery and the
+  health probe listed models without `anthropic-version`, which the
+  Anthropic API requires on every route, so the list was refused and an
+  Anthropic Provider showed no discovered models. Both now send the
+  Provider's static headers and, unless those name one,
+  `anthropic-version: 2023-06-01`, as a forwarded request does.
+
 ## v0.18.2 - 2026-10-21
 
 ### Fixed

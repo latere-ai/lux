@@ -190,6 +190,13 @@ func (s *Stub) routes() {
 func (s *Stub) handle(rt routeKind) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		kind := rt
+		// The Anthropic API refuses every route without the header, the
+		// model list included, so a request the gateway builds without
+		// it fails here as it fails upstream.
+		if s.o.Dialect == v1.DialectAnthropic && r.Header.Get("anthropic-version") == "" {
+			s.refuse(w, http.StatusBadRequest, "anthropic-version: header is required")
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		req := parseRequest(s.o.Dialect, kind, r, body)
 		if kind == routeGemini {

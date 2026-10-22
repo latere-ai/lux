@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -112,6 +113,39 @@ func TestDiscoveredModelShape(t *testing.T) {
 // and a gemini list of three pages by nextPageToken are read whole, the
 // gemini generation-methods filter applies, and a list past 20 pages
 // is a failed list.
+// The Anthropic API refuses a model list without anthropic-version, so
+// every list toward an anthropic Provider carries it, and the Provider's
+// static headers, which win over the default.
+func TestDiscoverySendsTheProvidersHeaders(t *testing.T) {
+	h := newHarness(t)
+	const page = `{"data":[{"id":"claude-a"}],"has_more":false}`
+	plain := &stub{pages: map[string]string{"": page}}
+	pinned := &stub{pages: map[string]string{"": page}}
+	h.provider(t, "plain", v1.DialectAnthropic, serveStub(t, plain), nil)
+	h.provider(t, "pinned", v1.DialectAnthropic, serveStub(t, pinned), func(p *v1.Provider) {
+		p.Spec.Headers = map[string]string{"anthropic-version": "2024-01-01", "x-extra": "1"}
+	})
+	d := h.discovery("a")
+	d.acquire(t.Context())
+	d.Tick(t.Context())
+	if got := h.models(t, string(v1.SourceDiscovered)); names(got) != "pinned/claude-a plain/claude-a" {
+		t.Fatalf("discovered = %q", names(got))
+	}
+	for _, r := range plain.all() {
+		if v := r.Header.Get("anthropic-version"); v != gateway.AnthropicVersion {
+			t.Fatalf("a list without a pinned version sent anthropic-version %q", v)
+		}
+	}
+	for _, r := range pinned.all() {
+		if v, x := r.Header.Get("anthropic-version"), r.Header.Get("x-extra"); v != "2024-01-01" || x != "1" {
+			t.Fatalf("a list sent anthropic-version %q and x-extra %q, not the Provider's", v, x)
+		}
+	}
+	if len(plain.all()) == 0 || len(pinned.all()) == 0 {
+		t.Fatal("discovery listed neither Provider")
+	}
+}
+
 func TestDiscoveryPaginates(t *testing.T) {
 	h := newHarness(t)
 	anthropic := &stub{pages: map[string]string{

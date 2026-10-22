@@ -140,7 +140,7 @@ func TestLuxStubsServesEveryStub(t *testing.T) {
 	if code, body := do(t, http.MethodGet, s.urls["openai"]+"/_received", "", nil); code != 200 || body != "[]" {
 		t.Fatalf("GET openai/_received = %d %s", code, body)
 	}
-	if code, body := do(t, http.MethodPost, s.urls["anthropic"]+"/v1/messages", `{"model":"m","messages":[{"role":"user","content":"hi"}]}`, http.Header{"x-api-key": {provider.DefaultCredential}}); code != 200 || !strings.Contains(body, provider.Content("anthropic", "m", "hi")) {
+	if code, body := do(t, http.MethodPost, s.urls["anthropic"]+"/v1/messages", `{"model":"m","messages":[{"role":"user","content":"hi"}]}`, http.Header{"x-api-key": {provider.DefaultCredential}, "anthropic-version": {"2023-06-01"}}); code != 200 || !strings.Contains(body, provider.Content("anthropic", "m", "hi")) {
 		t.Fatalf("POST anthropic/v1/messages = %d %s", code, body)
 	}
 	if code, body := do(t, http.MethodGet, s.urls["issuer"]+"/.well-known/openid-configuration", "", nil); code != 200 || !strings.Contains(body, `"issuer":"`+s.urls["issuer"]+`"`) {
