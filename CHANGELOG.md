@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.19.0 - 2026-10-23
+
 ### Added
 
 - **A Provider can keep the models it lists switched off until you choose
