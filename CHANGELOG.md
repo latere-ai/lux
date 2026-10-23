@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.19.1 - 2026-10-24
+
 ### Fixed
 
 - **Declaring a Model over a discovered one works through the API.** An
