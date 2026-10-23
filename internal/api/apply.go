@@ -134,6 +134,12 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 		}
 		obj = resolved.Object
 	}
+	// A Model the API writes is declared, so a create of a discovered
+	// Model's name replaces that Model in place (spec 005); the stores
+	// refuse a create whose source is not declared as a name taken.
+	if m, ok := obj.(*v1.Model); ok {
+		m.Status.Source = v1.SourceDeclared
+	}
 	w, err := c.prepareWrite(obj, existing, refs, owner, resolvedAt)
 	if err != nil {
 		return 0, nil, 0, err

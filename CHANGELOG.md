@@ -6,6 +6,14 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- **Declaring a Model over a discovered one works through the API.** An
+  apply of a discovered Model's name under `If-None-Match: *` was refused
+  `already_exists`, so an operator could not take over a model discovery
+  listed. The Model the API writes is now declared, and it replaces the
+  discovered one in place, keeping its id, as spec 005 states.
+
 ## v0.19.0 - 2026-10-23
 
 ### Added
