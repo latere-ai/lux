@@ -102,6 +102,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [047](047-zero-retention-keys.md) | Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request | medium | testing | 003, 004, 005, 007, 011 |
 | [048](048-request-label-filter.md) | Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has | small | testing | 007, 009, 011, 012 |
 | [049](049-key-doors.md) | Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key | small | testing | 003, 004, 007, 011 |
+| [050](050-discovered-models-start-disabled.md) | Discovered Models start disabled: a Provider may ask that every Model discovery creates for it start disabled | small | testing | 003, 005, 039 |
 
 ## Dependency graph
 
@@ -149,6 +150,7 @@ flowchart BT
   S047[047 zero-retention keys]
   S048[048 request-label filter]
   S049[049 key doors]
+  S050[050 discovered models start disabled]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -198,6 +200,8 @@ flowchart BT
   S045 --> S018
   S046 --> S037
   S047 --> S005
+  S050 --> S005
+  S050 --> S003
   S047 --> S007
   S047 --> S011
   S048 --> S011
