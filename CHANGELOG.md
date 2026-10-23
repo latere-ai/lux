@@ -6,6 +6,15 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- **A Provider can keep the models it lists switched off until you choose
+  them.** With `spec.discovery.startDisabled: true`, every Model
+  discovery creates for the Provider starts with `spec.disabled`, so no
+  door serves it and no model list carries it. Declare a Model of the
+  same name to serve one; a Model discovery already created keeps its
+  own `spec.disabled` whichever way the flag turns.
+
 ## v0.18.3 - 2026-10-22
 
 ### Fixed

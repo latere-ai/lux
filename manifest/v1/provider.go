@@ -103,10 +103,14 @@ type ValueFrom struct {
 }
 
 // Discovery is how the Provider's model list becomes Models.
+// StartDisabled creates every Model discovery adds for the Provider with
+// spec.disabled set, so none is served until an operator declares it; a
+// Model discovery already created keeps its own spec.disabled.
 type Discovery struct {
-	Mode    DiscoveryMode `json:"mode,omitempty"`
-	Include []string      `json:"include,omitempty"`
-	Exclude []string      `json:"exclude,omitempty"`
+	Mode          DiscoveryMode `json:"mode,omitempty"`
+	Include       []string      `json:"include,omitempty"`
+	Exclude       []string      `json:"exclude,omitempty"`
+	StartDisabled bool          `json:"startDisabled,omitempty"`
 }
 
 // Health is how the Provider's reachability is observed.

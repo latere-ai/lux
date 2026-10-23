@@ -557,3 +557,56 @@ func TestDiscoveredModelInheritsAndRefreshesLabels(t *testing.T) {
 		t.Fatal("old model shares provider labels")
 	}
 }
+
+// TestDiscoveryStartsDisabled: under discovery.startDisabled every Model
+// discovery creates is disabled, a Model it already created keeps its
+// own spec.disabled whichever way the flag turns, and a declared Model
+// over a discovered one is served at its own spec.disabled; deleting it
+// restores a discovered Model that starts disabled while the flag is on.
+func TestDiscoveryStartsDisabled(t *testing.T) {
+	h := newHarness(t)
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5", "o3")}}
+	p := h.provider(t, "openai", v1.DialectOpenAI, serveStub(t, up), func(p *v1.Provider) { p.Spec.Discovery.StartDisabled = true })
+	d := h.discovery("a")
+	d.acquire(t.Context())
+	d.Tick(t.Context())
+	found := h.models(t, string(v1.SourceDiscovered))
+	if names(found) != "openai/gpt-5 openai/o3" || !found["openai/gpt-5"].Spec.Disabled || !found["openai/o3"].Spec.Disabled {
+		t.Fatalf("discovered under startDisabled = %q, gpt-5 disabled %v", names(found), found["openai/gpt-5"].Spec.Disabled)
+	}
+
+	// The flag off: the Models already created stay disabled, and a model
+	// the upstream adds after it starts enabled.
+	p = h.get(t, p.Status.ID)
+	p.Spec.Discovery.StartDisabled = false
+	if _, err := h.st.Objects().Put(t.Context(), p, p.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	up.setPages(map[string]string{"": openaiList("gpt-5", "o3", "gpt-6")})
+	d.Tick(t.Context())
+	found = h.models(t, string(v1.SourceDiscovered))
+	if !found["openai/gpt-5"].Spec.Disabled || !found["openai/o3"].Spec.Disabled || found["openai/gpt-6"] == nil || found["openai/gpt-6"].Spec.Disabled {
+		t.Fatalf("after the flag turned off: gpt-5 %v, o3 %v, gpt-6 %+v", found["openai/gpt-5"].Spec.Disabled, found["openai/o3"].Spec.Disabled, found["openai/gpt-6"])
+	}
+
+	// The flag on again: a declared Model over gpt-5 is served at its own
+	// spec.disabled, and deleting it restores a disabled discovered one.
+	p = h.get(t, p.Status.ID)
+	p.Spec.Discovery.StartDisabled = true
+	if _, err := h.st.Objects().Put(t.Context(), p, p.Status.Version); err != nil {
+		t.Fatal(err)
+	}
+	declared := h.declare(t, "openai/gpt-5", "openai", "gpt-5")
+	d.Tick(t.Context())
+	all := h.models(t, "")
+	if m := all["openai/gpt-5"]; m.Status.Source != v1.SourceDeclared || m.Spec.Disabled {
+		t.Fatalf("the declared Model = source %s, disabled %v", m.Status.Source, m.Spec.Disabled)
+	}
+	if err := h.st.Objects().Delete(t.Context(), v1.KindModel, declared.Status.ID); err != nil {
+		t.Fatal(err)
+	}
+	d.Tick(t.Context())
+	if m := h.models(t, "")["openai/gpt-5"]; m == nil || m.Status.Source != v1.SourceDiscovered || !m.Spec.Disabled {
+		t.Fatalf("restored = %+v", m)
+	}
+}

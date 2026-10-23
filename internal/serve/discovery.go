@@ -440,8 +440,8 @@ func declared(ctx context.Context, tx store.Store, name string) (bool, error) {
 // resolve runs manifest.Resolve over the discovered Model of one
 // candidate under the Provider's owner: one target, weight 100, priority
 // 0, fallback never, no pricing, the default modalities unless the
-// upstream said the model embeds and nothing else, and source
-// discovered.
+// upstream said the model embeds and nothing else, disabled on a create
+// under discovery.startDisabled, and source discovered.
 func (d *Discovery) resolve(ctx context.Context, p *v1.Provider, c candidate, old *v1.Model, now time.Time) (*v1.Model, error) {
 	weight := 100
 	in := &v1.Model{
@@ -457,8 +457,11 @@ func (d *Discovery) resolve(ctx context.Context, p *v1.Provider, c candidate, ol
 	var existing v1.Object
 	if old != nil {
 		existing = old
-		// spec.disabled is an operator's apply alone: an update keeps it.
+		// An update keeps the stored spec.disabled: an operator's apply, or
+		// the start a create under discovery.startDisabled gave it.
 		in.Spec.Disabled = old.Spec.Disabled
+	} else {
+		in.Spec.Disabled = p.Spec.Discovery.StartDisabled
 	}
 	resolved, err := manifest.Resolve(ctx, in, manifest.Options{
 		Actor:    manifest.Actor{Subject: p.Status.Owner},

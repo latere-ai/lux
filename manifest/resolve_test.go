@@ -520,3 +520,22 @@ func sorted(s []string) []string {
 	sortStrings(out)
 	return out
 }
+
+// TestProviderStartDisabledRoundTrip: discovery.startDisabled decodes,
+// survives Resolve, and is rendered only when true.
+func TestProviderStartDisabledRoundTrip(t *testing.T) {
+	o := corpusOptions(t)
+	body := head(v1.KindProvider, "p") + "spec:\n  dialect: anthropic\n  baseURL: https://api.example.com/v1\n  discovery: {mode: auto, startDisabled: true}\n"
+	p, ok := mustResolve(t, body, o).Object.(*v1.Provider)
+	if !ok || !p.Spec.Discovery.StartDisabled {
+		t.Fatalf("startDisabled after Resolve = %+v", p)
+	}
+	out, err := json.Marshal(p.Spec.Discovery)
+	if err != nil || string(out) != `{"mode":"auto","startDisabled":true}` {
+		t.Fatalf("rendered = %s, %v", out, err)
+	}
+	p.Spec.Discovery.StartDisabled = false
+	if out, _ = json.Marshal(p.Spec.Discovery); strings.Contains(string(out), "startDisabled") {
+		t.Fatalf("a false flag is rendered: %s", out)
+	}
+}
