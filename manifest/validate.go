@@ -6,6 +6,7 @@ package manifest
 import (
 	"encoding/json"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -58,6 +59,54 @@ func checkMeta(kind string, meta v1.ObjectMeta) error {
 	}
 	if total > maxAnnotations {
 		return refuse(CodeInvalidField, "annotations total "+strconv.Itoa(total)+" bytes, at most 65536", "metadata.annotations")
+	}
+	return nil
+}
+
+// federationID is a tagged Anthropic identifier after its prefix.
+var federationID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// federationUUID is an organization id.
+var federationUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// checkFederation applies spec 051's rows: an anthropic Provider's alone,
+// never beside a value, its identifiers well formed, sent as
+// Authorization: Bearer, and only where the gateway has a workload
+// identity to exchange. set is whether the body carried a value.
+func checkFederation(s *v1.ProviderSpec, set bool, o Options) error {
+	c, f := s.Credential, s.Credential.Federation
+	const path = "spec.credential.federation"
+	if s.Dialect != v1.DialectAnthropic {
+		return refuse(CodeInvalidField, "federation is Anthropic's workload identity federation; only an anthropic Provider takes one", path)
+	}
+	if set {
+		return refuse(CodeExclusiveFields, "a federated credential is exchanged, never a value", path, "spec.credential.value")
+	}
+	if c.ValueFrom != nil {
+		return refuse(CodeExclusiveFields, "a federated credential is exchanged, never a variable", path, "spec.credential.valueFrom.env")
+	}
+	for _, id := range []struct{ field, value, prefix string }{
+		{"ruleID", f.RuleID, "fdrl_"}, {"organizationID", f.OrganizationID, ""}, {"serviceAccountID", f.ServiceAccountID, "svac_"}, {"workspaceID", f.WorkspaceID, "wrkspc_"},
+	} {
+		at := path + "." + id.field
+		switch {
+		case id.value == "" && id.field == "workspaceID":
+		case id.value == "":
+			return refuse(CodeMissingField, id.field+" is required", at)
+		case id.prefix == "" && !federationUUID.MatchString(id.value):
+			return refuse(CodeInvalidField, id.field+" is the organization's UUID", at)
+		case id.prefix != "" && (!strings.HasPrefix(id.value, id.prefix) || !federationID.MatchString(strings.TrimPrefix(id.value, id.prefix))):
+			return refuse(CodeInvalidField, id.field+" is "+id.prefix+" and 1 to 128 letters, digits, _ or -", at)
+		}
+	}
+	if c.Header != "" && !strings.EqualFold(c.Header, "Authorization") {
+		return refuse(CodeInvalidField, "a federated credential travels as Authorization", "spec.credential.header")
+	}
+	if c.Scheme != "" && c.Scheme != v1.SchemeBearer {
+		return refuse(CodeInvalidField, "a federated credential travels as a bearer token", "spec.credential.scheme")
+	}
+	if !o.WorkloadIdentity {
+		return refuse(CodeInvalidField, "federation needs LUX_WORKLOAD_IDENTITY_FILE or LUX_WORKLOAD_IDENTITY_KUBERNETES on this gateway", path)
 	}
 	return nil
 }
@@ -119,11 +168,19 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 		if c.Scheme != "" && !c.Scheme.Valid() {
 			return nil, refuse(CodeInvalidField, strconv.Quote(string(c.Scheme))+" is not bearer or raw", "spec.credential.scheme")
 		}
+		if c.Federation != nil {
+			if err := checkFederation(s, set, o); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if len(s.Headers) > maxHeaders {
 		return nil, refuse(CodeInvalidField, "at most 16 static headers; "+strconv.Itoa(len(s.Headers))+" given", "spec.headers")
 	}
 	credentialHeader := strings.ToLower(s.Dialect.CredentialHeader())
+	if s.Federated() != nil {
+		credentialHeader = "authorization"
+	}
 	if s.Credential != nil && s.Credential.Header != "" {
 		credentialHeader = strings.ToLower(s.Credential.Header)
 	}

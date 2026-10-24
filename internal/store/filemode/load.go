@@ -191,6 +191,7 @@ func (s *Store) load(ctx context.Context, prev map[string]string) (*snapshot, er
 				FileMode:              true,
 				AllowPrivateUpstreams: s.opts.AllowPrivateUpstreams,
 				TunnelEnabled:         false,
+				WorkloadIdentity:      s.opts.WorkloadIdentity,
 				PublicURL:             s.opts.PublicURL,
 				Now:                   s.opts.now,
 			})

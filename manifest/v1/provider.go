@@ -80,11 +80,16 @@ type ZeroRetention struct {
 // value itself is write-only: it is decoded into an unexported member the
 // encoders skip and read through Value, so no encoding of a Provider can
 // carry it.
+//
+// Federation is a credential the gateway gets rather than holds (spec
+// 051): it presents its own workload's identity token at the upstream's
+// token endpoint and sends the short-lived access token it gets back.
 type Credential struct {
-	value     writeOnly  `writeonly:"value"`
-	ValueFrom *ValueFrom `json:"valueFrom,omitempty"`
-	Header    string     `json:"header,omitempty"`
-	Scheme    Scheme     `json:"scheme,omitempty"`
+	value      writeOnly   `writeonly:"value"`
+	ValueFrom  *ValueFrom  `json:"valueFrom,omitempty"`
+	Header     string      `json:"header,omitempty"`
+	Scheme     Scheme      `json:"scheme,omitempty"`
+	Federation *Federation `json:"federation,omitempty"`
 }
 
 // Value returns the credential value the manifest carried and whether it
@@ -96,6 +101,26 @@ func (c *Credential) SetValue(v string) { c.value.put(v) }
 
 // ClearValue drops the value, which the store does after sealing it.
 func (c *Credential) ClearValue() { c.value.clear() }
+
+// Federated is the Provider's federation, nil for a Provider whose
+// credential is a value, a variable, or nothing.
+func (s ProviderSpec) Federated() *Federation {
+	if s.Credential == nil {
+		return nil
+	}
+	return s.Credential.Federation
+}
+
+// Federation is Anthropic's workload identity federation: the federation
+// rule that maps the gateway's identity token to a service account of
+// the organization, and the workspace the token is scoped to, needed
+// when the rule covers more than one. None of the four is a secret.
+type Federation struct {
+	RuleID           string `json:"ruleID"`
+	OrganizationID   string `json:"organizationID"`
+	ServiceAccountID string `json:"serviceAccountID"`
+	WorkspaceID      string `json:"workspaceID,omitempty"`
+}
 
 // ValueFrom names where a value is read from in the file mode.
 type ValueFrom struct {

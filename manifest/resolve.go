@@ -68,6 +68,7 @@ type Options struct {
 	FileMode              bool      // valueFrom allowed, a supplied Key value refused
 	AllowPrivateUpstreams bool
 	TunnelEnabled         bool             // a tunnel: true Provider is refused without it
+	WorkloadIdentity      bool             // a federated Provider is refused without it (spec 051)
 	PublicURL             *url.URL         // the gateway's own address; a baseURL there is a loop
 	Now                   func() time.Time // the clock; nil is time.Now
 	NewName               func() string    // an absent metadata.name; nil makes one missing_field

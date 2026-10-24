@@ -1,0 +1,13 @@
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic-federated
+spec:
+  dialect: anthropic
+  baseURL: https://anthropic.example.com/v1
+  credential:
+    federation:
+      ruleID: fdrl_01ExampleRule
+      organizationID: 4f6c1d2a-8e3b-4c7d-9a1e-2b5f6c7d8e9f
+      serviceAccountID: svac_01ExampleServiceAccount
+      workspaceID: wrkspc_01ExampleWorkspace

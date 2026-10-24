@@ -125,6 +125,7 @@ func (c *call) applyOnce(ctx context.Context, k kind, name string, in v1.Object,
 			Existing:              existing,
 			AllowPrivateUpstreams: c.h.o.AllowPrivateUpstreams,
 			TunnelEnabled:         c.h.o.TunnelEnabled,
+			WorkloadIdentity:      c.h.o.WorkloadIdentity,
 			PublicURL:             c.h.o.PublicURL,
 			Now:                   func() time.Time { return resolvedAt },
 			NewName:               c.h.o.NewName,
@@ -286,13 +287,33 @@ func (c *call) prepareKey(k *v1.Key, existing v1.Object, refs *references) (writ
 // 003's update rule says, so a manifest read back re-applies without
 // touching the secret, and a Provider that never had one reads set
 // false. Resolve fills the credential block for every Provider that is
-// not tunneled, so the block's absence carries no meaning here.
+// not tunneled, so the block's absence carries no meaning here. A
+// federated Provider holds no value at all.
 func (c *call) prepareProvider(p *v1.Provider, existing v1.Object) (write, *Error) {
 	w := write{write: func(context.Context, store.Store) error { return nil }, after: func(v1.Object) {}}
 	old, _ := existing.(*v1.Provider)
 	var stored *v1.CredentialStatus
 	if old != nil {
 		stored = old.Status.Credential
+	}
+	if p.Spec.Federated() != nil {
+		// A federated Provider holds no value (spec 051): a stored one is
+		// deleted with the apply, and its version kept so a value applied
+		// later takes the next and no version is used twice.
+		p.Status.Credential = &v1.CredentialStatus{}
+		if stored != nil {
+			p.Status.Credential.Version, p.Status.Credential.UpdatedAt = stored.Version, stored.UpdatedAt
+		}
+		if stored != nil && stored.Set {
+			p.Status.Credential.UpdatedAt = c.start
+			w.write = func(ctx context.Context, tx store.Store) error {
+				if err := tx.Credentials().Delete(ctx, p.Status.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
+					return err
+				}
+				return nil
+			}
+		}
+		return w, nil
 	}
 	value, ok := "", false
 	if p.Spec.Credential != nil {

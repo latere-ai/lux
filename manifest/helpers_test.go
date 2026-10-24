@@ -81,6 +81,7 @@ func corpusOptions(t *testing.T) Options {
 		FileMode              bool   `json:"fileMode"`
 		AllowPrivateUpstreams bool   `json:"allowPrivateUpstreams"`
 		TunnelEnabled         bool   `json:"tunnelEnabled"`
+		WorkloadIdentity      bool   `json:"workloadIdentity"`
 		PublicURL             string `json:"publicURL"`
 	}
 	if err := json.Unmarshal(corpusFile(t, "options.json"), &f); err != nil {
@@ -106,6 +107,7 @@ func corpusOptions(t *testing.T) Options {
 		FileMode:              f.FileMode,
 		AllowPrivateUpstreams: f.AllowPrivateUpstreams,
 		TunnelEnabled:         f.TunnelEnabled,
+		WorkloadIdentity:      f.WorkloadIdentity,
 		PublicURL:             public,
 		Now:                   func() time.Time { return f.Now },
 		NewName:               func() string { return f.NewName },

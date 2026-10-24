@@ -1212,10 +1212,27 @@ components:
           enum:
           - bearer
           - raw
+        federation:
+          $ref: "#/components/schemas/Federation"
     ValueFrom:
       type: object
       properties:
         env:
+          type: string
+    Federation:
+      type: object
+      required:
+      - ruleID
+      - organizationID
+      - serviceAccountID
+      properties:
+        ruleID:
+          type: string
+        organizationID:
+          type: string
+        serviceAccountID:
+          type: string
+        workspaceID:
           type: string
     ZeroRetention:
       type: object

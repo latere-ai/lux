@@ -36,6 +36,9 @@ type Options struct {
 	Defaults              manifest.Defaults
 	AllowPrivateUpstreams bool
 	PublicURL             *url.URL
+	// WorkloadIdentity admits a federated Provider (spec 051): the
+	// gateway has an identity token to exchange.
+	WorkloadIdentity bool
 }
 
 func (o Options) getenv(name string) string {

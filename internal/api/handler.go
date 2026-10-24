@@ -85,11 +85,12 @@ type Options struct {
 	TrustedProxies []netip.Prefix
 	// MaxManifestBytes is LUX_MAX_MANIFEST_BYTES; 0 is 65536.
 	MaxManifestBytes int64
-	// Defaults, AllowPrivateUpstreams, and TunnelEnabled are Resolve's
-	// options from the configuration.
+	// Defaults, AllowPrivateUpstreams, TunnelEnabled, and
+	// WorkloadIdentity are Resolve's options from the configuration.
 	Defaults              manifest.Defaults
 	AllowPrivateUpstreams bool
 	TunnelEnabled         bool
+	WorkloadIdentity      bool
 	// Keys seals a Provider's credential value at apply; nil in the
 	// file mode alone, where no apply reaches it.
 	Keys *secrets.Keyring

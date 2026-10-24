@@ -43,11 +43,13 @@ type Options struct {
 	Keys *secrets.Keyring
 	// Getenv reads the variables valueFrom.env names; nil is os.Getenv.
 	Getenv func(string) string
-	// Defaults, AllowPrivateUpstreams, TunnelEnabled, and PublicURL are
-	// Resolve's options from the configuration, as the API sets them.
+	// Defaults, AllowPrivateUpstreams, TunnelEnabled, WorkloadIdentity,
+	// and PublicURL are Resolve's options from the configuration, as the
+	// API sets them.
 	Defaults              manifest.Defaults
 	AllowPrivateUpstreams bool
 	TunnelEnabled         bool
+	WorkloadIdentity      bool
 	PublicURL             *url.URL
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
@@ -328,6 +330,7 @@ func (o Options) resolveOptions(cat *catalog, existing v1.Object, now time.Time,
 		FileMode:              fileMode,
 		AllowPrivateUpstreams: o.AllowPrivateUpstreams,
 		TunnelEnabled:         o.TunnelEnabled,
+		WorkloadIdentity:      o.WorkloadIdentity,
 		PublicURL:             o.PublicURL,
 		Now:                   func() time.Time { return now },
 	}

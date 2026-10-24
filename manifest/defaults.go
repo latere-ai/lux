@@ -32,11 +32,22 @@ func defaultProvider(p *v1.Provider, o Options) {
 		if s.Credential == nil {
 			s.Credential = &v1.Credential{}
 		}
-		if s.Credential.Header == "" {
-			s.Credential.Header = s.Dialect.CredentialHeader()
-		}
-		if s.Credential.Scheme == "" {
-			s.Credential.Scheme = s.Dialect.CredentialScheme()
+		switch {
+		case s.Credential.Federation != nil:
+			// An exchanged token travels as Authorization: Bearer (spec 051).
+			if s.Credential.Header == "" {
+				s.Credential.Header = "Authorization"
+			}
+			if s.Credential.Scheme == "" {
+				s.Credential.Scheme = v1.SchemeBearer
+			}
+		default:
+			if s.Credential.Header == "" {
+				s.Credential.Header = s.Dialect.CredentialHeader()
+			}
+			if s.Credential.Scheme == "" {
+				s.Credential.Scheme = s.Dialect.CredentialScheme()
+			}
 		}
 	}
 	if s.Discovery.Mode == "" {
