@@ -268,7 +268,7 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv) (op
 		return opened{st: pg, db: pg}, nil
 	case cfg.ManifestDir != "":
 		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
-		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL})
+		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL, WorkloadIdentity: cfg.WorkloadIdentity.Enabled()})
 		if err != nil {
 			return opened{}, err
 		}
@@ -576,7 +576,7 @@ func (r *run) bootstrap(ctx context.Context) Line {
 	res, err := bootstrap.Check(ctx, bootstrap.Options{
 		Dir: r.cfg.BootstrapDir, Store: r.st, Owner: r.cfg.AdminSubjects[0], Keys: r.cfg.SecretsKEK,
 		Getenv: r.o.Getenv, Defaults: manifest.Defaults{RequestsPerMinute: r.cfg.DefaultRequestsPerMinute, TokensPerMinute: r.cfg.DefaultTokensPerMinute, Timeout: r.cfg.UpstreamTimeout},
-		AllowPrivateUpstreams: r.cfg.UpstreamAllowPrivate, TunnelEnabled: r.cfg.TunnelEnabled, PublicURL: r.cfg.PublicURL,
+		AllowPrivateUpstreams: r.cfg.UpstreamAllowPrivate, TunnelEnabled: r.cfg.TunnelEnabled, WorkloadIdentity: r.cfg.WorkloadIdentity.Enabled(), PublicURL: r.cfg.PublicURL,
 	})
 	if err != nil {
 		return Line{Fail, bootstrapName, err.Error()}
@@ -665,22 +665,27 @@ func (r *run) credentials(ctx context.Context) Line {
 
 // credentialSource is the seam the probe reads a Provider's credential
 // through: the file mode's values, or the sealed rows under the keys,
-// and a federated Provider's token exchanged with the workload identity
-// the configuration names (spec 051).
-func (r *run) credentialSource(clients gateway.ClientSource) (gateway.CredentialSource, error) {
+// and a federated Provider's token exchanged with a token minted for the
+// pod's service account (spec 051). An identity file's token is the
+// serving gateway's to exchange, each one once, so with the file no
+// federated Provider is probed: skip says so.
+func (r *run) credentialSource(clients gateway.ClientSource) (src gateway.CredentialSource, skip string, err error) {
 	var base gateway.CredentialSource = &serve.StoreCredentials{Credentials: r.st.Credentials(), Keys: r.cfg.SecretsKEK}
 	if r.files != nil {
 		base = &serve.FileCredentials{Files: r.files}
 	}
-	src, _, err := federation.SourceOf(r.cfg.WorkloadIdentity, r.o.Getenv)
+	if r.cfg.WorkloadIdentity.File != "" {
+		return base, "not probed: an exchange would spend the identity file's token, which the serving gateway exchanges", nil
+	}
+	identity, _, err := federation.SourceOf(r.cfg.WorkloadIdentity, r.o.Getenv)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var tokens *federation.Exchanger
-	if src != nil {
-		tokens = federation.New(federation.Options{Identity: src, Clients: clients, Logger: slog.New(slog.DiscardHandler)})
+	if identity != nil {
+		tokens = federation.New(federation.Options{Identity: identity, Clients: clients, Logger: slog.New(slog.DiscardHandler)})
 	}
-	return serve.FederatedCredentials{Base: base, Tokens: tokens}, nil
+	return serve.FederatedCredentials{Base: base, Tokens: tokens}, "", nil
 }
 
 // providerRow (spec 005): every Provider's baseURL resolves, its address
@@ -706,7 +711,7 @@ func (r *run) providerRow(ctx context.Context) Line {
 		return Line{OK, name, detail}
 	}
 	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: r.cfg.UpstreamAllowPrivate, Version: version.Version})
-	credentials, err := r.credentialSource(clients)
+	credentials, skip, err := r.credentialSource(clients)
 	if err != nil {
 		return Line{Fail, name, err.Error()}
 	}
@@ -718,6 +723,10 @@ func (r *run) providerRow(ctx context.Context) Line {
 	state := OK
 	var parts []string
 	for _, p := range probed {
+		if skip != "" && p.Spec.Federated() != nil {
+			parts = append(parts, p.Metadata.Name+": "+skip)
+			continue
+		}
 		failed, lastError := health.Probe(ctx, p)
 		switch {
 		case failed:

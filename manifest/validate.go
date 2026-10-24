@@ -146,6 +146,11 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 	}
 	if c := s.Credential; c != nil {
 		value, set := c.Value()
+		if c.Federation != nil {
+			if err := checkFederation(s, set, o); err != nil {
+				return nil, err
+			}
+		}
 		if set && c.ValueFrom != nil {
 			return nil, refuse(CodeExclusiveFields, "a credential is a value or a variable, not both", "spec.credential.value", "spec.credential.valueFrom.env")
 		}
@@ -167,11 +172,6 @@ func checkProvider(p *v1.Provider, o Options) ([]string, error) {
 		}
 		if c.Scheme != "" && !c.Scheme.Valid() {
 			return nil, refuse(CodeInvalidField, strconv.Quote(string(c.Scheme))+" is not bearer or raw", "spec.credential.scheme")
-		}
-		if c.Federation != nil {
-			if err := checkFederation(s, set, o); err != nil {
-				return nil, err
-			}
 		}
 	}
 	if len(s.Headers) > maxHeaders {

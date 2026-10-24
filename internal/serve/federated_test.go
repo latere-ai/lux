@@ -23,9 +23,9 @@ func (s staticIdentity) IdentityToken(context.Context) (string, error) { return 
 
 // TestDiscoveryWithFederation is spec 051's sixth criterion: discovery
 // lists a federated Provider's models with the exchanged token as
-// Authorization: Bearer and no x-api-key; the health probe of a 401 drops
-// the token so the next list exchanges again; and without a workload
-// identity the list fails naming the variables.
+// Authorization: Bearer and no x-api-key; a 401 to a list or to the
+// health probe drops the token so the next request exchanges again; and
+// without a workload identity the probe fails naming the variables.
 func TestDiscoveryWithFederation(t *testing.T) {
 	h := newHarness(t)
 	models := &stub{pages: map[string]string{"": `{"data":[{"id":"claude-a"}],"has_more":false}`}}
@@ -45,7 +45,7 @@ func TestDiscoveryWithFederation(t *testing.T) {
 	})
 	tokens := federation.New(federation.Options{Identity: staticIdentity("jwt"), Clients: h.clients, Now: h.clock, Logger: h.logger})
 	creds := FederatedCredentials{Base: h.creds, Tokens: tokens}
-	d := NewDiscovery(DiscoveryOptions{Store: h.st, Clients: h.clients, Credentials: creds, Interval: time.Hour, Tail: 10 * time.Millisecond,
+	d := NewDiscovery(DiscoveryOptions{Store: h.st, Clients: h.clients, Credentials: creds, Interval: time.Minute, Tail: 10 * time.Millisecond,
 		Holder: "a", Logger: h.logger, Now: h.clock, Jitter: func() float64 { return 0 }})
 	d.acquire(t.Context())
 	d.Tick(t.Context())
@@ -56,6 +56,17 @@ func TestDiscoveryWithFederation(t *testing.T) {
 		t.Fatalf("the list sent Authorization %q and x-api-key %q", auth, key)
 	}
 
+	// A 401 to a list drops the token; the next list exchanges again.
+	models.set(http.StatusUnauthorized, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`)
+	h.advance(2 * time.Minute)
+	d.Tick(t.Context())
+	models.setPages(map[string]string{"": `{"data":[{"id":"claude-a"}],"has_more":false}`})
+	h.advance(2 * time.Minute)
+	d.Tick(t.Context())
+	if exchanges.Load() != 2 || models.lastHeader("Authorization") != "Bearer sk-ant-oat01-2" {
+		t.Fatalf("after a list's 401: %d exchanges, Authorization %q", exchanges.Load(), models.lastHeader("Authorization"))
+	}
+
 	// A 401 to the health probe drops the token; the next request exchanges.
 	health := NewHealth(HealthOptions{Store: h.st, Clients: h.clients, Credentials: creds, Interval: time.Hour, Holder: "a", Logger: h.logger, Now: h.clock})
 	models.set(http.StatusUnauthorized, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`)
@@ -63,7 +74,7 @@ func TestDiscoveryWithFederation(t *testing.T) {
 		t.Fatalf("the probe of a 401: %v %q", failed, lastError)
 	}
 	models.setPages(map[string]string{"": `{"data":[{"id":"claude-a"}],"has_more":false}`})
-	if failed, _ := health.Probe(t.Context(), p); failed || exchanges.Load() != 2 || models.lastHeader("Authorization") != "Bearer sk-ant-oat01-2" {
+	if failed, _ := health.Probe(t.Context(), p); failed || exchanges.Load() != 3 || models.lastHeader("Authorization") != "Bearer sk-ant-oat01-3" {
 		t.Fatalf("after the 401: %d exchanges, Authorization %q", exchanges.Load(), models.lastHeader("Authorization"))
 	}
 

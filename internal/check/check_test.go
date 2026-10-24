@@ -666,3 +666,29 @@ var optional = []string{"local issuer", "bootstrap"}
 func unconfigured() []string {
 	return slices.DeleteFunc(slices.Clone(Names), func(n string) bool { return slices.Contains(optional, n) })
 }
+
+// TestCheckFederatedProvider: a manifest dir that declares a federated
+// Provider loads in luxd check as it does in luxd serve, under
+// LUX_WORKLOAD_IDENTITY_FILE, and the Provider is not probed, since an
+// exchange would spend the identity file's token the serving gateway
+// exchanges (spec 051).
+func TestCheckFederatedProvider(t *testing.T) {
+	s := newStack(t)
+	token := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(token, []byte("jwt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	federated := fmt.Sprintf("apiVersion: lux.latere.ai/v1beta1\nkind: Provider\nmetadata:\n  name: anthropic-federated\nspec:\n  dialect: anthropic\n  baseURL: %s/v1\n  credential:\n    federation:\n      ruleID: fdrl_01\n      organizationID: 4f6c1d2a-8e3b-4c7d-9a1e-2b5f6c7d8e9f\n      serviceAccountID: svac_01\n", s.providers[v1.DialectAnthropic])
+	if err := os.WriteFile(filepath.Join(s.dir, "provider-federated.yaml"), []byte(federated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := s.fileEnv()
+	m["LUX_WORKLOAD_IDENTITY_FILE"] = token
+	lines := byName(Lines(t.Context(), Options{Getenv: env(m)}))
+	if l := lines["manifest dir"]; l.State != OK {
+		t.Fatalf("manifest dir: %+v", l)
+	}
+	if l := lines["providers"]; l.State != OK || !strings.Contains(l.Detail, "anthropic-federated: not probed") {
+		t.Fatalf("providers: %+v", l)
+	}
+}

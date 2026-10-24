@@ -15,7 +15,8 @@ const federated = "spec:\n  dialect: anthropic\n  baseURL: https://api.example.c
 	"      ruleID: fdrl_01ExampleRule\n      organizationID: 4f6c1d2a-8e3b-4c7d-9a1e-2b5f6c7d8e9f\n      serviceAccountID: svac_01ExampleServiceAccount\n"
 
 // TestFederationNeedsWorkloadIdentity is spec 051's first criterion past
-// the corpus: a federated Provider is refused where the gateway has no
+// the corpus: a federation beside a variable or an empty value is
+// exclusive_fields; a federated Provider is refused where the gateway has no
 // workload identity, in server mode and in the file mode, naming the two
 // variables; its credential header is Authorization, so a static header
 // of that name is refused; and an explicit Authorization, bearer is
@@ -31,6 +32,14 @@ func TestFederationNeedsWorkloadIdentity(t *testing.T) {
 		if e.Code != CodeInvalidField || strings.Join(e.Paths, ",") != "spec.credential.federation" ||
 			!strings.Contains(e.Detail, "LUX_WORKLOAD_IDENTITY_FILE") || !strings.Contains(e.Detail, "LUX_WORKLOAD_IDENTITY_KUBERNETES") {
 			t.Errorf("file mode %v: %s %v %q", o.FileMode, e.Code, e.Paths, e.Detail)
+		}
+	}
+	// Beside a variable in server mode, or an empty value, the refusal is
+	// the federation's own, not the value's.
+	for name, extra := range map[string]string{"valueFrom": "    valueFrom:\n      env: KEY\n", "an empty value": "    value: \"\"\n"} {
+		body := head(v1.KindProvider, "anthropic") + strings.Replace(federated, "  credential:\n", "  credential:\n"+extra, 1)
+		if e := resolveErr(t, body, on); e.Code != CodeExclusiveFields || e.Paths[0] != "spec.credential.federation" {
+			t.Errorf("federation with %s: %s %v", name, e.Code, e.Paths)
 		}
 	}
 	e := resolveErr(t, head(v1.KindProvider, "anthropic")+federated+"  headers:\n    Authorization: Bearer x\n", on)

@@ -184,6 +184,13 @@ func TestExchange(t *testing.T) {
 	if got := token(t, x, p); got != "sk-ant-oat01-2" {
 		t.Fatalf("a failed refresh: %q", got)
 	}
+	// The next requests keep it too, without asking again for RetryAfter.
+	failed := ep.count()
+	for range 3 {
+		if got := token(t, x, p); got != "sk-ant-oat01-2" || ep.count() != failed {
+			t.Fatalf("a request after a failed refresh: %q after %d more exchanges", got, ep.count()-failed)
+		}
+	}
 
 	// Past 30 seconds before, a failure is the request's, and is answered
 	// again without an exchange for five seconds.
@@ -212,13 +219,30 @@ func TestExchange(t *testing.T) {
 		t.Fatalf("a changed Provider: %q with %v", got, ep.grants[n])
 	}
 
+	// A Provider changed again whose exchange fails is never served the
+	// token held for what it named before.
+	ep.set(http.StatusUnauthorized, `{"type":"error","error":{"type":"authentication_error","message":"Authentication failed"}}`)
+	moved := federated(p.Spec.BaseURL)
+	moved.Spec.Credential.Federation.ServiceAccountID = "svac_02"
+	for range 2 {
+		if got, err := x.Token(t.Context(), moved); err == nil {
+			t.Fatalf("a changed Provider whose exchange failed got %q", got)
+		}
+	}
+	ep.set(0, "")
+	held := fmt.Sprintf("sk-ant-oat01-%d", n+1)
+	if got := token(t, x, changed); got != held {
+		t.Fatalf("the Provider the token is held for: %q", got)
+	}
+
 	// A refused token is dropped; another value is not.
+	n = ep.count()
 	x.Refused(changed, []byte("sk-ant-oat01-other"))
-	if token(t, x, changed); ep.count() != n+1 {
+	if token(t, x, changed); ep.count() != n {
 		t.Fatal("a value other than the held token was dropped")
 	}
-	x.Refused(changed, []byte(fmt.Sprintf("sk-ant-oat01-%d", n+1)))
-	if got := token(t, x, changed); got != fmt.Sprintf("sk-ant-oat01-%d", n+2) {
+	x.Refused(changed, []byte(held))
+	if got := token(t, x, changed); got != fmt.Sprintf("sk-ant-oat01-%d", n+1) {
 		t.Fatalf("after a refusal: %q", got)
 	}
 

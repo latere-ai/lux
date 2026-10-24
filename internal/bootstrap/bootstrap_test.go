@@ -689,3 +689,38 @@ func TestBootstrapResolvesAgainstTheStore(t *testing.T) {
 		t.Fatalf("a Budget in neither: %+v", e)
 	}
 }
+
+// TestBootstrapFederationDropsTheStoredValue is spec 051's second
+// criterion through bootstrap: a Provider switched to a federation has its
+// sealed value deleted in the write, and its status unset at the value's
+// version, as an apply through the API does; a restart changes nothing.
+func TestBootstrapFederationDropsTheStoredValue(t *testing.T) {
+	h := newHarness(t)
+	h.env["ANTHROPIC_API_KEY"] = "sk-ant-bootstrap"
+	h.write("anthropic.yaml", "apiVersion: lux.latere.ai/v1beta1\nkind: Provider\nmetadata:\n  name: anthropic\nspec:\n  dialect: anthropic\n  baseURL: https://api.example.com/v1\n  credential:\n    valueFrom:\n      env: ANTHROPIC_API_KEY\n")
+	h.apply()
+	p, _ := h.get(v1.KindProvider, "anthropic")
+	if h.open(p.ID()) != "sk-ant-bootstrap" {
+		t.Fatal("the key was not sealed")
+	}
+	h.write("anthropic.yaml", "apiVersion: lux.latere.ai/v1beta1\nkind: Provider\nmetadata:\n  name: anthropic\nspec:\n  dialect: anthropic\n  baseURL: https://api.example.com/v1\n  credential:\n    federation:\n      ruleID: fdrl_01\n      organizationID: 4f6c1d2a-8e3b-4c7d-9a1e-2b5f6c7d8e9f\n      serviceAccountID: svac_01\n")
+	if e := h.refused(h.options()); e == nil || !strings.Contains(e.Error(), "LUX_WORKLOAD_IDENTITY") {
+		t.Fatalf("without a workload identity: %v", e)
+	}
+	o := h.options()
+	o.WorkloadIdentity = true
+	res, err := Apply(t.Context(), o)
+	if err != nil || res.Updated != 1 {
+		t.Fatalf("to federation: %+v %v", res, err)
+	}
+	p, _ = h.get(v1.KindProvider, "anthropic")
+	if c := p.(*v1.Provider).Status.Credential; c == nil || c.Set || c.Version != 1 {
+		t.Fatalf("status.credential after federation: %+v", c)
+	}
+	if _, err := h.st.Credentials().Get(t.Context(), p.ID()); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("the stored key is still there: %v", err)
+	}
+	if res, err := Apply(t.Context(), o); err != nil || res.Unchanged != 1 {
+		t.Fatalf("a restart: %+v %v", res, err)
+	}
+}

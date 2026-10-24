@@ -148,6 +148,9 @@ func (u upstream) listModels(ctx context.Context, p *v1.Provider) ([]candidate, 
 			return nil, fmt.Errorf("GET %s: reading the body: %w", rawURL, err)
 		}
 		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusUnauthorized {
+				gateway.RefuseCredential(u.credentials, p, value)
+			}
 			return nil, fmt.Errorf("GET %s: upstream status %d: %s", rawURL, resp.StatusCode, excerpt(redact(body, value)))
 		}
 		if len(body) > maxListBytes {

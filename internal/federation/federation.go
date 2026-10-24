@@ -82,10 +82,13 @@ type held struct {
 	exchange sync.Mutex
 	mu       sync.Mutex
 	// key is the base URL and the identifiers the token was exchanged
-	// for; a Provider that names others exchanges again.
+	// for; a Provider that names others exchanges again. failKey is what
+	// the last failed exchange was for, apart, so a failure for other
+	// identifiers never makes the token held for these serve them.
 	key      string
 	token    []byte
 	expires  time.Time
+	failKey  string
 	failedAt time.Time
 	failure  error
 }
@@ -128,7 +131,7 @@ func (h *held) current(key string, now time.Time) (token []byte, usable, fresh b
 		fresh = now.Before(h.expires.Add(-RefreshBefore))
 		token = h.token
 	}
-	if h.key == key && h.failure != nil && now.Sub(h.failedAt) < RetryAfter {
+	if h.failKey == key && h.failure != nil && now.Sub(h.failedAt) < RetryAfter {
 		recent = h.failure
 	}
 	return token, usable, fresh, recent
@@ -142,14 +145,15 @@ func (e *Exchanger) Token(ctx context.Context, p *v1.Provider) ([]byte, error) {
 		return nil, errors.New("the Provider's credential is not federated")
 	}
 	key, h := keyOf(p, f), e.entry(p.Status.ID)
-	token, usable, fresh, _ := h.current(key, e.o.Now())
+	token, usable, fresh, recent := h.current(key, e.o.Now())
 	if fresh {
 		return token, nil
 	}
 	if usable {
 		// The advisory window: one request exchanges, the others keep
-		// the token, and a failed exchange keeps it too.
-		if !h.exchange.TryLock() {
+		// the token, and a failed exchange keeps it too, without another
+		// for RetryAfter.
+		if recent != nil || !h.exchange.TryLock() {
 			return token, nil
 		}
 		defer h.exchange.Unlock()
@@ -162,7 +166,7 @@ func (e *Exchanger) Token(ctx context.Context, p *v1.Provider) ([]byte, error) {
 	defer h.exchange.Unlock()
 	// Another request may have exchanged, or failed to, while this one
 	// waited.
-	token, _, fresh, recent := h.current(key, e.o.Now())
+	token, _, fresh, recent = h.current(key, e.o.Now())
 	if fresh {
 		return token, nil
 	}
@@ -197,11 +201,11 @@ func (e *Exchanger) exchange(ctx context.Context, p *v1.Provider, f *v1.Federati
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if err != nil {
-		h.key, h.failedAt, h.failure = key, now, err
+		h.failKey, h.failedAt, h.failure = key, now, err
 		e.o.Logger.WarnContext(ctx, "federation: the token exchange failed", "provider", p.Metadata.Name, "error", err)
 		return nil, err
 	}
-	h.key, h.token, h.expires, h.failure = key, token, now.Add(lifetime), nil
+	h.key, h.token, h.expires, h.failKey, h.failure = key, token, now.Add(lifetime), "", nil
 	e.o.Logger.InfoContext(ctx, "federation: exchanged a token", "provider", p.Metadata.Name, "valid_for", lifetime.String())
 	return token, nil
 }

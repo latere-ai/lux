@@ -236,6 +236,9 @@ type step struct {
 	hash      string        // a created Key's hash
 	valuePath string        // the field a created Key's value arrived in
 	sealed    *store.Sealed // a Provider's new credential
+	// unseal deletes a Provider's stored credential: one switched to a
+	// federation, which holds none (spec 051).
+	unseal bool
 }
 
 // plan reads the document's object by name and resolves the document
@@ -417,12 +420,27 @@ func fromVariable(e *Error, path string) *Error {
 // opened under the keys, and sealed as the next version when it differs
 // or none is stored, in the write's transaction; a value equal to the
 // stored one, or no value at all, keeps the stored credential and its
-// status, spec 003's update rule, so a restart reseals nothing. It
-// reports whether a new credential is written.
+// status, spec 003's update rule, so a restart reseals nothing. A
+// federated Provider's stored value is deleted. It reports whether the
+// stored credential changes.
 func (o Options) prepareProvider(ctx context.Context, s *step, p *v1.Provider) (bool, *Error) {
 	var stored *v1.CredentialStatus
 	if old, ok := s.existing.(*v1.Provider); ok {
 		stored = old.Status.Credential
+	}
+	if p.Spec.Federated() != nil {
+		// A federated Provider holds no value (spec 051): a stored one is
+		// deleted in the write's transaction, its version kept, as the
+		// API does.
+		p.Status.Credential = &v1.CredentialStatus{}
+		if stored != nil {
+			p.Status.Credential.Version, p.Status.Credential.UpdatedAt = stored.Version, stored.UpdatedAt
+		}
+		if stored != nil && stored.Set {
+			p.Status.Credential.UpdatedAt, s.unseal = s.at, true
+			return true, nil
+		}
+		return false, nil
 	}
 	value, carried := "", false
 	if p.Spec.Credential != nil {
@@ -553,6 +571,11 @@ func (o Options) write(ctx context.Context, s *step) error {
 		}
 		if s.sealed != nil {
 			if err := tx.Credentials().Put(ctx, s.obj.ID(), *s.sealed); err != nil {
+				return err
+			}
+		}
+		if s.unseal {
+			if err := tx.Credentials().Delete(ctx, s.obj.ID()); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
 			}
 		}

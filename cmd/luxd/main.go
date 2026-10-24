@@ -279,8 +279,12 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
 	// The workload identity of spec 051: a federated Provider's credential
 	// is the token its exchange holds, through the same seam the doors and
-	// the jobs open every other Provider's value through.
-	exchanger, notice, err := workloadIdentity(cfg.WorkloadIdentity, clientSource, getenv, logger)
+	// the jobs open every other Provider's value through. The exchange has
+	// clients of its own, under the same rules, so it never waits for a
+	// concurrency slot the Provider's own requests hold; a federated
+	// Provider is never tunneled.
+	exchangeClients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: cfg.UpstreamAllowPrivate, Version: version.Version})
+	exchanger, notice, err := workloadIdentity(cfg.WorkloadIdentity, exchangeClients, getenv, logger)
 	if err != nil {
 		return fail(stderr, err)
 	}

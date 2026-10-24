@@ -100,9 +100,10 @@ The identity token is the operator's to configure, never a Provider's:
 
 The first two are exclusive; with neither the gateway has no workload
 identity. The Kubernetes source reads the pod's mounted service
-account token, namespace and CA, takes the service account's name from
-the token's `sub`, and needs a Role that lets that service account
-`create` `serviceaccounts/token` on itself.
+account token, namespace and CA, asks the API server once who the
+token is (a SelfSubjectReview, which every authenticated subject may
+make), and needs a Role that lets that service account `create`
+`serviceaccounts/token` on itself.
 
 A token minted for every exchange carries a new `jti`, so Anthropic's
 single-use check holds across restarts, retries and several federated
@@ -117,8 +118,10 @@ send it to a base URL of its choosing.
 
 ### The exchange
 
-`POST <baseURL>/oauth/token`, through the Provider's own client (spec
-005's pinned client), as JSON:
+`POST <baseURL>/oauth/token`, through a client of spec 005's rules
+pinned to the Provider's base URL, apart from the clients the
+Provider's requests use, so an exchange never waits for a concurrency
+slot they hold; as JSON:
 
 ```json
 {"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -136,7 +139,10 @@ the status and the upstream's error message, never the assertion.
 The token is reused until 120 seconds before it expires. From then
 until 30 seconds before, one request exchanges again while the others
 keep the cached token, and a failed exchange keeps it; from 30 seconds
-before, a request waits for an exchange and fails with it.
+before, a request waits for an exchange and fails with it. A failed
+exchange is answered again for 5 seconds without another, and is held
+apart from the token: a Provider whose identifiers changed and whose
+exchange failed is never served the token of the identifiers before.
 
 ### Using the token
 
@@ -147,8 +153,12 @@ the Provider itself, and the gateway's own source answers a federated
 Provider from the exchange and any other from the stored value. A
 source that does not read the Provider is asked by id as before.
 
-An upstream 401 to a request that carried an exchanged token drops
-that token, so the next request exchanges again. A failed exchange is
+An upstream 401 to a request that carried an exchanged token, through
+a door, to discovery's list or to the health probe, drops that token,
+so the next request exchanges again. Bootstrap's apply deletes a stored
+value as the API's does. `luxd check` exchanges for a federated
+Provider with the Kubernetes source, and does not probe one with the
+file source, whose token the serving gateway exchanges once. A failed exchange is
 the request's `provider_unavailable`, `Provider <name>: credential:
 <reason>`, and the health probe's failure, so `status.health.lastError`
 names it.
