@@ -114,6 +114,13 @@ a dialect for one of them is a new row in the dialect table with its
 own spec, not a new `scheme`. The core's `scheme` set is therefore
 `bearer` and `raw` and nothing else, on purpose.
 
+One exchanged credential is the core's own: an anthropic Provider's
+`credential.federation` ([[051-workload-identity-federation]]), a
+token the gateway gets for its own workload identity at Anthropic's
+token endpoint, holds in memory and exchanges again before it expires.
+It travels as `Authorization: Bearer`, the store holds no value for
+it, and the doors and the jobs read it where they read a value.
+
 A Provider with no credential, neither `value` nor `valueFrom`, is
 valid ([[003-manifest-contract]]): the gateway injects no header toward
 it and strips a caller's copy of the dialect's credential header all

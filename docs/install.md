@@ -449,6 +449,9 @@ never the content.
   request record; [`configuration.md`](configuration.md) has the knobs
   and [`observability.md`](observability.md) the metrics for the sink and
   the archive.
+- Reach Anthropic with the gateway's own workload identity instead of an
+  API key: `credential.federation` and `LUX_WORKLOAD_IDENTITY_KUBERNETES`,
+  in [`security.md`](security.md#reach-anthropic-without-a-stored-key).
 - Set `LUX_USAGE_RETENTION` to decide how long usage keeps its hourly
   detail before it is folded into one row per month, by rules matched on
   Key labels; unset, every hourly row is kept.

@@ -74,6 +74,57 @@ by the gateway alone. [`plane.md`](plane.md) has a minimal authorizer to
 start from; the knobs are in
 [`configuration.md`](configuration.md#authorizer).
 
+### Reach Anthropic without a stored key
+
+An anthropic Provider can hold no API key at all. With
+`credential.federation`, the gateway presents its own workload identity
+at Anthropic's token endpoint and sends the short-lived token it gets
+back, kept in memory and exchanged again before it expires. A copy of
+the store, or of the KEK, then gives no one Anthropic access.
+
+```yaml
+apiVersion: lux.latere.ai/v1beta1
+kind: Provider
+metadata:
+  name: anthropic
+spec:
+  dialect: anthropic
+  baseURL: https://api.anthropic.com/v1
+  credential:
+    federation:
+      ruleID: fdrl_...
+      organizationID: 00000000-0000-0000-0000-000000000000
+      serviceAccountID: svac_...
+      workspaceID: wrkspc_...   # when the rule covers more than one
+```
+
+The identity token is yours to configure, never a Provider's. On
+Kubernetes, set `LUX_WORKLOAD_IDENTITY_KUBERNETES=1`: for every exchange
+the gateway mints a 30-minute token for its pod's service account, with
+the audience `LUX_WORKLOAD_IDENTITY_AUDIENCE` names
+(`https://api.anthropic.com` by default), so each exchange presents a
+token Anthropic has not seen. The service account needs this Role:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: luxd-token
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: [luxd]   # the gateway's own service account
+    verbs: [create]
+```
+
+Elsewhere, `LUX_WORKLOAD_IDENTITY_FILE` names a JWT the gateway reads
+again for every exchange; keep it fresh well within an hour, since
+Anthropic refuses a token it has exchanged before. In the Claude
+Console, register your cluster's issuer, a service account, and a
+federation rule matching the gateway's service account and audience,
+then copy their IDs into the Provider. A Provider switched to
+federation drops the key it stored.
+
 ### Rotate and revoke Keys
 
 A leaked Key value is contained by `POST /v1/keys/{id}/rotate`, which

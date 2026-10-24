@@ -103,6 +103,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [048](048-request-label-filter.md) | Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has | small | testing | 007, 009, 011, 012 |
 | [049](049-key-doors.md) | Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key | small | testing | 003, 004, 007, 011 |
 | [050](.archive/050-discovered-models-start-disabled.md) | Discovered Models start disabled: a Provider may ask that every Model discovery creates for it start disabled | small | complete | 003, 005, 039 |
+| [051](051-workload-identity-federation.md) | Workload identity federation: an anthropic Provider's credential is a short-lived token the gateway gets for its own workload identity, so no long-lived key is stored | medium | testing | 002, 003, 004, 005 |
 
 ## Dependency graph
 
@@ -151,6 +152,7 @@ flowchart BT
   S048[048 request-label filter]
   S049[049 key doors]
   S050[050 discovered models start disabled]
+  S051[051 workload identity federation]
   S002 --> S001
   S003 --> S001
   S004 --> S003
@@ -202,6 +204,10 @@ flowchart BT
   S047 --> S005
   S050 --> S005
   S050 --> S003
+  S051 --> S002
+  S051 --> S003
+  S051 --> S004
+  S051 --> S005
   S047 --> S007
   S047 --> S011
   S048 --> S011
@@ -234,6 +240,7 @@ flowchart BT
 | 18 | 043, 044 | a provider's refusal readable on both sides: its status on the request log line and its reason, credentials redacted, in the developer detail; a model granted to a Key through one replica served through any other at once |
 | 19 | 047 | a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request, with their zero-retention request fields written into every request |
 | 20 | 048, 049 | the request history read by a request's own labels, under the read the caller already has; a Key that names the doors it opens, refused at any other door before anything else is read |
+| 21 | 051 | an anthropic Provider reached with the gateway's own workload identity, exchanged for a short-lived token kept in memory, so the store holds no key for it |
 
 Phases run in order; specs inside a phase may run in parallel where
 their `depends_on` allows.

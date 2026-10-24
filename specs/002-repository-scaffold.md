@@ -191,6 +191,7 @@ not the server's and live in the tables of [[018-conformance-suite]],
 | `LUX_MAX_MANIFEST_BYTES` | 011 | `65536` | the largest manifest or JSON body accepted on the control plane |
 | `LUX_TUNNEL_ENABLED`, `LUX_TUNNEL_REGISTRY_TTL` | 013 | unset, `30s` | the reverse tunnel for local runtimes, and the liveness window of a serving node in the registry |
 | `LUX_TUNNEL_FORWARD_ADDR`, `LUX_TUNNEL_FORWARD_SECRET` | 013 | unset, unset | the address other replicas reach this one's internal listener at, and the bearers on the forward route, a comma separated list of which the first is sent and every one is accepted, so a rotation is prepending; unset serves a tunneled Provider on the holding replica only; the address without the secret is a start-up failure |
+| `LUX_WORKLOAD_IDENTITY_FILE`, `LUX_WORKLOAD_IDENTITY_KUBERNETES`, `LUX_WORKLOAD_IDENTITY_AUDIENCE` | 051 | unset, unset, `https://api.anthropic.com` | the gateway's own identity token, which a Provider's `credential.federation` is exchanged for: a file read again for every exchange, or a token minted for the pod's service account for every exchange with the audience named; the two sources are exclusive, and with neither a federated Provider is refused |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_*` | 019 | unset | the standard OpenTelemetry exporter variables, read by `latere.ai/x/pkg/otel`; telemetry is off without the endpoint |
 
 ### The gate

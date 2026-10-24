@@ -6,6 +6,23 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- **An anthropic Provider can hold no API key.** With
+  `credential.federation`, naming an Anthropic federation rule,
+  organization, service account and optionally workspace, the gateway
+  presents its own workload identity at Anthropic's token endpoint and
+  sends the short-lived token it gets back as `Authorization: Bearer`,
+  kept in memory and exchanged again before it expires; a 401 makes the
+  next request exchange again. The identity token comes from
+  `LUX_WORKLOAD_IDENTITY_KUBERNETES=1`, a token minted for the pod's own
+  service account for every exchange with the audience
+  `LUX_WORKLOAD_IDENTITY_AUDIENCE` names, or from
+  `LUX_WORKLOAD_IDENTITY_FILE`. A Provider switched to federation drops
+  the key it stored, and one is refused on a gateway with neither
+  variable. `luxd check` exchanges for a federated Provider when it
+  probes it.
+
 ## v0.19.1 - 2026-10-24
 
 ### Fixed
