@@ -1,15 +1,15 @@
 ---
 title: "Discovered Models start disabled: a Provider may ask that every Model discovery creates for it start disabled, so none is served until an operator declares it"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
   - specs/005-providers.md
-  - .archive/039-disabled-models.md
+  - specs/.archive/039-disabled-models.md
 affects: [manifest/v1/, manifest/, internal/serve/discovery.go, api/openapi.yaml, specs/003-manifest-contract.md, specs/005-providers.md]
 effort: small
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 author: changkun
 ---
 
@@ -27,7 +27,7 @@ or, worse, served.
 
 A Provider gains `spec.discovery.startDisabled`. When true, every Model
 discovery creates for the Provider is created with `spec.disabled`
-([039-disabled-models](.archive/039-disabled-models.md)), so no door
+([039-disabled-models](039-disabled-models.md)), so no door
 serves it and no model list carries it. An operator serves one by
 declaring a Model of the same name, which shadows the discovered one
 in place as it does today.
@@ -65,14 +65,14 @@ in place as it does today.
 - Pricing a discovered Model from any list. Pricing is the declaring
   operator's.
 - Any change to what a disabled Model does at call time or in a list
-  ([039-disabled-models](.archive/039-disabled-models.md)).
+  ([039-disabled-models](039-disabled-models.md)).
 
 ## Acceptance criteria
 
 - A Provider with `discovery.startDisabled: true` whose upstream lists
   two models has two discovered Models with `spec.disabled` true after
   one tick; a disabled Model is refused at call time as
-  [039-disabled-models](.archive/039-disabled-models.md) proves
+  [039-disabled-models](039-disabled-models.md) proves
   (`TestDiscoveryStartsDisabled`).
 - Turning the flag off and ticking again leaves both disabled; a model
   the upstream adds after that is created enabled
@@ -84,3 +84,28 @@ in place as it does today.
 - The manifest round-trips the flag, renders it only when true, and the
   OpenAPI document names it (`TestProviderStartDisabledRoundTrip`, the
   openapi drift check).
+
+## Outcome
+
+Built as designed in v0.19.0 and live in production since v0.19.1 on
+2026-10-24.
+
+| # | Test |
+|---|---|
+| 1 | `TestDiscoveryStartsDisabled`, the first tick |
+| 2 | `TestDiscoveryStartsDisabled`, the flag turned off and a model added |
+| 3 | `TestDiscoveryStartsDisabled`, the declared Model and its deletion |
+| 4 | `TestProviderStartDisabledRoundTrip` and the OpenAPI drift check |
+
+Notes on the build:
+
+- Declaring a Model over a discovered one through the API, which
+  criterion 3 relies on, was refused `already_exists` until v0.19.1:
+  the API left `status.source` empty on the Model it wrote, so the
+  store did not take it as declared. The store's own test covered the
+  replacement and missed the API path. `TestDeclaringOverADiscoveredModel`
+  now covers it.
+- In production the platform declared eleven Anthropic models over
+  their discovered Models, each enabled and priced, and a call to one
+  of them answered.
+
