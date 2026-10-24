@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.20.0 - 2026-10-24
+
 ### Added
 
 - **An anthropic Provider can hold no API key.** With
