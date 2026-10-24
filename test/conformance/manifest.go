@@ -203,10 +203,18 @@ func tunnelRefused(e envelope) bool {
 	return e.code == "invalid_field" && slices.Equal(e.paths, []string{"spec.tunnel"})
 }
 
+// federationRefused reports whether a Provider was refused for a
+// federated credential on a server without a workload identity (spec
+// 051), which a server may run without.
+func federationRefused(e envelope) bool {
+	return e.code == "invalid_field" && slices.Equal(e.paths, []string{"spec.credential.federation"})
+}
+
 // case003AcceptedCorpus applies every accepted case in kind order,
 // reads each back, and holds the read-back's metadata to the golden's.
 // A tunneled Provider the server refuses, and the Models that target
-// it, skip by name: the tunnel is spec 013's and not built.
+// it, skip by name: the tunnel is spec 013's and not built. A federated
+// Provider on a server without a workload identity skips the same way.
 func case003AcceptedCorpus(t testing.TB, c *client) {
 	tunneled := map[string]bool{}
 	for _, name := range corpusCases(t, "accepted") {
@@ -226,15 +234,15 @@ func case003AcceptedCorpus(t testing.TB, c *client) {
 				}
 			}
 			if skip {
-				t.Logf("%s: skipped, its Provider is tunneled and the server refused the tunnel", name)
+				t.Logf("%s: skipped, its Provider is one the server refused", name)
 				continue
 			}
 		}
 		objName := str(golden, "metadata.name")
 		resp := c.apply(t, kind, objName, tree)
 		if kind == v1.KindProvider && resp.Status == http.StatusBadRequest {
-			if e := c.envelope(t, resp); tunnelRefused(e) {
-				t.Logf("%s: skipped, the server does not enable tunneled Providers: %s", name, e.detail)
+			if e := c.envelope(t, resp); tunnelRefused(e) || federationRefused(e) {
+				t.Logf("%s: skipped, the server does not enable this kind of Provider: %s", name, e.detail)
 				tunneled[objName] = true
 				continue
 			}

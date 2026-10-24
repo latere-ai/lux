@@ -111,6 +111,14 @@ namespace, in `credential.valueFrom.env` or `Key.spec.valueFrom.env`.
 | `LUX_TUNNEL_FORWARD_ADDR` | The `host:port` other replicas reach this one's internal listener at; unset serves a tunneled Provider on the holding replica only. | `unset` | No |
 | `LUX_TUNNEL_FORWARD_SECRET` | Comma-separated bearers of the forward route: the first is sent, every one is accepted, so a rotation is prepending. Each at least 32 bytes. Never echoed. | `unset` | When `LUX_TUNNEL_FORWARD_ADDR` is set |
 
+## Workload identity
+
+| Variable | Meaning | Default | When required |
+|---|---|---|---|
+| `LUX_WORKLOAD_IDENTITY_FILE` | A path holding the gateway's own identity token, a JWT read again for every exchange, which a Provider with `credential.federation` is exchanged for. Exclusive with `LUX_WORKLOAD_IDENTITY_KUBERNETES`. | `unset` | No |
+| `LUX_WORKLOAD_IDENTITY_KUBERNETES` | 1 mints a token for the pod's own service account through the TokenRequest API for every exchange, valid 30 minutes; the service account needs `create` on its own `serviceaccounts/token`. | `unset` | No |
+| `LUX_WORKLOAD_IDENTITY_AUDIENCE` | The audience a token minted for the pod's service account names. | `https://api.anthropic.com` | No |
+
 ## Secrets
 
 | Variable | Meaning | Default | When required |

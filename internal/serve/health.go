@@ -17,6 +17,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 
+	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -284,6 +285,9 @@ func (h *Health) Probe(ctx context.Context, p *v1.Provider) (failed bool, lastEr
 	case resp.StatusCode >= 500:
 		return true, "GET " + rawURL + ": upstream status " + strconv.Itoa(resp.StatusCode) + ": " + excerpt(redact(body, value))
 	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
+		if resp.StatusCode == http.StatusUnauthorized {
+			gateway.RefuseCredential(h.o.Credentials, p, value)
+		}
 		return false, "credential refused: " + strconv.Itoa(resp.StatusCode)
 	default:
 		return false, ""

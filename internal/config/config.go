@@ -218,6 +218,9 @@ type Config struct {
 	// TunnelForwardSecrets are the bearers of the forward route: the
 	// first is sent, every one is accepted. Never echoed.
 	TunnelForwardSecrets []string
+
+	// WorkloadIdentity is the gateway's own identity token of spec 051.
+	WorkloadIdentity WorkloadIdentity
 }
 
 // Load reads every variable through getenv and returns the configuration,
@@ -291,6 +294,7 @@ func Load(getenv Getenv) (Config, error) {
 	problems = append(problems, c.loadAPI(getenv)...)
 	problems = append(problems, c.loadEvents(getenv)...)
 	problems = append(problems, c.loadTunnel(getenv)...)
+	problems = append(problems, c.loadWorkloadIdentity(getenv)...)
 	// The file mode's directory is desired state already, so a second
 	// directory claiming the same state is a contradiction, not a
 	// composition; and bootstrapped objects belong to the first admin

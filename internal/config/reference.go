@@ -390,6 +390,28 @@ var referenceGroups = []referenceGroup{
 			envNote:  "required when LUX_TUNNEL_FORWARD_ADDR is set",
 		},
 	}},
+	{title: "Workload identity", vars: []referenceVar{
+		{
+			name:     "LUX_WORKLOAD_IDENTITY_FILE",
+			meaning:  "A path holding the gateway's own identity token, a JWT read again for every exchange, which a Provider with `credential.federation` is exchanged for. Exclusive with `LUX_WORKLOAD_IDENTITY_KUBERNETES`.",
+			def:      "unset",
+			required: "No",
+		},
+		{
+			name:     "LUX_WORKLOAD_IDENTITY_KUBERNETES",
+			meaning:  "1 mints a token for the pod's own service account through the TokenRequest API for every exchange, valid 30 minutes; the service account needs `create` on its own `serviceaccounts/token`.",
+			def:      "unset",
+			required: "No",
+			envValue: "1",
+		},
+		{
+			name:     "LUX_WORKLOAD_IDENTITY_AUDIENCE",
+			meaning:  "The audience a token minted for the pod's service account names.",
+			def:      "https://api.anthropic.com",
+			required: "No",
+			envValue: "https://api.anthropic.com",
+		},
+	}},
 	{title: "Secrets", vars: []referenceVar{
 		{
 			name:        "LUX_SECRETS_KEK",

@@ -276,7 +276,7 @@ func (c *call) inject(ctx context.Context, req *http.Request, p *v1.Provider) ([
 	if cred == nil {
 		return nil, nil
 	}
-	value, err := c.h.o.Credentials.Credential(ctx, p.Status.ID)
+	value, err := OpenCredential(ctx, c.h.o.Credentials, p)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,11 @@ func (c *call) attempt(parent context.Context, t Target, m mode) (f *failure, fi
 	case resp.StatusCode >= 300 && resp.StatusCode < 400, resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
 		// A redirect is not followed, and a 401 or 403 is the Provider's
 		// credential refused, which no caller's request caused: both are
-		// the provider's error, not the request's.
+		// the provider's error, not the request's. A 401 drops a value
+		// the source got rather than holds (spec 051).
+		if resp.StatusCode == http.StatusUnauthorized {
+			RefuseCredential(c.h.o.Credentials, p, credential)
+		}
 		c.h.o.Router.RecordSuccess(t)
 		c.observe(p, false)
 		return fail(CodeUpstreamError, upstreamDetail(resp, credential)), true

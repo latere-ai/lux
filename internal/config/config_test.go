@@ -83,7 +83,7 @@ func TestLoadAppliesEveryDefault(t *testing.T) {
 		PublicURL: wantPublicURL(t), BasePathMode: BasePathPrefix, RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
-		TunnelRegistryTTL: 30 * time.Second,
+		TunnelRegistryTTL: 30 * time.Second, WorkloadIdentity: WorkloadIdentity{Audience: DefaultWorkloadAudience},
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -137,6 +137,8 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		"LUX_TUNNEL_REGISTRY_TTL":                 "45s",
 		"LUX_TUNNEL_FORWARD_ADDR":                 "10.0.0.7:9001",
 		"LUX_TUNNEL_FORWARD_SECRET":               secretNew + "," + secretOld,
+		"LUX_WORKLOAD_IDENTITY_KUBERNETES":        "1",
+		"LUX_WORKLOAD_IDENTITY_AUDIENCE":          "https://api.anthropic.example",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -181,6 +183,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		TunnelRegistryTTL:                45 * time.Second,
 		TunnelForwardAddr:                "10.0.0.7:9001",
 		TunnelForwardSecrets:             []string{secretNew, secretOld},
+		WorkloadIdentity:                 WorkloadIdentity{Kubernetes: true, Audience: "https://api.anthropic.example"},
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -203,7 +206,7 @@ func TestLoadReadsEveryVariable(t *testing.T) {
 		PublicURL: wantPublicURL(t), BasePathMode: BasePathPrefix, RequestsPerMinute: 600, UnauthenticatedRequestsPerMinute: 60,
 		MaxManifestBytes: 65536, MaxBodyBytes: 64 << 20, UpstreamTimeout: 10 * time.Minute,
 		RequestLogExporter: ExporterNone, S3Region: DefaultS3Region, S3Prefix: DefaultS3Prefix,
-		TunnelRegistryTTL: 30 * time.Second,
+		TunnelRegistryTTL: 30 * time.Second, WorkloadIdentity: WorkloadIdentity{Audience: DefaultWorkloadAudience},
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Fatalf("Load() = %+v, want %+v", c, want)
@@ -409,5 +412,34 @@ func TestBootstrapRules(t *testing.T) {
 				t.Fatalf("BootstrapDir = %q", c.BootstrapDir)
 			}
 		})
+	}
+}
+
+// TestWorkloadIdentityConfig is spec 051's seventh criterion: the file,
+// the Kubernetes source and the audience load as the table says, with
+// Anthropic's audience by default; both sources at once, a flag other
+// than 1, and an audience that names more than one or is no URL are each
+// a problem naming its variable.
+func TestWorkloadIdentityConfig(t *testing.T) {
+	load := func(vars map[string]string) (WorkloadIdentity, []string) {
+		var c Config
+		return c.WorkloadIdentity, c.loadWorkloadIdentity(env(vars))
+	}
+	if w, p := load(nil); len(p) != 0 || w.Enabled() || w.Audience != DefaultWorkloadAudience {
+		t.Fatalf("unset: %+v %v", w, p)
+	}
+	var c Config
+	if p := c.loadWorkloadIdentity(env(map[string]string{"LUX_WORKLOAD_IDENTITY_FILE": " /var/run/secrets/anthropic/token "})); len(p) != 0 || c.WorkloadIdentity.File != "/var/run/secrets/anthropic/token" || !c.WorkloadIdentity.Enabled() {
+		t.Fatalf("a file: %+v %v", c.WorkloadIdentity, p)
+	}
+	for vars, want := range map[string]map[string]string{
+		"are both set": {"LUX_WORKLOAD_IDENTITY_FILE": "/t", "LUX_WORKLOAD_IDENTITY_KUBERNETES": "1"},
+		"LUX_WORKLOAD_IDENTITY_KUBERNETES is \"yes\"": {"LUX_WORKLOAD_IDENTITY_KUBERNETES": "yes"},
+		"it names one audience":                       {"LUX_WORKLOAD_IDENTITY_AUDIENCE": "https://a.example,https://b.example"},
+		"not an absolute URL":                         {"LUX_WORKLOAD_IDENTITY_AUDIENCE": "https://"},
+	} {
+		if _, p := load(want); len(p) != 1 || !strings.Contains(p[0], vars) {
+			t.Errorf("%v: %v, want one problem saying %q", want, p, vars)
+		}
 	}
 }

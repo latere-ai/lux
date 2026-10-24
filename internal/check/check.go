@@ -38,6 +38,7 @@ import (
 	"latere.ai/x/lux/internal/bootstrap"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
+	"latere.ai/x/lux/internal/federation"
 	"latere.ai/x/lux/internal/secrets"
 	"latere.ai/x/lux/internal/serve"
 	"latere.ai/x/lux/internal/store"
@@ -663,14 +664,23 @@ func (r *run) credentials(ctx context.Context) Line {
 }
 
 // credentialSource is the seam the probe reads a Provider's credential
-// through: the file mode's values, or the sealed rows under the keys.
-func (r *run) credentialSource() interface {
-	Credential(ctx context.Context, providerID string) ([]byte, error)
-} {
+// through: the file mode's values, or the sealed rows under the keys,
+// and a federated Provider's token exchanged with the workload identity
+// the configuration names (spec 051).
+func (r *run) credentialSource(clients gateway.ClientSource) (gateway.CredentialSource, error) {
+	var base gateway.CredentialSource = &serve.StoreCredentials{Credentials: r.st.Credentials(), Keys: r.cfg.SecretsKEK}
 	if r.files != nil {
-		return &serve.FileCredentials{Files: r.files}
+		base = &serve.FileCredentials{Files: r.files}
 	}
-	return &serve.StoreCredentials{Credentials: r.st.Credentials(), Keys: r.cfg.SecretsKEK}
+	src, _, err := federation.SourceOf(r.cfg.WorkloadIdentity, r.o.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	var tokens *federation.Exchanger
+	if src != nil {
+		tokens = federation.New(federation.Options{Identity: src, Clients: clients, Logger: slog.New(slog.DiscardHandler)})
+	}
+	return serve.FederatedCredentials{Base: base, Tokens: tokens}, nil
 }
 
 // providerRow (spec 005): every Provider's baseURL resolves, its address
@@ -695,9 +705,14 @@ func (r *run) providerRow(ctx context.Context) Line {
 		}
 		return Line{OK, name, detail}
 	}
+	clients := gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: r.cfg.UpstreamAllowPrivate, Version: version.Version})
+	credentials, err := r.credentialSource(clients)
+	if err != nil {
+		return Line{Fail, name, err.Error()}
+	}
 	health := serve.NewHealth(serve.HealthOptions{
-		Clients:     gateway.NewClientSource(gateway.ClientOptions{AllowPrivate: r.cfg.UpstreamAllowPrivate, Version: version.Version}),
-		Credentials: r.credentialSource(),
+		Clients:     clients,
+		Credentials: credentials,
 		Logger:      slog.New(slog.DiscardHandler),
 	})
 	state := OK

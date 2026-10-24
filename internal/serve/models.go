@@ -88,9 +88,9 @@ func (u upstream) get(ctx context.Context, p *v1.Provider, rawURL string) (*http
 	if err != nil {
 		return nil, nil, err
 	}
-	value, err := u.credentials.Credential(ctx, p.Status.ID)
+	value, err := gateway.OpenCredential(ctx, u.credentials, p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("credential: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

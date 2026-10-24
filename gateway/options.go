@@ -182,6 +182,39 @@ type CredentialSource interface {
 	Credential(ctx context.Context, providerID string) ([]byte, error)
 }
 
+// ProviderCredentialSource is a CredentialSource that reads the Provider
+// itself, which a credential the gateway gets rather than holds needs
+// (spec 051): the doors and the jobs ask it with the Provider, through
+// OpenCredential, and ask any other source by the Provider's id.
+type ProviderCredentialSource interface {
+	CredentialSource
+	ProviderCredential(ctx context.Context, p *v1.Provider) ([]byte, error)
+}
+
+// CredentialRefusals is a CredentialSource told of a value the upstream
+// answered 401 to, which a source that gets its values drops so the next
+// request gets another (spec 051).
+type CredentialRefusals interface {
+	Refused(p *v1.Provider, value []byte)
+}
+
+// OpenCredential is src's value toward p: asked with the Provider when
+// src reads it, by its id otherwise.
+func OpenCredential(ctx context.Context, src CredentialSource, p *v1.Provider) ([]byte, error) {
+	if pc, ok := src.(ProviderCredentialSource); ok {
+		return pc.ProviderCredential(ctx, p)
+	}
+	return src.Credential(ctx, p.Status.ID)
+}
+
+// RefuseCredential tells src the upstream answered 401 to value, when src
+// listens.
+func RefuseCredential(src CredentialSource, p *v1.Provider, value []byte) {
+	if r, ok := src.(CredentialRefusals); ok {
+		r.Refused(p, value)
+	}
+}
+
 // HealthObserver takes each attempt's outcome for the passive health of
 // spec 005: failed is a transport error, a timeout, or a 5xx; any other
 // complete response is a success.

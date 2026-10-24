@@ -36,6 +36,7 @@ import (
 	"latere.ai/x/lux/internal/check"
 	"latere.ai/x/lux/internal/config"
 	"latere.ai/x/lux/internal/events"
+	"latere.ai/x/lux/internal/federation"
 	"latere.ai/x/lux/internal/reqlog"
 	"latere.ai/x/lux/internal/rewrap"
 	"latere.ai/x/lux/internal/secrets"
@@ -199,7 +200,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		res, err := bootstrap.Apply(ctx, bootstrap.Options{
 			Dir: cfg.BootstrapDir, Store: st, Owner: cfg.AdminSubjects[0], Keys: cfg.SecretsKEK,
 			Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate,
-			TunnelEnabled: cfg.TunnelEnabled, PublicURL: cfg.PublicURL,
+			TunnelEnabled: cfg.TunnelEnabled, WorkloadIdentity: cfg.WorkloadIdentity.Enabled(), PublicURL: cfg.PublicURL,
 		})
 		if err != nil {
 			return fail(stderr, fmt.Errorf("LUX_BOOTSTRAP_DIR: %w", err))
@@ -276,8 +277,17 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		healthJob.Tick(ctx)
 	})
 	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
-	discovery = serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.DiscoveryInterval, Logger: logger})
-	healthJob = serve.NewHealth(serve.HealthOptions{Store: st, Clients: clientSource, Credentials: credentials, Interval: cfg.HealthInterval, TunnelTTL: cfg.TunnelRegistryTTL, Metrics: reg, Logger: logger, AfterTick: catalog.ReloadModels})
+	// The workload identity of spec 051: a federated Provider's credential
+	// is the token its exchange holds, through the same seam the doors and
+	// the jobs open every other Provider's value through.
+	exchanger, notice, err := workloadIdentity(cfg.WorkloadIdentity, clientSource, getenv, logger)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	_, _ = fmt.Fprintf(stdout, "luxd: %s\n", notice)
+	jobCredentials := serve.FederatedCredentials{Base: credentials, Tokens: exchanger}
+	discovery = serve.NewDiscovery(serve.DiscoveryOptions{Store: st, Clients: clientSource, Credentials: jobCredentials, Interval: cfg.DiscoveryInterval, Logger: logger})
+	healthJob = serve.NewHealth(serve.HealthOptions{Store: st, Clients: clientSource, Credentials: jobCredentials, Interval: cfg.HealthInterval, TunnelTTL: cfg.TunnelRegistryTTL, Metrics: reg, Logger: logger, AfterTick: catalog.ReloadModels})
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	var jobs sync.WaitGroup
 	jobs.Go(func() { discovery.Run(jobsCtx) })
@@ -327,6 +337,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 	if files != nil {
 		doorCredentials = credentials
 	}
+	doorCredentials = serve.FederatedCredentials{Base: doorCredentials, Tokens: exchanger}
 	doors := gateway.New(gateway.Options{
 		Keys:         keys,
 		Catalog:      catalog,
@@ -363,6 +374,7 @@ func serveCmd(ctx context.Context, args []string, getenv config.Getenv, stdout, 
 		Defaults:              defaults,
 		AllowPrivateUpstreams: cfg.UpstreamAllowPrivate,
 		TunnelEnabled:         tun != nil,
+		WorkloadIdentity:      cfg.WorkloadIdentity.Enabled(),
 		Keys:                  cfg.SecretsKEK,
 		Clients:               revoker,
 		Tunnel:                tunnelRoutes(tun),
@@ -534,7 +546,7 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg
 		// gets the operator's and a Provider without a timeout the same;
 		// the public URL is the loop check's, as through the API.
 		defaults := manifest.Defaults{RequestsPerMinute: cfg.DefaultRequestsPerMinute, TokensPerMinute: cfg.DefaultTokensPerMinute, Timeout: cfg.UpstreamTimeout}
-		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL})
+		files, err := filemode.Load(ctx, filemode.Options{Dir: cfg.ManifestDir, Getenv: getenv, Defaults: defaults, AllowPrivateUpstreams: cfg.UpstreamAllowPrivate, PublicURL: cfg.PublicURL, WorkloadIdentity: cfg.WorkloadIdentity.Enabled()})
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -548,6 +560,17 @@ func openStore(ctx context.Context, cfg config.Config, getenv config.Getenv, reg
 // take a Provider's credential through: the two types of internal/serve.
 type credentialSource interface {
 	Credential(ctx context.Context, providerID string) ([]byte, error)
+}
+
+// workloadIdentity is the exchanger of spec 051 over the identity token
+// the configuration names, and the start-up line; with no source it is
+// nil, and a federated Provider is refused at apply.
+func workloadIdentity(w config.WorkloadIdentity, clients gateway.ClientSource, getenv func(string) string, logger *slog.Logger) (*federation.Exchanger, string, error) {
+	src, from, err := federation.SourceOf(w, getenv)
+	if err != nil || src == nil {
+		return nil, "workload identity: none; a Provider with credential.federation is refused, and LUX_WORKLOAD_IDENTITY_FILE or LUX_WORKLOAD_IDENTITY_KUBERNETES admits one", err
+	}
+	return federation.New(federation.Options{Identity: src, Clients: clients, Logger: logger}), "workload identity: " + from, nil
 }
 
 // openCredentials is the credential source of the mode and the start-up
