@@ -244,7 +244,7 @@ after create: `no`, or `yes` for any caller the authorizer allows.
 | `requestFields` | object | absent | yes | a JSON object the gateway merges into every request body it sends the Provider, the Provider's value winning on each member it names: an object value is merged member by member, any other value, a list included, replaces the caller's whole ([042-provider-request-fields](.archive/042-provider-request-fields.md)); `model`, `stream`, and `stream_options` at the top level, compared case-insensitively, are `reserved_prefix`; a null member value, and a compact encoding above `manifest.MaxRequestFieldsBytes`, 16384 bytes, are `invalid_field`; not secret, so every read returns it |
 | `discovery.mode` | enum | `auto` | yes | `auto` lists the upstream's models on the discovery interval and declares each as a discovered Model ([[005-providers]]); `none` declares nothing |
 | `discovery.include`, `.exclude` | []string | empty | yes | globs under the glob rule below over upstream names; `include` empty is everything; `exclude` wins |
-| `discovery.startDisabled` | bool | `false` | yes | every Model discovery creates for the Provider starts with `spec.disabled` ([[050-discovered-models-start-disabled]]); rendered only when true |
+| `discovery.startDisabled` | bool | `false` | yes | every Model discovery creates for the Provider starts with `spec.disabled` ([050-discovered-models-start-disabled](.archive/050-discovered-models-start-disabled.md)); rendered only when true |
 | `health.mode` | enum | `probe` | yes | `probe` calls the upstream's model list on the health interval; `passive` infers health from traffic; `none` reports `Unknown` and never marks a target unavailable |
 | `timeout` | duration | `Defaults.Timeout` | yes | Go syntax, at least `1s`, at most `1h` |
 | `concurrency` | int | `0` | yes | in-flight requests toward this provider across one replica; `0` is none |
@@ -276,7 +276,7 @@ and no other ([[001-architecture]], invariant 2).
 | `targets[].model` | string | `metadata.name` | yes | the upstream's name for the model, 1 to 256 printable characters |
 | `targets[].weight` | int | `100` | yes | `0` to `1000`; `0` is used only when every target of a lower priority is unavailable |
 | `targets[].priority` | int | `0` | yes | `0` to `9`; the fallback order |
-| `disabled` | bool | `false` | yes | while true every door refuses a call to the Model with `model_disabled` and leaves it out of every model list ([039-disabled-models](.archive/039-disabled-models.md)); rendered only when true; written by an apply, and by discovery on a create under `discovery.startDisabled` ([[050-discovered-models-start-disabled]]), never by health |
+| `disabled` | bool | `false` | yes | while true every door refuses a call to the Model with `model_disabled` and leaves it out of every model list ([039-disabled-models](.archive/039-disabled-models.md)); rendered only when true; written by an apply, and by discovery on a create under `discovery.startDisabled` ([050-discovered-models-start-disabled](.archive/050-discovered-models-start-disabled.md)), never by health |
 | `fallback` | enum | `onError` | yes | `onError` tries the next target on a retryable failure before any response bytes reached the caller ([[008-routing-and-models]]); `never` fails on the first |
 | `pricing` | object | absent | yes | absent is unpriced, which `status.warnings` says; present requires `input` and `output` |
 | `pricing.currency` | string | `USD` | yes | an ISO 4217 code, upper case |

@@ -342,7 +342,7 @@ The rules that make the catalog safe to recompute:
   one lets the next run restore it.
 - A Provider with `discovery.startDisabled` true has every Model
   discovery creates for it start disabled; an update keeps a Model's
-  stored `spec.disabled` ([[050-discovered-models-start-disabled]]).
+  stored `spec.disabled` ([050-discovered-models-start-disabled](.archive/050-discovered-models-start-disabled.md)).
 - `discovery.mode: none` lists nothing and deletes nothing, so turning
   discovery off leaves the Models it already created until an operator
   deletes them.
