@@ -125,6 +125,16 @@ federation rule matching the gateway's service account and audience,
 then copy their IDs into the Provider. A Provider switched to
 federation drops the key it stored.
 
+Many clusters sign with an issuer only the cluster can reach, such as
+`https://kubernetes.default.svc.cluster.local`, and their discovery
+document names an in-cluster address for the keys, so Anthropic cannot
+fetch them by discovery. Register such an issuer as a custom OIDC
+issuer, with its keys either at a URL Anthropic can reach, such as the
+API server's public `/openid/v1/jwks` with the cluster's CA once that
+path is readable without sign-in, or pasted inline. Inline keys stop
+working when the cluster rotates its signing key, until you paste the
+new ones.
+
 ### Rotate and revoke Keys
 
 A leaked Key value is contained by `POST /v1/keys/{id}/rotate`, which
