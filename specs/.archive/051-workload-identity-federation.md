@@ -1,6 +1,6 @@
 ---
 title: "Workload identity federation: an anthropic Provider's credential is a short-lived token the gateway gets for its own workload identity at Anthropic's token endpoint, so no long-lived key is stored"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/002-repository-scaffold.md
@@ -10,7 +10,7 @@ depends_on:
 affects: [manifest/v1/, manifest/, gateway/, internal/federation/, internal/serve/, internal/api/, internal/config/, internal/check/, cmd/luxd/, api/openapi.yaml, docs/, test/conformance/, specs/002-repository-scaffold.md, specs/003-manifest-contract.md, specs/005-providers.md]
 effort: medium
 created: 2026-10-24
-updated: 2026-10-24
+updated: 2026-10-25
 author: changkun
 ---
 
@@ -196,3 +196,41 @@ names it.
    (`TestDiscoveryWithFederation`).
 7. The variables load as the table says, and both sources at once is a
    start-up problem (`TestWorkloadIdentityConfig`).
+
+## Outcome
+
+Built as designed in v0.20.0 and live in production on 2026-10-25.
+
+| # | Test |
+|---|---|
+| 1 | the golden corpus (`accepted/provider/federated.yaml` and six refusals) and `TestFederationNeedsWorkloadIdentity` |
+| 2 | `TestFederationDropsTheStoredValue`, and `TestBootstrapFederationDropsTheStoredValue` for the startup file |
+| 3 | `TestExchange` |
+| 4 | `TestKubernetesIdentity` and `TestFileIdentity` |
+| 5 | `TestFederatedForward` |
+| 6 | `TestDiscoveryWithFederation` |
+| 7 | `TestWorkloadIdentityConfig` |
+
+Notes on the build:
+
+- An independent review before the release found eight faults, each
+  fixed with a test that fails without it: a failed exchange for changed
+  identifiers could serve the token held for the old ones; the startup
+  file kept the stored value; `luxd check` refused a federated Provider
+  and, with the file source, would have spent the file's single-use
+  token; a failed advisory refresh exchanged again on every request; the
+  exchange shared the request path's concurrency limit and could starve;
+  discovery's 401 did not drop the token; and two refusals carried the
+  wrong code.
+- In production the issuer is registered at Anthropic as a custom OIDC
+  issuer, `https://kubernetes.default.svc.cluster.local`, with the
+  `explicit_url` source at the cluster API server's public JWKS address
+  and the cluster's CA. The cluster's discovery document names the
+  in-cluster address as `jwks_uri`, so the `discovery` source, the only
+  one the Console's Kubernetes path offers, cannot reach the keys.
+- Live: the `anthropic` Provider saved with `federation` deleted its
+  stored value (`status.credential.set` false); within a second the
+  gateway exchanged a token valid for ten minutes, the rule's lifetime,
+  and discovery listed the Provider's fourteen Models with it; the next
+  health probe was Healthy; each replica exchanged its own token on its
+  first request, and a call to `anthropic/claude-haiku-5-5` answered.

@@ -103,7 +103,7 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [048](048-request-label-filter.md) | Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has | small | testing | 007, 009, 011, 012 |
 | [049](049-key-doors.md) | Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key | small | testing | 003, 004, 007, 011 |
 | [050](.archive/050-discovered-models-start-disabled.md) | Discovered Models start disabled: a Provider may ask that every Model discovery creates for it start disabled | small | complete | 003, 005, 039 |
-| [051](051-workload-identity-federation.md) | Workload identity federation: an anthropic Provider's credential is a short-lived token the gateway gets for its own workload identity, so no long-lived key is stored | medium | testing | 002, 003, 004, 005 |
+| [051](.archive/051-workload-identity-federation.md) | Workload identity federation: an anthropic Provider's credential is a short-lived token the gateway gets for its own workload identity, so no long-lived key is stored | medium | complete | 002, 003, 004, 005 |
 
 ## Dependency graph
 

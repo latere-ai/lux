@@ -115,7 +115,7 @@ own spec, not a new `scheme`. The core's `scheme` set is therefore
 `bearer` and `raw` and nothing else, on purpose.
 
 One exchanged credential is the core's own: an anthropic Provider's
-`credential.federation` ([[051-workload-identity-federation]]), a
+`credential.federation` ([051-workload-identity-federation](.archive/051-workload-identity-federation.md)), a
 token the gateway gets for its own workload identity at Anthropic's
 token endpoint, holds in memory and exchanges again before it expires.
 It travels as `Authorization: Bearer`, the store holds no value for
