@@ -40,7 +40,7 @@ jobs:
   # a run that stops before publish leaves two unreferenced digests and
   # nothing an operator could pull by accident.
   build:
-    uses: latere-ai/ci/.github/workflows/image-build.yml@c3fcc1bda62305ca978a5474dd29a898564baa42
+    uses: latere-ai/ci/.github/workflows/image-build.yml@v1
     permissions:
       contents: read
       actions: read
@@ -213,7 +213,7 @@ jobs:
   # the CHANGELOG section as its body.
   publish:
     needs: [build, conformance]
-    uses: latere-ai/ci/.github/workflows/image-publish.yml@c3fcc1bda62305ca978a5474dd29a898564baa42
+    uses: latere-ai/ci/.github/workflows/image-publish.yml@v1
     permissions:
       contents: write
       packages: write
@@ -230,7 +230,7 @@ jobs:
   # section at the tag.
   verify:
     needs: publish
-    uses: latere-ai/ci/.github/workflows/release-verify.yml@c3fcc1bda62305ca978a5474dd29a898564baa42
+    uses: latere-ai/ci/.github/workflows/release-verify.yml@v1
     permissions:
       contents: read
       packages: read
