@@ -396,7 +396,7 @@ and not the server.
 
 ### CI
 
-`verify.yml` keeps its `gate`, `tidy`, and `image` jobs and gains two,
+`verify.yml` keeps its `gate` job, whose lateregate run also checks the module files are tidy and the developer image builds, and gains two,
 each on GitHub's runners, each with every third-party action pinned by
 commit with its version in a comment, as the file already does.
 

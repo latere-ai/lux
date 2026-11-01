@@ -33,33 +33,6 @@ jobs:
       runs_on: ubuntu-latest
       test_os: '["ubuntu-latest"]'
 
-  tidy:
-    name: go.mod and go.sum are tidy
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      # Spec 001's dependency invariant names the module's direct
-      # dependencies; go.mod is where a reader checks the claim, so it
-      # has to agree with the imports.
-      - run: go mod tidy -diff
-
-  image:
-    name: the developer image builds
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: docker build -t luxd:candidate .
-      - name: The image reports its version
-        run: |
-          docker run --rm luxd:candidate -version | grep -q '^luxd '
-
   # The integration tier: luxd and lux-stubs as processes the tier builds
   # into a directory of its own, so it needs the toolchain, make, and
   # curl, the last two for the make run rows. The package pattern is
@@ -143,26 +116,6 @@ jobs:
       - run: go test -tags=postgres -run '^TestPostgres' -v ./...
         env:
           LUX_DB_URL: postgres://postgres:lux@127.0.0.1:5432/postgres?sslmode=disable
-
-  # The alert rules of spec 019 pass promtool, the step spec 017 owns: the
-  # rule groups are lifted out of the PrometheusRule and checked with the
-  # Prometheus image's own promtool, pinned by digest, so no rule an
-  # installation starts with fails to load.
-  rules:
-    name: the alert rules pass promtool
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: promtool check rules over the PrometheusRule's groups
-        run: |
-          mkdir -p out/rules
-          awk '/^spec:/{f=1;next} f{sub(/^  /,""); print}' deploy/base/prometheusrule.yaml > out/rules/rules.yaml
-          # prom/prometheus:v3.5.0, pinned by digest as every image reference is
-          docker run --rm -v "$PWD/out/rules:/rules:ro" --entrypoint promtool \
-            docker.io/prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996 \
-            check rules /rules/rules.yaml
 
   # The install document against this checkout, both parts. Part 1 of
   # spec 035 runs out/luxd from make build on the runner, beside the stub

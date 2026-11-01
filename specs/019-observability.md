@@ -48,7 +48,7 @@ two [036-catalog-in-memory](.archive/036-catalog-in-memory.md)'s. The last
 metric of the table that waited on its owner,
 [[013-tunneled-runtimes]]'s `lux_tunnel_sessions`, is in the registry
 on every configuration, and the rules file's `promtool` step is the
-`rules` job [release and installation](.archive/017-release-and-installation.md) wrote into `verify.yml`.
+`rules` gate of lateregate, which `gate` in `verify.yml` runs.
 `cmd/luxd` wraps the public listener in `latere.ai/x/pkg/otel`'s
 `Handler`, which opens each request's server span and records the OTLP
 HTTP server metrics by route. Every row of the acceptance table passes.
@@ -617,7 +617,7 @@ the events, and the tunnel ([[012-request-log-and-events]],
 | An authorizer answer of each kind moves `lux_authorizer_requests_total` on the matching `decision`, with a `pkg/authz` `error` counted as `unavailable` | `TestAuthorizerMetricMapping` | passing, `internal/serve` |
 | A target whose circuit opens sets `lux_circuit_open` to 1 for that provider and model and back to 0 when it closes; an open and a closed tunnel session move `lux_tunnel_sessions` by one | `TestCircuitAndTunnelGauges` | passing: the circuit half in `gateway`, the tunnel half as `TestSessionsGauge` in `internal/tunnel` and at the wiring in `cmd/luxd`'s `TestServeTunnelsARuntime`, with `TestRegisterIdleReadsZero` and `TestTunnelOffNotices` on the gauge with the tunnel off |
 | `./cmd/luxd`'s build list carries the OpenTelemetry SDK under the row this spec adds, and `./cmd/lux`'s carries none of it | the `depcheck` gate | passing; `./cmd/lux`'s row, written with the command ([[014-agent-client]]), admits no OpenTelemetry module |
-| The rules file passes `promtool check rules` and names only metrics and labels in the table | the CI step, `TestAlertsNameKnownMetrics` | `TestAlertsNameKnownMetrics` passing, `internal/arch`; the CI step is the `rules` job of `verify.yml`, running `promtool check rules` through the pinned Prometheus image |
+| The rules file passes `promtool check rules` and names only metrics and labels in the table | the CI step, `TestAlertsNameKnownMetrics` | `TestAlertsNameKnownMetrics` passing, `internal/arch`; the CI step is the `rules` gate of lateregate, run by the `gate` job of `verify.yml`, running `promtool check rules` at the version lateregate pins |
 | `/metrics` is served on the internal listener in the Prometheus text format with the `version=0.0.4` content type, and answered 404 on the public one, while the other three probes answer on both | [[002-repository-scaffold]]'s `TestServeAnswersTheProbesOnBothListenersAndStopsCleanly`, `TestMetricsContentType` | passing, `cmd/luxd` |
 
 ## Outcome
@@ -669,8 +669,8 @@ owes the paragraph claiming `lux_upstream_requests_total` and
 names and its text does not. [[016-security-and-threat-model]]'s
 verification rows that still say `019` are its own to update, the
 three test markers this build dropped having already gone.
-[release and installation](.archive/017-release-and-installation.md) owns the `rules` job of `verify.yml`
-that runs `promtool check rules` over the file this spec's alert table
+The `rules` gate of lateregate, run by the `gate` job of `verify.yml`,
+runs `promtool check rules` over the file this spec's alert table
 fixes. A dashboard over any of it is a platform's and is not shipped
 here.
 
