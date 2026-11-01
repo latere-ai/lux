@@ -7,9 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -53,34 +51,16 @@ func TestReleaseConformanceCommandRejectsNonconformantCandidate(t *testing.T) {
 	}
 }
 
-// A red verify response must stop the exact gate-green script before it reaches
-// a retry. The fake gh is confined to this child process and never contacts GitHub.
-func TestReleaseVerifyCommandRejectsRedCommit(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash is not on PATH")
-	}
-	dir := t.TempDir()
-	for name, script := range map[string]string{"gh": "#!/bin/sh\nprintf '%s\\n' failure\n", "sleep": "#!/bin/sh\nexit 99\n"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("GITHUB_REPOSITORY", "example/gateway")
-	t.Setenv("GITHUB_SHA", "red-fixture")
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", releaseCommand(t, "gate-green", "Wait for the verify run on this commit and require success"))
-	cmd.Dir = root(t)
-	out, err := cmd.CombinedOutput()
-	if err == nil || ctx.Err() != nil || !strings.Contains(string(out), "verify concluded 'failure' on red-fixture") {
-		t.Fatalf("red verify result did not stop the release gate: %v\n%s", err, out)
-	}
-}
-
+// The verify wait is the build stage's first step, so a red verify run
+// stops the release before anything is built; the stage must read this
+// repository's per-push gate, and nothing that publishes may run past a
+// failed build or conformance run.
 func TestReleaseFailuresCannotBeIgnoredByPublish(t *testing.T) {
 	w, _ := readWorkflow(t, "release.yml")
-	for _, name := range []string{"gate-green", "build", "conformance", "publish"} {
+	if got, ok := w.Jobs["build"].With["verify_workflow"]; ok && got != "verify.yml" {
+		t.Errorf("the build stage waits on %v; the per-push gate is verify.yml", got)
+	}
+	for _, name := range []string{"build", "conformance", "publish"} {
 		job := w.Jobs[name]
 		if job.If != "" && job.If != "success()" {
 			t.Errorf("%s overrides the successful-dependencies gate with %q", name, job.If)

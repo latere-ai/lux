@@ -5,7 +5,9 @@ package arch
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,8 +33,9 @@ func derived(segment string) bool {
 // TestReleasePublishesUnderTheOwnersNamespace is spec 001's invariant 8
 // as spec 017's test: no workflow, deploy manifest, document, script,
 // or Dockerfile names a fixed image namespace under ghcr.io; the
-// published references derive from github.repository_owner at run time,
-// and the release workflow reads that variable.
+// published references derive from the repository owner at run time,
+// which the build stage lowers into the namespace, and no job of the
+// release workflow names one of its own.
 func TestReleasePublishesUnderTheOwnersNamespace(t *testing.T) {
 	dir := root(t)
 	var hits []string
@@ -72,17 +75,37 @@ func TestReleasePublishesUnderTheOwnersNamespace(t *testing.T) {
 	for _, h := range hits {
 		t.Errorf("a fixed image namespace: %s", h)
 	}
-	release, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", "release.yml"))
-	if err != nil {
-		t.Fatal(err)
+	// The build stage takes the namespace from the repository owner,
+	// lowered as an image reference requires, or from the repository
+	// variable that overrides it; a namespace input would fix it for
+	// every fork.
+	w, text := readWorkflow(t, "release.yml")
+	for name, job := range w.Jobs {
+		if _, ok := job.With["namespace"]; ok {
+			t.Errorf("release.yml's %s names an image namespace; the build stage derives it from the repository owner", name)
+		}
 	}
-	if !strings.Contains(string(release), "GITHUB_REPOSITORY_OWNER") {
-		t.Error("release.yml does not derive the namespace from the repository owner")
-	}
-	if strings.Contains(string(release), "tr '[:upper:]' '[:lower:]'") == false {
-		t.Error("release.yml does not lower the owner, which an image reference requires")
+	if !strings.Contains(text, "needs.build.outputs.owner") {
+		t.Error("release.yml reads no namespace from the build stage, so its own jobs cannot follow a fork's")
 	}
 }
+
+// stageDir is where latere-ai/ci keeps the shared release stages the
+// release workflow calls.
+const stageDir = "latere-ai/ci/.github/workflows/"
+
+// stageOutputs are the outputs each stage declares, the only job outputs a
+// job may read from a call of that stage.
+var stageOutputs = map[string]map[string]bool{
+	"image-build.yml": {
+		"owner": true, "images": true,
+		"ref_1": true, "digest_1": true, "ref_2": true, "digest_2": true, "ref_3": true, "digest_3": true,
+	},
+}
+
+// stageVersion is the reference a stage is called at: a full commit, or
+// one of latere-ai/ci's version tags, and never a branch.
+var stageVersion = regexp.MustCompile(`^([0-9a-f]{40}|v\d+(\.\d+\.\d+(-[0-9A-Za-z.]+)?)?)$`)
 
 // workflow is the part of a workflow file these tests read.
 type workflow struct {
@@ -92,6 +115,9 @@ type workflow struct {
 		ContinueOnError any               `yaml:"continue-on-error"`
 		Permissions     map[string]string `yaml:"permissions"`
 		Needs           any               `yaml:"needs"`
+		RunsOn          any               `yaml:"runs-on"`
+		Uses            string            `yaml:"uses"`
+		With            map[string]any    `yaml:"with"`
 		Steps           []struct {
 			ContinueOnError any               `yaml:"continue-on-error"`
 			Name            string            `yaml:"name"`
@@ -125,13 +151,16 @@ var pinned = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$`
 // opens no pull request, permissions are declared per job with contents
 // read as the workflow's default and contents write on publish and
 // fixture alone and no other scope on fixture, the jobs run in the
-// spec's order, and every third-party action is pinned by commit.
+// spec's order, building, signing, publishing, and verifying are calls
+// of latere-ai/ci's shared stages at one version, every job runs on a
+// hosted runner, and every third-party action of the repository's own
+// jobs is pinned by commit.
 func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	w, text := readWorkflow(t, "release.yml")
 	if w.Permissions["contents"] != "read" || len(w.Permissions) != 1 {
 		t.Errorf("the workflow's default permissions are %v, want contents: read alone", w.Permissions)
 	}
-	want := []string{"gate-green", "build", "conformance", "publish", "install-release", "release-verify", "fixture"}
+	want := []string{"build", "conformance", "publish", "verify", "install-release", "fixture"}
 	for _, name := range want {
 		if _, ok := w.Jobs[name]; !ok {
 			t.Errorf("release.yml has no %s job", name)
@@ -153,10 +182,49 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 		}
 		return nil
 	}
-	for job, before := range map[string]string{"build": "gate-green", "conformance": "build", "publish": "conformance", "install-release": "publish", "release-verify": "publish", "fixture": "publish"} {
+	for job, before := range map[string]string{"conformance": "build", "publish": "conformance", "verify": "publish", "install-release": "publish", "fixture": "publish"} {
 		if !slices.Contains(needs(job), before) {
 			t.Errorf("%s does not run after %s: needs %v", job, before, needs(job))
 		}
+	}
+	// The stages, each called by its path at one version of latere-ai/ci.
+	// The repository is public, so every job runs on GitHub's hosted
+	// runner; a stage left to the organization's runner policy would run
+	// a tag's release on the self-hosted one.
+	stages := map[string]string{"build": "image-build.yml", "publish": "image-publish.yml", "verify": "release-verify.yml"}
+	versions := map[string]bool{}
+	for name, job := range w.Jobs {
+		stage, ok := stages[name]
+		if !ok {
+			if job.Uses != "" {
+				t.Errorf("%s calls %s; build, publish, and verify are the stages", name, job.Uses)
+			}
+			if job.RunsOn != "ubuntu-latest" {
+				t.Errorf("%s runs on %v, want ubuntu-latest", name, job.RunsOn)
+			}
+			continue
+		}
+		path, version, found := strings.Cut(job.Uses, "@")
+		if !found || path != stageDir+stage || !stageVersion.MatchString(version) {
+			t.Errorf("%s uses %q, want %s%s at a commit or a version tag of latere-ai/ci", name, job.Uses, stageDir, stage)
+		}
+		versions[version] = true
+		if len(job.Steps) != 0 {
+			t.Errorf("%s runs steps of its own beside its stage", name)
+		}
+		if job.With["runs_on"] != "ubuntu-latest" {
+			t.Errorf("%s runs its stage on %v, want ubuntu-latest", name, job.With["runs_on"])
+		}
+		// A value reaches a command through the environment the stage
+		// sets, never as an expression spliced into the text it runs.
+		for key, value := range job.With {
+			if s, ok := value.(string); ok && strings.HasSuffix(key, "_command") && strings.Contains(s, "${{") {
+				t.Errorf("the %s of %s carries an expression", key, name)
+			}
+		}
+	}
+	if len(versions) != 1 {
+		t.Errorf("the stages are called at %v, want one version of latere-ai/ci", slices.Sorted(maps.Keys(versions)))
 	}
 	pushes := regexp.MustCompile(`git push[^\n]*`)
 	for name, job := range w.Jobs {
@@ -202,18 +270,30 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	if strings.Contains(text, "pull-requests:") {
 		t.Error("release.yml declares a pull-requests permission; no job of it opens a pull request")
 	}
+	// A stage is pinned by its own reference, checked above, and carries
+	// no comment; every other action names its version in one.
 	for _, uses := range regexp.MustCompile(`(?m)uses: (\S+)( # v[0-9][^\n]*)?`).FindAllStringSubmatch(text, -1) {
-		if uses[2] == "" && !strings.HasPrefix(uses[1], "./") {
+		if uses[2] == "" && !strings.HasPrefix(uses[1], "./") && !strings.HasPrefix(uses[1], stageDir) {
 			t.Errorf("uses: %s carries no version comment", uses[1])
 		}
 	}
-	// The pipeline's guards: the digests are pushed under no tag, the
-	// suite runs before publish tags them, and the notes are the
-	// CHANGELOG section through the gate's own rule.
-	for _, want := range []string{"push-by-digest=true", "docker buildx imagetools create -t", "go tool lateregate release-notes", "gh release download", "cosign verify-blob", "gh attestation verify", "run-blocks.sh ../docs/install.md"} {
+	// Signing, attesting, and tagging are the stages' alone.
+	for _, direct := range []string{"cosign", "anchore/sbom-action", "actions/attest-", "imagetools"} {
+		if strings.Contains(text, direct) {
+			t.Errorf("release.yml names %s; the shared stages sign, attest, and tag", direct)
+		}
+	}
+	// The repository's own guards around the stages: the suite runs
+	// against the digests before publish tags them, the release attaches
+	// the fixture archive the suite produced, and the install document is
+	// walked against what the release published.
+	for _, want := range []string{"go test ./test/conformance", "gh release download", "run-blocks.sh ../docs/install.md"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("release.yml lacks %q", want)
 		}
+	}
+	if got := w.Jobs["publish"].With["artifacts"]; got != "fixture-archive" {
+		t.Errorf("the publish stage attaches the run artifacts %v, want fixture-archive, the conformance run's fixture", got)
 	}
 	verify, _ := readWorkflow(t, "verify.yml")
 	if _, ok := verify.Jobs["install"]; !ok {
@@ -459,12 +539,41 @@ func TestGatewayImageIsLux(t *testing.T) {
 	for _, h := range hits {
 		t.Errorf("the gateway image is published as lux, not luxd: %s", h)
 	}
-	release, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", "release.yml"))
-	if err != nil {
-		t.Fatal(err)
+	// The build stage publishes each image under the name its slot gives,
+	// and the publish stage tags it <owner>/<name>:<tag>: the gateway,
+	// built from Dockerfile.release, as lux, asked for the version its
+	// binary luxd prints, and the stubs as lux-stubs. The verify stage
+	// checks both by those names.
+	w, _ := readWorkflow(t, "release.yml")
+	build := w.Jobs["build"].With
+	for slot, want := range map[string]struct{ name, dockerfile, versionArgs, versionExpect string }{
+		"image_1": {"lux", "Dockerfile.release", "-version", "luxd {tag} ("},
+		"image_2": {"lux-stubs", "Dockerfile.stubs", "", ""},
+	} {
+		raw, _ := build[slot].(string)
+		var image struct {
+			Name          string `json:"name"`
+			Dockerfile    string `json:"dockerfile"`
+			VersionArgs   string `json:"version_args"`
+			VersionExpect string `json:"version_expect"`
+		}
+		if err := json.Unmarshal([]byte(raw), &image); err != nil {
+			t.Errorf("the build stage's %s is not the JSON of an image: %v", slot, err)
+			continue
+		}
+		if image.Name != want.name || image.Dockerfile != want.dockerfile {
+			t.Errorf("%s publishes %q from %q, want %s from %s", slot, image.Name, image.Dockerfile, want.name, want.dockerfile)
+		}
+		if image.VersionArgs != want.versionArgs || image.VersionExpect != want.versionExpect {
+			t.Errorf("%s asks for its version with %q and expects %q, want %q and %q", slot, image.VersionArgs, image.VersionExpect, want.versionArgs, want.versionExpect)
+		}
 	}
-	if !strings.Contains(string(release), `/lux:${GITHUB_REF_NAME}`) {
-		t.Error("release.yml does not tag the gateway image as <owner>/lux:<tag>")
+	if build["image_3"] != nil {
+		t.Errorf("the build stage makes a third image, %v, which no release publishes", build["image_3"])
+	}
+	verified, _ := w.Jobs["verify"].With["images"].(string)
+	if got := strings.Fields(verified); !slices.Equal(got, []string{"lux", "lux-stubs"}) {
+		t.Errorf("the verify stage checks the images %v, want lux and lux-stubs", got)
 	}
 	compose, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
 	if err != nil {
@@ -579,19 +688,15 @@ func TestComposeDefaultsToARelease(t *testing.T) {
 // write of that name in the same file: a step output `steps.<id>.outputs.X`
 // needs a `X=` appended to GITHUB_OUTPUT or a variable assigned `=X` that
 // is, and a job output `needs.<job>.outputs.X` needs an `X:` entry under
-// a job's `outputs:`. A name computed at run time or misspelled on one
+// a job's `outputs:`, or, where that job calls a shared stage, an output
+// the stage declares. A name computed at run time or misspelled on one
 // side reads as an empty string and fails only at the first tag; the test
 // fails here instead.
 func TestWorkflowOutputsAreWritten(t *testing.T) {
-	dir := root(t)
 	stepReads := regexp.MustCompile(`steps\.[a-z_]+\.outputs\.([a-z_]+)`)
-	jobReads := regexp.MustCompile(`needs\.[a-z_]+\.outputs\.([a-z_]+)`)
+	jobReads := regexp.MustCompile(`needs\.([a-z0-9_-]+)\.outputs\.([a-z0-9_]+)`)
 	for _, name := range []string{"release.yml", "verify.yml"} {
-		data, err := os.ReadFile(filepath.Join(dir, ".github", "workflows", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(data)
+		w, text := readWorkflow(t, name)
 		for _, m := range stepReads.FindAllStringSubmatch(text, -1) {
 			out := m[1]
 			if !strings.Contains(text, out+"=") && !strings.Contains(text, "="+out) {
@@ -604,8 +709,16 @@ func TestWorkflowOutputsAreWritten(t *testing.T) {
 			keys[m[1]] = true
 		}
 		for _, m := range jobReads.FindAllStringSubmatch(text, -1) {
-			if !keys[m[1]] {
-				t.Errorf("%s reads a job output %s that no job declares", name, m[1])
+			job, out := m[1], m[2]
+			if uses := w.Jobs[job].Uses; uses != "" {
+				stage, _, _ := strings.Cut(strings.TrimPrefix(uses, stageDir), "@")
+				if !stageOutputs[stage][out] {
+					t.Errorf("%s reads %s's output %s, which %s does not declare", name, job, out, uses)
+				}
+				continue
+			}
+			if !keys[out] {
+				t.Errorf("%s reads a job output %s that no job declares", name, out)
 			}
 		}
 	}
@@ -614,17 +727,36 @@ func TestWorkflowOutputsAreWritten(t *testing.T) {
 // TestReleaseExtractsEachPlatformByItsOwnDigest: a released image is a
 // multi-arch index, and `docker create --platform` on the index reference
 // stores each platform under the index digest and refuses the second, so
-// the workflows resolve a platform's manifest digest and create by that.
+// tools/release/images.sh resolves a platform's manifest digest and
+// creates by that. The build stage runs it once both images are pushed
+// and before anything is tagged, while the bare binaries it compares
+// against are still in dist/, and removes those only after it.
 func TestReleaseExtractsEachPlatformByItsOwnDigest(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(root(t), ".github", "workflows", "release.yml"))
+	script, err := os.ReadFile(filepath.Join(root(t), "tools", "release", "images.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "docker create --platform") {
+	if strings.Contains(string(script), "docker create --platform") {
+		t.Error("tools/release/images.sh creates a container from the index reference with --platform")
+	}
+	if !strings.Contains(string(script), "imagetools inspect --raw") {
+		t.Error("tools/release/images.sh does not resolve a platform's manifest digest from the index")
+	}
+	w, text := readWorkflow(t, "release.yml")
+	if strings.Contains(text, "docker create --platform") {
 		t.Error("release.yml creates a container from the index reference with --platform")
 	}
-	if !strings.Contains(string(data), "imagetools inspect --raw") {
-		t.Error("release.yml does not resolve a platform's manifest digest from the index")
+	if archives, _ := w.Jobs["build"].With["archives_command"].(string); !strings.Contains(archives, `tools/release/build.sh "$TAG" dist`) {
+		t.Error("the build stage does not build the binaries and the archives before the images")
+	}
+	after, _ := w.Jobs["build"].With["after_images_command"].(string)
+	check := strings.Index(after, `tools/release/images.sh dist "$IMAGE_1" "$IMAGE_2"`)
+	remove := strings.Index(after, "rm dist/luxd_linux_* dist/lux-stubs_linux_*")
+	if check < 0 {
+		t.Error("the build stage does not hold the images to the archives' bytes before publish")
+	}
+	if remove < 0 || remove < check {
+		t.Errorf("the build stage removes the bare binaries at %d and checks the images against them at %d; the check comes first, and the release attaches no bare binary", remove, check)
 	}
 }
 
@@ -700,91 +832,6 @@ func TestEveryImageReferenceNamesAPublishedRepository(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-// TestReleaseBodyCheckReadsBothSidesTheSameWay runs the release-verify
-// step that holds the release body against the CHANGELOG section, with
-// the two `gh` fetches replaced by fixtures. `lateregate release` writes
-// `## vX.Y.Z - date` followed by the blank line that stood under
-// `## Unreleased`, so the extracted section begins blank; `lateregate
-// release-notes`, which writes the body, trims it. A step that trims
-// only one side reads that blank line as a difference and fails a
-// release whose body is correct, as v0.3.0's run did. The step is the
-// file's own text, so a change to it is a change to what runs here.
-func TestReleaseBodyCheckReadsBothSidesTheSameWay(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash is not on PATH, so the step's script is not exercised here")
-	}
-	const stepName = "The body is the CHANGELOG section for the tag"
-	w, _ := readWorkflow(t, "release.yml")
-	var script string
-	for _, step := range w.Jobs["release-verify"].Steps {
-		if step.Name == stepName {
-			script = step.Run
-		}
-	}
-	if script == "" {
-		t.Fatalf("release-verify has no %q step", stepName)
-	}
-	// Only the two fetches go; the fixtures below stand in for what they
-	// download. Their count is asserted, so a reworded fetch fails here
-	// rather than leaving a script that reads no fixture and passes.
-	var kept []string
-	fetches := 0
-	for line := range strings.SplitSeq(script, "\n") {
-		if strings.Contains(line, "gh release view") || strings.Contains(line, "gh api ") {
-			fetches++
-			continue
-		}
-		kept = append(kept, line)
-	}
-	if fetches != 2 {
-		t.Fatalf("%d fetching lines removed from the step, want the 2 `gh` calls; the script has changed shape", fetches)
-	}
-	fragment := strings.Join(kept, "\n")
-
-	const changelog = "# Changelog\n\n## Unreleased\n\n## v9.9.9 - 2026-09-17\n\n" +
-		"- The section under the heading opens with the blank line the\n  release cut leaves there.\n\n- A second note.\n\n" +
-		"## v9.8.0 - 2026-09-16\n\n- An older note, which is no part of the tag's section.\n"
-	const notes = "- The section under the heading opens with the blank line the\n  release cut leaves there.\n\n- A second note.\n"
-
-	for _, c := range []struct {
-		name  string
-		body  string
-		match bool
-	}{
-		{"the body as release-notes writes it", notes, true},
-		{"a body padded with blank lines of its own", "\n\n" + notes + "\n\n", true},
-		{"a body carrying carriage returns", strings.ReplaceAll(notes, "\n", "\r\n"), true},
-		{"a body that is not the section", "- Something else entirely.\n", false},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte(changelog), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "body.md"), []byte(c.body), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			cmd := exec.Command("bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", fragment)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(), "GITHUB_REF_NAME=v9.9.9")
-			out, err := cmd.CombinedOutput()
-			if c.match && err != nil {
-				t.Errorf("the step read a correct body as a difference: %v\n%s", err, out)
-			}
-			if !c.match && err == nil {
-				t.Errorf("the step passed a body that is not the section:\n%s", out)
-			}
-			section, readErr := os.ReadFile(filepath.Join(dir, "section.md"))
-			if readErr != nil {
-				t.Fatalf("the step wrote no section.md: %v", readErr)
-			}
-			if string(section) != notes {
-				t.Errorf("section.md = %q, want the section trimmed on both ends: %q", section, notes)
-			}
-		})
 	}
 }
 

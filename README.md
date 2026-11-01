@@ -248,9 +248,9 @@ Each release publishes the `lux` and `lux-stubs` images, the `luxd` and
 namespace of the repository owner that ran the release workflow, so a
 fork publishes under its own. The images are `ghcr.io/<owner>/lux:<tag>`
 and `ghcr.io/<owner>/lux-stubs:<tag>`, signed with cosign, each with a
-bill of materials and a provenance attestation; the archives are listed
-in a signed `checksums.txt`. [`SECURITY.md`](SECURITY.md) says how to
-verify them.
+bill of materials and a provenance attestation; the archives and the
+bills of materials are listed in a signed `checksums.txt`.
+[`SECURITY.md`](SECURITY.md) says how to verify them.
 
 Until `v1.0.0` the manifest schema may still change: a minor release may
 break a row of the [version table](docs/upgrades/README.md#what-a-version-number-promises),

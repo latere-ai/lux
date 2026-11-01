@@ -287,11 +287,12 @@ Key, so `lux requests` answers whether a past request was sent that way.
 
 ### Verify released artifacts
 
-Every release is signed by the release workflow's own identity. Verify
-the image and the archives before you run them, with `cosign verify`,
-`cosign verify-blob`, and `gh attestation verify` against the build
-provenance; [`SECURITY.md`](../SECURITY.md#verifying-a-release) has the
-commands.
+Every release is signed by the identity of the shared release stages in
+latere-ai/ci, run for this repository. Verify the images and the
+archives before you run them, with `cosign verify`, `cosign verify-blob`,
+and `gh attestation verify` against the build provenance;
+[`SECURITY.md`](../SECURITY.md#verifying-a-release) has the commands, and
+the ones for releases up to v0.20.0.
 
 ## Reporting a vulnerability
 

@@ -6,6 +6,22 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- **Releases are built, signed and published by the shared release stages
+  in latere-ai/ci.** The signatures on the `lux` and `lux-stubs` images
+  now name latere-ai/ci's `image-build.yml` run for this repository, and
+  the signature on `checksums.txt` names its `image-publish.yml`;
+  SECURITY.md gives the commands that check a release, and the ones for
+  releases up to v0.20.0. `checksums.txt` now lists the bills of
+  materials beside the archives. The gateway image's bill of materials is
+  `sbom-lux.spdx.json`, named after the image, where it was
+  `sbom-luxd.spdx.json`, and a release no longer carries
+  `sbom-module.spdx.json`, the bill of materials for the whole module
+  graph; the per-image ones list the modules compiled into `luxd` and
+  `lux-stubs`. The gateway image must now also report the version its tag
+  pins before it is published.
+
 ## v0.20.0 - 2026-10-24
 
 ### Added

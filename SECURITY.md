@@ -42,36 +42,70 @@ that proves it.
 ## The supply chain
 
 Dependencies are checked for known vulnerabilities on every push, and a
-new one is a reviewed row in the gate's allow list. Every release
-carries an SPDX bill of materials for the module graph and one per
-image (`sbom-module.spdx.json`, `sbom-luxd.spdx.json`,
+new one is a reviewed row in the gate's allow list. A release is built
+from a tagged commit whose verify run passed, through the shared release
+stages in [latere-ai/ci](https://github.com/latere-ai/ci). Every release
+carries an SPDX bill of materials per image (`sbom-lux.spdx.json`,
 `sbom-lux-stubs.spdx.json`), cosign signatures over both images and over
-`checksums.txt`, and an SBOM attestation and a build provenance
-attestation per image. Nothing is signed with a key anyone holds: the
-signer is the release workflow's own identity.
+`checksums.txt`, which lists every other file the release attaches, and
+an SBOM attestation and a build provenance attestation per image.
+Nothing is signed with a key anyone holds: the images are signed by the
+build stage's identity and `checksums.txt` by the publish stage's, each
+run for this repository.
 
 ## Verifying a release
 
 Set the tag you are about to run and the account that published it, then
-check the archives and the image. The same checks run in the release
-workflow before a release is published.
+check the release's files and the images. The release workflow runs the
+same checks against every release it publishes.
 
 ```sh
 TAG=v0.20.0
 OWNER=latere-ai   # a fork's release: the fork's owner
-IDENTITY="https://github.com/$OWNER/lux/.github/workflows/release.yml@refs/tags/$TAG"
 ISSUER=https://token.actions.githubusercontent.com
 
-# The archives: checksums.txt is signed, and lists every archive's SHA-256.
+# The files: checksums.txt is signed by the publish stage run for this
+# repository, and lists every other file's SHA-256.
+gh release download "$TAG" -R "$OWNER/lux" -D lux-release
+cd lux-release
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-oidc-issuer "$ISSUER" \
+  --certificate-identity-regexp '^https://github\.com/latere-ai/ci/\.github/workflows/image-publish\.yml@' \
+  --certificate-github-workflow-repository "$OWNER/lux" checksums.txt
+sha256sum -c checksums.txt
+
+# The images: the signature by the build stage run for this repository,
+# then the provenance and SBOM attestations.
+for image in lux lux-stubs; do
+  cosign verify "ghcr.io/$OWNER/$image:$TAG" \
+    --certificate-oidc-issuer "$ISSUER" \
+    --certificate-identity-regexp '^https://github\.com/latere-ai/ci/\.github/workflows/image-build\.yml@' \
+    --certificate-github-workflow-repository "$OWNER/lux"
+  gh attestation verify "oci://ghcr.io/$OWNER/$image:$TAG" -R "$OWNER/lux" \
+    --signer-workflow latere-ai/ci/.github/workflows/image-build.yml
+done
+```
+
+Releases up to v0.20.0 were signed by this repository's own release
+workflow, and their `checksums.txt` lists the archives alone. Check one
+of those with `TAG`, `OWNER`, and `ISSUER` set as above, against that
+workflow's identity:
+
+```sh
+IDENTITY="https://github.com/$OWNER/lux/.github/workflows/release.yml@refs/tags/$TAG"
+
 gh release download "$TAG" -R "$OWNER/lux" -p 'checksums.txt*' -p '*.tar.gz'
 cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" checksums.txt
 sha256sum -c checksums.txt
 
-# The images: the signature, then the provenance and SBOM attestations.
-cosign verify --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" \
-  "ghcr.io/$OWNER/lux:$TAG"
-gh attestation verify "oci://ghcr.io/$OWNER/lux:$TAG" --repo "$OWNER/lux"
+for image in lux lux-stubs; do
+  cosign verify --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" \
+    "ghcr.io/$OWNER/$image:$TAG"
+  gh attestation verify "oci://ghcr.io/$OWNER/$image:$TAG" --repo "$OWNER/lux"
+done
 ```
 
-`lux-stubs` verifies the same way under its own image name.
+Those releases also carry `sbom-module.spdx.json`, a bill of materials
+for the whole module graph, and name the gateway image's bill of
+materials `sbom-luxd.spdx.json`.
