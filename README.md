@@ -50,9 +50,12 @@ limits, expiry, and budget.
 - **Every dialect at one address.** The OpenAI, Anthropic, and Gemini
   request shapes are doors into the same gateway, and so is the
   lux-native one. A caller keeps the SDK it already has; the translation
-  between shapes lives in one package with its own golden test corpus,
+  between the OpenAI, Anthropic and lux-native shapes lives in one package
+  with its own golden test corpus,
   [`latere.ai/x/pkg/llmdialect`](https://github.com/latere-ai/pkg),
-  rather than a branch per provider in the request path.
+  rather than a branch per provider in the request path. The Gemini shape
+  is not translated: its door reaches only a provider that speaks Gemini,
+  and answers `dialect_unsupported` for any other.
 - **The provider credential never leaves the gateway.** A `Key` is not a
   provider key: it names the models it may reach and the limits it runs
   under, its value is shown once at creation, and revoking it takes
@@ -168,8 +171,9 @@ release on a cluster, see [Install](docs/install.md).
 
 - Four kinds with strict decoding, server-side defaults, and a `status`
   the server writes, evolving under written compatibility rules.
-- Four dialects on the data plane, translated through one package with a
-  golden corpus, and a conformance suite any server must pass. Each door's
+- Four dialects on the data plane, three of them translated through one
+  package with a golden corpus, with Gemini passed through to providers
+  that speak it, and a conformance suite any server must pass. Each door's
   model list carries the figures a Model declares: the context window and
   the output limit on every door, and the input modalities and prices on
   every door but `/gemini`, so a client sizes its requests from the
