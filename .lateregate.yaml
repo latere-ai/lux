@@ -199,7 +199,7 @@ postgres:
   pool_env: LUX_DB_POOL_URL
 
 # The developer image must build, report its version, hold no shell, and
-# start. It starts in memory mode with an issuer that is never asked: the
+# start. It starts in memory mode with an issuer that refuses at once: the
 # probe is on the public listener and needs no token, and an issuer that does
 # not answer at start is named and the server starts. The KEK is the demo key
 # compose.yaml uses and seals nothing real.
@@ -212,7 +212,7 @@ image:
       env:
         LUX_PUBLIC_URL: http://127.0.0.1:8080
         LUX_SECRETS_KEK: HxFnCDhgTwClkERT1jTojAwxu5Kdn5iqvCC/st6dU0M=
-        LUX_OIDC_ISSUERS: https://issuer.example.com
+        LUX_OIDC_ISSUERS: https://127.0.0.1:1
       port: 8080
       probe: /livez
       wait_seconds: 30
