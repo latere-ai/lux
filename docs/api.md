@@ -67,6 +67,12 @@ door, so an existing SDK points at it unchanged.
 | Gemini | `/gemini/v1beta` |
 | Lux | `/lux/v1` |
 
+The OpenAI, Anthropic and Lux doors translate into one another, so each
+reaches a provider of any of those dialects. The Gemini door is not
+translated: it reaches only a provider that speaks Gemini, and answers
+`dialect_unsupported` for any other. Every door's list shows the same
+models, including ones that door cannot reach.
+
 `GET /{door}/v1/models` is that dialect's own model list, distinct from
 `/v1/models`, which is the `Model` kind in manifest shape. Each entry
 also carries the figures its Model declares, so a client can size its
