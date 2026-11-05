@@ -556,6 +556,11 @@ func TestRequestIDOnEveryResponse(t *testing.T) {
 		t.Errorf("refused: %v", rec.Header())
 	}
 	r = httptest.NewRequest("GET", "/nowhere", nil)
+	r.Header.Set("X-Request-Id", "trace 42")
+	if rec := w.do(r); rec.Header().Get("X-Request-Id") != "" {
+		t.Error("an X-Request-Id with a space was echoed")
+	}
+	r = httptest.NewRequest("GET", "/nowhere", nil)
 	r.Header.Set("X-Request-Id", strings.Repeat("a", 129))
 	if rec := w.do(r); rec.Header().Get("X-Request-Id") != "" {
 		t.Error("a 129-byte X-Request-Id was echoed")

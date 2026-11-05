@@ -70,6 +70,7 @@ var gatewayImports = []string{
 	"latere.ai/x/pkg/llmdialect/bridge",
 	"latere.ai/x/pkg/llmdialect/ir",
 	"latere.ai/x/pkg/metrics",
+	"latere.ai/x/pkg/requestid",
 	"latere.ai/x/pkg/semaphore",
 }
 

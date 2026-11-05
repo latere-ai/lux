@@ -19,6 +19,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 	"latere.ai/x/pkg/ratelimit"
+	"latere.ai/x/pkg/requestid"
 
 	"latere.ai/x/lux/gateway"
 	"latere.ai/x/lux/internal/auth"
@@ -243,8 +244,8 @@ func (h *Handler) begin(w http.ResponseWriter, r *http.Request) *call {
 	hdr := w.Header()
 	hdr.Set(gateway.HeaderRequestID, c.id)
 	hdr.Set("X-Content-Type-Options", "nosniff")
-	if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
-		hdr.Set("X-Request-Id", xid)
+	if xid := r.Header.Get(requestid.Header); requestid.Valid(xid) {
+		hdr.Set(requestid.Header, xid)
 	}
 	return c
 }
@@ -277,20 +278,6 @@ func underAKind(path string) bool {
 		}
 	}
 	return false
-}
-
-// echoable is spec 011's rule for X-Request-Id: at most 128 bytes of
-// printable ASCII, or the header is dropped rather than echoed.
-func echoable(s string) bool {
-	if s == "" || len(s) > 128 {
-		return false
-	}
-	for i := range len(s) {
-		if s[i] < 0x20 || s[i] > 0x7e {
-			return false
-		}
-	}
-	return true
 }
 
 // routes registers every pattern without a method, so a method the

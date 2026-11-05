@@ -143,6 +143,10 @@ var rootAllow = map[string]allow{
 			// developer detail (spec 043); that package is the standard
 			// library alone.
 			"latere.ai/x/pkg/audit",
+			// The X-Request-Id a response echoes is held to
+			// latere.ai/x/pkg/requestid's rule, which is the standard
+			// library alone.
+			"latere.ai/x/pkg/requestid",
 			"go.opentelemetry.io/",
 			"golang.org/x/",
 			"github.com/felixge/httpsnoop",

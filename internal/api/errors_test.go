@@ -336,7 +336,7 @@ func TestRequestIdOnEveryResponse(t *testing.T) {
 
 // TestXRequestIdIsEchoedOnly: a caller's X-Request-Id of 128 printable
 // bytes is echoed unchanged and appears in no event or log line; one of
-// 129 bytes or with a control byte is not echoed.
+// 129 bytes, with a control byte, or with a space is not echoed.
 func TestXRequestIdIsEchoedOnly(t *testing.T) {
 	h := newHarness(t, nil)
 	ok := strings.Repeat("x", 128)
@@ -353,7 +353,7 @@ func TestXRequestIdIsEchoedOnly(t *testing.T) {
 	if strings.Contains(h.log.String(), ok) {
 		t.Error("a log line carries the caller's X-Request-Id")
 	}
-	for _, bad := range []string{strings.Repeat("x", 129), "abc\x01def", "abc\x7fdef", "über"} {
+	for _, bad := range []string{strings.Repeat("x", 129), "abc\x01def", "abc\x7fdef", "über", "trace 42", " ", "a\tb"} {
 		rec := h.request(http.MethodGet, "/v1/budgets/team", "", "X-Request-Id", bad)
 		if _, present := rec.Header()["X-Request-Id"]; present {
 			t.Errorf("%q was echoed", bad)

@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"latere.ai/x/pkg/llmdialect/bridge"
+	"latere.ai/x/pkg/requestid"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -127,27 +128,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hdr := w.Header()
 	hdr.Set(HeaderRequestID, c.id)
 	hdr.Set("X-Content-Type-Options", "nosniff")
-	if xid := r.Header.Get("X-Request-Id"); echoable(xid) {
-		hdr.Set("X-Request-Id", xid)
+	if xid := r.Header.Get(requestid.Header); requestid.Valid(xid) {
+		hdr.Set(requestid.Header, xid)
 	}
 	c.rec = Record{ID: c.id, At: c.start}
 	ctx, span := startRequest(r.Context(), r.Header)
 	c.span = span
 	c.finish(ctx, c.run(ctx))
-}
-
-// echoable is spec 011's rule for X-Request-Id: at most 128 bytes of
-// printable ASCII, or the header is dropped rather than echoed.
-func echoable(s string) bool {
-	if s == "" || len(s) > 128 {
-		return false
-	}
-	for i := range len(s) {
-		if s[i] < 0x20 || s[i] > 0x7e {
-			return false
-		}
-	}
-	return true
 }
 
 // settle replaces the lease's reservation with the measured tokens,
