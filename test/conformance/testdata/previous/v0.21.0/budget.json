@@ -1,0 +1,26 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Budget",
+  "metadata": {
+    "name": "dev"
+  },
+  "spec": {
+    "amount": "10",
+    "currency": "USD",
+    "window": "month",
+    "hard": true
+  },
+  "status": {
+    "id": "bud_01M6P4VMCMPWB24Q0CY5J74WXX",
+    "version": 1,
+    "owner": "http://127.0.0.1:9106|dev",
+    "state": "Open",
+    "spent": "0",
+    "remaining": "10",
+    "resetsAt": "2026-12-01T00:00:00Z",
+    "keys": 1,
+    "createdAt": "2026-11-05T15:22:23.508709748Z",
+    "updatedAt": "2026-11-05T15:22:23.508798131Z",
+    "warnings": []
+  }
+}

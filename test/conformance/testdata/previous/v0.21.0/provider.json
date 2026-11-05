@@ -1,0 +1,45 @@
+{
+  "apiVersion": "lux.latere.ai/v1beta1",
+  "kind": "Provider",
+  "metadata": {
+    "name": "openai"
+  },
+  "spec": {
+    "dialect": "openai",
+    "tunnel": false,
+    "baseURL": "http://127.0.0.1:9101/v1",
+    "credential": {
+      "header": "Authorization",
+      "scheme": "bearer"
+    },
+    "discovery": {
+      "mode": "none"
+    },
+    "health": {
+      "mode": "probe"
+    },
+    "timeout": "10m",
+    "concurrency": 0
+  },
+  "status": {
+    "id": "prv_01M6P4VMCGC966T6GWY9NXMCV3",
+    "version": 1,
+    "owner": "http://127.0.0.1:9106|dev",
+    "credential": {
+      "set": true,
+      "version": 1,
+      "updatedAt": "2026-11-05T15:22:23.502702513Z"
+    },
+    "health": {
+      "state": "Healthy",
+      "since": "2026-11-05T15:22:26.437888937Z",
+      "lastProbeAt": "2026-11-05T15:23:06.437273908Z",
+      "lastError": ""
+    },
+    "createdAt": "2026-11-05T15:22:23.504080513Z",
+    "updatedAt": "2026-11-05T15:22:23.504227233Z",
+    "warnings": [
+      "The base URL is a plaintext http:// address on a loopback address, admitted because this gateway allows private upstreams."
+    ]
+  }
+}
