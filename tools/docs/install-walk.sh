@@ -13,8 +13,9 @@
 # provider on the machine for part 1 (stubs-local.sh), and runs the fenced
 # blocks of the document in order (run-blocks.sh). kind and kubectl come
 # from the PATH the suite is given. The cluster, the stub process and the
-# scratch directory are removed when the script ends, passed or failed, so
-# a laptop run leaves nothing behind.
+# scratch directory are removed when the script ends, passed or failed.
+# The /etc/hosts line stubs-local.sh adds for the stub Pod's name stays: it
+# is shared with other runs and removing it needs sudo again.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
