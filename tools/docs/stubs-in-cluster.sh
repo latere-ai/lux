@@ -27,7 +27,25 @@ issuer=http://lux-stubs.$namespace.svc.cluster.local:9106
 if ! kind get clusters 2>/dev/null | grep -qx "$cluster"; then
   kind create cluster --name "$cluster" --config kind-lux.yaml --wait 120s
 fi
-kind load docker-image --name "$cluster" "$@"
+# kind loads from Docker where it is installed, as on a runner. Where podman
+# built the images, kind loads them from an archive, under the name the
+# cluster looks them up by: podman files an unqualified luxd:candidate as
+# localhost/luxd:candidate, and the cluster asks for
+# docker.io/library/luxd:candidate.
+if command -v docker >/dev/null 2>&1; then
+  kind load docker-image --name "$cluster" "$@"
+else
+  archive=$(mktemp -d)
+  for image in $(printf '%s\n' "$@" | sort -u); do
+    name=$image
+    case $image in */*) ;; *) name=docker.io/library/$image ;; esac
+    podman tag "$image" "$name"
+    podman save -o "$archive/image.tar" "$name"
+    kind load image-archive --name "$cluster" "$archive/image.tar"
+    rm -f "$archive/image.tar"
+  done
+  rm -rf "$archive"
+fi
 
 kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
 sed "s|image: lux-stubs$|image: $stubs|" "$here/stubs.yaml" | kubectl apply -f -
