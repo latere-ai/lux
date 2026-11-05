@@ -1,8 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/latere-ai/lux/blob/main/SECURITY.md
-    about: Report it privately to security@latere.ai, never as an issue.
+    url: https://github.com/latere-ai/lux/security/advisories/new
+    about: Report it privately, as SECURITY.md describes, never as an issue.
   - name: Running luxd and writing manifests
     url: https://github.com/latere-ai/lux/blob/main/docs/README.md
     about: Install, configuration, manifest reference, API, and operations documentation.
