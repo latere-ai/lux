@@ -3,6 +3,8 @@
 How a release of `luxd` follows the one before it, what a version number
 promises, and what to read before crossing a major.
 
+After an upgrade, `BASE_URL=<public base of the Models API> TAG=<release> tools/smoke/release.sh` checks from the outside that the service serves that release; the release pipeline runs it after every rollout.
+
 ## What a version number promises
 
 Lux uses semantic versioning on the release tag. From `v1.0.0` the table
