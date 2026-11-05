@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"latere.ai/x/pkg/clientip"
 )
 
 // Defaults and bounds for the control plane variables of spec 011 and
@@ -135,12 +137,18 @@ func countOr(name, raw string, def int, problems []string) (int, []string) {
 func prefixes(name, raw string, problems []string) ([]netip.Prefix, []string) {
 	var out []netip.Prefix
 	for _, s := range splitList(raw) {
-		p, err := netip.ParsePrefix(s)
-		if err != nil {
+		if _, err := netip.ParsePrefix(s); err != nil {
 			problems = append(problems, name+" entry "+strconv.Quote(s)+" is not a CIDR range such as 10.0.0.0/8")
 			continue
 		}
-		out = append(out, p.Masked())
+		// clientip stores an IPv4-mapped range as the IPv4 range it
+		// stands for, the form addresses are matched in.
+		ps, err := clientip.ParseTrusted(s)
+		if err != nil || len(ps) != 1 {
+			problems = append(problems, name+" entry "+strconv.Quote(s)+" is not a CIDR range such as 10.0.0.0/8")
+			continue
+		}
+		out = append(out, ps[0])
 	}
 	return out, problems
 }

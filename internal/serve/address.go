@@ -4,77 +4,22 @@
 package serve
 
 import (
-	"net"
 	"net/http"
 	"net/netip"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
+	"latere.ai/x/pkg/clientip"
 	"latere.ai/x/pkg/ratelimit"
 
 	"latere.ai/x/lux/gateway"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
-// The client address rule and the per-address bucket of spec 011, which
-// run here before the door handler of spec 004 and before the /v1
+// The per-address bucket of spec 011, keyed by the client address the rule
+// of pkg/clientip gives, which runs here before the door handler of spec 004 and before the /v1
 // handler, so both planes agree on who the caller is and how many bad
 // credentials one address may present.
-
-// ClientAddress is the caller's address for the rate bucket and for the
-// authorizer's request.ip: the peer's, or, when the peer is inside one
-// of the trusted ranges, the last X-Forwarded-For entry outside every
-// range, which is the address the nearest untrusted hop presented. A
-// forwarded header from a peer outside the ranges is ignored, and so is
-// every header when no range is trusted, so a caller cannot choose the
-// address it is limited under. An entry that is not an address ends the
-// walk and the peer stands.
-func ClientAddress(r *http.Request, trusted []netip.Prefix) string {
-	peer := hostOf(r.RemoteAddr)
-	addr, err := netip.ParseAddr(peer)
-	if err != nil || !inRanges(addr, trusted) {
-		return peer
-	}
-	var entries []string
-	for _, h := range r.Header.Values("X-Forwarded-For") {
-		for e := range strings.SplitSeq(h, ",") {
-			if e = strings.TrimSpace(e); e != "" {
-				entries = append(entries, e)
-			}
-		}
-	}
-	for _, entrie := range slices.Backward(entries) {
-		a, err := netip.ParseAddr(hostOf(entrie))
-		if err != nil {
-			return peer
-		}
-		if !inRanges(a, trusted) {
-			return a.String()
-		}
-	}
-	return peer
-}
-
-// hostOf strips a port from host:port and the brackets from an IPv6
-// literal; a bare host is returned as it is.
-func hostOf(s string) string {
-	if host, _, err := net.SplitHostPort(s); err == nil {
-		return host
-	}
-	return strings.Trim(s, "[]")
-}
-
-func inRanges(a netip.Addr, ranges []netip.Prefix) bool {
-	a = a.Unmap()
-	for _, p := range ranges {
-		if p.Contains(a) {
-			return true
-		}
-	}
-	return false
-}
 
 // AddressLimiterOptions is what LimitUnauthenticated runs under.
 type AddressLimiterOptions struct {
@@ -115,7 +60,7 @@ func LimitUnauthenticated(next http.Handler, o AddressLimiterOptions) http.Handl
 	}
 	buckets := ratelimit.New(ratelimit.Config{Idle: addressIdle, Now: o.Now})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		addr := ClientAddress(r, o.Trusted)
+		addr := clientip.Address(r, o.Trusted)
 		buckets.SetRate(addr, o.PerMinute)
 		a := buckets.Allow(addr)
 		if !a.OK {

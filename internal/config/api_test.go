@@ -136,6 +136,15 @@ func TestAPIValuesAreRead(t *testing.T) {
 		t.Fatalf("TrustedProxies = %v, want the range masked to its prefix", c.TrustedProxies)
 	}
 	c, err = Load(env(withKEK(map[string]string{
+		"LUX_OIDC_ISSUERS": issuer, "LUX_TRUSTED_PROXIES": "::ffff:10.0.0.0/104",
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.TrustedProxies) != 1 || c.TrustedProxies[0] != netip.MustParsePrefix("10.0.0.0/8") {
+		t.Fatalf("TrustedProxies = %v, want the IPv4-mapped range stored as the IPv4 range it stands for", c.TrustedProxies)
+	}
+	c, err = Load(env(withKEK(map[string]string{
 		"LUX_OIDC_ISSUERS": issuer, "LUX_REQUESTS_PER_MINUTE": " ", "LUX_UNAUTHENTICATED_REQUESTS_PER_MINUTE": "",
 		"LUX_TRUSTED_PROXIES": " , ", "LUX_MAX_MANIFEST_BYTES": "\t", "LUX_MAX_BODY_BYTES": " ", "LUX_UPSTREAM_TIMEOUT": "",
 	})))

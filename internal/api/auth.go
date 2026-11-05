@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/clientip"
 
 	"latere.ai/x/lux/authorizer"
 	"latere.ai/x/lux/internal/auth"
-	"latere.ai/x/lux/internal/serve"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
 
@@ -24,7 +24,7 @@ import (
 // RateLimit headers and a refusal adds Retry-After. In the file mode
 // there is no bearer to read and no subject to limit.
 func (c *call) authenticate() *Error {
-	c.addr = serve.ClientAddress(c.r, c.h.o.TrustedProxies)
+	c.addr = clientip.Address(c.r, c.h.o.TrustedProxies)
 	if c.h.fileMode() {
 		return nil
 	}

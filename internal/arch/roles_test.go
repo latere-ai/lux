@@ -39,6 +39,9 @@ var tokenRole = struct {
 		"latere.ai/x/pkg/authz",
 		"latere.ai/x/pkg/authkit",
 		"latere.ai/x/pkg/bearer",
+		// LUX_TRUSTED_PROXIES is read into ranges by internal/config;
+		// the package is the standard library alone.
+		"latere.ai/x/pkg/clientip",
 		"latere.ai/x/pkg/cache",
 		"latere.ai/x/pkg/envutil",
 		"latere.ai/x/pkg/httpjson",

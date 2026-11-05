@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"latere.ai/x/pkg/clientip"
 
 	"latere.ai/x/lux/gateway"
 )
@@ -38,6 +41,8 @@ func TestClientAddressRule(t *testing.T) {
 		{"an entry that is not an address", "10.1.2.3:4444", []string{"203.0.113.9, unknown"}, trusted, "10.1.2.3"},
 		{"an IPv6 peer in a range", "[fd00::1]:4444", []string{"[2001:db8::9]:8080"}, trusted, "2001:db8::9"},
 		{"a mapped IPv4 peer", "[::ffff:10.1.2.3]:4444", []string{"203.0.113.9"}, trusted, "203.0.113.9"},
+		{"a mapped IPv4 client forwarded", "10.1.2.3:4444", []string{"::ffff:203.0.113.9"}, trusted, "203.0.113.9"},
+		{"a mapped IPv4 peer untrusted", "[::ffff:198.51.100.7]:1234", []string{"203.0.113.9"}, trusted, "198.51.100.7"},
 		{"a peer with no port", "10.1.2.3", []string{"203.0.113.9"}, trusted, "203.0.113.9"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -46,8 +51,8 @@ func TestClientAddressRule(t *testing.T) {
 			for _, h := range tc.xff {
 				r.Header.Add("X-Forwarded-For", h)
 			}
-			if got := ClientAddress(r, tc.trusted); got != tc.want {
-				t.Fatalf("ClientAddress() = %q, want %q", got, tc.want)
+			if got := clientip.Address(r, tc.trusted); got != tc.want {
+				t.Fatalf("Address() = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -168,5 +173,27 @@ func TestStatusWriterUnwraps(t *testing.T) {
 	}
 	if secondsUp(0) != 1 || secondsUp(1500*time.Millisecond) != 2 || secondsUp(time.Minute) != 60 {
 		t.Error("secondsUp rounds wrongly")
+	}
+}
+
+// TestLimitUnauthenticatedKeysOneClientOnce: a client the proxy forwards
+// as an IPv4-mapped IPv6 address and the same client forwarded as
+// dotted IPv4 draw from one bucket, so the second spelling cannot
+// double the client's allowance.
+func TestLimitUnauthenticatedKeysOneClientOnce(t *testing.T) {
+	now := time.Date(2026, 9, 13, 10, 0, 0, 0, time.UTC)
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+	h := LimitUnauthenticated(inner, AddressLimiterOptions{PerMinute: 2, Trusted: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, Now: func() time.Time { return now }, NewID: func() string { return "req_test" }})
+	var codes []int
+	for _, forwarded := range []string{"203.0.113.9", "::ffff:203.0.113.9", "203.0.113.9", "::ffff:203.0.113.9"} {
+		r := httptest.NewRequest(http.MethodGet, "/v1/keys", nil)
+		r.RemoteAddr = "10.1.2.3:4444"
+		r.Header.Set("X-Forwarded-For", forwarded)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		codes = append(codes, rec.Code)
+	}
+	if want := []int{401, 401, 429, 429}; !slices.Equal(codes, want) {
+		t.Fatalf("statuses = %v, want %v: the mapped spelling drew from a bucket of its own", codes, want)
 	}
 }

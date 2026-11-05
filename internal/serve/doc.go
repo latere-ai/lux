@@ -19,9 +19,9 @@
 // process environment in file mode. KeyCache and Limiter are spec 007's
 // Key lookup and windows on one replica, Catalog is spec 008's view of
 // desired state for the doors, and RenderKey and RenderBudget fill the
-// read-time status the API returns. For spec 011, ClientAddress and
-// LimitUnauthenticated are the client address rule and the per-address
-// bucket in front of both planes, ObjectOwners answers the owner policy
+// read-time status the API returns. For spec 011, LimitUnauthenticated is
+// the per-address bucket in front of both planes, keyed by the client
+// address pkg/clientip works out, ObjectOwners answers the owner policy
 // over the store, AppendEvent journals an event through internal/events, and
 // the Recorder prices every record of the doors and writes it (009).
 // The /v1 handlers are internal/api's; cmd/luxd wires and nothing more.
