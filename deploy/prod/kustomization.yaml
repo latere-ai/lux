@@ -38,7 +38,7 @@ resources:
 images:
   - name: luxd
     newName: ghcr.io/latere-ai/lux
-    newTag: v0.20.0
+    newTag: v0.21.0
 # The ConfigMap is luxd-env, not luxd: kustomize rewrites any Role
 # resourceNames entry equal to a generated ConfigMap's suffixed name, and the
 # Role in deploy/prod-bootstrap names the service account luxd-core.
