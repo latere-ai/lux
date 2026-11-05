@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Fixed
+
+- **An `X-Request-Id` with a space is no longer echoed.** Both planes keep
+  an id only when it is printable and at most 128 bytes, and mint one
+  otherwise.
+
+- **A client is rate limited by one address however it is written.** An
+  IPv4-mapped address and its plain IPv4 form draw from one bucket.
+
+- **A list filter that names labels admits only rows that carry every one
+  of them.**
+
 ## v0.21.0 - 2026-11-05
 
 ### Added
