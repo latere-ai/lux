@@ -49,7 +49,7 @@ build-stubs:
 # make run and make run-file: a working gateway on loopback in one command,
 # every endpoint luxd dials answered by a stub (spec 015).
 #
-# The ports are derived from the checkout directory's name, so two
+# The ports are derived from the checkout directory's path, so two
 # checkouts do not collide; RUN_PORT overrides the base. Everything the
 # stack writes sits under out/run: the pid files run-down reads, the logs,
 # the rendered examples, the key encryption key, and the file mode's Key
