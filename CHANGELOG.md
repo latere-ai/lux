@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.21.1 - 2026-11-05
+
 ### Fixed
 
 - **An `X-Request-Id` with a space is no longer echoed.** Both planes keep
