@@ -32,7 +32,7 @@ with no Key changed.
 On 2026-09-25:
 
 - A door resolves the Model a call names from the in-memory catalog of
-  [036-catalog-in-memory](.archive/036-catalog-in-memory.md), then holds
+  [036-catalog-in-memory](036-catalog-in-memory.md), then holds
   it to the Key's selectors: `model_not_found`, 404, for a name the
   catalog lacks, `model_not_allowed`, 403, for one no selector matches
   (`gateway/handler.go` `lookupModel`).

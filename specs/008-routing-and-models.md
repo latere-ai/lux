@@ -139,7 +139,7 @@ used at all: `onError` walks it, `never` fails on the first attempt.
 | upstream `3xx` | no | a redirect is not followed ([[005-providers]]) and another target would answer the same |
 | any other upstream `4xx` | no | the request is wrong, or the Provider's credential or upstream name is; every target of this Provider would say so, and another Provider's answer would not make this one right |
 | a body the target dialect refuses to encode | no | the same encode fails on every target of that dialect |
-| the caller's context cancelled | no | there is nobody to answer |
+| the caller's context canceled | no | there is nobody to answer |
 | anything at all after the first response byte reached the caller | no | below |
 
 The rules around the order:

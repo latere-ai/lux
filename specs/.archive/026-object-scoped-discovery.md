@@ -24,7 +24,7 @@ author: changkun
 ## Overview
 
 An owner can hold objects for several tenants. A control plane cannot infer
-object tenancy from owner membership, and a funded catalogue cannot be listed
+object tenancy from owner membership, and a funded catalog cannot be listed
 safely by granting access to every object of its provisioning service.
 
 ## Design

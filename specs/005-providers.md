@@ -474,7 +474,7 @@ transport.
 | `DisableCompression` | true | the transport adds no `Accept-Encoding` of its own and decodes nothing, so [[004-request-path]]'s rule that the header is removed on translated and model routes and kept on opaque ones holds byte for byte |
 | deadline | `Provider.spec.timeout`, defaulted from `LUX_UPSTREAM_TIMEOUT`, over the whole request including its stream, as the request context's deadline the caller sets; no `http.Client.Timeout` and no `ResponseHeaderTimeout`; the jobs use `10m` for a Provider whose `timeout` is empty, which the file mode leaves so until [[004-request-path]] wires the default | a stream that stalls is cut rather than held; there is no idle timeout between events, because the one deadline is the one knob an operator sets |
 | response cap | a response body the gateway reads whole, a non-streaming response on a translated or model route, is read by the door through `io.LimitReader` at `LUX_MAX_BODY_BYTES` ([[004-request-path]]) and one byte more is `upstream_error` with the detail naming the cap; a stream is relayed and never buffered, so it has no cap; the jobs cap one page of a model list at 16 MiB | a provider cannot exhaust a replica's memory with one answer |
-| concurrency | `latere.ai/x/pkg/semaphore` of `spec.concurrency` slots per Provider per replica, `0` is no limit; `Acquire` waits at most the request's remaining deadline, and a slot is held until the response body is closed, so a stream in flight counts | a wait that outlives the request's own deadline is `provider_unavailable`, `ErrProviderBusy`, whichever of the timer and the context fired first; only a cancelled caller is its own error |
+| concurrency | `latere.ai/x/pkg/semaphore` of `spec.concurrency` slots per Provider per replica, `0` is no limit; `Acquire` waits at most the request's remaining deadline, and a slot is held until the response body is closed, so a stream in flight counts | a wait that outlives the request's own deadline is `provider_unavailable`, `ErrProviderBusy`, whichever of the timer and the context fired first; only a canceled caller is its own error |
 
 The outbound header set is [[004-request-path]]'s, which owns what is
 forwarded and what is removed. Two of its rules are this spec's,
@@ -615,7 +615,7 @@ the Design above beside the rule it settles:
   addresses".
 - A concurrency wait that ends with the request's deadline is
   `ErrProviderBusy` whichever of the timer and the context fired first;
-  only a cancelled caller is the context's own error.
+  only a canceled caller is the context's own error.
 - `luxd rewrap` runs over the store `LUX_DB_URL` names: the run is
   proven over `store.Credentials` against the memory store and, since
   [[010-state]]'s Postgres store landed, over a real database in

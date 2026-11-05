@@ -13,13 +13,13 @@ proves a server serves both. Spec 002 is the configuration reference:
 every `LUX_*` variable is in its table, owned by it or listed with its
 owner.
 
-- [029-reference-mutation-context](.archive/029-reference-mutation-context.md) — complete. Bind reference checks and rotation to sanitized desired state.
+- [029-reference-mutation-context](.archive/029-reference-mutation-context.md): complete. Bind reference checks and rotation to sanitized desired state.
 
-- [030-key-credential-admission](.archive/030-key-credential-admission.md) — complete. Admit registered Key credentials without exposing their verifier.
+- [030-key-credential-admission](.archive/030-key-credential-admission.md): complete. Admit registered Key credentials without exposing their verifier.
 
-- [031-durable-key-fences](.archive/031-durable-key-fences.md) — complete. Close Key names to delayed credential writes.
+- [031-durable-key-fences](.archive/031-durable-key-fences.md): complete. Close Key names to delayed credential writes.
 
-- [032-key-fence-api](.archive/032-key-fence-api.md) — complete. Authorize and expose durable Key fences.
+- [032-key-fence-api](.archive/032-key-fence-api.md): complete. Authorize and expose durable Key fences.
 
 ## Layout
 

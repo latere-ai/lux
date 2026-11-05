@@ -94,10 +94,10 @@ refuses a Key that names no limit at all and the catalog's own Keys
 are declared without one. The payload is 006's exactly, read as
 `authz.Request` and answered as `authz.Decision` from
 `latere.ai/x/pkg/authz`, and one in any language reads the JSON names.
-Everything around the policy — the bearer and its successor, the body
+Everything around the policy (the bearer and its successor, the body
 bound, the decode, the check that an action and its `resource.kind` are
 the gateway's, the reserved probe id, the failure mapping, and the
-answer — is `latere.ai/x/pkg/authz/server`, so the program mounts that
+answer) is `latere.ai/x/pkg/authz/server`, so the program mounts that
 scaffold and writes a `Decider` and nothing else. The table it validates
 against is `latere.ai/x/lux/authorizer`'s, named through the package
 rather than through a string literal, so a reader who copies it runs

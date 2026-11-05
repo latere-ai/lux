@@ -201,7 +201,7 @@ bearer and expiry. A `token` that does not verify or names another
 subject is ignored, logged with its developer detail, and leaves the
 previous expiry in place. When the expiry passes with no fresh token
 the session is closed with `token_expired` and every in-flight carrier
-is cancelled. Issuer tokens are short-lived, so the agent's loop sends a
+is canceled. Issuer tokens are short-lived, so the agent's loop sends a
 fresh token on the first heartbeat after its token source yields one
 ([[014-agent-client]]'s `--token-file` is read per request for this
 reason), and a session runs for as long as the agent can obtain tokens.
@@ -733,7 +733,7 @@ authorizer payload and the owner policy the exception amends
 | The carrier framing is one header line then the body in each direction, headers flushed before the body, and a streamed response reaches the caller event by event with no buffering | `TestCarrierFraming`, `TestTunnelStreamsWithoutBuffering` | passing, in `internal/tunnel/wire` and `internal/tunnel` |
 | A connect negotiating HTTP/1.1 is refused with `not_found` and the HTTP/2 detail; over plaintext h2c the same connect succeeds | `TestTunnelRequiresHTTP2` | passing |
 | A second session for one Provider supersedes the first, the first is closed with `superseded` within one heartbeat, and the second serves | `TestNewestSessionWins` | passing, on one replica and across two over one store |
-| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a carrier with a newer token of the session's subject is accepted; a session whose bearer expires with no fresh token is closed with `token_expired` and its in-flight carriers are cancelled | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | passing |
+| A carrier with another subject's bearer, with an unknown session, or with an expired bearer is `unauthenticated`; a carrier with a newer token of the session's subject is accepted; a session whose bearer expires with no fresh token is closed with `token_expired` and its in-flight carriers are canceled | `TestCarrierAuthentication`, `TestSessionEndsWithTheToken` | passing |
 | A heartbeat carrying a fresh bearer of the session's subject moves the session's expiry to the new `exp` and the session serves past the old one; a bearer of another subject or one that fails to verify is ignored and the old expiry stands | `TestSessionTokenRefresh`, with the stub issuer minting a 2 s and then a 60 s token | passing, with `issuertest` minting the two tokens |
 | A carrier parked for three times `ttl` with no work receives an empty line every `ttl/3` and is still given work afterwards | `TestParkedCarrierKeepalive` | passing |
 | With `LUX_TUNNEL_FORWARD_SECRET` `new,old` on one replica and `old` on another, forwards succeed in both directions; with `new` alone against `old` alone they are refused | `TestForwardSecretRotation` | passing, two Gateways over one memory store |

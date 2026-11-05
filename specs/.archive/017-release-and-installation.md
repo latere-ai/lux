@@ -378,10 +378,10 @@ gets.
 
 | Surface | A patch may | A minor may | A major may |
 |---|---|---|---|
-| the manifest schema ([[003-manifest-contract]]) | fix a rule that was refusing a valid manifest | add an optional field with a behaviour-preserving default, or an enum value | change the API group to `lux.latere.ai/v2`, with a conversion in both directions and a period where both are served |
+| the manifest schema ([[003-manifest-contract]]) | fix a rule that was refusing a valid manifest | add an optional field with a behavior-preserving default, or an enum value | change the API group to `lux.latere.ai/v2`, with a conversion in both directions and a period where both are served |
 | `/v1` routes ([[011-api]]) | fix a status or a sentence that was wrong | add a route, a parameter, or a response field | remove or repurpose one |
 | error codes ([[011-api]]) | nothing | add a code | remove a code or change what one means |
-| `LUX_*` variables ([[002-repository-scaffold]]) | fix a default that was wrong | add a variable, or widen what one accepts | remove a variable or change its meaning; the major's first release reads a removed variable, ignores it, and logs one `WARN` naming the replacement, so an operator's existing manifest of environment does not silently change behaviour on upgrade |
+| `LUX_*` variables ([[002-repository-scaffold]]) | fix a default that was wrong | add a variable, or widen what one accepts | remove a variable or change its meaning; the major's first release reads a removed variable, ignores it, and logs one `WARN` naming the replacement, so an operator's existing manifest of environment does not silently change behavior on upgrade |
 | event types and payloads ([[012-request-log-and-events]]) | nothing | add a type or a `data` member | remove a type or a member |
 | the usage record ([[009-usage-and-metering]]) | nothing | add a field | remove or repurpose a field |
 | the exported packages ([[001-architecture]]) | nothing | add a function, a type, or a field | break a call site |
@@ -505,7 +505,7 @@ The `fixture` job pushes `conformance/fixture-<tag>` and stops. It opens
 no pull request.
 
 The design above had the job push the branch and then run `gh pr create`
-against it. The GitHub organisation this repository lives in forbids
+against it. The GitHub organization this repository lives in forbids
 Actions from creating pull requests, so that call was refused on every
 release. The branch was already pushed by then, so each release ended
 with the fixture directory on the remote and a red job beside a green
