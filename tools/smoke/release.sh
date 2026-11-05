@@ -8,7 +8,7 @@
 # release. An operator can run it by hand after an upgrade.
 #
 # BASE_URL is the public base of the Models API, the origin and the path
-# prefix together: https://api.latere.ai/v1/models in production. The
+# prefix together, as in https://host.example/v1/models. The
 # script has no default target.
 #
 # Checks, in order, stopping at the first failure:
