@@ -3,7 +3,7 @@
 How a release of `luxd` follows the one before it, what a version number
 promises, and what to read before crossing a major.
 
-After an upgrade, `BASE_URL=<public base of the Models API> TAG=<release> tools/smoke/release.sh` checks from the outside that the service serves that release; the release pipeline runs it after every rollout.
+After an upgrade, `BASE_URL=<public base of the Models API> TAG=<release> tools/smoke/release.sh` checks from the outside that the service serves that release; the release pipeline runs it after rolling the maintainer's own installation, where it deploys one.
 
 ## What a version number promises
 

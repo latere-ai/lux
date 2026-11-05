@@ -10,7 +10,11 @@
 # digest and under no tag, signed, and given a bill of materials and SBOM
 # and provenance attestations each; the images are held to the archives'
 # bytes; and the deploy archive pins the gateway image by digest. The
-# conformance suite then runs against the two digests. Only then does the
+# conformance suite then runs against the two digests. The deploy stage
+# then rolls Latere's own installation, only where the repository variable
+# LUX_RELEASE_DEPLOY is set: deploy/prod applied with the gateway image
+# pinned by digest, the Deployment waited for, and tools/smoke/release.sh
+# repeated against the live origin. Only then does the
 # publish stage tag the digests, sign checksums.txt over every attached
 # file, and publish the GitHub release with the CHANGELOG section as its
 # body. After that the verify stage checks the release from a clean runner,
@@ -67,14 +71,15 @@ jobs:
       # the build produced and the archives carry. Then the deploy archive:
       # the base with the gateway image pinned to this release by digest, the
       # component, the overlays, the bootstrap template, and the example
-      # manifests, under one deploy/ directory. Last, the bare binaries leave
+      # manifests, under one deploy/ directory; Latere's own deploy/prod and
+      # deploy/prod-bootstrap are left out of it. Last, the bare binaries leave
       # dist/: the release attaches every file there, and the archives carry
       # the same bytes.
       after_images_command: |
         tools/release/images.sh dist "$IMAGE_1" "$IMAGE_2"
         printf 'images:\n  - name: luxd\n    newName: %s\n    digest: %s\n' "${IMAGE_1%@*}" "${IMAGE_1#*@}" >> deploy/base/kustomization.yaml
         kubectl kustomize deploy/overlays/kind | grep -q "image: ${IMAGE_1}"
-        tar -czf "dist/deploy-${TAG}.tar.gz" deploy
+        tar --exclude=deploy/prod --exclude=deploy/prod-bootstrap -czf "dist/deploy-${TAG}.tar.gz" deploy
         rm dist/luxd_linux_* dist/lux-stubs_linux_*
       runs_on: ubuntu-latest
 
@@ -207,12 +212,45 @@ jobs:
         if: failure()
         run: docker logs luxd; docker logs stubs
 
+  # Between the conformance run and the publish stage: the shared deploy
+  # stage, under the production environment, so the
+  # rollout is a GitHub deployment with a URL on the repository's
+  # Deployments page. It runs after the conformance suite has passed against
+  # the candidate digests, so production never rolls before the release's own
+  # tests do. The repository variable and the kubeconfig secret are set on
+  # this repository and on no fork, so a tag on a fork publishes every
+  # artifact and skips this job. The gateway image is given by digest, as the
+  # overlay's own name for it, because it carries no tag until publish. The
+  # stubs image is not deployed. deploy/prod holds only re-appliable
+  # manifests; deploy/prod-bootstrap is never read.
+  deploy:
+    name: deploy and smoke
+    # build is named for its outputs: a job reads the outputs of the jobs it
+    # needs directly, and of no other. conformance is named so that a red
+    # suite stops the release before production rolls.
+    needs: [build, conformance]
+    if: ${{ vars.LUX_RELEASE_DEPLOY != '' }}
+    uses: latere-ai/ci/.github/workflows/image-deploy.yml@v1
+    permissions:
+      contents: read
+    with:
+      images: luxd=${{ needs.build.outputs.ref_1 }}@${{ needs.build.outputs.digest_1 }}
+      deployments: |
+        luxd-core
+      url: https://api.latere.ai/v1/models
+    secrets:
+      DEPLOY_KUBECONFIG: ${{ secrets.LUX_KUBECONFIG }}
+
   # 3. Only now do the digests get the :<tag> reference, and the release is
   # published with every file the build wrote and the fixture archive the
   # conformance run produced, checksums.txt over all of them signed, and
   # the CHANGELOG section as its body.
   publish:
-    needs: [build, conformance]
+    needs: [build, conformance, deploy]
+    # deploy is skipped on every repository that sets no LUX_RELEASE_DEPLOY,
+    # and a job that leans on the implicit success() is skipped whenever a
+    # job above it in the graph is, so each result is named here.
+    if: ${{ always() && needs.build.result == 'success' && needs.conformance.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' }}
     uses: latere-ai/ci/.github/workflows/image-publish.yml@v1
     permissions:
       contents: write
@@ -221,6 +259,11 @@ jobs:
     with:
       images: ${{ needs.build.outputs.images }}
       artifacts: fixture-archive
+      # The smoke evidence is the run artifact the deploy stage uploads. A
+      # release whose deploy was skipped has none, and the publish stage
+      # refuses an evidence pattern that names no file, so it is named only
+      # when the deploy ran.
+      evidence: ${{ needs.deploy.result == 'success' && 'smoke-evidence' || '' }}
       runs_on: ubuntu-latest
 
   # 4. From a clean runner with no checkout: every asset downloaded, the
@@ -230,6 +273,9 @@ jobs:
   # section at the tag.
   verify:
     needs: publish
+    # deploy sits above this job in the graph and is skipped on a fork, so
+    # the result this job waits on is named, as on publish.
+    if: ${{ always() && needs.publish.result == 'success' }}
     uses: latere-ai/ci/.github/workflows/release-verify.yml@v1
     permissions:
       contents: read

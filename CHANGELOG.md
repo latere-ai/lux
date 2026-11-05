@@ -6,6 +6,20 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- **A release can deploy itself.** The release workflow has a `deploy` job
+  between the conformance run and the publish stage, which applies
+  `deploy/prod` with the gateway image pinned by digest, waits for the
+  rollout and runs `tools/smoke/release.sh` against the live origin. It
+  runs only where the repository variable `LUX_RELEASE_DEPLOY` is set, so a
+  fork publishes every artifact and deploys nothing, and it runs only after
+  the conformance suite has passed against the release's own digests.
+  `deploy/prod` holds the maintainer's production manifests and
+  `deploy/prod-bootstrap` the identity the job deploys with. Neither is in
+  the deploy archive, which still carries the base, the component, the
+  overlays, the bootstrap template and the examples.
+
 ### Changed
 
 - **Releases are built, signed and published by the shared release stages

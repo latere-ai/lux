@@ -164,7 +164,7 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	if w.Permissions["contents"] != "read" || len(w.Permissions) != 1 {
 		t.Errorf("the workflow's default permissions are %v, want contents: read alone", w.Permissions)
 	}
-	want := []string{"build", "conformance", "publish", "verify", "install-release", "fixture"}
+	want := []string{"build", "conformance", "deploy", "publish", "verify", "install-release", "fixture"}
 	for _, name := range want {
 		if _, ok := w.Jobs[name]; !ok {
 			t.Errorf("release.yml has no %s job", name)
@@ -186,7 +186,7 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 		}
 		return nil
 	}
-	for job, before := range map[string]string{"conformance": "build", "publish": "conformance", "verify": "publish", "install-release": "publish", "fixture": "publish"} {
+	for job, before := range map[string]string{"conformance": "build", "deploy": "conformance", "publish": "conformance", "verify": "publish", "install-release": "publish", "fixture": "publish"} {
 		if !slices.Contains(needs(job), before) {
 			t.Errorf("%s does not run after %s: needs %v", job, before, needs(job))
 		}
@@ -195,13 +195,13 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	// The repository is public, so every job runs on GitHub's hosted
 	// runner; a stage left to the organization's runner policy would run
 	// a tag's release on the self-hosted one.
-	stages := map[string]string{"build": "image-build.yml", "publish": "image-publish.yml", "verify": "release-verify.yml"}
+	stages := map[string]string{"build": "image-build.yml", "deploy": "image-deploy.yml", "publish": "image-publish.yml", "verify": "release-verify.yml"}
 	versions := map[string]bool{}
 	for name, job := range w.Jobs {
 		stage, ok := stages[name]
 		if !ok {
 			if job.Uses != "" {
-				t.Errorf("%s calls %s; build, publish, and verify are the stages", name, job.Uses)
+				t.Errorf("%s calls %s; build, deploy, publish, and verify are the stages", name, job.Uses)
 			}
 			if job.RunsOn != "ubuntu-latest" {
 				t.Errorf("%s runs on %v, want ubuntu-latest", name, job.RunsOn)
@@ -216,8 +216,14 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 		if len(job.Steps) != 0 {
 			t.Errorf("%s runs steps of its own beside its stage", name)
 		}
-		if job.With["runs_on"] != "ubuntu-latest" {
+		// The deploy stage takes the runner the organization's policy picks
+		// for a job that holds a cluster credential, as it does in every
+		// repository that deploys; it runs only where LUX_RELEASE_DEPLOY is
+		// set, which no fork does.
+		if _, named := job.With["runs_on"]; name != "deploy" && job.With["runs_on"] != "ubuntu-latest" {
 			t.Errorf("%s runs its stage on %v, want ubuntu-latest", name, job.With["runs_on"])
+		} else if name == "deploy" && named {
+			t.Error("deploy names a runner; the stage's default is the organization's policy")
 		}
 		// A value reaches a command through the environment the stage
 		// sets, never as an expression spliced into the text it runs.

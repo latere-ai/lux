@@ -62,7 +62,24 @@ func TestReleaseFailuresCannotBeIgnoredByPublish(t *testing.T) {
 	}
 	for _, name := range []string{"build", "conformance", "publish"} {
 		job := w.Jobs[name]
-		if job.If != "" && job.If != "success()" {
+		if name == "publish" {
+			// Publish names each result it waits on, because the deploy
+			// above it is skipped wherever LUX_RELEASE_DEPLOY is unset, and
+			// a skipped job upstream skips a job that leans on success().
+			// It must still refuse a failed build or conformance run and a
+			// failed or cancelled deploy.
+			for _, want := range []string{
+				"always()",
+				"needs.build.result == 'success'",
+				"needs.conformance.result == 'success'",
+				"needs.deploy.result != 'failure'",
+				"needs.deploy.result != 'cancelled'",
+			} {
+				if !strings.Contains(job.If, want) {
+					t.Errorf("publish's condition lacks %q: %q", want, job.If)
+				}
+			}
+		} else if job.If != "" && job.If != "success()" {
 			t.Errorf("%s overrides the successful-dependencies gate with %q", name, job.If)
 		}
 		if job.ContinueOnError != nil && job.ContinueOnError != false {
@@ -75,7 +92,7 @@ func TestReleaseFailuresCannotBeIgnoredByPublish(t *testing.T) {
 		}
 	}
 	needs, ok := w.Jobs["publish"].Needs.([]any)
-	if !ok || !slices.Contains(needs, any("build")) || !slices.Contains(needs, any("conformance")) {
-		t.Fatal("publish must depend on both build and conformance")
+	if !ok || !slices.Contains(needs, any("build")) || !slices.Contains(needs, any("conformance")) || !slices.Contains(needs, any("deploy")) {
+		t.Fatal("publish must depend on build, conformance and deploy")
 	}
 }
