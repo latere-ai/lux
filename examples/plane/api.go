@@ -556,19 +556,7 @@ func (q listQuery) admits(obj v1.Object) bool {
 
 // allowedBy is the authorizer's filter over one object.
 func allowedBy(f *authz.Filter, obj v1.Object) bool {
-	if f == nil {
-		return true
-	}
-	if len(f.Owners) > 0 && !slices.Contains(f.Owners, obj.Owner()) {
-		return false
-	}
-	labels := labelsOf(obj)
-	for k, v := range f.Labels {
-		if labels[k] != v {
-			return false
-		}
-	}
-	return true
+	return f.Admits(obj.Owner(), labelsOf(obj))
 }
 
 // parseList reads the parameters the kind's route defines and refuses

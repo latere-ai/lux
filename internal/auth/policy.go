@@ -90,14 +90,7 @@ var grantCore = authorizer.Vocabulary().Core
 // token, so one that reached here arrived another way and the closed
 // answer is the only safe one.
 func restrict(req authz.Request, d authz.Decision) authz.Decision {
-	if !d.Allow {
-		return d
-	}
-	grants, err := authz.ParseGrants(req.Claims)
-	if err != nil {
-		return authz.Decision{Reason: authz.ReasonGrant}
-	}
-	return authz.Restrict(grantCore, d, req, grants)
+	return authz.RestrictByClaims(grantCore, d, req)
 }
 
 // decide is the policy's own answer, the rows of the comment above.

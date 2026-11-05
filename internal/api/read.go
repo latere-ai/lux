@@ -78,7 +78,7 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 		}
 		filter = d.Filter
 	}
-	f, owners, empty := q.intersect(filter)
+	f, empty := q.intersect(filter)
 	if empty {
 		return c.writeJSON(http.StatusOK, listResponse{Items: []v1.Object{}}, 0)
 	}
@@ -101,7 +101,7 @@ func (c *call) list(ctx context.Context, k kind) *Error {
 			return mapError(lerr)
 		}
 		for _, obj := range page {
-			if len(owners) > 0 && !slices.Contains(owners, obj.Owner()) {
+			if !filter.Admits(obj.Owner(), labelsOf(obj)) {
 				continue
 			}
 			if c.h.o.AuthorizeListItems && !c.h.fileMode() {
@@ -220,10 +220,11 @@ func one(vals []string) string {
 // intersect narrows the query by the authorizer's filter: an owner
 // outside the filter's owners, a label the filter contradicts, or two
 // values for one label is an empty list; one owner goes to the store,
-// several are the post-filter the page loop applies.
-func (q listQuery) intersect(filter *authz.Filter) (f store.Filter, owners []string, empty bool) {
+// and the page loop admits every row through the filter again, which is
+// what narrows by several owners.
+func (q listQuery) intersect(filter *authz.Filter) (f store.Filter, empty bool) {
 	if q.labels == nil {
-		return f, nil, true
+		return f, true
 	}
 	f = store.Filter{Owner: q.owner, Source: q.source}
 	labels := map[string]string{}
@@ -231,25 +232,23 @@ func (q listQuery) intersect(filter *authz.Filter) (f store.Filter, owners []str
 	if filter != nil {
 		for k, v := range filter.Labels {
 			if prev, ok := labels[k]; ok && prev != v {
-				return f, nil, true
+				return f, true
 			}
 			labels[k] = v
 		}
 		if len(filter.Owners) > 0 {
 			switch {
 			case q.owner != "" && !slices.Contains(filter.Owners, q.owner):
-				return f, nil, true
+				return f, true
 			case q.owner == "" && len(filter.Owners) == 1:
 				f.Owner = filter.Owners[0]
-			case q.owner == "":
-				owners = slices.Clone(filter.Owners)
 			}
 		}
 	}
 	if len(labels) > 0 {
 		f.Labels = labels
 	}
-	return f, owners, false
+	return f, false
 }
 
 // zeroObject is the empty object of a kind, for a list's resource.
@@ -264,4 +263,19 @@ func zeroObject(kind string) v1.Object {
 	default:
 		return &v1.Budget{}
 	}
+}
+
+// labelsOf is the labels of an object, whatever its kind.
+func labelsOf(obj v1.Object) map[string]string {
+	switch x := obj.(type) {
+	case *v1.Provider:
+		return x.Metadata.Labels
+	case *v1.Model:
+		return x.Metadata.Labels
+	case *v1.Key:
+		return x.Metadata.Labels
+	case *v1.Budget:
+		return x.Metadata.Labels
+	}
+	return nil
 }

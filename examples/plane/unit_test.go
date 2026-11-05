@@ -124,6 +124,7 @@ func TestTheListFiltersSelect(t *testing.T) {
 		{"another owner", &authz.Filter{Owners: []string{"https://login.example.com|bob"}}, false},
 		{"a label it carries", &authz.Filter{Labels: map[string]string{"team": "research"}}, true},
 		{"a label it lacks", &authz.Filter{Labels: map[string]string{"team": "ops"}}, false},
+		{"an empty value for a label it does not carry", &authz.Filter{Labels: map[string]string{"tier": ""}}, false},
 	} {
 		t.Run("the filter: "+tc.name, func(t *testing.T) {
 			if got := allowedBy(tc.f, key); got != tc.admit {

@@ -232,3 +232,21 @@ func TestFilteredPaginationDoesNotDiscardVisibleOverflow(t *testing.T) {
 		t.Fatal("permitted overflow was dropped", got)
 	}
 }
+
+// TestListFilterLabelNeedsTheLabel: a filter naming a label admits only
+// rows carrying it, so a row with no labels is not listed under a filter
+// that names an empty value for one, whatever the store's own match
+// says.
+func TestListFilterLabelNeedsTheLabel(t *testing.T) {
+	h := newHarness(t, nil)
+	for i, labels := range []map[string]string{nil, {"tier": ""}} {
+		b := &v1.Budget{Metadata: v1.ObjectMeta{Name: "lab-" + strconv.Itoa(i), Labels: labels}, Spec: v1.BudgetSpec{Currency: "USD", Window: v1.WindowMonth}, Status: v1.BudgetStatus{ID: h.newID(v1.PrefixBudget), Owner: h.subject()}}
+		if _, err := h.st.Objects().Put(t.Context(), b, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.stub.Allow(stub.Rule{Action: "budget.list", Filter: &authz.Filter{Owners: []string{h.subject()}, Labels: map[string]string{"tier": ""}}})
+	if got := names(t, h.request(http.MethodGet, "/v1/budgets", "")); !reflect.DeepEqual(got, []string{"lab-1"}) {
+		t.Errorf("a row with no tier label under a filter naming one: %v", got)
+	}
+}
