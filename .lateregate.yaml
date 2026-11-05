@@ -185,6 +185,17 @@ identity:
   reached_by: self-hosted
   # Access is by role: the roles rule runs, and it is one way once set.
   roles_only: true
+  # deploy/prod is Latere's own overlay inside the core's tree, and
+  # deploy/prod-bootstrap the identity and the objects an operator applies
+  # beside it; they name the installation they serve, so the no-latere-value
+  # rule reads the addresses they set and does not refuse them. The deploy
+  # archive of a release leaves both out.
+  skip:
+    - deploy/prod
+    - deploy/prod-bootstrap
+  overlays:
+    - deploy/prod
+    - deploy/prod-bootstrap
 
 # The database shape: which endpoint the serving path connects on. Serving
 # queries go to the pooler when LUX_DB_POOL_URL is set and fall back to

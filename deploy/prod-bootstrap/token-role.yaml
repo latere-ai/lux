@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# What the core's service account may do at Latere: mint a token for itself,
+# which an anthropic Provider's workload identity federation exchanges at
+# Anthropic for a short-lived access token (spec 051). The token is minted
+# for every exchange, so each one Anthropic sees is new, and its audience is
+# LUX_WORKLOAD_IDENTITY_AUDIENCE's, never the API server's. Nothing else: the
+# account reads no object and lists nothing. Learning its own name is a
+# SelfSubjectReview, which every authenticated subject may make.
+#
+# It is not in deploy/prod because a Role is an object the rollout identity
+# may not write: an identity that could write Roles could grant itself
+# anything. An operator applies it once, and again only if it changes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: luxd-token-core
+  namespace: latere
+  labels:
+    app.kubernetes.io/name: luxd
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: [luxd-core]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: luxd-token-core
+  namespace: latere
+  labels:
+    app.kubernetes.io/name: luxd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: luxd-token-core
+subjects:
+  - kind: ServiceAccount
+    name: luxd-core
+    namespace: latere

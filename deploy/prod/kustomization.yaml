@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Lux core as Latere runs it: the production target of the release
+# pipeline, which applies it on every release with
+#
+#   kubectl apply -k deploy/prod
+#
+# after pinning the image to the digest the release built. ../base is the
+# core's own base; this overlay adds what is Latere's. Everything here is safe
+# to apply again. What is not (the rollout identity, the Role the core mints
+# its workload identity token under, and the Secrets) is in
+# deploy/prod-bootstrap and is applied by an operator, never by the pipeline.
+#
+# nameSuffix -core makes every object luxd-core, so the tree cannot replace
+# the hosted gateway's luxd objects that run beside it. The two select on
+# different label keys (the gateway on `app`, the core on
+# `app.kubernetes.io/name`), so neither Service reaches the other's pods. The
+# suffix touches only the objects this tree declares: the Secrets luxd-secrets,
+# luxd-requestlog and platformd-internal-ca are created outside it and keep
+# their names.
+#
+# The Deployment runs the image `luxd`, the placeholder the base names. The
+# images entry points it at the published gateway image by digest and under no
+# tag, which is how the release pipeline pins it (`kustomize edit set image
+# luxd=<ref>@<digest>`) and how production runs today; the digest committed
+# here is the release last applied by hand, and every release replaces it in
+# the checkout it deploys from.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: latere
+nameSuffix: -core
+resources:
+  - ../base
+  - ingress.yaml
+  - networkpolicy-egress.yaml
+  - ciliumnetworkpolicy.yaml
+images:
+  - name: luxd
+    newName: ghcr.io/latere-ai/lux
+    digest: sha256:ca10813ed4507574374387620e73fd1862b4959710ab0373c0a91ddbb49eddd7
+# The ConfigMap is luxd-env, not luxd: kustomize rewrites any Role
+# resourceNames entry equal to a generated ConfigMap's suffixed name, and the
+# Role in deploy/prod-bootstrap names the service account luxd-core.
+configMapGenerator:
+  - name: luxd-env
+    envs:
+      - luxd.env
+patches:
+  - path: deployment.yaml

@@ -43,6 +43,21 @@ var forbidden = []*regexp.Regexp{
 // under .claude, each a tree of its own with its own copy of this test.
 var skipDirs = map[string]bool{".git": true, ".claude": true, "out": true, "node_modules": true, "dist": true}
 
+// latereTrees are the two directories that are Latere's own installation of
+// the core, not the core: the production overlay the release pipeline
+// applies, and the identity and the objects an operator applies beside it.
+// They name the maintainer's hosts and neighbors because they are the
+// installation, and the deploy archive of a release leaves them out, so
+// nothing a reader installs carries them.
+var latereTrees = map[string]bool{"deploy/prod": true, "deploy/prod-bootstrap": true}
+
+// deployURL is the one line of a workflow that may name the maintainer's
+// host: the address the deploy job's smoke checks, which is the production
+// origin and is not a default of any artifact.
+func deployURL(rel, line string) bool {
+	return rel == ".github/workflows/release.yml" && strings.HasPrefix(strings.TrimSpace(line), "url: https://")
+}
+
 // TestNoLatereCoordinatesInReleasedArtifacts is spec 001's invariant 8
 // as a test over the whole tree: no document, manifest, workflow,
 // default, comment, or string names a hostname of the maintainer's, a
@@ -59,6 +74,9 @@ func TestNoLatereCoordinatesInReleasedArtifacts(t *testing.T) {
 		}
 		if d.IsDir() {
 			if skipDirs[d.Name()] && path != dir {
+				return filepath.SkipDir
+			}
+			if r, _ := filepath.Rel(dir, path); latereTrees[filepath.ToSlash(r)] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -82,6 +100,9 @@ func TestNoLatereCoordinatesInReleasedArtifacts(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(dir, path)
 		for i, line := range strings.Split(string(data), "\n") {
+			if deployURL(filepath.ToSlash(rel), line) {
+				continue
+			}
 			for _, m := range hostname.FindAllStringIndex(line, -1) {
 				host := strings.ToLower(line[m[0]:m[1]])
 				after := line[m[1]:]

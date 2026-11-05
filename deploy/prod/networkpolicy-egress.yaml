@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The ports this installation's dependencies listen on, which the core's
+# base cannot know. The base admits egress on 443 and 5432 to any address.
+#
+# The core's database is DigitalOcean's managed Postgres, which listens on
+# 25060 for a direct connection and 25061 for the pool.
+# The base names Egress in its policyTypes, so a port it does not name is a
+# connection dropped: `luxd serve` cannot run its migrations and never
+# starts.
+#
+# The authorizer and the event sink are platformd's internal TLS listener,
+# pod port 8443 behind the Service's 443. A NetworkPolicy is evaluated on
+# the pod's own port after the Service's translation, and under Cilium an
+# ipBlock never matches a pod, so the base's 443 to 0.0.0.0/0 does not
+# reach it. platformd's side admits the core in its own tree.
+#
+# The telemetry collector the namespace's monitoring injects runs as a
+# DaemonSet in dash0-system, and the injected endpoint is the node's address
+# on the host port 40318. Cilium translates that to the collector's Pod on
+# its container port 4318 before policy is evaluated, so a rule admitting
+# 40318 matches nothing and drops every export. The collector's Pods on
+# 4318 are admitted, by namespace and by the DaemonSet's name label.
+#
+# The issuer is https://auth.latere.ai, whose address inside the cluster is
+# the load balancer's, and Cilium translates that to the ingress
+# controller's pods before policy: the base's 443 to 0.0.0.0/0 never
+# matches a pod, OIDC discovery times out, and the core never starts. The
+# controller's pods on their https port 443 are admitted, and no other pod.
+#
+# Policies are additive: this widens egress for the core's pods and leaves
+# the base's confinement as it is everywhere else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: luxd-egress
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: luxd
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 25060
+          protocol: TCP
+        - port: 25061
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dash0-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - port: 4318
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: platformd
+      ports:
+        - port: 8443
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 443
+          protocol: TCP

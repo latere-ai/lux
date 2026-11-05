@@ -47,6 +47,10 @@ func TestReleasePublishesUnderTheOwnersNamespace(t *testing.T) {
 			if skipDirs[d.Name()] && path != dir {
 				return filepath.SkipDir
 			}
+			// Latere's installation names the one image it runs.
+			if r, _ := filepath.Rel(dir, path); latereTrees[filepath.ToSlash(r)] {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)

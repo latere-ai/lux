@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# What the base's container gains at Latere.
+#
+# LUX_OIDC_AUDIENCE: `lux` is the core's primary audience, which the
+# console's actor tokens and platformd's service token name; `api.latere.ai`
+# is the platform origin's, which a platform key's token names. An env entry
+# wins over the ConfigMap, and the base sets this one on the container.
+#
+# SSL_CERT_DIR appends platformd's internal CA to the system roots, so the
+# authorizer and the event sink on platformd's internal TLS listener verify;
+# the volume carries ca.crt alone, never the CA's key.
+#
+# automountServiceAccountToken: the core reaches Anthropic with its own
+# workload identity (lux spec 051), a token it mints for its service account
+# through the TokenRequest API, authorized by the pod's mounted token; the
+# account may do nothing else (rbac.yaml). The base mounts none.
+#
+# envFrom is replaced whole, because a list with no merge key is: the
+# generated ConfigMap luxd-env, luxd-secrets as the base names it, and
+# luxd-requestlog, optional. That Secret holds LUX_REQUESTLOG_EXPORTER=s3 and
+# the S3 rows of the request log's own private bucket; it is created only once
+# the bucket exists, and without it the exporter is unset and records stay in
+# each replica's in-memory ring.
+#
+# lifecycle.preStop: the pod keeps serving for five seconds after Kubernetes
+# decides to stop it, the time the ingress and Service endpoints take to drop
+# its address. Without the pause the server closes its listener the moment
+# the stop signal arrives while traffic is still routed to it, and a rollout
+# answers 502 for about a second. The native sleep action needs no binary in
+# the image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: luxd
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: luxd
+          env:
+            - name: LUX_OIDC_AUDIENCE
+              value: lux,api.latere.ai
+            - name: SSL_CERT_DIR
+              value: "/etc/ssl/certs:/var/run/luxd-trust"
+          envFrom:
+            - configMapRef:
+                name: luxd-env
+            - secretRef:
+                name: luxd-secrets
+            - secretRef:
+                name: luxd-requestlog
+                optional: true
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+          volumeMounts:
+            - name: internal-ca
+              mountPath: /var/run/luxd-trust
+              readOnly: true
+      volumes:
+        - name: internal-ca
+          secret:
+            secretName: platformd-internal-ca
+            items:
+              - key: ca.crt
+                path: platformd-internal-ca.crt

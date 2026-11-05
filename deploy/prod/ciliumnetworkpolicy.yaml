@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Kubernetes API for the core's workload identity (lux spec 051): the
+# SelfSubjectReview and the TokenRequest it makes before an exchange. Plain
+# NetworkPolicy cannot name the API server, and under Cilium the base's 443
+# to 0.0.0.0/0 does not reach it, so it is the kube-apiserver entity, which
+# covers the in-cluster Service address and the external one. Policies are
+# additive: this widens egress by the API server alone.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: luxd-apiserver
+  labels:
+    app.kubernetes.io/name: luxd
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: luxd
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
