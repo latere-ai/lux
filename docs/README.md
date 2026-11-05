@@ -8,6 +8,7 @@ packages.
 | Page | |
 |---|---|
 | Quick start | the published images on your machine with no build, `docker compose up` and a few `curl`s, in [`quickstart.md`](quickstart.md); the wiring is [`compose.yaml`](../compose.yaml) |
+| Running it locally | `make run` from a clone: the gateway, a stand-in provider per dialect, an issuer, an authorizer and an event sink on loopback, and a request through every door, the control plane and the events, in [`local.md`](local.md) |
 | Install | from a checkout to a first completion on your machine with no issuer, and from nothing to a request through a door on a kind cluster, in [`install.md`](install.md); the manifests it applies are [`deploy/`](../deploy/README.md), and upgrades and rollback are in [`upgrades/`](upgrades/README.md) |
 | Configuration | every `LUX_*` variable `luxd` reads, its meaning, default, and when it is required, in [`configuration.md`](configuration.md); [`.env.example`](../.env.example) is the same set as a file to copy |
 | Security | what the gateway guarantees, what it sees and how long it keeps it, what it does not defend, and what an operator keeps safe: the KEK, TLS, trusted proxies, the authorizer, key rotation, holding an upstream to its data terms, keeping a workload's requests from upstreams that may keep them, and verifying releases, in [`security.md`](security.md); how to report a vulnerability, in [`SECURITY.md`](../SECURITY.md) |
@@ -27,6 +28,7 @@ first request.
 | Manifest reference | each kind's fields are the schemas in the OpenAPI document the [API page](api.md) links; `luxd` validates and defaults them, and a `GET` reads back what runs |
 | API | the `/v1` control plane, the dialect doors, authentication, the error shape, and what an authorizer is asked, in [`api.md`](api.md); the authoritative reference is the OpenAPI document [`api/openapi.yaml`](../api/openapi.yaml), served at `GET /v1/openapi.json` |
 | The packages | `manifest` (decode, default, validate, and resolve the four kinds), `gateway` (the doors and the routing), `metering` (costing and spend windows), `client` (the typed client of `/v1`), `client/tunnel` (attach a local model runtime), and `authorizer` (the actions and resource shapes an authorizer is written against); each package's Go documentation says what it promises |
+| Writing an authorizer | the question `luxd` asks your endpoint, the actions it names, the answer and how long it is cached, what happens when there is none, and the reserved probe, in [`authorizer.md`](authorizer.md) |
 | Building a platform on it | the two doors, where each platform concern goes, a minimal authorizer, how a sandbox gets model access without holding a credential, and the conformance command, in [`plane.md`](plane.md); the runnable endpoint is [`examples/authorizer`](../examples/authorizer) and the server built from the packages is [`examples/plane`](../examples/plane) |
 
 ## Changing it

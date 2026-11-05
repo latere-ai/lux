@@ -121,7 +121,7 @@ flowchart LR
   luxd -->|"asks each decision"| authorizer["your authorizer, optional"]
   luxd -->|"signed events on changes, health and spent limits"| sink["your event sink, optional"]
   luxd -->|"state"| db[("memory, Postgres, or a manifest directory")]
-  luxd -->|"request bodies"| archive[("S3-compatible archive, optional")]
+  luxd -->|"request records, no bodies"| archive[("S3-compatible archive, optional")]
   luxd -->|"the provider's own credential"| providers["model providers"]
   prometheus["Prometheus"] -->|"scrapes metrics"| luxd
 ```
@@ -263,9 +263,10 @@ curl https://lux.example.com/anthropic/v1/messages \
   the prices on the `Model`, kept hourly and then folded into monthly
   rows by retention rules matched on Key labels, with one person's
   identity removable from every row.
-- A request log with the bodies kept out of the gateway's own store and
-  archived where you point it, partitioned by a Key label so a bucket
-  lifecycle rule expires each partition on its own.
+- A request log, one record per request with no prompt or completion
+  in it, kept out of the gateway's own store and archived where you
+  point it, partitioned by a Key label so a bucket lifecycle rule
+  expires each partition on its own.
 - Provider credentials wrapped by a key-encryption key, write-only
   through the API, never read back and never handed to a caller.
 - State in memory, in Postgres, or read from a directory of manifests on
