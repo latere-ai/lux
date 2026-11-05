@@ -19,9 +19,9 @@ import (
 func jsonBenchRecord() Record {
 	return Record{
 		ID: "evt_01JBENCH0000000000000000", Type: KeyUpdated, Time: time.Date(2026, 9, 14, 10, 30, 0, 0, time.UTC),
-		Subject: "https://login.latere.ai|7c9e6679-7425-40de-944b-e07fc1f90ae7", Reason: ReasonRequest, RequestID: "req_01JBENCH0000000000000000",
+		Subject: "https://login.example.com|7c9e6679-7425-40de-944b-e07fc1f90ae7", Reason: ReasonRequest, RequestID: "req_01JBENCH0000000000000000",
 		Object: ObjectRef{
-			Kind: "Key", ID: "key_01JBENCH0000000000000000", Name: "ci-runner", Owner: "https://login.latere.ai|7c9e6679-7425-40de-944b-e07fc1f90ae7",
+			Kind: "Key", ID: "key_01JBENCH0000000000000000", Name: "ci-runner", Owner: "https://login.example.com|7c9e6679-7425-40de-944b-e07fc1f90ae7",
 			Labels: map[string]string{"team": "platform", "env": "prod", "run": "r_42"},
 		},
 		Data: map[string]any{"paths": []string{"spec.models", "spec.limits.requestsPerMinute", "metadata.labels.env"}},

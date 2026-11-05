@@ -27,7 +27,7 @@ func jsonBenchRecord(i int) metering.Record {
 	r := metering.Record{
 		ID: fmt.Sprintf("req_%026d", i), At: at, EndedAt: at.Add(1840 * time.Millisecond),
 		Key:   metering.KeyRef{ID: fmt.Sprintf("key_%026d", i%40), Prefix: "lux_ab12cd34ef56"},
-		Owner: "https://login.latere.ai|7c9e6679-7425-40de-944b-e07fc1f90ae7",
+		Owner: "https://login.example.com|7c9e6679-7425-40de-944b-e07fc1f90ae7",
 		Model: metering.Ref{Name: "claude-sonnet", ID: "mdl_01JBENCH0000000000000001"}, Provider: metering.Ref{Name: "anthropic", ID: "prv_01JBENCH0000000000000002"},
 		UpstreamModel: "claude-sonnet-4-5", Door: "openai", TargetDialect: "anthropic", Route: "/openai/v1/chat/completions", Translated: true,
 		Loss: []string{"messages[3].name", "user"},
