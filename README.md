@@ -20,7 +20,32 @@ your own control plane instead of forking it.
 [![Release](https://img.shields.io/github/v/release/latere-ai/lux)](https://github.com/latere-ai/lux/releases)
 [![Go](https://img.shields.io/github/go-mod/go-version/latere-ai/lux)](go.mod)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange.svg)](#project-status)
+[![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange.svg)](#status)
+
+## Status
+
+Lux is before 1.0: its manifests are `lux.latere.ai/v1beta1`, and until
+1.0 a minor release may break a row of the
+[version table](docs/upgrades/README.md#what-a-version-number-promises).
+The [changelog](CHANGELOG.md) names every change and every break in each
+[release](https://github.com/latere-ai/lux/releases). Everything under
+[What you get](#what-you-get) is implemented and covered by tests, and
+CI walks [`docs/install.md`](docs/install.md) on every push, from a
+checkout and against a cluster.
+
+A release carries the `lux` and `lux-stubs` images, the `luxd` and
+`lux` binaries for Linux and macOS, and the deploy manifests, published
+under the account that ran the release workflow, so a fork publishes
+under its own. The images are `ghcr.io/<owner>/lux:<tag>` and
+`ghcr.io/<owner>/lux-stubs:<tag>`, signed with cosign, each with a bill
+of materials and a provenance attestation, and the archives are listed
+in a signed `checksums.txt`. The
+[security policy](SECURITY.md#verifying-a-release) says how to verify
+them.
+
+Lux has had no external security audit. The
+[security policy](SECURITY.md#what-is-protected) names the test behind
+each control it claims.
 
 ## The problem
 
@@ -36,6 +61,79 @@ or splitting it across two, means changing the callers.
 Lux makes the provider a document, the model name a routing decision,
 and the credential a workload holds a separate object with its own
 limits, expiry, and budget.
+
+## Quickstart
+
+You need Go 1.27 or newer, `git`, `make` and `curl`. This starts the
+gateway on your machine with stand-ins for the providers, the identity
+provider, and the endpoints you would write, and sends requests through
+two doors:
+
+```sh
+git clone https://github.com/latere-ai/lux.git && cd lux
+eval "$(make run | grep '^export ')"
+curl -sS -w '\n' "$LUX_URL/openai/v1/chat/completions" \
+  -H "Authorization: Bearer $LUX_KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
+curl -sS -w '\n' "$LUX_URL/anthropic/v1/messages" \
+  -H "x-api-key: $LUX_KEY" -H 'anthropic-version: 2023-06-01' -H 'Content-Type: application/json' \
+  -d '{"model":"stub-anthropic","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}'
+curl -sS "$LUX_URL/v1/requests?limit=1" -H "Authorization: Bearer $LUX_TOKEN"
+```
+
+Each door answers in its own dialect, and the control plane answers
+with a record of the last request: its Key by prefix, the Model and
+Provider it went to, its tokens, and what it cost, and never the prompt
+or the completion:
+
+```
+{"choices":[{"finish_reason":"stop","index":0,"message":{"content":"stub:openai:stub-openai:2cf24dba","role":"assistant"}}],...}
+{"content":[{"text":"stub:anthropic:stub-anthropic:2cf24dba","type":"text"}],...}
+{"items":[{"id":"req_01M6PZJNR2G5XG7ZNF0ZCRN3QN","key":{"id":"key_01M6PZJNQC0YAHCWGJWWZTG119","prefix":"lux_cxx03pJP"},...,"door":"anthropic",...,"tokens":{"input":100,"output":20,...},"cost":{"amount":600,"currency":"USD","priced":true},...}],...}
+```
+
+`make run` builds `luxd` and `lux-stubs`, the test stubs: a fake
+provider per dialect, an OpenID Connect issuer, an authorizer, and an
+event sink. It starts them on loopback with all state in memory, applies
+one Provider and one Model per dialect from
+[`deploy/examples`](deploy/examples), a Budget, and a Key, and prints
+`LUX_URL`, `LUX_TOKEN` for the control plane, and `LUX_KEY` for the
+doors, which the second line exports. The port is derived from the
+checkout's path, so two clones do not collide, and `RUN_PORT` sets it.
+`make run-down` stops everything, and `make clean` removes `out/`,
+where the binaries, logs and keys are.
+[Running it locally](docs/local.md) goes through every door, the control
+plane, and the events from the same stack.
+
+Without a checkout, [`compose.yaml`](compose.yaml) runs the published
+`luxd` and stub images the same way, and [the quick start](docs/quickstart.md)
+walks it. To run a build against a real provider with no issuer, or to
+install a release on a cluster, see [Install](docs/install.md).
+
+## How it fits
+
+```mermaid
+flowchart LR
+  callers["SDKs and agents, with a Key"] -->|"OpenAI, Anthropic, Gemini or lux-native door"| luxd
+  operators["the lux command, your platform"] -->|"/v1 with an issuer token"| luxd
+  runtime["a model runtime on your machine"] -->|"tunnel, connects outbound"| luxd
+  luxd -->|"verifies tokens"| issuer["OpenID Connect issuers"]
+  luxd -->|"asks each decision"| authorizer["your authorizer, optional"]
+  luxd -->|"signed events on changes, health and spent limits"| sink["your event sink, optional"]
+  luxd -->|"state"| db[("memory, Postgres, or a manifest directory")]
+  luxd -->|"request bodies"| archive[("S3-compatible archive, optional")]
+  luxd -->|"the provider's own credential"| providers["model providers"]
+  prometheus["Prometheus"] -->|"scrapes metrics"| luxd
+```
+
+A caller reaches a model through a door with a Key, in the dialect its
+SDK already speaks. `luxd` resolves the model name to a provider,
+translates the request, adds that provider's credential, and records
+what it cost. The control plane under `/v1` takes a token from an issuer
+you trust and asks your authorizer what the subject may do, or applies
+the built-in owner policy when there is none. A model on your own
+machine joins through a tunnel it opens outbound, and is a Provider like
+any other.
 
 ## How it works
 
@@ -140,33 +238,6 @@ curl https://lux.example.com/anthropic/v1/messages \
        "messages":[{"role":"user","content":"hello"}]}'
 ```
 
-## Try it
-
-From a checkout, with Go 1.27 or newer, `make run` builds `luxd` and the
-test stubs: a fake provider per dialect, an OpenID Connect issuer, an
-authorizer, and an event sink. It starts them on loopback with all state
-in memory, applies one Provider and one Model per dialect from
-[`deploy/examples`](deploy/examples), a Budget, and a Key, and prints
-`LUX_URL`, `LUX_TOKEN`, and `LUX_KEY` for a first request. The Key opens
-any door in the dialect that door's SDK speaks:
-
-```sh
-curl -sS "$LUX_URL/openai/v1/chat/completions" \
-  -H "Authorization: Bearer $LUX_KEY" -H 'Content-Type: application/json' \
-  -d '{"model":"stub-openai","messages":[{"role":"user","content":"hello"}]}'
-```
-
-`make run-down` stops it. `make run-file` runs the same stack with the
-manifests read from a directory instead of applied through the API.
-
-Without a checkout, [`compose.yaml`](compose.yaml) runs the published
-`luxd` and stub images the same way. [The quick start](docs/quickstart.md)
-starts it for a release tag, mints a token, declares a Provider, a Model,
-and a Key, and sends a request through a door.
-
-To run a build against a real provider with no issuer, or install a
-release on a cluster, see [Install](docs/install.md).
-
 ## What you get
 
 - Four kinds with strict decoding, server-side defaults, and a `status`
@@ -220,11 +291,13 @@ For running Lux and building on it:
 | | |
 |---|---|
 | [Quick start](docs/quickstart.md) | the published images on your machine, no build: `docker compose up` and a few requests to a running gateway |
+| [Running it locally](docs/local.md) | `make run` from a clone: every door, the control plane, and the events, against stub providers on loopback |
 | [Install](docs/install.md) | from a checkout to a first completion on your machine, and from an empty cluster to a request through a door |
 | [The `lux` command](docs/cli.md) | every command and flag, for operating a gateway from a shell |
 | [Configuration](docs/configuration.md) | every `LUX_*` variable `luxd` reads, its default, and when it is required; `.env.example` is the same set to copy |
 | [API](docs/api.md) | the `/v1` control plane, the dialect doors, authentication, errors, and the OpenAPI document |
-| [Security](docs/security.md) | what the gateway protects, what you must do to run it safely, and how to verify a release |
+| [Security](docs/security.md) | what the gateway guarantees, what it sees and keeps, what it does not defend, and what an operator keeps safe |
+| [Writing an authorizer](docs/authorizer.md) | the question `luxd` asks your endpoint, the actions, the answer, and what happens when it does not answer |
 | [Observability](docs/observability.md) | probes, metrics, alerts, logs, and traces |
 | [Building a platform](docs/plane.md) | compose the packages and the webhooks, and give a workload model access without handing it a credential |
 | [Performance](docs/performance.md) | what the gateway's own overhead costs per request, and how to measure it |
@@ -238,28 +311,6 @@ order. The specs are written for people who change Lux, not for people
 who run it. [`CONTRIBUTING.md`](CONTRIBUTING.md) is how to build, the bar
 a change meets, and where a package belongs; [`SECURITY.md`](SECURITY.md)
 is how to report a vulnerability.
-
-## Project status
-
-Pre-release, built in the open. The
-[releases page](https://github.com/latere-ai/lux/releases) lists every
-version, and the [CHANGELOG](CHANGELOG.md) has one section per release.
-Every capability above is implemented and covered by tests, and `main`
-passes the full quality gate on every commit.
-
-Each release publishes the `lux` and `lux-stubs` images, the `luxd` and
-`lux` binaries for Linux and macOS, and the deploy manifests, under the
-namespace of the repository owner that ran the release workflow, so a
-fork publishes under its own. The images are `ghcr.io/<owner>/lux:<tag>`
-and `ghcr.io/<owner>/lux-stubs:<tag>`, signed with cosign, each with a
-bill of materials and a provenance attestation; the archives and the
-bills of materials are listed in a signed `checksums.txt`.
-[`SECURITY.md`](SECURITY.md) says how to verify them.
-
-Until `v1.0.0` the manifest schema may still change: a minor release may
-break a row of the [version table](docs/upgrades/README.md#what-a-version-number-promises),
-and its CHANGELOG entry names the break. [`docs/install.md`](docs/install.md) is walked by CI on every
-push, from a checkout and against a cluster.
 
 ## License
 
