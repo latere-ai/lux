@@ -1,192 +1,26 @@
-# Every push to main and every pull request runs the gate, the shared
-# pipeline of latere-ai/ci, the checks that need the tree and no network,
-# a tidy module file and the license notice on every source file, the
-# two tiers of spec 015 that need more than the toolchain: the integration
-# tier over the stubs it builds itself, and the postgres tier against a
-# service container, and the install document of specs 035 and 017 from
-# the checkout, its first part on the runner and its second against a
-# kind cluster. Every third-party action is pinned by commit.
-name: verify
+name: ci
 
-# A push or pull request that changes only markdown outside the exceptions
-# starts no run, because no build or test reads it. The exceptions are specs/,
-# whose error tables and criteria the suite holds to the code; docs/, which
-# tests hold to the code and the install job walks; skills/, which a test holds
-# to the CLI; SECURITY.md, which the threat-model test reads; and the markdown
-# inside any testdata directory, which tests load. `lateregate release` runs
-# the whole bar before every tag. A tag is never filtered by paths.
+# The bar lives in latere-ai/ci-gate, pinned in go.mod, and the shared
+# workflow runs it. What this repository decides is in .lateregate.yaml.
+# `lateregate init` writes this file, the same in every repository.
 on:
   push:
     branches: [main]
-    tags: ['v*']
-    paths:
-      - "**"
-      - "!**.md"
-      - "specs/**"
-      - "docs/**"
-      - "skills/**"
-      - "SECURITY.md"
-      - "**/testdata/**"
   pull_request:
-    paths:
-      - "**"
-      - "!**.md"
-      - "specs/**"
-      - "docs/**"
-      - "skills/**"
-      - "SECURITY.md"
-      - "**/testdata/**"
   workflow_dispatch:
 
 # A newer push to the same ref supersedes this run: its commit carries every
-# change this one would verify, and the runner is better spent on it.
+# change this one would verify.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
+# actions: read lets the gate find the last commit whose CI passed, which it
+# measures the change from.
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  # Every job runs on GitHub's hosted runners. The repository is public,
-  # so they cost nothing, and a hosted runner is a fresh machine per job.
   gate:
-    if: "!startsWith(github.ref, 'refs/tags/')"
     uses: latere-ai/ci/.github/workflows/lateregate.yml@v1
-    with:
-      runs_on: ubuntu-latest
-      test_os: '["ubuntu-latest"]'
-
-  # The integration tier: luxd and lux-stubs as processes the tier builds
-  # into a directory of its own, so it needs the toolchain, make, and
-  # curl, the last two for the make run rows. The package pattern is
-  # ./... so a tagged test anywhere in the tree is run, and -v so a tier
-  # that matched nothing is visible as an empty list. No -race: the gate's
-  # race gate runs the in-process suite, and here the assertions are HTTP
-  # requests against a separate process.
-  e2e:
-    name: the integration tier
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - run: go test -tags=integration -run '^TestE2E' -v ./...
-
-  # The conformance suite twice: against the tree as pushed and against
-  # the commit it came from, the base of the pull request or the previous
-  # commit of a push, on one runner with one toolchain, so a change under
-  # the doors that moves a byte a caller sees is red here before it is a
-  # bug report. Spec 021's swap of the codec glue for the bridge is the
-  # first such change; the job stays for the next one. A push with no
-  # previous commit runs the after half alone.
-  conformance-twice:
-    name: the conformance suite before and after
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - name: after
-        run: go test -tags=integration -run '^TestE2EConformance$' -v ./test/e2e/
-      - name: after, under a base path
-        run: go test -tags=integration -run '^TestE2EConformanceUnderBasePath$' -v ./test/e2e/
-      - name: after, under a base path in the place of /v1
-        run: go test -tags=integration -run '^TestE2EConformanceUnderReplacedBasePath$' -v ./test/e2e/
-      - name: before
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            echo "no previous commit to compare with"
-            exit 0
-          fi
-          git worktree add ../before "$BASE"
-          cd ../before
-          go test -tags=integration -run '^TestE2EConformance$' -v ./test/e2e/
-
-  # The postgres tier: the same tree of cases against a shared store, with
-  # LUX_DB_URL pointed at a service container. The database is the
-  # tier's dependency, declared by the variable, and nothing in the tree
-  # starts one.
-  postgres:
-    name: the postgres tier
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        # postgres:17-alpine, pinned by digest as every image reference is
-        image: postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
-        env:
-          POSTGRES_PASSWORD: lux
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
-        ports: ['5432:5432']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - run: go test -tags=postgres -run '^TestPostgres' -v ./...
-        env:
-          LUX_DB_URL: postgres://postgres:lux@127.0.0.1:5432/postgres?sslmode=disable
-
-  # The install document against this checkout, both parts. Part 1 of
-  # spec 035 runs out/luxd from make build on the runner, beside the stub
-  # OpenAI provider as a local process; part 2 of spec 017 runs a kind
-  # cluster with the developer image and the stub image loaded, the stubs
-  # as a Pod standing in for the issuer and the provider. The fenced
-  # blocks of docs/install.md run in order by the same runner the release
-  # pipeline uses against the published artifacts. A prose defect fails
-  # the build the day it lands.
-  install:
-    name: the install document from a checkout and against a kind cluster
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
-        with:
-          install_only: true
-      - name: The developer image, the stub image, luxd, and the lux command from the checkout
-        run: |
-          docker build -t luxd:candidate .
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/lux-stubs_linux_amd64 ./cmd/lux-stubs
-          docker build -f Dockerfile.stubs -t lux-stubs:candidate .
-          make build
-          mkdir -p "$RUNNER_TEMP/bin" && go build -o "$RUNNER_TEMP/bin/lux" ./cmd/lux
-      - name: The cluster and the stubs
-        run: |
-          mkdir -p work && cd work
-          ../tools/docs/stubs-in-cluster.sh lux-stubs:candidate luxd:candidate lux-stubs:candidate
-      # The runner is linux/amd64, so the stub binary the image carries
-      # runs here too, as the stub provider part 1's luxd reaches.
-      - name: The stub provider on the runner, for part 1
-        run: |
-          cd work
-          ../tools/docs/stubs-local.sh ../dist/lux-stubs_linux_amd64
-      - name: Walk the document
-        env:
-          LUX_INSTALL_BIN: ${{ github.workspace }}/out/luxd
-          LUX_INSTALL_IMAGE: luxd:candidate
-          LUX_INSTALL_MANIFESTS: ../deploy
-        run: |
-          cd work
-          PATH="$RUNNER_TEMP/bin:$PATH" ../tools/docs/run-blocks.sh ../docs/install.md
-      - name: The cluster's state and the local logs, for a failed run
-        if: failure()
-        run: kubectl -n lux get all; kubectl -n lux describe pod -l app.kubernetes.io/name=luxd; kubectl -n lux logs deploy/luxd --tail=200; tail -n 200 work/luxd.log work/lux-stubs.log || true

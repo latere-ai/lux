@@ -305,17 +305,50 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 	if got := w.Jobs["publish"].With["artifacts"]; got != "fixture-archive" {
 		t.Errorf("the publish stage attaches the run artifacts %v, want fixture-archive, the conformance run's fixture", got)
 	}
-	verify, _ := readWorkflow(t, "verify.yml")
-	if _, ok := verify.Jobs["install"]; !ok {
-		t.Error("verify.yml has no install job walking docs/install.md on every push")
+	// The gate walks the install document on every push as the install
+	// suite of .lateregate.yaml; the one workflow of the repository's own
+	// that remains beside the shared caller pins its actions by commit.
+	if got := installSuiteCommand(t); got != installWalkScript {
+		t.Errorf("the install suite of .lateregate.yaml runs %q, want %s, which walks docs/install.md on every push", got, installWalkScript)
 	}
-	for name, job := range verify.Jobs {
+	before, _ := readWorkflow(t, "conformance-before.yml")
+	for name, job := range before.Jobs {
 		for _, step := range job.Steps {
 			if step.Uses != "" && !pinned.MatchString(step.Uses) && !strings.HasPrefix(step.Uses, "latere-ai/ci/") {
-				t.Errorf("verify.yml %s uses %s, which is not pinned by a full commit", name, step.Uses)
+				t.Errorf("conformance-before.yml %s uses %s, which is not pinned by a full commit", name, step.Uses)
 			}
 		}
 	}
+}
+
+// installWalkScript is the script that builds the images and walks
+// docs/install.md from the checkout, both parts.
+const installWalkScript = "tools/docs/install-walk.sh"
+
+// installSuiteCommand is the command of the e2e suite named install in
+// .lateregate.yaml.
+func installSuiteCommand(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root(t), ".lateregate.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		E2E []struct {
+			Name    string `yaml:"name"`
+			Command string `yaml:"command"`
+		} `yaml:"e2e"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf(".lateregate.yaml: %v", err)
+	}
+	for _, e := range cfg.E2E {
+		if e.Name == "install" {
+			return e.Command
+		}
+	}
+	t.Fatal(".lateregate.yaml has no e2e suite named install")
+	return ""
 }
 
 // TestRunBlocksRunsTheFencedBlocksInOrder is the block runner of spec
@@ -447,9 +480,9 @@ var exported = regexp.MustCompile(`(?m)^export ([A-Z_][A-Z0-9_]*)=`)
 // docs/install.md: part 1 comes before part 2, runs the server named by
 // LUX_INSTALL_BIN with a local issuer key and a bootstrap directory,
 // stops it, and unsets every variable it exported that part 2 does not
-// name, so part 2 starts against nothing of part 1. Both install jobs
-// start the stub provider on the runner before the walk and name the
-// server binary for the walk step.
+// name, so part 2 starts against nothing of part 1. The release's install
+// job and the gate's install script start the stub provider on the machine
+// before the walk and name the server binary for the walk step.
 func TestInstallPartOneStartsFromACheckout(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(root(t), "docs", "install.md"))
 	if err != nil {
@@ -482,23 +515,36 @@ func TestInstallPartOneStartsFromACheckout(t *testing.T) {
 			t.Errorf("part 1 exports %s, which part 2 does not name, and does not unset it", name)
 		}
 	}
-	for file, job := range map[string]string{"verify.yml": "install", "release.yml": "install-release"} {
-		w, _ := readWorkflow(t, file)
-		stubs, walk := -1, -1
-		for i, step := range w.Jobs[job].Steps {
-			if strings.Contains(step.Run, "tools/docs/stubs-local.sh") {
-				stubs = i
-			}
-			if strings.Contains(step.Run, "run-blocks.sh ../docs/install.md") {
-				walk = i
-				if !strings.HasSuffix(step.Env["LUX_INSTALL_BIN"], "/luxd") {
-					t.Errorf("%s %s walks the document with LUX_INSTALL_BIN %q, want the luxd it built or unpacked", file, job, step.Env["LUX_INSTALL_BIN"])
-				}
+	// The release walks the document from a workflow job; the gate walks
+	// it from a script. Each starts the stubs before the walk and names
+	// the server binary for the walk.
+	w, _ := readWorkflow(t, "release.yml")
+	stubs, walk := -1, -1
+	for i, step := range w.Jobs["install-release"].Steps {
+		if strings.Contains(step.Run, "tools/docs/stubs-local.sh") {
+			stubs = i
+		}
+		if strings.Contains(step.Run, "run-blocks.sh ../docs/install.md") {
+			walk = i
+			if !strings.HasSuffix(step.Env["LUX_INSTALL_BIN"], "/luxd") {
+				t.Errorf("release.yml install-release walks the document with LUX_INSTALL_BIN %q, want the luxd it unpacked", step.Env["LUX_INSTALL_BIN"])
 			}
 		}
-		if stubs < 0 || walk < 0 || stubs > walk {
-			t.Errorf("%s %s starts the local stub provider at step %d and walks the document at step %d; the stubs come first", file, job, stubs, walk)
-		}
+	}
+	if stubs < 0 || walk < 0 || stubs > walk {
+		t.Errorf("release.yml install-release starts the local stub provider at step %d and walks the document at step %d; the stubs come first", stubs, walk)
+	}
+	script, err := os.ReadFile(filepath.Join(root(t), filepath.FromSlash(installWalkScript)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stubsAt := strings.Index(string(script), "tools/docs/stubs-local.sh")
+	walkAt := strings.Index(string(script), "run-blocks.sh ../docs/install.md")
+	if stubsAt < 0 || walkAt < 0 || stubsAt > walkAt {
+		t.Errorf("%s starts the local stub provider at offset %d and walks the document at offset %d; the stubs come first", installWalkScript, stubsAt, walkAt)
+	}
+	if !strings.Contains(string(script), "LUX_INSTALL_BIN=$root/out/luxd") {
+		t.Errorf("%s does not name the luxd it built for the walk", installWalkScript)
 	}
 }
 

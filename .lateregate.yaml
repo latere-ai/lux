@@ -221,3 +221,64 @@ image:
       version_args: [-version]
       version_expect: "luxd "
       skip_start: needs an OpenID Connect issuer it can reach or a local issuer key, which the gate does not bring up
+
+# The suites that need more than the toolchain, run by `lateregate e2e` on a
+# laptop and by the shared workflow on a push. lateregate starts the
+# services each lists and puts the tools it names on the suite's PATH, so
+# no workflow here carries a service block or a pinned download. A test
+# that skips fails its suite.
+e2e:
+  # Spec 015's integration tier: luxd and lux-stubs as processes the tier
+  # builds into a directory of its own. The package pattern is ./... so a
+  # tagged test anywhere in the tree runs, and there is no race flag: the
+  # suite gate's race run covers the in-process tests, and these assertions
+  # are HTTP requests against a separate process.
+  - name: integration
+    why: luxd and the stubs, built and run as separate processes, serve every door and flow end to end
+    test: {tags: [integration], packages: [./...], run: '^TestE2E'}
+    # The conformance contract skips a case by name when its target cannot
+    # run it: the file-mode-only case on a server in server mode, and the
+    # cases that read a stub on the run that holds the authorizer of
+    # docs/plane.md and wires no stub provider. Each is a skip by design;
+    # the old job tolerated them as `go test` does.
+    allow_skip: the conformance contract skips by name the cases its target cannot run, a file-mode-only case on a server-mode server and the stub-reading cases on the run that wires no stub provider
+  # The conformance suite of spec 021 on its own, so its three cases are
+  # named in the report: the doors at the root, under a base path, and
+  # under a base path that takes the place of /v1. The integration suite
+  # above runs them as well; the before-and-after comparison of
+  # conformance-before.yml needs the same names to run against the base
+  # commit.
+  - name: conformance
+    why: the doors answer the same bytes at the root, under a base path, and under a base path in the place of /v1
+    test: {tags: [integration], packages: [./test/e2e/], run: '^(TestE2EConformance|TestE2EConformanceUnderBasePath|TestE2EConformanceUnderReplacedBasePath)$'}
+    allow_skip: the conformance contract skips by name its one file-mode-only case when the server is in server mode
+  # Spec 015's postgres tier: the same tree of cases with LUX_DB_URL set,
+  # plus the cases that only exist with a shared store. Each test makes a
+  # database of its own on the cluster the variable names, so the user
+  # lateregate creates owns the cluster for the run.
+  - name: postgres
+    why: the Postgres store keeps the contract the memory store keeps, and replicas sharing one database agree
+    test: {tags: [postgres], packages: [./...], run: '^TestPostgres'}
+    services: [postgres]
+    env: {LUX_DB_URL: "${postgres.url}"}
+  # Specs 035 and 017: docs/install.md walked block by block from this
+  # checkout, part 1 with luxd as a process on the machine and part 2
+  # against a kind cluster that holds the developer image and the stubs.
+  # The script builds the images and binaries itself, so the suite reads
+  # what they are built from (the Dockerfiles, the Makefile and the module
+  # files; a Go change runs it anyway), what it installs (deploy) and what
+  # it walks (the document and the scripts).
+  - name: install
+    why: docs/install.md, walked block by block from a checkout and against a kind cluster, brings up a working installation
+    command: tools/docs/install-walk.sh
+    tools: [kind, kubectl]
+    reads:
+      - docs/install.md
+      - deploy
+      - Dockerfile
+      - Dockerfile.stubs
+      - Makefile
+      - go.mod
+      - go.sum
+      - tools/docs
+    timeout: 30m
