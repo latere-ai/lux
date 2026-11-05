@@ -11,6 +11,8 @@
 # entries before it left it, and each matches exactly once.
 release:
   stamp:
+    - file: deploy/prod/kustomization.yaml
+      pattern: 'newTag: v\d+\.\d+\.\d+'
     - file: docs/quickstart.md
       pattern: 'export LUX_VERSION=v\d+\.\d+\.\d+'
     - file: SECURITY.md

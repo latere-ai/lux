@@ -21,11 +21,11 @@
 # their names.
 #
 # The Deployment runs the image `luxd`, the placeholder the base names. The
-# images entry points it at the published gateway image by digest and under no
-# tag, which is how the release pipeline pins it (`kustomize edit set image
-# luxd=<ref>@<digest>`) and how production runs today; the digest committed
-# here is the release last applied by hand, and every release replaces it in
-# the checkout it deploys from.
+# images entry below resolves it to the published gateway image and the
+# release this target runs. `lateregate release` rewrites the version in the
+# same commit as the changelog section, under the release.stamp entry in
+# .lateregate.yaml, so this line never lags a tag. The release's deploy job
+# replaces the tag with the digest it built.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: latere
@@ -38,7 +38,7 @@ resources:
 images:
   - name: luxd
     newName: ghcr.io/latere-ai/lux
-    digest: sha256:ca10813ed4507574374387620e73fd1862b4959710ab0373c0a91ddbb49eddd7
+    newTag: v0.20.0
 # The ConfigMap is luxd-env, not luxd: kustomize rewrites any Role
 # resourceNames entry equal to a generated ConfigMap's suffixed name, and the
 # Role in deploy/prod-bootstrap names the service account luxd-core.
