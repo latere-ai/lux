@@ -189,7 +189,7 @@ func TestSecurityDocumentMatchesTheModel(t *testing.T) {
 func bullets(t *testing.T) []string {
 	t.Helper()
 	lines := strings.Split(readSpec(t, "SECURITY.md"), "\n")
-	start := slices.Index(lines, "## What the design commits to")
+	start := slices.Index(lines, "### What the design commits to")
 	if start < 0 {
 		t.Fatal("SECURITY.md has no What the design commits to section")
 	}
