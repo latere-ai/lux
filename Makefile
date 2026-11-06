@@ -118,11 +118,31 @@ define start-stubs
 endef
 
 # The variables both modes hand luxd: the listeners, the public URL, the
-# stub sink, and the admission of loopback upstreams the stubs need.
+# stub sink, the admission of loopback upstreams the stubs need, and the
+# shortest health interval, so the doors list the example Models within
+# seconds of the applies rather than the default thirty.
 LUXD_ENV := LUX_PUBLIC_ADDR=127.0.0.1:$(PORT_PUBLIC) LUX_INTERNAL_ADDR=127.0.0.1:$(PORT_INTERNAL) \
 	LUX_PUBLIC_URL=$(LUX_URL) \
 	LUX_EVENTS_URL=$(STUB_SINK) LUX_EVENTS_SECRET=stub-sink-secret \
-	LUX_UPSTREAM_ALLOW_PRIVATE=1
+	LUX_UPSTREAM_ALLOW_PRIVATE=1 LUX_HEALTH_INTERVAL=5s
+
+# wait-for-models polls the control plane at $(1), with the curl arguments
+# $(2), until every example Model reads available, and fails naming the
+# log to read. The health job's first tick after the applies marks each
+# Model available and then reloads the doors' model lists, so a client
+# that reads a model's figures from a door's list finds them once the
+# recipe prints the exports. The control plane is polled rather than a
+# door because a door's model list is a request with a usage record.
+define wait-for-models
+	for f in $(RUN_DIR)/examples/model-*.yaml; do \
+	  name=$${f##*/model-}; name=$${name%.yaml}; i=0; \
+	  until curl -fsS "$(1)/v1/models/$$name" $(2) 2>/dev/null | grep -q '"available":true'; do \
+	    i=$$((i+1)); \
+	    if [ $$i -ge 300 ]; then echo "the Model $$name did not become available; see $(RUN_DIR)/luxd.log" >&2; exit 1; fi; \
+	    sleep 0.1; \
+	  done; \
+	done
+endef
 
 # run: both binaries, the stubs, luxd serve with the memory store, the
 # stub issuer, the stub authorizer, and the stub sink, the examples
@@ -149,6 +169,7 @@ run: build build-stubs
 	  if [ "$$kind" = key ]; then KEY=$$(printf '%s' "$$out" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p'); fi; \
 	done; \
 	[ -n "$$KEY" ] || { echo "the Key's value was not returned; see $(RUN_DIR)/luxd.log" >&2; exit 1; }; \
+	$(call wait-for-models,$(LUX_URL),-H "Authorization: Bearer $$TOKEN"); \
 	echo "export LUX_URL=$(LUX_URL)"; \
 	echo "export LUX_TOKEN=$$TOKEN"; \
 	echo "export LUX_KEY=$$KEY"; \
@@ -169,6 +190,7 @@ run-file: build build-stubs
 	STUB_DEV_KEY=$$(cat $(RUN_DIR)/dev-key) LUX_MANIFEST_DIR=$(RUN_DIR)/examples $(LUXD_ENV) \
 	  $(OUT_DIR)/$(SERVICE) serve > $(RUN_DIR)/luxd.log 2>&1 & echo $$! > $(RUN_DIR)/luxd.pid; \
 	$(call wait-for,$(INTERNAL_URL)/readyz,$(RUN_DIR)/luxd.log); \
+	$(call wait-for-models,$(INTERNAL_URL),); \
 	echo "export LUX_URL=$(LUX_URL)"; \
 	echo "export LUX_KEY=$$(cat $(RUN_DIR)/dev-key)"; \
 	echo "# file mode: no LUX_TOKEN, the control plane is read-only at $(INTERNAL_URL)/v1 and takes no bearer"; \

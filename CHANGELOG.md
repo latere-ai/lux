@@ -15,6 +15,12 @@ refused before it is pushed.
   model. A client that reads a model's figures from that list, such as
   an agent runtime, can use the stand-ins without naming the figures
   itself.
+- **`make run` and `make run-file` return once the doors list the
+  example Models.** They wait until the control plane reads every Model
+  available, and run the gateway with `LUX_HEALTH_INTERVAL=5s`, so a
+  client that starts on the printed exports finds the Models in the
+  lists at once rather than up to 30 seconds later. Each takes a few
+  seconds longer to return.
 
 ## v0.22.0 - 2026-11-06
 

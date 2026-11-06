@@ -69,7 +69,11 @@ when the gateway is ready. It does these things, in this order:
    for `dev`, then sends each file in `deploy/examples` to the control
    plane in turn: four Providers, four Models, one Budget and one Key.
    The files name the stand-ins at fixed ports, and `make run` rewrites
-   them to your ports first. The copies are in `out/run/examples`.
+   them to your ports first. The copies are in `out/run/examples`. It
+   then waits, a few seconds, until the gateway has checked each
+   stand-in and reads every Model available, so the doors list the
+   Models by the time the exports print. Here the gateway checks its
+   Providers every 5 seconds; the default is 30.
 6. **Prints three exports**, and a few commented lines to try:
 
    ```

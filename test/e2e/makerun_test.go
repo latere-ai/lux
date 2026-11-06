@@ -7,6 +7,7 @@ package e2e
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -128,6 +129,9 @@ func TestE2EMakeRun(t *testing.T) {
 	if cost := items[0].(map[string]any)["cost"].(map[string]any); cost["amount"] != float64(450) || cost["currency"] != "USD" {
 		t.Fatalf("cost = %v, want 450 micro-units of USD as the example says", cost)
 	}
+	// A door's model list is a request with a record of its own, so the
+	// lists are read after the count above.
+	listsTheFigures(t, env["LUX_URL"], env["LUX_KEY"])
 	// The worker delivers on its poll, so the applies' events arrive
 	// within a second or two of make run returning.
 	sinkURL := "http://127.0.0.1:" + strconv.Itoa(base+8)
@@ -140,10 +144,60 @@ func TestE2EMakeRun(t *testing.T) {
 	}
 }
 
+// listsTheFigures reads the openai and the anthropic doors' model lists
+// with the printed Key and asserts each lists its stub Model with the
+// example's input window and output limit, in that door's members. The
+// target returns once the control plane reads every Model available,
+// which the health tick writes just before it reloads the lists, so a
+// list is read again for a second at most, never a health interval.
+func listsTheFigures(t *testing.T, url, key string) {
+	t.Helper()
+	for _, door := range []struct {
+		name, model, window, limit string
+		header                     http.Header
+	}{
+		{"openai", "stub-openai", "context_window", "max_output_tokens", bearer(key)},
+		{"anthropic", "stub-anthropic", "max_input_tokens", "max_tokens", http.Header{"X-Api-Key": {key}, "Anthropic-Version": {"2023-06-01"}}},
+	} {
+		deadline := time.Now().Add(time.Second)
+		for {
+			problem := doorFigures(t, url, door.name, door.model, door.window, door.limit, door.header)
+			if problem == "" {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal(problem)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+// doorFigures is what is wrong with one door's list entry for model, or
+// empty when it carries the example's 200000 and 4096.
+func doorFigures(t *testing.T, url, door, model, window, limit string, header http.Header) string {
+	t.Helper()
+	resp := do(t, http.MethodGet, url+"/"+door+"/v1/models", header, "")
+	if resp.status != http.StatusOK {
+		return "GET /" + door + "/v1/models = " + strconv.Itoa(resp.status) + " " + string(resp.body)
+	}
+	data, _ := resp.json(t)["data"].([]any)
+	for _, item := range data {
+		if m, _ := item.(map[string]any); m["id"] == model {
+			if m[window] != float64(200000) || m[limit] != float64(4096) {
+				return model + " at the " + door + " door carries " + window + " " + fmt.Sprint(m[window]) + " and " + limit + " " + fmt.Sprint(m[limit]) + ", want 200000 and 4096 as the example says"
+			}
+			return ""
+		}
+	}
+	return "the " + door + " door does not list " + model + ": " + string(resp.body)
+}
+
 // throughTheDoor sends the example's request through the /openai door
-// with the printed Key and asserts the stub's answer. The first request
-// after start may find a Provider the probe has not yet published as
-// reachable, so it is retried until the health job's next tick has run.
+// with the printed Key and asserts the stub's answer. The target waits
+// until the doors list the example Models, so the first request finds
+// its Provider reachable; a probe that fails on a loaded runner marks it
+// unreachable until the next tick, so the request is retried that long.
 func throughTheDoor(t *testing.T, url, key string) {
 	t.Helper()
 	var last response
@@ -171,6 +225,7 @@ func TestE2EMakeRunFileMode(t *testing.T) {
 	if env["LUX_URL"] == "" || !strings.HasPrefix(env["LUX_KEY"], "lux_") || env["LUX_TOKEN"] != "" {
 		t.Fatalf("exports = %v\n%s", env, out)
 	}
+	listsTheFigures(t, env["LUX_URL"], env["LUX_KEY"])
 	throughTheDoor(t, env["LUX_URL"], env["LUX_KEY"])
 	internal := "http://127.0.0.1:" + strconv.Itoa(base+1)
 	if !strings.Contains(out, internal+"/v1") {
