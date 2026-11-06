@@ -140,6 +140,11 @@ its own state alone: it holds no session, and it calls neither the
 gateway nor the issuer while deciding, because the gateway is waiting
 inside the very request it is answering.
 
+[Writing an authorizer](authorizer.md) is the whole contract: the
+fields of each resource, every action and the routes that ask it, how
+long an answer is kept, the limits an allow carries, and what fails
+closed.
+
 The policy is `policy.Decide` and nothing else. Everything around it,
 the bearer and its successor, the body bound, the decode, the check that
 an action and its `resource.kind` are the gateway's, the reserved probe
