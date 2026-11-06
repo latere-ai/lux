@@ -35,14 +35,24 @@ func requireOnPath(t *testing.T, names ...string) {
 }
 
 // freePortRange finds a base port whose nine consecutive ports are free,
-// the range make run derives from RUN_PORT.
+// the range make run derives from RUN_PORT. The base is below 32768, as
+// the Makefile's own derivation keeps it below 40000, so no port of the
+// range is in an ephemeral range, Linux's 32768-60999 or macOS's
+// 49152-65535. A port the OS assigned would be: where the OS hands
+// ephemeral ports out in order, as macOS does with
+// net.inet.tcp.randomize_ports=0, the connections make opens while it
+// builds take base+2 or base+3 before the stubs bind them. The start is
+// the clock's, so parallel runs begin apart, and each try steps a whole
+// range on.
 func freePortRange(t *testing.T) int {
 	t.Helper()
-	for range 20 {
-		base := freePort(t)
+	const lo, span, width = 20000, 32768 - 20000 - 9, 9
+	start := int(time.Now().UnixNano() % span)
+	for i := range 200 {
+		base := lo + (start+i*width)%span
 		free := true
-		for i := 1; i < 9; i++ {
-			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(base+i))
+		for p := base; p < base+width; p++ {
+			ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p))
 			if err != nil {
 				free = false
 				break
@@ -53,7 +63,7 @@ func freePortRange(t *testing.T) int {
 			return base
 		}
 	}
-	t.Fatal("no free range of nine ports")
+	t.Fatal("no free range of nine ports between 20000 and 32767")
 	return 0
 }
 
