@@ -6,7 +6,7 @@ package provider
 import (
 	"bytes"
 	"crypto/subtle"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"slices"
@@ -298,7 +298,7 @@ func (s *Stub) refuse(w http.ResponseWriter, status int, message string) {
 // writeJSON writes v as one JSON body. The maps this package builds
 // marshal with sorted keys, so one request twice yields identical bytes.
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

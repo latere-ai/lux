@@ -6,7 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -74,7 +74,9 @@ func TestBootstrapAppliesTheDirectory(t *testing.T) {
 			t.Fatalf("GET %s = %d %s", path, resp.StatusCode, body)
 		}
 		var obj struct {
-			Status struct{ Owner string } `json:"status"`
+			Status struct {
+				Owner string `json:"owner"`
+			} `json:"status"`
 		}
 		if err := json.Unmarshal([]byte(body), &obj); err != nil || obj.Status.Owner != admin {
 			t.Errorf("GET %s: owner %q, want %q (%v)", path, obj.Status.Owner, admin, err)
@@ -186,7 +188,9 @@ func TestBootstrapLoadsTheCatalog(t *testing.T) {
 		t.Fatalf("PUT key: %d %s", resp.StatusCode, body)
 	}
 	var key struct {
-		Status struct{ Value string } `json:"status"`
+		Status struct {
+			Value string `json:"value"`
+		} `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(body), &key); err != nil || key.Status.Value == "" {
 		t.Fatalf("the Key's value: %v %s", err, body)

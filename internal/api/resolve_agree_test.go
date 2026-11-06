@@ -6,7 +6,8 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"net/http"
 	"net/url"
@@ -145,9 +146,9 @@ func assertResolvedBodiesAgree(t *testing.T, kind string, apiBody, importerBody 
 
 // topLevel splits a response into its top-level members, their raw bytes
 // kept so the comparison is byte-exact and no number loses precision.
-func topLevel(t *testing.T, raw []byte) map[string]json.RawMessage {
+func topLevel(t *testing.T, raw []byte) map[string]jsontext.Value {
 	t.Helper()
-	var m map[string]json.RawMessage
+	var m map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, raw)
 	}
@@ -155,7 +156,7 @@ func topLevel(t *testing.T, raw []byte) map[string]json.RawMessage {
 }
 
 // idOf reads status.id from a raw status object, nil when there is none.
-func idOf(t *testing.T, status json.RawMessage) any {
+func idOf(t *testing.T, status jsontext.Value) any {
 	t.Helper()
 	if len(status) == 0 {
 		return nil
@@ -168,7 +169,7 @@ func idOf(t *testing.T, status json.RawMessage) any {
 }
 
 // keysOf is the sorted member names of a top-level object.
-func keysOf(m map[string]json.RawMessage) []string {
+func keysOf(m map[string]jsontext.Value) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

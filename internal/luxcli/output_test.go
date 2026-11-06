@@ -4,7 +4,7 @@
 package luxcli
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"reflect"
 	"strings"
@@ -247,7 +247,7 @@ func TestHumanizeAndWhen(t *testing.T) {
 	if _, ok := when("not a time"); ok {
 		t.Error("a non-time parsed")
 	}
-	if _, ok := when(json.Number("1")); ok {
+	if _, ok := when(number("1")); ok {
 		t.Error("a number parsed as a time")
 	}
 	a := &app{o: Options{Now: func() time.Time { return now }}}
@@ -262,10 +262,10 @@ func TestHumanizeAndWhen(t *testing.T) {
 	if age(a, o) != "-" || resets(a, newObject()) != "-" {
 		t.Error("an absent instant is a dash")
 	}
-	if got := yamlValue(json.Number("18446744073709551615")); got != uint64(18446744073709551615) {
+	if got := yamlValue(number("18446744073709551615")); got != uint64(18446744073709551615) {
 		t.Errorf("a large number became %v", got)
 	}
-	if got := yamlValue(json.Number("1.5")); got != 1.5 {
+	if got := yamlValue(number("1.5")); got != 1.5 {
 		t.Errorf("a fraction became %v", got)
 	}
 	if _, err := decodeJSON([]byte(`{"a":1} {"b":2}`)); err == nil {
@@ -281,5 +281,28 @@ func TestHumanizeAndWhen(t *testing.T) {
 	o.del("status")
 	if len(o.keys) != 0 {
 		t.Error("del left a key")
+	}
+}
+
+// TestDecodeJSONKeepsOrderAndDigits: members keep the order they arrived
+// in, a number keeps its digits, and a second value is refused.
+func TestDecodeJSONKeepsOrderAndDigits(t *testing.T) {
+	in := `{"b":18446744073709551615,"a":[],"c":{"z":1.50,"y":null,"x":[true,"s"]}}`
+	v, err := decodeJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.Marshal(v)
+	if err != nil || string(out) != in {
+		t.Fatalf("round trip = %s, %v", out, err)
+	}
+	if _, err := decodeJSON([]byte(`{} {}`)); err == nil {
+		t.Fatal("two values accepted")
+	}
+	if _, err := decodeJSON([]byte(`{"a":`)); err == nil {
+		t.Fatal("a truncated value accepted")
+	}
+	if got, err := decodeJSON([]byte(`{"a":1,"a":2}`)); err != nil || path(got.(*object), "a") != number("2") {
+		t.Fatalf("a repeated name = %v, %v", got, err)
 	}
 }

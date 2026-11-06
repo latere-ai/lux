@@ -6,7 +6,7 @@ package conformance
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -130,7 +130,7 @@ func (s *stubProvider) control(w http.ResponseWriter, r *http.Request) {
 		if out == nil {
 			out = []received{}
 		}
-		_ = json.NewEncoder(w).Encode(out)
+		_ = json.MarshalWrite(w, out)
 	case http.MethodDelete:
 		s.received = nil
 		w.WriteHeader(http.StatusNoContent)
@@ -372,7 +372,7 @@ func newStubSet(t testing.TB, iss *issuertest.Server, az *stub.Server) *stubSet 
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(doc)
+		_ = json.MarshalWrite(w, doc)
 	}))
 	t.Cleanup(set.doc.Close)
 	return set

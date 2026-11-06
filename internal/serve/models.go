@@ -6,7 +6,8 @@ package serve
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -168,6 +169,14 @@ func (u upstream) listModels(ctx context.Context, p *v1.Provider) ([]candidate, 
 	}
 }
 
+// foreignJSON reads JSON this process does not produce. Repeated names,
+// invalid UTF-8 and any letter case in a member name are accepted.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // parseList reads one page in the dialect's shape and returns its
 // candidates and the token of the next page, or "" on the last.
 func parseList(d v1.Dialect, body []byte) ([]candidate, string, error) {
@@ -180,7 +189,7 @@ func parseList(d v1.Dialect, body []byte) ([]candidate, string, error) {
 			} `json:"models"`
 			NextPageToken string `json:"nextPageToken"`
 		}
-		if err := json.Unmarshal(body, &page); err != nil {
+		if err := json.Unmarshal(body, &page, foreignJSON); err != nil {
 			return nil, "", fmt.Errorf("the body is not a models page: %w", err)
 		}
 		var out []candidate
@@ -208,7 +217,7 @@ func parseList(d v1.Dialect, body []byte) ([]candidate, string, error) {
 			HasMore bool   `json:"has_more"`
 			LastID  string `json:"last_id"`
 		}
-		if err := json.Unmarshal(body, &page); err != nil {
+		if err := json.Unmarshal(body, &page, foreignJSON); err != nil {
 			return nil, "", fmt.Errorf("the body is not a models page: %w", err)
 		}
 		out := make([]candidate, 0, len(page.Data))
@@ -228,7 +237,7 @@ func parseList(d v1.Dialect, body []byte) ([]candidate, string, error) {
 				ID string `json:"id"`
 			} `json:"data"`
 		}
-		if err := json.Unmarshal(body, &page); err != nil {
+		if err := json.Unmarshal(body, &page, foreignJSON); err != nil {
 			return nil, "", fmt.Errorf("the body is not a models list: %w", err)
 		}
 		out := make([]candidate, 0, len(page.Data))

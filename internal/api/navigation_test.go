@@ -4,7 +4,8 @@
 package api
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func TestOpenAPINavigationLabels(t *testing.T) {
 		t.Fatalf("OpenAPI status = %d", rec.Code)
 	}
 	var doc struct {
-		Paths map[string]map[string]json.RawMessage `json:"paths"`
+		Paths map[string]map[string]jsontext.Value `json:"paths"`
 	}
 
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {

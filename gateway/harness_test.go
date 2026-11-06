@@ -6,7 +6,7 @@ package gateway
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -647,7 +647,7 @@ func chatBody(model string, stream bool) string {
 	if stream {
 		b["stream"] = true
 	}
-	out, _ := json.Marshal(b)
+	out, _ := json.Marshal(b, json.Deterministic(true))
 	return string(out)
 }
 
@@ -657,7 +657,7 @@ func messagesBody(model string, stream bool) string {
 	if stream {
 		b["stream"] = true
 	}
-	out, _ := json.Marshal(b)
+	out, _ := json.Marshal(b, json.Deterministic(true))
 	return string(out)
 }
 
@@ -667,7 +667,7 @@ func luxBody(model string, stream bool) string {
 	if stream {
 		b["stream"] = true
 	}
-	out, _ := json.Marshal(b)
+	out, _ := json.Marshal(b, json.Deterministic(true))
 	return string(out)
 }
 

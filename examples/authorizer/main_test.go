@@ -5,7 +5,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -176,7 +176,7 @@ func TestTheEndpointReadsItsBearerAndItsBody(t *testing.T) {
 		Allow  bool   `json:"allow"`
 		Reason string `json:"reason"`
 	}
-	if err := json.NewDecoder(probe.Body).Decode(&answer); err != nil {
+	if err := json.UnmarshalRead(probe.Body, &answer); err != nil {
 		t.Fatal(err)
 	}
 	if answer.Allow || answer.Reason != authz.ReasonProbe {

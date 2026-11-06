@@ -6,7 +6,8 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"mime"
@@ -86,35 +87,36 @@ func (c *call) keyFence(ctx context.Context, name string) *Error {
 
 // jsonMembers retains raw values while rejecting duplicate names and trailing
 // documents. Parsing labels through the same function rejects nested duplicates.
-func jsonMembers(raw []byte) (map[string]json.RawMessage, error) {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	token, err := d.Token()
-	if err != nil || token != json.Delim('{') {
+func jsonMembers(raw []byte) (map[string]jsontext.Value, error) {
+	// A repeated name is reported below, in words, rather than by the decoder.
+	d := jsontext.NewDecoder(bytes.NewReader(raw), jsontext.AllowDuplicateNames(true))
+	token, err := d.ReadToken()
+	if err != nil || token.Kind() != '{' {
 		return nil, errors.New("expected a JSON object")
 	}
-	result := map[string]json.RawMessage{}
-	for d.More() {
-		token, err := d.Token()
+	result := map[string]jsontext.Value{}
+	for d.PeekKind() != '}' {
+		token, err := d.ReadToken()
 		if err != nil {
 			return nil, err
 		}
-		name, ok := token.(string)
-		if !ok {
+		if token.Kind() != '"' {
 			return nil, errors.New("expected a JSON field name")
 		}
+		name := token.String()
 		if _, exists := result[name]; exists {
 			return nil, errors.New("duplicate JSON field")
 		}
-		var value json.RawMessage
-		if err := d.Decode(&value); err != nil {
+		value, err := d.ReadValue()
+		if err != nil {
 			return nil, err
 		}
-		result[name] = value
+		result[name] = value.Clone()
 	}
-	if _, err := d.Token(); err != nil {
+	if _, err := d.ReadToken(); err != nil {
 		return nil, err
 	}
-	if _, err := d.Token(); !errors.Is(err, io.EOF) {
+	if _, err := d.ReadToken(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("unexpected content after JSON object")
 	}
 	return result, nil

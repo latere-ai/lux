@@ -4,7 +4,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 )
 
@@ -27,13 +27,14 @@ func (b *Budget) Owner() string { return b.Status.Owner }
 // Name implements Object.
 func (b *Budget) Name() string { return b.Metadata.Name }
 
-// MarshalJSON writes the envelope before the object.
+// MarshalJSON writes the envelope before the object, with members of a
+// map in key order whatever options the caller holds.
 func (b Budget) MarshalJSON() ([]byte, error) {
 	type plain Budget
 	return json.Marshal(struct {
 		envelope
 		plain
-	}{envelope{APIVersion, KindBudget}, plain(b)})
+	}{envelope{APIVersion, KindBudget}, plain(b)}, json.Deterministic(true))
 }
 
 // BudgetSpec is the desired state of a Budget. Hard is a pointer because an
@@ -45,25 +46,25 @@ func (b Budget) MarshalJSON() ([]byte, error) {
 // after now, is where that window starts instead, so an operator can
 // restart a window without waiting for its reset.
 type BudgetSpec struct {
-	Amount      *Money    `json:"amount,omitempty"`
+	Amount      *Money    `json:"amount,omitzero"`
 	Currency    string    `json:"currency,omitempty"`
 	Window      Window    `json:"window,omitempty"`
 	Anchor      time.Time `json:"anchor,omitzero"`
 	RestartedAt time.Time `json:"restartedAt,omitzero"`
-	Hard        *bool     `json:"hard,omitempty"`
+	Hard        *bool     `json:"hard,omitzero"`
 }
 
 // BudgetStatus is written by the server and ignored on apply. Resolve
 // fills Warnings; the API renders the rest at read time.
 type BudgetStatus struct {
 	ID        string      `json:"id,omitempty"`
-	Version   int64       `json:"version,omitempty"`
+	Version   int64       `json:"version,omitzero"`
 	Owner     string      `json:"owner,omitempty"`
 	State     BudgetState `json:"state,omitempty"`
-	Spent     *Money      `json:"spent,omitempty"`
-	Remaining *Money      `json:"remaining,omitempty"`
+	Spent     *Money      `json:"spent,omitzero"`
+	Remaining *Money      `json:"remaining,omitzero"`
 	ResetsAt  time.Time   `json:"resetsAt,omitzero"`
-	Keys      *int        `json:"keys,omitempty"`
+	Keys      *int        `json:"keys,omitzero"`
 	CreatedAt time.Time   `json:"createdAt,omitzero"`
 	UpdatedAt time.Time   `json:"updatedAt,omitzero"`
 	Warnings  []string    `json:"warnings"`

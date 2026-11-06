@@ -5,7 +5,8 @@ package events
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"
@@ -145,7 +146,7 @@ func encode(rec Record) ([]byte, error) {
 	if rec.Object.Labels == nil {
 		rec.Object.Labels = map[string]string{}
 	}
-	return json.Marshal(rec)
+	return json.Marshal(rec, json.Deterministic(true), jsontext.AllowInvalidUTF8(true))
 }
 
 // labelsOf is the object's metadata labels, for the four kinds.

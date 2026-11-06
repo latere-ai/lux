@@ -4,7 +4,8 @@
 package luxcli
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/url"
 	"strings"
 	"testing"
@@ -112,8 +113,8 @@ func TestListFollowsEveryPage(t *testing.T) {
 		t.Fatalf("exit %d stderr %q", r.code, r.stderr)
 	}
 	var list struct {
-		Items      []json.RawMessage `json:"items"`
-		NextCursor *string           `json:"next_cursor"`
+		Items      []jsontext.Value `json:"items"`
+		NextCursor *string          `json:"next_cursor"`
 	}
 	if err := json.Unmarshal([]byte(r.stdout), &list); err != nil || len(list.Items) != 3 || list.NextCursor != nil {
 		t.Fatalf("stdout %q: %v", r.stdout, err)

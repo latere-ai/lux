@@ -5,7 +5,7 @@ package auth
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net"
@@ -93,7 +93,7 @@ func startFakeIssuer(t *testing.T, f *fakeIssuer) string {
 			doc = f.doc(f.srv.URL)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(doc)
+		_ = json.MarshalWrite(w, doc)
 	})
 	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, _ *http.Request) { f.jwks(w) })
 	return f.srv.URL
@@ -102,7 +102,7 @@ func startFakeIssuer(t *testing.T, f *fakeIssuer) string {
 func jsonKeys(keys ...map[string]string) func(http.ResponseWriter) {
 	return func(w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
+		_ = json.MarshalWrite(w, map[string]any{"keys": keys})
 	}
 }
 
@@ -507,7 +507,7 @@ func TestOwnerIsTheTokensSubject(t *testing.T) {
 	var minted struct {
 		ActorToken string `json:"actor_token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&minted); err != nil || minted.ActorToken == "" {
+	if err := json.UnmarshalRead(resp.Body, &minted); err != nil || minted.ActorToken == "" {
 		t.Fatalf("POST /actor-tokens: %d %v", resp.StatusCode, err)
 	}
 	c, err = v.Verify(minted.ActorToken)

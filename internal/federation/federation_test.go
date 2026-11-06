@@ -5,7 +5,7 @@ package federation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -343,3 +343,27 @@ func TestExchangeFailures(t *testing.T) {
 type staticToken string
 
 func (s staticToken) IdentityToken(context.Context) (string, error) { return string(s), nil }
+
+// TestExchangeJSON: the request to the provider is one spelling, and an
+// answer is read as the provider wrote it: any letter case, a repeated
+// name.
+func TestExchangeJSON(t *testing.T) {
+	body := map[string]string{"grant_type": "g", "assertion": "a", "federation_rule_id": "r", "organization_id": "o"}
+	want := `{"assertion":"a","federation_rule_id":"r","grant_type":"g","organization_id":"o"}`
+	for range 20 {
+		b, err := json.Marshal(body, providerJSON)
+		if err != nil || string(b) != want {
+			t.Fatalf("request = %s, %v", b, err)
+		}
+	}
+	var got struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
+	}
+	if err := json.Unmarshal([]byte(`{"Access_Token":"x","access_token":"t","expires_in":60}`), &got, foreignJSON); err != nil || got.AccessToken != "t" || got.ExpiresIn != 60 {
+		t.Fatalf("answer = %+v, %v", got, err)
+	}
+	if msg := upstreamMessage([]byte(`{"Error":{"Type":"t","Message":"m"}}`)); msg != "t: m" {
+		t.Fatalf("message = %q", msg)
+	}
+}

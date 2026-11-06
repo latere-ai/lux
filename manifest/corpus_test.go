@@ -6,7 +6,8 @@ package manifest
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"io/fs"
@@ -61,7 +62,7 @@ func TestGoldenCorpus(t *testing.T) {
 				t.Errorf("a %s sits under accepted/%s", obj.Kind(), dir)
 			}
 			kinds[obj.Kind()]++
-			got, err := json.MarshalIndent(r.Object, "", "  ")
+			got, err := json.Marshal(r.Object, jsontext.WithIndent("  "), json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -77,7 +78,7 @@ func TestGoldenCorpus(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the golden does not resolve: %v", err)
 			}
-			got2, _ := json.MarshalIndent(r2.Object, "", "  ")
+			got2, _ := json.Marshal(r2.Object, jsontext.WithIndent("  "), json.Deterministic(true))
 			if !bytes.Equal(got, got2) {
 				t.Errorf("resolving the golden again moves it:\n%s\n%s", got, got2)
 			}
@@ -111,10 +112,10 @@ func TestGoldenCorpus(t *testing.T) {
 			if paths == nil {
 				paths = []string{}
 			}
-			got, err := json.MarshalIndent(struct {
+			got, err := json.Marshal(struct {
 				Code  Code     `json:"code"`
 				Paths []string `json:"paths"`
-			}{e.Code, paths}, "", "  ")
+			}{e.Code, paths}, jsontext.WithIndent("  "), json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}

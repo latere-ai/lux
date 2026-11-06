@@ -5,7 +5,7 @@ package manifest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"reflect"
 	"strings"
@@ -114,7 +114,7 @@ func TestRequestFieldsInGoForm(t *testing.T) {
 	if got := r.Object.(*v1.Provider).Spec.RequestFields; !reflect.DeepEqual(got, want) {
 		t.Errorf("resolved requestFields %#v, want %#v", got, want)
 	}
-	raw, err := json.Marshal(r.Object)
+	raw, err := json.Marshal(r.Object, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestZeroRetentionRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(r.Object)
+	raw, err := json.Marshal(r.Object, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,11 +200,11 @@ func TestZeroRetentionRules(t *testing.T) {
 	}
 	// Written only when set: a Key that does not ask renders as it did
 	// before the member existed.
-	if raw, err := json.Marshal(key); err != nil || strings.Contains(string(raw), "zeroRetention") {
+	if raw, err := json.Marshal(key, json.Deterministic(true)); err != nil || strings.Contains(string(raw), "zeroRetention") {
 		t.Errorf("a Key that does not ask renders %s (%v)", raw, err)
 	}
 	key.Spec.ZeroRetention = true
-	if raw, err := json.Marshal(key); err != nil || !strings.Contains(string(raw), `"zeroRetention":true`) {
+	if raw, err := json.Marshal(key, json.Deterministic(true)); err != nil || !strings.Contains(string(raw), `"zeroRetention":true`) {
 		t.Errorf("a Key that asks renders %s (%v)", raw, err)
 	}
 }

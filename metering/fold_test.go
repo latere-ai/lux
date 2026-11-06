@@ -4,7 +4,7 @@
 package metering
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"math/rand/v2"
 	"reflect"
@@ -203,11 +203,11 @@ func TestAggregatesMatchTheRecords(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("total rows = %d, want one per currency and one unpriced", len(rows))
 	}
-	b, _ := json.Marshal(rows[0])
+	b, _ := json.Marshal(rows[0], json.Deterministic(true))
 	if strings.Contains(string(b), `"bucket"`) || !strings.Contains(string(b), `"dimensions":{}`) {
 		t.Fatalf("a total row renders %s", b)
 	}
-	b, _ = json.Marshal(Fold(rs, []Dimension{DimensionDoor}, IntervalDay)[0])
+	b, _ = json.Marshal(Fold(rs, []Dimension{DimensionDoor}, IntervalDay)[0], json.Deterministic(true))
 	if !strings.Contains(string(b), `"bucket":"2026-09-13T00:00:00Z"`) || !strings.Contains(string(b), `"dimensions":{"door":"`) {
 		t.Fatalf("a day row renders %s", b)
 	}
@@ -266,7 +266,7 @@ func TestRequestLabelsAreNotAggregated(t *testing.T) {
 	if len(rows) != 3 { // one per currency, the label empty on each
 		t.Fatalf("%d rows under label:run, want 3", len(rows))
 	}
-	b, _ := json.Marshal(rows)
+	b, _ := json.Marshal(rows, json.Deterministic(true))
 	if strings.Contains(string(b), "requestLabels") || strings.Contains(string(b), `"r0"`) {
 		t.Fatalf("a request label reached a response row: %s", b)
 	}
@@ -351,7 +351,7 @@ func TestUsageQueryValidation(t *testing.T) {
 	if f, _ := reflect.TypeFor[Charge]().FieldByName("Amount"); f.Type.Kind() != reflect.Int64 {
 		t.Fatalf("Charge.Amount is a %s", f.Type)
 	}
-	b, _ := json.Marshal(Row{Cost: 1_250_000, Currency: "USD"})
+	b, _ := json.Marshal(Row{Cost: 1_250_000, Currency: "USD"}, json.Deterministic(true))
 	if !strings.Contains(string(b), `"cost":1250000`) {
 		t.Fatalf("a row renders its cost as %s", b)
 	}

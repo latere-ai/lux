@@ -5,7 +5,8 @@ package gateway
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"slices"
 	"strings"
@@ -35,19 +36,39 @@ func mergeRequestFields(body []byte, fields map[string]any) ([]byte, error) {
 	return mergeObject(top, fields)
 }
 
+// foreignJSON reads a request body the caller wrote: a duplicate member,
+// invalid UTF-8 and any letter case are accepted, as the providers accept
+// them.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
+// providerJSON writes the values merged into a request for a model
+// provider: nil slices and maps stay null, member order is fixed and
+// U+2028 and U+2029 are escaped, so the same request is the same bytes.
+var providerJSON = json.JoinOptions(
+	json.Deterministic(true),
+	json.FormatNilSliceAsNull(true),
+	json.FormatNilMapAsNull(true),
+	jsontext.AllowInvalidUTF8(true),
+	jsontext.EscapeForJS(true),
+)
+
 // jsonObject decodes b as one JSON object with its member values left
 // undecoded, and reports whether b is one: null, any other value, and
 // bytes that are not JSON are not.
-func jsonObject(b []byte) (map[string]json.RawMessage, bool) {
-	var object map[string]json.RawMessage
-	if json.Unmarshal(b, &object) != nil {
+func jsonObject(b []byte) (map[string]jsontext.Value, bool) {
+	var object map[string]jsontext.Value
+	if json.Unmarshal(b, &object, foreignJSON) != nil {
 		return nil, false
 	}
 	return object, object != nil
 }
 
 // mergeObject merges fields into one decoded object and encodes it.
-func mergeObject(object map[string]json.RawMessage, fields map[string]any) ([]byte, error) {
+func mergeObject(object map[string]jsontext.Value, fields map[string]any) ([]byte, error) {
 	for name, value := range fields {
 		for member := range object {
 			if member != name && strings.EqualFold(member, name) {
@@ -61,7 +82,7 @@ func mergeObject(object map[string]json.RawMessage, fields map[string]any) ([]by
 		if nested, ok := value.(map[string]any); ok {
 			inner, isObject := jsonObject(object[name])
 			if !isObject {
-				inner = map[string]json.RawMessage{}
+				inner = map[string]jsontext.Value{}
 			}
 			raw, err = mergeObject(inner, nested)
 		} else {
@@ -78,7 +99,7 @@ func mergeObject(object map[string]json.RawMessage, fields map[string]any) ([]by
 // encodeObject writes one object with its members sorted by name, each
 // value as it stands, so a value the merge did not reach is written
 // with the bytes it was read with.
-func encodeObject(object map[string]json.RawMessage) ([]byte, error) {
+func encodeObject(object map[string]jsontext.Value) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteByte('{')
 	for i, name := range slices.Sorted(maps.Keys(object)) {
@@ -100,11 +121,5 @@ func encodeObject(object map[string]json.RawMessage) ([]byte, error) {
 // encodeJSON encodes one value of a Provider's requestFields, or a
 // member name, compact and without escaping <, >, and &.
 func encodeJSON(v any) ([]byte, error) {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+	return json.Marshal(v, providerJSON)
 }

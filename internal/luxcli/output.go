@@ -5,7 +5,8 @@ package luxcli
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -46,87 +47,99 @@ func (o *object) del(k string) {
 	}
 }
 
-// MarshalJSON writes the members in order.
-func (o *object) MarshalJSON() ([]byte, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-	for i, k := range o.keys {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		key, err := json.Marshal(k)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(key)
-		b.WriteByte(':')
-		v, err := json.Marshal(o.m[k])
-		if err != nil {
-			return nil, err
-		}
-		b.Write(v)
+// MarshalJSONTo writes the members in order.
+func (o *object) MarshalJSONTo(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	b.WriteByte('}')
-	return b.Bytes(), nil
+	for _, k := range o.keys {
+		if err := enc.WriteToken(jsontext.String(k)); err != nil {
+			return err
+		}
+		if err := json.MarshalEncode(enc, o.m[k]); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
-// decodeJSON reads one JSON value into *object, []any, string,
-// json.Number, bool, and nil.
+// number is a JSON number kept as the digits it arrived with, so an
+// integer past 2^53 prints as it was written.
+type number string
+
+// MarshalJSONTo writes the digits as a number.
+func (n number) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteValue(jsontext.Value(n))
+}
+
+// Int64 is the number as an int64, or an error when it is not one.
+func (n number) Int64() (int64, error) { return strconv.ParseInt(string(n), 10, 64) }
+
+// Float64 is the number as a float64.
+func (n number) Float64() (float64, error) { return strconv.ParseFloat(string(n), 64) }
+
+// responseJSON is how a response body is read: any member order, and
+// a repeated name or an invalid byte does not make the body unreadable.
+var responseJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+)
+
+// decodeJSON reads one JSON value into *object, []any, string, number,
+// bool, and nil.
 func decodeJSON(data []byte) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
+	dec := jsontext.NewDecoder(bytes.NewReader(data), responseJSON)
 	v, err := decodeValue(dec)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+	if _, err := dec.ReadToken(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("more than one JSON value")
 	}
 	return v, nil
 }
 
-func decodeValue(dec *json.Decoder) (any, error) {
-	tok, err := dec.Token()
+func decodeValue(dec *jsontext.Decoder) (any, error) {
+	tok, err := dec.ReadToken()
 	if err != nil {
 		return nil, err
 	}
-	switch t := tok.(type) {
-	case json.Delim:
-		switch t {
-		case '{':
-			o := newObject()
-			for dec.More() {
-				kt, err := dec.Token()
-				if err != nil {
-					return nil, err
-				}
-				k, _ := kt.(string)
-				v, err := decodeValue(dec)
-				if err != nil {
-					return nil, err
-				}
-				o.set(k, v)
+	switch tok.Kind() {
+	case '{':
+		o := newObject()
+		for dec.PeekKind() != '}' {
+			kt, err := dec.ReadToken()
+			if err != nil {
+				return nil, err
 			}
-			_, err := dec.Token() // '}'
-			return o, err
-		case '[':
-			var out []any
-			for dec.More() {
-				v, err := decodeValue(dec)
-				if err != nil {
-					return nil, err
-				}
-				out = append(out, v)
+			k := kt.String()
+			v, err := decodeValue(dec)
+			if err != nil {
+				return nil, err
 			}
-			_, err := dec.Token() // ']'
-			if out == nil {
-				out = []any{}
-			}
-			return out, err
+			o.set(k, v)
 		}
-		return nil, errors.New("unexpected delimiter")
+		_, err := dec.ReadToken() // '}'
+		return o, err
+	case '[':
+		out := []any{}
+		for dec.PeekKind() != ']' {
+			v, err := decodeValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, v)
+		}
+		_, err := dec.ReadToken() // ']'
+		return out, err
+	case '"':
+		return tok.String(), nil
+	case '0':
+		return number(tok.String()), nil
+	case 't', 'f':
+		return tok.Bool(), nil
 	default:
-		return tok, nil
+		return nil, nil
 	}
 }
 
@@ -151,7 +164,7 @@ func yamlValue(v any) any {
 			out = append(out, yamlValue(e))
 		}
 		return out
-	case json.Number:
+	case number:
 		if i, err := x.Int64(); err == nil {
 			return i
 		}
@@ -360,7 +373,7 @@ func scalar(v any) string {
 		return ""
 	case string:
 		return x
-	case json.Number:
+	case number:
 		return string(x)
 	case bool:
 		return strconv.FormatBool(x)

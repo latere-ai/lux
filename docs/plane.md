@@ -178,7 +178,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -247,7 +247,7 @@ func (policy) Decide(_ context.Context, req authz.Request) (authz.Decision, erro
 		// The ceilings a Key this subject applies is held to, by the wire
 		// names luxd decodes; authorizer.WireLimits is the Go type of the
 		// same six members, for a platform that renders them from a struct.
-		limits, err := json.Marshal(map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100})
+		limits, err := json.Marshal(map[string]any{"max_key_spend": spendCap[plan], "max_key_ttl": "720h", "max_keys": 100}, json.Deterministic(true))
 		if err != nil {
 			return authz.Decision{}, server.Unavailable("the " + plan + " plan's ceiling cannot be rendered")
 		}

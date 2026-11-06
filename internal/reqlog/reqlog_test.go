@@ -7,7 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -162,8 +163,8 @@ func (h *harness) archived(t *testing.T) []metering.Record {
 
 // same compares two records through their JSON.
 func same(a, b metering.Record) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
+	x, _ := json.Marshal(a, json.Deterministic(true))
+	y, _ := json.Marshal(b, json.Deterministic(true))
 	return bytes.Equal(x, y)
 }
 
@@ -626,7 +627,7 @@ func TestArchivePagesReadABoundedAmount(t *testing.T) {
 				for i, owner := range owners {
 					r := record(n*10+i, at.Add(time.Duration(i)*time.Second))
 					r.Owner = owner
-					if err := json.NewEncoder(&body).Encode(r); err != nil {
+					if err := json.MarshalEncode(jsontext.NewEncoder(&body), r); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1032,5 +1033,33 @@ func TestArchiveRequestLabelFilter(t *testing.T) {
 	none.RequestLabels = map[string]string{"trial": "t-9"}
 	if got, _, err := rd.List(t.Context(), none, store.Page{}); err != nil || len(got) != 0 {
 		t.Fatalf("a value no record carries = %v, %v", ids(got), err)
+	}
+}
+
+// TestArchiveLinesAreSortedAndSurviveInvalidUTF8: an object is one line
+// per record, each ending in a newline with members in a fixed order, and
+// an error text carrying bytes that are not UTF-8 is written with U+FFFD
+// instead of dropping the batch.
+func TestArchiveLinesAreSortedAndSurviveInvalidUTF8(t *testing.T) {
+	h := newHarness(t)
+	e := h.exporter(func(o *ExporterOptions) { o.FlushInterval = time.Hour })
+	r := record(7, h.c.Now())
+	r.Error = "upstream said \xff"
+	r.Labels = map[string]string{"z": "1", "a": "2", "m": "3"}
+	e.Append(r)
+	if err := e.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	keys := h.srv.Keys()
+	if len(keys) != 1 {
+		t.Fatalf("%d objects", len(keys))
+	}
+	got := h.lines(t, keys[0])
+	if len(got) != 1 || got[0].Error != "upstream said �" {
+		t.Fatalf("lines = %+v", got)
+	}
+	body, ok := h.srv.Get(keys[0])
+	if !ok || !bytes.HasSuffix(body, []byte("\n")) || !bytes.Contains(body, []byte(`"labels":{"a":"2","m":"3","z":"1"}`)) {
+		t.Fatalf("body = %s", body)
 	}
 }

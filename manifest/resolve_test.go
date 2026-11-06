@@ -5,7 +5,7 @@ package manifest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"reflect"
@@ -102,19 +102,19 @@ func TestDefaultsFillOnlyAbsentFields(t *testing.T) {
 		m := r.Object.(*v1.Model)
 		one, two := v1.Money(1_000_000), v1.Money(2_000_000)
 		want := v1.ModelSpec{
-			Targets:    []v1.Target{{Provider: "openai", Model: "m", Weight: ptr(100), Priority: 0}},
+			Targets:    []v1.Target{{Provider: "openai", Model: "m", Weight: new(100), Priority: 0}},
 			Fallback:   v1.FallbackOnError,
 			Pricing:    &v1.Pricing{Currency: "USD", Per: 1_000_000, Input: &one, Output: &two, CachedInput: &one, CacheWrite: &one},
 			Modalities: v1.Modalities{Input: []v1.Modality{v1.ModalityText}, Output: []v1.Modality{v1.ModalityText}},
 		}
 		if !reflect.DeepEqual(m.Spec, want) {
-			got, _ := json.Marshal(m.Spec)
+			got, _ := json.Marshal(m.Spec, json.Deterministic(true))
 			t.Errorf("spec = %s", got)
 		}
 		r = mustResolve(t, head(v1.KindModel, "m")+"spec:\n  targets:\n    - {provider: openai, model: up, weight: 0, priority: 2}\n    - {provider: azure, weight: 7}\n  fallback: never\n  pricing:\n    currency: EUR\n    per: 1000\n    input: \"1\"\n    output: \"2\"\n    cachedInput: \"0\"\n    cacheWrite: \"0.5\"\n  modalities:\n    input: [image]\n    output: [embedding]\n", o)
 		m = r.Object.(*v1.Model)
 		if m.Spec.Targets[0].Model != "up" || *m.Spec.Targets[0].Weight != 0 || m.Spec.Targets[0].Priority != 2 || *m.Spec.Targets[1].Weight != 7 || m.Spec.Fallback != v1.FallbackNever || m.Spec.Pricing.Currency != "EUR" || m.Spec.Pricing.Per != 1000 || *m.Spec.Pricing.CachedInput != 0 || *m.Spec.Pricing.CacheWrite != 500_000 || m.Spec.Modalities.Input[0] != v1.ModalityImage || m.Spec.Modalities.Output[0] != v1.ModalityEmbedding {
-			got, _ := json.Marshal(m.Spec)
+			got, _ := json.Marshal(m.Spec, json.Deterministic(true))
 			t.Errorf("a set field was overwritten: %s", got)
 		}
 	})
@@ -223,8 +223,7 @@ func TestLookupFailurePassesThrough(t *testing.T) {
 	if err == nil {
 		t.Fatal("Resolve accepted a Key whose Lookup failed")
 	}
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		t.Fatalf("a Lookup failure was turned into the refusal %s", e.Code)
 	}
 	if !strings.Contains(err.Error(), "spec.models[0]") || !strings.Contains(err.Error(), "not reachable") {
@@ -305,7 +304,7 @@ func TestSelectorsRecordTheirMatches(t *testing.T) {
 		{Selector: "*", Matched: sorted(all)},
 	}
 	if !reflect.DeepEqual(k.Status.Selectors, want) {
-		got, _ := json.Marshal(k.Status.Selectors)
+		got, _ := json.Marshal(k.Status.Selectors, json.Deterministic(true))
 		t.Errorf("selectors = %s", got)
 	}
 	if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], `"nothing-*"`) {
@@ -466,7 +465,7 @@ func TestLimits(t *testing.T) {
 func TestResolveIsDeterministicAndLeavesTheInput(t *testing.T) {
 	o := corpusOptions(t)
 	in := mustDecode(t, corpusFileString(t, "accepted/key/run-42.yaml"))
-	before, _ := json.Marshal(in)
+	before, _ := json.Marshal(in, json.Deterministic(true))
 	a, err := Resolve(context.Background(), in, o)
 	if err != nil {
 		t.Fatal(err)
@@ -475,12 +474,12 @@ func TestResolveIsDeterministicAndLeavesTheInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ja, _ := json.Marshal(a.Object)
-	jb, _ := json.Marshal(b.Object)
+	ja, _ := json.Marshal(a.Object, json.Deterministic(true))
+	jb, _ := json.Marshal(b.Object, json.Deterministic(true))
 	if string(ja) != string(jb) {
 		t.Errorf("two resolves differ:\n%s\n%s", ja, jb)
 	}
-	after, _ := json.Marshal(in)
+	after, _ := json.Marshal(in, json.Deterministic(true))
 	if string(before) != string(after) {
 		t.Errorf("Resolve changed its input:\n%s\n%s", before, after)
 	}
@@ -530,12 +529,12 @@ func TestProviderStartDisabledRoundTrip(t *testing.T) {
 	if !ok || !p.Spec.Discovery.StartDisabled {
 		t.Fatalf("startDisabled after Resolve = %+v", p)
 	}
-	out, err := json.Marshal(p.Spec.Discovery)
+	out, err := json.Marshal(p.Spec.Discovery, json.Deterministic(true))
 	if err != nil || string(out) != `{"mode":"auto","startDisabled":true}` {
 		t.Fatalf("rendered = %s, %v", out, err)
 	}
 	p.Spec.Discovery.StartDisabled = false
-	if out, _ = json.Marshal(p.Spec.Discovery); strings.Contains(string(out), "startDisabled") {
+	if out, _ = json.Marshal(p.Spec.Discovery, json.Deterministic(true)); strings.Contains(string(out), "startDisabled") {
 		t.Fatalf("a false flag is rendered: %s", out)
 	}
 }

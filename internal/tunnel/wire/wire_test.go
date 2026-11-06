@@ -153,3 +153,25 @@ type flushFails struct{}
 
 func (flushFails) Write(p []byte) (int, error) { return len(p), nil }
 func (flushFails) Flush() error                { return errors.New("flush failed") }
+
+// TestHeaderLineCarriesInvalidUTF8: a header value is bytes the peers
+// do not control, so it is written with U+FFFD and read back rather than
+// refused.
+func TestHeaderLineCarriesInvalidUTF8(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteLine(&buf, Request{ID: "r", Headers: map[string][]string{"X-Bytes": {"a\xffb"}}}); err != nil {
+		t.Fatalf("WriteLine: %v", err)
+	}
+	var got Request
+	if err := ReadLine(bufio.NewReader(&buf), &got); err != nil {
+		t.Fatalf("ReadLine: %v", err)
+	}
+	if v := got.Headers["X-Bytes"]; len(v) != 1 || v[0] != "a\ufffdb" {
+		t.Fatalf("header = %q", v)
+	}
+	line := []byte("{\"type\":\"ready\",\"type\":\"close\"}\n")
+	var f Frame
+	if err := ReadLine(bufio.NewReader(bytes.NewReader(line)), &f); err != nil || f.Type != "close" {
+		t.Fatalf("a repeated name: %q, %v", f.Type, err)
+	}
+}

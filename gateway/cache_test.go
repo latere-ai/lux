@@ -4,7 +4,8 @@
 package gateway
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -53,8 +54,8 @@ func TestBreakpointsReachAnAnthropicModelBehindAnOpenAIGateway(t *testing.T) {
 			}
 			var sent struct {
 				Messages []struct {
-					Role    string          `json:"role"`
-					Content json.RawMessage `json:"content"`
+					Role    string         `json:"role"`
+					Content jsontext.Value `json:"content"`
 				} `json:"messages"`
 			}
 			if err := json.Unmarshal(w.openai.last(t).Body, &sent); err != nil {

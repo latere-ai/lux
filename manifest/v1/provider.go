@@ -4,7 +4,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 )
 
@@ -29,13 +29,14 @@ func (p *Provider) Owner() string { return p.Status.Owner }
 // Name implements Object.
 func (p *Provider) Name() string { return p.Metadata.Name }
 
-// MarshalJSON writes the envelope before the object.
+// MarshalJSON writes the envelope before the object, with members of a
+// map in key order whatever options the caller holds.
 func (p Provider) MarshalJSON() ([]byte, error) {
 	type plain Provider
 	return json.Marshal(struct {
 		envelope
 		plain
-	}{envelope{APIVersion, KindProvider}, plain(p)})
+	}{envelope{APIVersion, KindProvider}, plain(p)}, json.Deterministic(true))
 }
 
 // ProviderSpec is the desired state of a Provider. The bool fields carry
@@ -55,10 +56,10 @@ type ProviderSpec struct {
 	Dialect       Dialect           `json:"dialect,omitempty"`
 	Tunnel        bool              `json:"tunnel"`
 	BaseURL       string            `json:"baseURL,omitempty"`
-	Credential    *Credential       `json:"credential,omitempty"`
+	Credential    *Credential       `json:"credential,omitzero"`
 	Headers       map[string]string `json:"headers,omitempty"`
 	RequestFields map[string]any    `json:"requestFields,omitempty"`
-	ZeroRetention *ZeroRetention    `json:"zeroRetention,omitempty"`
+	ZeroRetention *ZeroRetention    `json:"zeroRetention,omitzero"`
 	Discovery     Discovery         `json:"discovery,omitzero"`
 	Health        Health            `json:"health,omitzero"`
 	Timeout       Duration          `json:"timeout,omitempty"`
@@ -86,10 +87,10 @@ type ZeroRetention struct {
 // token endpoint and sends the short-lived access token it gets back.
 type Credential struct {
 	value      writeOnly   `writeonly:"value"`
-	ValueFrom  *ValueFrom  `json:"valueFrom,omitempty"`
+	ValueFrom  *ValueFrom  `json:"valueFrom,omitzero"`
 	Header     string      `json:"header,omitempty"`
 	Scheme     Scheme      `json:"scheme,omitempty"`
-	Federation *Federation `json:"federation,omitempty"`
+	Federation *Federation `json:"federation,omitzero"`
 }
 
 // Value returns the credential value the manifest carried and whether it
@@ -135,7 +136,7 @@ type Discovery struct {
 	Mode          DiscoveryMode `json:"mode,omitempty"`
 	Include       []string      `json:"include,omitempty"`
 	Exclude       []string      `json:"exclude,omitempty"`
-	StartDisabled bool          `json:"startDisabled,omitempty"`
+	StartDisabled bool          `json:"startDisabled,omitzero"`
 }
 
 // Health is how the Provider's reachability is observed.
@@ -147,12 +148,12 @@ type Health struct {
 // fills Warnings; the API and the jobs fill the rest.
 type ProviderStatus struct {
 	ID         string            `json:"id,omitempty"`
-	Version    int64             `json:"version,omitempty"`
+	Version    int64             `json:"version,omitzero"`
 	Owner      string            `json:"owner,omitempty"`
-	Credential *CredentialStatus `json:"credential,omitempty"`
-	Health     *HealthStatus     `json:"health,omitempty"`
-	Discovered *DiscoveredStatus `json:"discovered,omitempty"`
-	Tunnel     *TunnelStatus     `json:"tunnel,omitempty"`
+	Credential *CredentialStatus `json:"credential,omitzero"`
+	Health     *HealthStatus     `json:"health,omitzero"`
+	Discovered *DiscoveredStatus `json:"discovered,omitzero"`
+	Tunnel     *TunnelStatus     `json:"tunnel,omitzero"`
 	CreatedAt  time.Time         `json:"createdAt,omitzero"`
 	UpdatedAt  time.Time         `json:"updatedAt,omitzero"`
 	Warnings   []string          `json:"warnings"`

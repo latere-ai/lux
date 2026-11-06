@@ -4,7 +4,7 @@
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"strconv"
 
@@ -14,8 +14,8 @@ import (
 )
 
 // parseYAML parses one YAML document into a generic tree of
-// map[string]any, []any, string, json.Number, bool, and nil, resolving
-// anchors, aliases, and merge keys itself so the expansion is counted
+// map[string]any, []any, string, jsontext.Value (a number, as written),
+// bool, and nil, resolving anchors, aliases, and merge keys itself so the expansion is counted
 // against MaxScalarBytes as it happens rather than after it has happened.
 func parseYAML(body []byte) (map[string]any, error) {
 	file, err := parser.ParseBytes(body, 0)
@@ -126,10 +126,10 @@ func (w *yamlWalk) node(n ast.Node, path string, depth int) (any, error) {
 		default:
 			s = n.GetToken().Value
 		}
-		return json.Number(s), w.bounds.scalar(path, len(s))
+		return jsontext.Value(s), w.bounds.scalar(path, len(s))
 	case *ast.FloatNode:
 		s := strconv.FormatFloat(n.Value, 'g', -1, 64)
-		return json.Number(s), w.bounds.scalar(path, len(s))
+		return jsontext.Value(s), w.bounds.scalar(path, len(s))
 	case *ast.BoolNode:
 		return n.Value, nil
 	case *ast.NullNode:

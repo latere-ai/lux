@@ -18,7 +18,8 @@
 package sink
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"slices"
@@ -60,10 +61,10 @@ type Options struct {
 // Event is one verified delivery: the event's id, how many deliveries
 // of that id arrived, the first one's clock, and the body as received.
 type Event struct {
-	ID         string          `json:"id"`
-	Attempts   int             `json:"attempts"`
-	ReceivedAt time.Time       `json:"receivedAt"`
-	Body       json.RawMessage `json:"body"`
+	ID         string         `json:"id"`
+	Attempts   int            `json:"attempts"`
+	ReceivedAt time.Time      `json:"receivedAt"`
+	Body       jsontext.Value `json:"body"`
 }
 
 // Rejected is one delivery that did not verify: why, the header it
@@ -180,7 +181,7 @@ func (s *Sink) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.ContainsFunc(s.events, func(e Event) bool { return e.ID == envelope.ID }) {
-		s.events = append(s.events, Event{ID: envelope.ID, ReceivedAt: now, Body: json.RawMessage(slices.Clone(body))})
+		s.events = append(s.events, Event{ID: envelope.ID, ReceivedAt: now, Body: jsontext.Value(slices.Clone(body))})
 	}
 	s.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
@@ -202,7 +203,7 @@ func (s *Sink) control(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			First int `json:"first"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.First < 0 {
+		if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, 4<<10), &body); err != nil || body.First < 0 {
 			http.Error(w, `the body is {"first": <n>} with n at least 0`, http.StatusBadRequest)
 			return
 		}
@@ -214,7 +215,7 @@ func (s *Sink) control(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

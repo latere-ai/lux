@@ -4,7 +4,8 @@
 package postgres
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -78,8 +79,8 @@ type encoded struct {
 	kind, name, owner, source string
 	labels                    string // a JSON object
 	providers                 []string
-	spec                      string                     // {"metadata": ..., "spec": ...}
-	status                    map[string]json.RawMessage // the control plane's half
+	spec                      string                    // {"metadata": ..., "spec": ...}
+	status                    map[string]jsontext.Value // the control plane's half
 }
 
 // encode marshals the object once, which drops the write-only values
@@ -90,20 +91,20 @@ func encode(obj v1.Object) (*encoded, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(obj)
+	data, err := json.Marshal(obj, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("postgres: encoding the %s: %w", obj.Kind(), err)
 	}
 	var doc struct {
-		Metadata json.RawMessage            `json:"metadata"`
-		Spec     json.RawMessage            `json:"spec"`
-		Status   map[string]json.RawMessage `json:"status"`
+		Metadata jsontext.Value            `json:"metadata"`
+		Spec     jsontext.Value            `json:"spec"`
+		Status   map[string]jsontext.Value `json:"status"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("postgres: decoding the %s: %w", obj.Kind(), err)
 	}
 	if doc.Status == nil {
-		doc.Status = map[string]json.RawMessage{}
+		doc.Status = map[string]jsontext.Value{}
 	}
 	labels, err := labelsText(f.labels)
 	if err != nil {
@@ -118,7 +119,7 @@ func encode(obj v1.Object) (*encoded, error) {
 		e.source = string(x.Status.Source)
 		if e.source == "" {
 			e.source = string(v1.SourceDeclared)
-			e.status["source"] = json.RawMessage(`"` + e.source + `"`)
+			e.status["source"] = jsontext.Value(`"` + e.source + `"`)
 		}
 		for _, t := range x.Spec.Targets {
 			e.providers = append(e.providers, t.Provider)
@@ -135,19 +136,19 @@ func encode(obj v1.Object) (*encoded, error) {
 // second lookup, and answers the half as the text the status column is
 // bound as.
 func (e *encoded) stamp(id string, version int64, createdAt, updatedAt time.Time) (string, error) {
-	e.status["id"] = json.RawMessage(`"` + id + `"`)
-	e.status["version"] = json.RawMessage(fmt.Sprint(version))
+	e.status["id"] = jsontext.Value(`"` + id + `"`)
+	e.status["version"] = jsontext.Value(fmt.Sprint(version))
 	for name, t := range map[string]time.Time{"createdAt": createdAt, "updatedAt": updatedAt} {
-		b, err := json.Marshal(t)
+		b, err := json.Marshal(t, json.Deterministic(true))
 		if err != nil {
 			return "", err
 		}
 		e.status[name] = b
 	}
 	if e.owner != "" {
-		e.status["owner"] = json.RawMessage(`"` + e.owner + `"`)
+		e.status["owner"] = jsontext.Value(`"` + e.owner + `"`)
 	}
-	b, err := json.Marshal(e.status)
+	b, err := json.Marshal(e.status, json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}
@@ -155,7 +156,7 @@ func (e *encoded) stamp(id string, version int64, createdAt, updatedAt time.Time
 }
 
 // rawOr is a raw message, or def when it is empty.
-func rawOr(m json.RawMessage, def string) string {
+func rawOr(m jsontext.Value, def string) string {
 	if len(m) == 0 {
 		return def
 	}
@@ -170,8 +171,8 @@ func decode(kind string, spec, status []byte) (v1.Object, error) {
 		return nil, err
 	}
 	var parts struct {
-		Metadata json.RawMessage `json:"metadata"`
-		Spec     json.RawMessage `json:"spec"`
+		Metadata jsontext.Value `json:"metadata"`
+		Spec     jsontext.Value `json:"spec"`
 	}
 	if err := json.Unmarshal(spec, &parts); err != nil {
 		return nil, fmt.Errorf("postgres: decoding a stored %s: %w", kind, err)
@@ -249,7 +250,7 @@ func observedJSON(kind string, observed any) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("postgres: PutStatus of kind %q, not one of the four", kind)
 	}
-	return json.Marshal(m)
+	return json.Marshal(m, json.Deterministic(true))
 }
 
 // put adds a pointer member when it is set.

@@ -10,7 +10,8 @@ package federation
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -210,6 +211,23 @@ func (e *Exchanger) exchange(ctx context.Context, p *v1.Provider, f *v1.Federati
 	return token, nil
 }
 
+// foreignJSON reads JSON this process does not produce. Repeated names,
+// invalid UTF-8 and any letter case in a member name are accepted.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
+// providerJSON writes a request to a service this repository does not
+// own: members in a fixed order, and nil slices and maps as null, so two
+// equal requests are the same bytes.
+var providerJSON = json.JoinOptions(
+	json.Deterministic(true),
+	json.FormatNilSliceAsNull(true),
+	json.FormatNilMapAsNull(true),
+)
+
 // post sends the exchange of spec 051 and reads its answer: the access
 // token and how long it lasts. An error names the status and the
 // upstream's message, never the assertion.
@@ -225,7 +243,7 @@ func (e *Exchanger) post(ctx context.Context, p *v1.Provider, f *v1.Federation) 
 	if f.WorkspaceID != "" {
 		body["workspace_id"] = f.WorkspaceID
 	}
-	b, err := json.Marshal(body)
+	b, err := json.Marshal(body, providerJSON)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -257,7 +275,7 @@ func (e *Exchanger) post(ctx context.Context, p *v1.Provider, f *v1.Federation) 
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int64  `json:"expires_in"`
 	}
-	if err := json.Unmarshal(answer, &got); err != nil {
+	if err := json.Unmarshal(answer, &got, foreignJSON); err != nil {
 		return nil, 0, fmt.Errorf("the token exchange answered 200 with a body that is not a token response: %w", err)
 	}
 	if got.AccessToken == "" || got.ExpiresIn <= 0 {
@@ -281,7 +299,7 @@ func upstreamMessage(body []byte) string {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(body, &shape) == nil && shape.Error.Message != "" {
+	if json.Unmarshal(body, &shape, foreignJSON) == nil && shape.Error.Message != "" {
 		if shape.Error.Type != "" {
 			return shape.Error.Type + ": " + shape.Error.Message
 		}

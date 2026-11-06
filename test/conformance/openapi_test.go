@@ -4,6 +4,7 @@
 package conformance
 
 import (
+	"encoding/json/jsontext"
 	"net/http"
 	"strings"
 	"testing"
@@ -158,5 +159,26 @@ func TestValidateReadsTheResponseTable(t *testing.T) {
 	}
 	if indexless(p[0]) != "$.items[].size: 20 is above the maximum" {
 		t.Errorf("indexless %q", indexless(p[0]))
+	}
+}
+
+// TestReadTreeKeepsNumbers: a response is read with its numbers as
+// written, so 1 and 1.0 differ, a duplicate member is read (the last
+// wins), and invalid UTF-8 does not stop the read.
+func TestReadTreeKeepsNumbers(t *testing.T) {
+	tree, err := readTree(jsontext.NewDecoder(strings.NewReader("{\"a\":1,\"a\":1.0,\"b\":[12345678901234567890,\"x\xff\",true,null]}"), foreignJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := tree.(map[string]any)
+	if got := string(m["a"].(jsontext.Value)); got != "1.0" {
+		t.Errorf("a = %s, want 1.0", got)
+	}
+	b := m["b"].([]any)
+	if got := string(b[0].(jsontext.Value)); got != "12345678901234567890" {
+		t.Errorf("b[0] = %s", got)
+	}
+	if b[1] != "x�" || b[2] != true || b[3] != nil {
+		t.Errorf("b = %#v", b)
 	}
 }

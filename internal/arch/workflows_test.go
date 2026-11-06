@@ -5,7 +5,7 @@ package arch
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io/fs"
 	"maps"
 	"os"

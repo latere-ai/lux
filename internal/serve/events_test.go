@@ -4,7 +4,8 @@
 package serve
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestAppendEventWritesTheRecord(t *testing.T) {
 	if rec.Type != "key.created" || rec.Subject != subject || rec.Reason != "request" || rec.RequestID != "req_1" || rec.ID != rows[0].ID || rec.Object.ID != k.Status.ID || rec.Object.Name != "run-42" || rec.Object.Owner != subject {
 		t.Errorf("record %+v", rec)
 	}
-	if string(rows[0].Payload) == "" || !json.Valid(rows[0].Payload) {
+	if string(rows[0].Payload) == "" || !jsontext.Value(rows[0].Payload).IsValid() {
 		t.Error("the payload is not JSON")
 	}
 	var raw map[string]any

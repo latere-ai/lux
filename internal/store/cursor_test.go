@@ -76,3 +76,15 @@ func TestErrorsAreDistinct(t *testing.T) {
 		t.Fatalf("%d errors, want 9", len(seen))
 	}
 }
+
+// TestCanonicalFilterBytes: the digest of a cursor is over bytes that
+// do not depend on map order.
+func TestCanonicalFilterBytes(t *testing.T) {
+	f := Filter{Owner: "o", Labels: map[string]string{"c": "3", "a": "1", "b": "2"}, IDs: []string{"y", "x"}}
+	want := `{"owner":"o","labels":{"a":"1","b":"2","c":"3"},"ids":["x","y"]}`
+	for range 20 {
+		if got := string(f.canonical()); got != want {
+			t.Fatalf("canonical = %s, want %s", got, want)
+		}
+	}
+}

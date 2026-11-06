@@ -5,7 +5,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/url"
@@ -611,7 +612,7 @@ func TestTheCeilingsAreDecodedFromTheDecision(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := authz.Decision{Allow: true}
 			if tc.raw != "" {
-				d.Limits = json.RawMessage(tc.raw)
+				d.Limits = jsontext.Value(tc.raw)
 			}
 			got, err := decodeLimits(d)
 			if tc.wrong {
@@ -872,4 +873,18 @@ func TestTheLeaseGivesBackWhatARefusalTook(t *testing.T) {
 	}
 	// A settle twice is one settle: the lease is spent.
 	lease.Settle(t.Context(), gateway.Tokens{Input: 10, Output: 10})
+}
+
+// TestOpenAPIDocumentBytesAreStable: the document is built from maps and
+// is served as the same bytes on every call, members in key order.
+func TestOpenAPIDocumentBytesAreStable(t *testing.T) {
+	first := openAPIDocument("http://plane.test")
+	for range 20 {
+		if again := openAPIDocument("http://plane.test"); string(again) != string(first) {
+			t.Fatal("the document moved between two calls")
+		}
+	}
+	if !strings.HasPrefix(string(first), `{"components":`) {
+		t.Errorf("the document opens with %.40s, want members in key order", first)
+	}
 }

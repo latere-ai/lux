@@ -4,7 +4,8 @@
 package client
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strconv"
 	"strings"
 
@@ -74,13 +75,22 @@ func (e *UnreadableError) Error() string {
 	return e.Method + " " + e.URL + ": status " + strconv.Itoa(e.Status) + " with a body this client does not read: " + strconv.Quote(excerpt)
 }
 
+// serverJSON reads what a server answered, which may have passed through
+// a proxy or carry text the server did not control: a repeated member,
+// invalid UTF-8 and any letter case are read rather than refused.
+var serverJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // decodeError reads a refusal's envelope into an Error, or reports
 // false for a body that is not one. The value is returned rather than
 // a pointer so a body that is not an envelope is a zero value and not a
 // nil error.
 func decodeError(status int, body []byte, requestID string, retryAfter string) (Error, bool) {
 	var env httpjson.ErrorEnvelope
-	if json.Unmarshal(body, &env) != nil || env.Error.Code == "" {
+	if json.Unmarshal(body, &env, serverJSON) != nil || env.Error.Code == "" {
 		return Error{}, false
 	}
 	e := Error{Status: status, Code: env.Error.Code, Message: env.Error.Message, RequestID: requestID}

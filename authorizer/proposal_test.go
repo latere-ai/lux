@@ -5,7 +5,7 @@ package authorizer
 
 import (
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"
@@ -34,7 +34,7 @@ func TestMutationProposalExcludesSecretsAndIncludesPolicy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		raw, err := json.Marshal(proposal)
+		raw, err := json.Marshal(proposal, json.Deterministic(true))
 		if err != nil {
 			t.Fatal(err)
 		}

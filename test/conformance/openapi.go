@@ -5,7 +5,8 @@ package conformance
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"regexp"
 	"strconv"
@@ -27,22 +28,76 @@ type document struct {
 
 // parseDocument reads the document.
 func parseDocument(data []byte) (*document, error) {
-	var doc struct {
-		OpenAPI    string         `json:"openapi"`
-		Paths      map[string]any `json:"paths"`
-		Components struct {
-			Schemas map[string]any `json:"schemas"`
-		} `json:"components"`
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	if err := dec.Decode(&doc); err != nil {
+	tree, err := readTree(jsontext.NewDecoder(bytes.NewReader(data), foreignJSON))
+	if err != nil {
 		return nil, err
 	}
-	if !strings.HasPrefix(doc.OpenAPI, "3.") || len(doc.Paths) == 0 {
+	root, _ := tree.(map[string]any)
+	version, _ := root["openapi"].(string)
+	paths, _ := root["paths"].(map[string]any)
+	components, _ := root["components"].(map[string]any)
+	schemas, _ := components["schemas"].(map[string]any)
+	if !strings.HasPrefix(version, "3.") || len(paths) == 0 {
 		return nil, errors.New("the document is not an OpenAPI 3 document with paths")
 	}
-	return &document{paths: doc.Paths, schemas: doc.Components.Schemas}, nil
+	return &document{paths: paths, schemas: schemas}, nil
+}
+
+// foreignJSON reads what a server under test answered: a duplicate member
+// and invalid UTF-8 are read rather than refused, so the checks below
+// report the drift they are for.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
+// readTree reads one value as map[string]any, []any, string, bool, nil,
+// or a jsontext.Value holding a number's digits as written, which is what
+// tells 1 from 1.0 and keeps a large integer exact.
+func readTree(dec *jsontext.Decoder) (any, error) {
+	switch dec.PeekKind() {
+	case '{':
+		if _, err := dec.ReadToken(); err != nil {
+			return nil, err
+		}
+		m := map[string]any{}
+		for dec.PeekKind() != '}' {
+			k, err := dec.ReadToken()
+			if err != nil {
+				return nil, err
+			}
+			key := k.String()
+			v, err := readTree(dec)
+			if err != nil {
+				return nil, err
+			}
+			m[key] = v
+		}
+		_, err := dec.ReadToken()
+		return m, err
+	case '[':
+		if _, err := dec.ReadToken(); err != nil {
+			return nil, err
+		}
+		a := []any{}
+		for dec.PeekKind() != ']' {
+			v, err := readTree(dec)
+			if err != nil {
+				return nil, err
+			}
+			a = append(a, v)
+		}
+		_, err := dec.ReadToken()
+		return a, err
+	case '0':
+		v, err := dec.ReadValue()
+		return v.Clone(), err
+	default:
+		var v any
+		err := json.UnmarshalDecode(dec, &v, foreignJSON)
+		return v, err
+	}
 }
 
 // operation finds the path item and operation for a request, or nil when
@@ -146,10 +201,8 @@ func (d *document) validateResponse(resp map[string]any, status int, contentType
 	if !strings.HasPrefix(contentType, "application/json") {
 		return []string{"Content-Type " + strconv.Quote(contentType) + " on a response the document describes as application/json"}
 	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-	var value any
-	if err := dec.Decode(&value); err != nil {
+	value, err := readTree(jsontext.NewDecoder(bytes.NewReader(body), foreignJSON))
+	if err != nil {
 		return []string{"the body is not JSON: " + err.Error()}
 	}
 	schema, _ := media["schema"].(map[string]any)
@@ -253,20 +306,20 @@ func (d *document) check(schema map[string]any, value any, path string, problems
 			}
 		}
 	case "integer", "number":
-		n, ok := value.(json.Number)
+		n, ok := value.(jsontext.Value)
 		if !ok {
 			*problems = append(*problems, path+": "+render(value)+" is not a number")
 			return
 		}
-		if typ == "integer" && strings.ContainsAny(n.String(), ".eE") {
-			*problems = append(*problems, path+": "+n.String()+" is not an integer")
+		if typ == "integer" && strings.ContainsAny(string(n), ".eE") {
+			*problems = append(*problems, path+": "+string(n)+" is not an integer")
 		}
-		f, _ := n.Float64()
+		f, _ := strconv.ParseFloat(string(n), 64)
 		if lo, ok := numberOf(schema["minimum"]); ok && f < lo {
-			*problems = append(*problems, path+": "+n.String()+" is below the minimum")
+			*problems = append(*problems, path+": "+string(n)+" is below the minimum")
 		}
 		if hi, ok := numberOf(schema["maximum"]); ok && f > hi {
-			*problems = append(*problems, path+": "+n.String()+" is above the maximum")
+			*problems = append(*problems, path+": "+string(n)+" is above the maximum")
 		}
 	case "boolean":
 		if _, ok := value.(bool); !ok {
@@ -288,8 +341,8 @@ func toStrings(v any) []string {
 
 func numberOf(v any) (float64, bool) {
 	switch n := v.(type) {
-	case json.Number:
-		f, err := n.Float64()
+	case jsontext.Value:
+		f, err := strconv.ParseFloat(string(n), 64)
 		return f, err == nil
 	case float64:
 		return n, true
@@ -301,7 +354,7 @@ func numberOf(v any) (float64, bool) {
 func equalJSON(a, b any) bool { return render(a) == render(b) }
 
 func render(v any) string {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return "?"
 	}

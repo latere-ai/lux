@@ -5,7 +5,8 @@ package serve
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -253,7 +254,7 @@ func relist(e store.Event) bool {
 		return false
 	}
 	var rec struct {
-		Data json.RawMessage `json:"data"`
+		Data jsontext.Value `json:"data"`
 	}
 	if err := json.Unmarshal(e.Payload, &rec); err != nil || len(rec.Data) == 0 {
 		return false
@@ -508,7 +509,7 @@ func shapeOf(m *v1.Model) string {
 	data, err := json.Marshal(struct {
 		Metadata v1.ObjectMeta `json:"metadata"`
 		Spec     v1.ModelSpec  `json:"spec"`
-	}{m.Metadata, m.Spec})
+	}{m.Metadata, m.Spec}, json.Deterministic(true))
 	if err != nil {
 		return ""
 	}

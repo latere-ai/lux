@@ -5,7 +5,8 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -69,28 +70,20 @@ func (o ordered) set(key string, value any) ordered {
 	return append(o, member{key, value})
 }
 
-// MarshalJSON writes the members in order.
-func (o ordered) MarshalJSON() ([]byte, error) {
-	var b strings.Builder
-	b.WriteByte('{')
-	for i, m := range o {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		k, err := json.Marshal(m.key)
-		if err != nil {
-			return nil, err
-		}
-		v, err := json.Marshal(m.value)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(k)
-		b.WriteByte(':')
-		b.Write(v)
+// MarshalJSONTo writes the members in order.
+func (o ordered) MarshalJSONTo(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
 	}
-	b.WriteByte('}')
-	return []byte(b.String()), nil
+	for _, m := range o {
+		if err := enc.WriteToken(jsontext.String(m.key)); err != nil {
+			return err
+		}
+		if err := json.MarshalEncode(enc, m.value); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 // toYAML converts the document into the shapes the YAML encoder keeps
@@ -133,7 +126,7 @@ func OpenAPIYAML() []byte {
 // openAPIJSON renders the document as the JSON GET /v1/openapi.json
 // serves, with a trailing newline.
 func openAPIJSON() []byte {
-	data, err := json.Marshal(openAPIDocument())
+	data, err := json.Marshal(openAPIDocument(), json.Deterministic(true))
 	if err != nil {
 		panic("api: the OpenAPI document does not encode: " + err.Error())
 	}
@@ -166,7 +159,7 @@ func openAPIJSONAt(base string, replacesV1 bool, public *url.URL) []byte {
 			out = append(out, member{"servers", []any{obj("url", public.String())}})
 		}
 	}
-	b, err := json.Marshal(out)
+	b, err := json.Marshal(out, json.Deterministic(true))
 	if err != nil {
 		panic("api: the OpenAPI document does not encode: " + err.Error())
 	}

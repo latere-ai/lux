@@ -26,7 +26,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -247,7 +247,7 @@ func (k *Key) Mint(c Claims) (string, error) {
 	case c.TTL <= 0:
 		return "", errors.New("localissuer: a token's lifetime is above zero, not " + c.TTL.String())
 	}
-	head, err := json.Marshal(header{Alg: k.alg, Typ: "JWT", Kid: k.id})
+	head, err := json.Marshal(header{Alg: k.alg, Typ: "JWT", Kid: k.id}, json.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("localissuer: encoding the header: %w", err)
 	}
@@ -255,7 +255,7 @@ func (k *Key) Mint(c Claims) (string, error) {
 		Iss: c.Issuer, Sub: c.Subject, Aud: c.Audience,
 		Iat: c.IssuedAt.Unix(), Exp: c.IssuedAt.Add(c.TTL).Unix(),
 		Jti: rand.Text(),
-	})
+	}, json.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("localissuer: encoding the claims: %w", err)
 	}

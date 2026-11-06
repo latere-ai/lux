@@ -6,7 +6,7 @@ package conformance
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"go/parser"
 	"go/token"
 	"net/http"

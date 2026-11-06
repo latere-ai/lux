@@ -14,7 +14,7 @@
 package index
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 )
 
@@ -46,7 +46,7 @@ func New(doc Document) http.Handler {
 	if doc.Providers == nil {
 		doc.Providers = map[string]string{}
 	}
-	data, err := json.Marshal(doc)
+	data, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
 		// Document holds strings alone, so this cannot happen; a stub
 		// that cannot say what it is has nothing to serve.

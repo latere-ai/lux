@@ -5,7 +5,7 @@ package gateway
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -88,7 +88,7 @@ func jsonBenchChatRequest(model string, turns, tools int, stream bool) []byte {
 		}
 		req["tools"] = defs
 	}
-	out, err := json.Marshal(req)
+	out, err := json.Marshal(req, providerJSON)
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +102,7 @@ func jsonBenchAnthropicResponse(n int) []byte {
 		"content":     []map[string]any{{"type": "text", "text": jsonBenchText(n)}},
 		"stop_reason": "end_turn", "stop_sequence": nil,
 		"usage": map[string]any{"input_tokens": 1450, "output_tokens": 312, "cache_read_input_tokens": 1024, "cache_creation_input_tokens": 0},
-	})
+	}, providerJSON)
 	if err != nil {
 		panic(err)
 	}

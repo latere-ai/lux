@@ -5,7 +5,8 @@ package metering
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -25,6 +26,14 @@ import (
 const (
 	MinHourlyRetention  = 24 * time.Hour
 	MinMonthlyRetention = 720 * time.Hour
+)
+
+// userJSON reads a value an operator wrote by hand: a duplicate member,
+// invalid UTF-8 and any letter case in a member name are accepted.
+var userJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
 )
 
 // Retention is a period a row is kept for; zero is for ever.
@@ -87,10 +96,10 @@ func ParseRetentionRules(raw string) (RetentionRules, error) {
 	if len(bytes.TrimSpace([]byte(raw))) == 0 {
 		return nil, nil
 	}
-	dec := json.NewDecoder(bytes.NewReader([]byte(raw)))
-	dec.DisallowUnknownFields()
+	// Only the first value is read; text after it is ignored, as it always was.
+	dec := jsontext.NewDecoder(bytes.NewReader([]byte(raw)), userJSON, json.RejectUnknownMembers(true))
 	var rules RetentionRules
-	if err := dec.Decode(&rules); err != nil {
+	if err := json.UnmarshalDecode(dec, &rules); err != nil {
 		return nil, fmt.Errorf("not a JSON list of rules: %w", err)
 	}
 	for i, r := range rules {

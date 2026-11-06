@@ -4,7 +4,7 @@
 package authorizer
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"reflect"
 	"slices"
 	"strings"
@@ -154,7 +154,7 @@ func resourceOf(t *testing.T, action string) authz.Resource {
 // object, so a comparison reads what an authorizer reads.
 func flat(t *testing.T, res authz.Resource) map[string]any {
 	t.Helper()
-	raw, err := json.Marshal(res)
+	raw, err := json.Marshal(res, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

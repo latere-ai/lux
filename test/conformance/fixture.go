@@ -7,7 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"io/fs"
 	"net/http"
 	"slices"
@@ -150,7 +150,7 @@ func case003PreviousReleaseManifests(t testing.TB, c *client) {
 // deepCopy copies decoded JSON through its encoding.
 func deepCopy(t testing.TB, v any) any {
 	t.Helper()
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func case009PreviousReleaseRecords(t testing.TB, c *client) {
 				t.Errorf("%s: record %d does not decode: %v", version, n, err)
 				continue
 			}
-			again, err := json.Marshal(rec)
+			again, err := json.Marshal(rec, json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -6,7 +6,8 @@ package serve
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -333,14 +334,14 @@ func TestRecordCarriesNoContent(t *testing.T) {
 		t.Fatal("no aggregate rows")
 	}
 	var out bytes.Buffer
-	enc := json.NewEncoder(&out)
+	enc := jsontext.NewEncoder(&out)
 	for _, r := range recs {
-		if err := enc.Encode(r); err != nil {
+		if err := json.MarshalEncode(enc, r); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, r := range rows {
-		if err := enc.Encode(r); err != nil {
+		if err := json.MarshalEncode(enc, r); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -659,8 +660,8 @@ func TestAggregatesMatchTheRecords(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := metering.Fold(recs, by, in)
-			gotJSON, _ := json.Marshal(got)
-			wantJSON, _ := json.Marshal(want)
+			gotJSON, _ := json.Marshal(got, json.Deterministic(true))
+			wantJSON, _ := json.Marshal(want, json.Deterministic(true))
 			if string(gotJSON) != string(wantJSON) {
 				t.Fatalf("by %v, %s:\n got %s\nwant %s", by, in, gotJSON, wantJSON)
 			}

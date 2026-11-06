@@ -5,7 +5,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -241,4 +241,18 @@ func (p *fencePausedTransaction) Transact(ctx context.Context, fn func(store.Sto
 		}
 	}
 	return p.Store.Transact(ctx, fn)
+}
+
+// TestJSONMembersRefusesRepeatedNames: a repeated member, at any depth
+// jsonMembers is applied to, is named in the refusal.
+func TestJSONMembersRefusesRepeatedNames(t *testing.T) {
+	if _, err := jsonMembers([]byte(`{"owner":"a","owner":"b"}`)); err == nil || err.Error() != "duplicate JSON field" {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := jsonMembers([]byte(`{"owner":"a"} {}`)); err == nil || err.Error() != "unexpected content after JSON object" {
+		t.Fatalf("err = %v", err)
+	}
+	if m, err := jsonMembers([]byte(`{"owner":"a","labels":{"k":"v"}}`)); err != nil || string(m["labels"]) != `{"k":"v"}` {
+		t.Fatalf("members = %v, %v", m, err)
+	}
 }

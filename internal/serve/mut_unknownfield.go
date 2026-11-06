@@ -7,7 +7,7 @@ package serve
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -73,7 +73,7 @@ func dropUnknownFields(r *http.Request) ([]byte, bool) {
 	}
 	changed := false
 	for range 16 {
-		body, err := json.Marshal(tree)
+		body, err := json.Marshal(tree, json.Deterministic(true))
 		if err != nil {
 			return nil, false
 		}

@@ -5,7 +5,7 @@ package conformance
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -68,19 +68,19 @@ func hollowServer(t testing.TB, skewed bool) *httptest.Server {
 				doc["version"], doc["apiVersion"], doc["openapi"], doc["issuers"], doc["audience"] = "", "v9", "x", []string{}, ""
 				doc["doors"] = doors
 			}
-			_ = json.NewEncoder(w).Encode(doc)
+			_ = json.MarshalWrite(w, doc)
 		case strings.HasSuffix(r.URL.Path, "/_received"):
 			if r.Method == http.MethodDelete {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			_ = json.NewEncoder(w).Encode([]received{{Method: "GET", Path: "/elsewhere", Headers: map[string][]string{"Authorization": {"Bearer " + hollowValue}}, Body: "{}"}})
+			_ = json.MarshalWrite(w, []received{{Method: "GET", Path: "/elsewhere", Headers: map[string][]string{"Authorization": {"Bearer " + hollowValue}}, Body: "{}"}})
 		case strings.HasSuffix(r.URL.Path, "/fail"):
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/v1/requests":
-			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{record}, "source": "nowhere"})
+			_ = json.MarshalWrite(w, map[string]any{"items": []any{record}, "source": "nowhere"})
 		case r.URL.Path == "/v1/usage":
-			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{map[string]any{"requests": 7, "cost": 1.5, "dimensions": map[string]any{"key": "x"}}}})
+			_ = json.MarshalWrite(w, map[string]any{"items": []any{map[string]any{"requests": 7, "cost": 1.5, "dimensions": map[string]any{"key": "x"}}}})
 		case r.URL.Path == "/v1/openapi.json":
 			// The kinds' routes with a schema that admits any object, so
 			// the suite's own holding lets the Key mint and the fixtures
@@ -95,13 +95,13 @@ func hollowServer(t testing.TB, skewed bool) *httptest.Server {
 				paths["/v1/"+plurals[kind]] = ops
 				paths["/v1/"+plurals[kind]+"/{name}"] = ops
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"openapi": "3.1.0", "paths": paths, "components": map[string]any{"schemas": map[string]any{"Error": map[string]any{"type": "object"}}}})
+			_ = json.MarshalWrite(w, map[string]any{"openapi": "3.1.0", "paths": paths, "components": map[string]any{"schemas": map[string]any{"Error": map[string]any{"type": "object"}}}})
 		case r.URL.Path == "/stubs/":
 			providers := map[string]string{}
 			for _, d := range dialects {
 				providers[d] = srv.URL + "/stub/" + d
 			}
-			_ = json.NewEncoder(w).Encode(stubs{Providers: providers, Authorizer: srv.URL + "/stub/authorizer", Credential: "hollow"})
+			_ = json.MarshalWrite(w, stubs{Providers: providers, Authorizer: srv.URL + "/stub/authorizer", Credential: "hollow"})
 		default:
 			data, _ := io.ReadAll(r.Body)
 			if strings.Contains(string(data), `"stream":true`) {
@@ -115,7 +115,7 @@ func hollowServer(t testing.TB, skewed bool) *httptest.Server {
 			if r.Method == http.MethodPut {
 				w.WriteHeader(http.StatusCreated)
 			}
-			_ = json.NewEncoder(w).Encode(body)
+			_ = json.MarshalWrite(w, body)
 		}
 	}))
 	t.Cleanup(srv.Close)

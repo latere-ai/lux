@@ -5,7 +5,7 @@ package client
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"net/http"
@@ -49,7 +49,7 @@ func (c *Client) Discover(ctx context.Context) error {
 		Doors map[string]string `json:"doors"`
 	}
 	unreadable := &UnreadableError{Method: http.MethodGet, URL: c.url(wellKnownPath), Status: resp.Status, RequestID: resp.RequestID, Body: resp.Body}
-	if err := json.Unmarshal(resp.Body, &doc); err != nil {
+	if err := json.Unmarshal(resp.Body, &doc, serverJSON); err != nil {
 		return unreadable
 	}
 	replaces, err := replacesV1(doc.API, doc.Doors)

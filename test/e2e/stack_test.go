@@ -8,7 +8,7 @@ package e2e
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -482,7 +482,7 @@ func (s *stack) events(t *testing.T) []sink.Event {
 }
 
 func marshal(v any) string {
-	out, err := json.Marshal(v)
+	out, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		panic(err)
 	}

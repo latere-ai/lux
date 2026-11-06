@@ -4,7 +4,7 @@
 package memory
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"time"

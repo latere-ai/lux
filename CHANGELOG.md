@@ -6,6 +6,28 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- **Lux reads and writes JSON with `encoding/json/v2`.** What it sends to
+  model providers and identity providers is byte for byte what it sent
+  before: members in the same order, `null` for a list that was never set, and U+2028
+  and U+2029 escaped. The `manifest/v1` types encode as they did under
+  either JSON package, so a program that writes them gets the omission rules
+  their documentation gives. Manifests, provider answers, discovery
+  documents and the operator's retention rules are read as leniently as
+  before: a repeated member (the last wins), invalid UTF-8 and any letter
+  case in a member name are accepted.
+- **The API's own answers follow v2's defaults.** An empty list is `[]`
+  rather than `null`, `<`, `>` and `&` are written as they are, members of
+  a map come in no fixed order, and error details carry v2's wording.
+  `GET /v1/openapi.json` differs from the committed document only in those
+  three characters. `POST /v1/usage/redact` refuses text after the JSON
+  object, and a request member must be spelled as documented.
+- **A list cursor for a filter whose labels hold `<`, `>` or `&` is
+  refused once.** The cursor's digest covers the filter's JSON, which no
+  longer escapes them; ask for the first page again.
+- Requires `latere.ai/x/pkg` v0.113.0 and `latere.ai/x/sdk-go` v0.33.0.
+
 ## v0.21.1 - 2026-11-05
 
 ### Fixed

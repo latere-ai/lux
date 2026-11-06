@@ -6,7 +6,8 @@ package tunnel
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -306,12 +307,20 @@ func (a *agent) newRequest(ctx context.Context, target, token string, body io.Re
 	return req, nil
 }
 
+// refusalJSON reads a refusal that may have passed through a proxy: a
+// repeated member, invalid UTF-8 and any letter case are read.
+var refusalJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // refusal reads a refused connect into a RefusedError.
 func refusal(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	e := &RefusedError{Status: resp.StatusCode}
 	var env httpjson.ErrorEnvelope
-	if err := json.Unmarshal(body, &env); err == nil && env.Error.Code != "" {
+	if err := json.Unmarshal(body, &env, refusalJSON); err == nil && env.Error.Code != "" {
 		e.Code, e.Message = env.Error.Code, env.Error.Message
 		e.Detail, _ = env.Error.Details["detail"].(string)
 		return e

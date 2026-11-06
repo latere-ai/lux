@@ -7,7 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"maps"
 	"net/http"
@@ -122,7 +122,7 @@ func primary(d v1.Dialect, model, text string, stream bool) (path, body string) 
 }
 
 func marshal(v any) string {
-	out, err := json.Marshal(v)
+	out, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		panic(err)
 	}

@@ -5,7 +5,9 @@ package luxcli
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -183,9 +185,9 @@ func TestAgentWithOnlyTheSkill(t *testing.T) {
 		t.Fatalf("apply: exit %d\nstdout %s\nstderr %s", r.code, r.stdout, r.stderr)
 	}
 	var key string
-	dec := json.NewDecoder(strings.NewReader(r.stdout))
+	dec := jsontext.NewDecoder(strings.NewReader(r.stdout))
 	kinds := []string{}
-	for dec.More() {
+	for {
 		var obj struct {
 			Kind   string `json:"kind"`
 			Status struct {
@@ -193,7 +195,9 @@ func TestAgentWithOnlyTheSkill(t *testing.T) {
 				State string `json:"state"`
 			} `json:"status"`
 		}
-		if err := dec.Decode(&obj); err != nil {
+		if err := json.UnmarshalDecode(dec, &obj); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
 			t.Fatalf("stdout is not a stream of objects: %v\n%s", err, r.stdout)
 		}
 		kinds = append(kinds, obj.Kind)

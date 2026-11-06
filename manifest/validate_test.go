@@ -4,7 +4,7 @@
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/url"
 	"strings"
 	"testing"
@@ -203,7 +203,7 @@ func selectors(n int) string {
 }
 
 func itoa(i int) string {
-	b, _ := json.Marshal(i)
+	b, _ := json.Marshal(i, json.Deterministic(true))
 	return string(b)
 }
 
@@ -365,7 +365,7 @@ func TestValueFromIsFileModeOnly(t *testing.T) {
 		t.Errorf("valueFrom = %+v", k.Spec.ValueFrom)
 	}
 	// The encoded object carries the variable's name and no value.
-	j, _ := json.Marshal(p)
+	j, _ := json.Marshal(p, json.Deterministic(true))
 	if !strings.Contains(string(j), `"valueFrom":{"env":"LUX_PROVIDER_P_CREDENTIAL"}`) {
 		t.Errorf("encoding %s", j)
 	}
@@ -405,7 +405,7 @@ func TestSuppliedValueSchema(t *testing.T) {
 			if c.code == "" {
 				r := mustResolve(t, c.body, o2)
 				k := r.Object.(*v1.Key)
-				j, _ := json.Marshal(k)
+				j, _ := json.Marshal(k, json.Deterministic(true))
 				y, _ := yaml.Marshal(k)
 				if strings.Contains(string(j), "vvvv") || strings.Contains(string(y), "vvvv") {
 					t.Errorf("an encoding carries the value:\n%s\n%s", j, y)
@@ -463,7 +463,7 @@ func TestHashSuppliedValueSchema(t *testing.T) {
 				return
 			}
 			k := mustResolve(t, c.body, o2).Object.(*v1.Key)
-			j, err := json.Marshal(k)
+			j, err := json.Marshal(k, json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -4,7 +4,7 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"maps"
 )
 
@@ -54,7 +54,7 @@ func openAPIDocument(base string) []byte {
 			"Error":    errorSchema(),
 		}},
 	}
-	out, err := json.Marshal(doc)
+	out, err := json.Marshal(doc, json.Deterministic(true))
 	if err != nil {
 		panic("plane: the OpenAPI document does not marshal: " + err.Error())
 	}

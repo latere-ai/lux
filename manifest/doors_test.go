@@ -5,7 +5,7 @@ package manifest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"slices"
 	"strings"
@@ -63,7 +63,7 @@ func TestKeyDoorsRules(t *testing.T) {
 	if plain.Spec.Doors != nil {
 		t.Errorf("absent resolves to %v", plain.Spec.Doors)
 	}
-	if raw, err := json.Marshal(plain); err != nil || strings.Contains(string(raw), "doors") {
+	if raw, err := json.Marshal(plain, json.Deterministic(true)); err != nil || strings.Contains(string(raw), "doors") {
 		t.Errorf("a Key without doors renders %s (%v)", raw, err)
 	}
 	for _, d := range []v1.Dialect{v1.DialectOpenAI, v1.DialectAnthropic, v1.DialectGemini, v1.DialectLux} {
@@ -78,7 +78,7 @@ func TestKeyDoorsRules(t *testing.T) {
 	if !slices.Equal(k.Spec.Doors, []v1.Dialect{v1.DialectLux, v1.DialectAnthropic}) {
 		t.Fatalf("doors resolve to %v", k.Spec.Doors)
 	}
-	raw, err := json.Marshal(k)
+	raw, err := json.Marshal(k, json.Deterministic(true))
 	if err != nil || !strings.Contains(string(raw), `"doors":["lux","anthropic"]`) {
 		t.Fatalf("a Key with doors renders %s (%v)", raw, err)
 	}
@@ -90,7 +90,7 @@ func TestKeyDoorsRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if raw2, err := json.Marshal(r2.Object); err != nil || string(raw2) != string(raw) {
+	if raw2, err := json.Marshal(r2.Object, json.Deterministic(true)); err != nil || string(raw2) != string(raw) {
 		t.Errorf("resolve is not a fixed point:\n%s\n%s", raw, raw2)
 	}
 	for d, want := range map[v1.Dialect]bool{v1.DialectLux: true, v1.DialectAnthropic: true, v1.DialectOpenAI: false, v1.DialectGemini: false} {

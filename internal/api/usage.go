@@ -4,9 +4,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"mime"
 	"net/http"
@@ -115,9 +114,7 @@ func (c *call) redactUsage(ctx context.Context) *Error {
 	var in struct {
 		Owner string `json:"owner"`
 	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
+	if err := json.Unmarshal(body, &in, json.RejectUnknownMembers(true)); err != nil {
 		return refuse(CodeInvalidRequest, "the body is {\"owner\": \"<issuer>|<subject>\"}: "+err.Error())
 	}
 	if issuer, subject, ok := authz.SplitSubject(in.Owner); !ok || issuer == "" || subject == "" {

@@ -13,7 +13,7 @@ package issuer
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -62,7 +62,7 @@ func Subject(url, sub string) string { return authz.Subject(url, sub) }
 // call this package makes, so a test that starts lux-stubs has no
 // second reading of the route.
 func Mint(ctx context.Context, client *http.Client, url string, claims issuertest.Claims) (string, error) {
-	body, err := json.Marshal(claims)
+	body, err := json.Marshal(claims, json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}

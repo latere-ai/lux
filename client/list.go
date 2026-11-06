@@ -6,7 +6,9 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
 	"maps"
 	"net/http"
 	"net/url"
@@ -22,7 +24,7 @@ func (c *Client) List(ctx context.Context, path string, query url.Values, limit 
 	maps.Copy(q, query)
 	var (
 		first   *Response
-		items   []json.RawMessage
+		items   []jsontext.Value
 		members []member
 		pages   int
 	)
@@ -64,13 +66,13 @@ func (c *Client) List(ctx context.Context, path string, query url.Values, limit 
 // with its value's bytes untouched.
 type member struct {
 	key string
-	raw json.RawMessage
+	raw jsontext.Value
 }
 
 // page is one list response taken apart.
 type page struct {
 	members []member
-	items   []json.RawMessage
+	items   []jsontext.Value
 	next    string
 }
 
@@ -78,28 +80,29 @@ type page struct {
 // member, so the order and the bytes of what the server sent survive.
 func parsePage(body []byte) (page, error) {
 	var p page
-	dec := json.NewDecoder(bytes.NewReader(body))
-	tok, err := dec.Token()
+	dec := jsontext.NewDecoder(bytes.NewReader(body), serverJSON)
+	tok, err := dec.ReadToken()
 	if err != nil {
 		return p, err
 	}
-	if tok != json.Delim('{') {
-		return p, &json.SyntaxError{Offset: 0}
+	if tok.Kind() != '{' {
+		return p, errNotEnvelope
 	}
 	seen := false
-	for dec.More() {
-		kt, err := dec.Token()
+	for dec.PeekKind() != '}' {
+		kt, err := dec.ReadToken()
 		if err != nil {
 			return p, err
 		}
-		key, _ := kt.(string)
-		var raw json.RawMessage
-		if err := dec.Decode(&raw); err != nil {
+		key := kt.String()
+		raw, err := dec.ReadValue()
+		if err != nil {
 			return p, err
 		}
+		raw = raw.Clone()
 		switch key {
 		case "items":
-			if err := json.Unmarshal(raw, &p.items); err != nil {
+			if err := json.Unmarshal(raw, &p.items, serverJSON); err != nil {
 				return p, err
 			}
 			seen = true
@@ -112,15 +115,19 @@ func parsePage(body []byte) (page, error) {
 		}
 	}
 	if !seen {
-		return p, &json.SyntaxError{Offset: 0}
+		return p, errNotEnvelope
 	}
 	return p, nil
 }
 
+// errNotEnvelope is what parsePage reports for a body that is not a list
+// envelope: not an object, or without items.
+var errNotEnvelope = &jsontext.SyntacticError{Err: errors.New("not a list envelope")}
+
 // assemble renders one envelope: items first, then the other members in
 // their order, next_cursor left out, and the newline every body of the
 // API ends in.
-func assemble(items []json.RawMessage, members []member) ([]byte, error) {
+func assemble(items []jsontext.Value, members []member) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString(`{"items":[`)
 	for i, it := range items {

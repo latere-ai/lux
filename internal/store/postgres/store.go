@@ -5,7 +5,7 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/url"
@@ -386,7 +386,7 @@ func labelsText(labels map[string]string) (string, error) {
 	if labels == nil {
 		return "{}", nil
 	}
-	b, err := json.Marshal(labels)
+	b, err := json.Marshal(labels, json.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("postgres: encoding the labels: %w", err)
 	}

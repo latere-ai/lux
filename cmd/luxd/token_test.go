@@ -10,7 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"maps"
 	"net/http"
@@ -94,7 +94,9 @@ func TestLocalIssuerAloneStartsTheServer(t *testing.T) {
 		t.Fatalf("GET /v1/self: %d %s", resp.StatusCode, body)
 	}
 	var self struct {
-		Subject, Issuer, Policy string
+		Subject string `json:"subject"`
+		Issuer  string `json:"issuer"`
+		Policy  string `json:"policy"`
 	}
 	if err := json.Unmarshal([]byte(body), &self); err != nil {
 		t.Fatal(err)
@@ -260,7 +262,7 @@ func TestTokenCommandIsReadOnly(t *testing.T) {
 					delete(status, "health")
 				}
 			}
-			normalized, err := json.Marshal(list.Items)
+			normalized, err := json.Marshal(list.Items, json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}

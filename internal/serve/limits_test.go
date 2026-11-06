@@ -4,7 +4,7 @@
 package serve
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"math/rand/v2"
 	"strings"

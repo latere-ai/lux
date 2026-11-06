@@ -4,7 +4,8 @@
 package authorizer
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func TestDecodeLimits(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := authz.Decision{Allow: true}
 			if tc.limits != "" {
-				d.Limits = json.RawMessage(tc.limits)
+				d.Limits = jsontext.Value(tc.limits)
 			}
 			got, err := DecodeLimits(d)
 			if tc.bad {
@@ -67,7 +68,7 @@ func TestDecodeLimits(t *testing.T) {
 func TestWireLimitsRoundTrip(t *testing.T) {
 	spend := v1.Money(50_000_000)
 	rpm := 1200
-	raw, err := json.Marshal(WireLimits{MaxKeySpend: &spend, MaxKeyTTL: "720h"})
+	raw, err := json.Marshal(WireLimits{MaxKeySpend: &spend, MaxKeyTTL: "720h"}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func TestWireLimitsRoundTrip(t *testing.T) {
 	if want := (Limits{Key: manifest.Limits{MaxSpend: spend, MaxTTL: 720 * time.Hour}}); got != want {
 		t.Errorf("they decode to %+v, want %+v", got, want)
 	}
-	zero, err := json.Marshal(WireLimits{RequestsPerMinute: &rpm, MaxKeys: new(int)})
+	zero, err := json.Marshal(WireLimits{RequestsPerMinute: &rpm, MaxKeys: new(int)}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

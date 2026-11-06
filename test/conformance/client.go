@@ -6,7 +6,7 @@ package conformance
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"io/fs"
@@ -152,7 +152,7 @@ type response struct {
 func (r *response) json(t testing.TB) map[string]any {
 	t.Helper()
 	var m map[string]any
-	if err := json.Unmarshal(r.Body, &m); err != nil {
+	if err := json.Unmarshal(r.Body, &m, foreignJSON); err != nil {
 		t.Fatalf("%d: the body is not a JSON object: %v\n%s", r.Status, err, excerpt(r.Body))
 	}
 	return m
@@ -196,7 +196,7 @@ func encode(t testing.TB, body any) []byte {
 	case string:
 		return []byte(b)
 	}
-	data, err := json.Marshal(body)
+	data, err := json.Marshal(body, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("encoding the body: %v", err)
 	}
@@ -324,7 +324,7 @@ func (c *client) hold(t testing.TB, method, rawURL string, resp *response) {
 				Message string `json:"message"`
 			} `json:"error"`
 		}
-		if json.Unmarshal(resp.Body, &env) == nil && env.Error.Code != "" {
+		if json.Unmarshal(resp.Body, &env, foreignJSON) == nil && env.Error.Code != "" {
 			c.mu.Lock()
 			if prev, ok := c.sentences[env.Error.Code]; ok && prev != env.Error.Message {
 				t.Errorf("%s answers %q and answered %q before; one code has one sentence", env.Error.Code, env.Error.Message, prev)
@@ -698,7 +698,7 @@ func obj(m any, path string) map[string]any {
 // as bytes.
 func canonical(t testing.TB, v any) string {
 	t.Helper()
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("encoding: %v", err)
 	}

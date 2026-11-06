@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
@@ -74,7 +74,7 @@ func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, n := range names {
 			data = append(data, map[string]any{"id": n})
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
+		_ = json.MarshalWrite(w, map[string]any{"object": "list", "data": data})
 	default:
 		_, _ = io.WriteString(w, `{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"gpt-4.1","choices":[{"index":0,"message":{"role":"assistant","content":"`+canaryCompletion+`"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}`)
 	}

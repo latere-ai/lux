@@ -5,7 +5,7 @@ package main
 
 import (
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"maps"
 	"net/http"
@@ -184,7 +184,9 @@ func runTelemetry(t *testing.T) (*telemetryRun, string) {
 	}
 	var applied struct {
 		Status struct {
-			ID, Prefix, Value string
+			ID     string `json:"id"`
+			Prefix string `json:"prefix"`
+			Value  string `json:"value"`
 		} `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(body), &applied); err != nil || applied.Status.Value == "" {

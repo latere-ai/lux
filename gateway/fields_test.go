@@ -6,7 +6,8 @@ package gateway
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,7 +63,7 @@ func TestMergeRequestFields(t *testing.T) {
 			if string(got) != c.want {
 				t.Errorf("got  %s\nwant %s", got, c.want)
 			}
-			if !json.Valid(got) {
+			if !jsontext.Value(got).IsValid() {
 				t.Errorf("not JSON: %s", got)
 			}
 			if fmt.Sprint(c.fields) != before {
@@ -279,5 +280,36 @@ func TestRequestFieldsOnOpaqueRoutes(t *testing.T) {
 	}
 	if w.recorder.last(t).Provider != "oai" {
 		t.Errorf("record %+v", w.recorder.last(t))
+	}
+}
+
+// TestMergeRequestFieldsBytes: what the merge writes for a model provider
+// keeps a nil list or map as null, orders every object's members by name,
+// and reads a body with invalid UTF-8 in a value without failing and
+// without changing the value's bytes.
+func TestMergeRequestFieldsBytes(t *testing.T) {
+	var none []string
+	var nothing map[string]string
+	got, err := mergeRequestFields([]byte("{\"m\":\"a\xffb\",\"Z\":1}"), map[string]any{
+		"tools": none, "meta": nothing, "z": map[string]any{"b": 2, "a": none},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "{\"m\":\"a\xffb\",\"meta\":null,\"tools\":null,\"z\":{\"a\":null,\"b\":2}}"; string(got) != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// TestMergeRequestFieldsEscapesLineSeparators: U+2028 and U+2029 in a
+// merged value are written as escapes, so the bytes sent to a provider do
+// not depend on the encoder's version.
+func TestMergeRequestFieldsEscapesLineSeparators(t *testing.T) {
+	got, err := mergeRequestFields([]byte(`{}`), map[string]any{"s": "a\u2028b\u2029"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"s":"a\u2028b\u2029"}`; string(got) != want {
+		t.Errorf("got %s, want %s", got, want)
 	}
 }

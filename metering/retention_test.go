@@ -4,7 +4,7 @@
 package metering
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +27,7 @@ func TestParseRetentionRules(t *testing.T) {
 	}
 	for raw, want := range map[string]string{
 		`{"hourly": "24h"}`:                        "not a JSON list",
-		`[{"hourly": "24h", "keep": true}]`:        "unknown field",
+		`[{"hourly": "24h", "keep": true}]`:        "unknown object member name",
 		`[{"hourly": "12h"}]`:                      "rule 0: hourly is at least 24h",
 		`[{"hourly": "24h"}, {"monthly": "240h"}]`: "rule 1: monthly is at least 720h",
 		`[{"drop": ["model"]}]`:                    `drop "model" is not owner, key, or labels`,
@@ -39,7 +39,7 @@ func TestParseRetentionRules(t *testing.T) {
 			t.Errorf("ParseRetentionRules(%s) = %v, want %q", raw, err, want)
 		}
 	}
-	out, err := json.Marshal(rules[0])
+	out, err := json.Marshal(rules[0], json.Deterministic(true))
 	if err != nil || !strings.Contains(string(out), `"hourly":"2160h0m0s"`) || !strings.Contains(string(out), `"monthly":"forever"`) {
 		t.Fatalf("a rule encodes as %s, %v", out, err)
 	}
@@ -105,5 +105,32 @@ func TestRetentionRules(t *testing.T) {
 	x, y := AggregateKey{Bucket: 1, KeyID: "a"}, AggregateKey{Bucket: 1, KeyID: "b"}
 	if x.Compare(y) != -1 || y.Compare(x) != 1 || x.Compare(x) != 0 || (AggregateKey{Bucket: 2}).Compare(y) != 1 {
 		t.Fatal("Compare does not order by bucket then dimensions")
+	}
+}
+
+// TestParseRetentionRulesReadsAHandWrittenValue: the setting is written by
+// an operator, so a member in another letter case, a repeated member (the
+// last wins), invalid UTF-8 in a string and text after the list are read,
+// and a rule encodes back under its own names.
+func TestParseRetentionRulesReadsAHandWrittenValue(t *testing.T) {
+	rules, err := ParseRetentionRules("[{\"Hourly\":\"24h\",\"hourly\":\"48h\",\"MONTHLY\":\"720h\",\"match\":{\"team\":\"a\xff\"}}]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 || time.Duration(rules[0].Hourly) != 48*time.Hour || time.Duration(rules[0].Monthly) != 720*time.Hour {
+		t.Fatalf("read %+v", rules)
+	}
+	if after, err := ParseRetentionRules(`[{"hourly":"24h"}] # one rule`); err != nil || len(after) != 1 {
+		t.Errorf("text after the list: %v %v, want it ignored", after, err)
+	}
+	if got := rules[0].Match["team"]; got != "a�" {
+		t.Errorf("the label reads %q, want the replacement character", got)
+	}
+	out, err := json.Marshal(rules[0], json.Deterministic(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"match":{"team":"a` + "�" + `"},"hourly":"48h0m0s","monthly":"720h0m0s"}`; string(out) != want {
+		t.Errorf("encodes as %s, want %s", out, want)
 	}
 }

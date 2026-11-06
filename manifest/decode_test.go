@@ -4,7 +4,8 @@
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io/fs"
 	"reflect"
@@ -205,8 +206,8 @@ func TestHintFillsTheEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, _ := json.Marshal(bare)
-	b, _ := json.Marshal(full)
+	a, _ := json.Marshal(bare, json.Deterministic(true))
+	b, _ := json.Marshal(full, json.Deterministic(true))
 	if string(a) != string(b) {
 		t.Errorf("hinted body encodes\n%s\nthe full envelope\n%s", a, b)
 	}
@@ -430,7 +431,7 @@ func TestCredentialValueNeverEncodes(t *testing.T) {
 	if !set || v != "sk-live-..." {
 		t.Fatalf("Value() = %q, %v", v, set)
 	}
-	j, err := json.Marshal(p)
+	j, err := json.Marshal(p, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +455,7 @@ func TestCredentialValueNeverEncodes(t *testing.T) {
 	if v, set := k.(*v1.Key).Spec.Value(); !set || v != "kv-canary-0002-kv-canary-0002-kv-canary" {
 		t.Errorf("Value() = %q, %v", v, set)
 	}
-	j, _ = json.Marshal(k)
+	j, _ = json.Marshal(k, json.Deterministic(true))
 	y, _ = yaml.Marshal(k)
 	if strings.Contains(string(j), "canary") || strings.Contains(string(y), "canary") {
 		t.Errorf("an encoding of the Key carries its value:\n%s\n%s", j, y)
@@ -474,5 +475,31 @@ func TestDecodeDoesNotPanicOnKindHelpers(t *testing.T) {
 			}()
 			f()
 		}()
+	}
+}
+
+// TestJSONNumbersKeepTheirDigits: a number in a JSON body reaches the kind
+// as written, so an integer above 2^53 is exact and 1.0 is refused where
+// an integer is wanted, and a duplicate member is refused rather than
+// silently taken last.
+func TestJSONNumbersKeepTheirDigits(t *testing.T) {
+	tree, err := parseJSON([]byte(`{"big":12345678901234567890,"exp":1E5,"neg":-0.0}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"big": "12345678901234567890", "exp": "1E5", "neg": "-0.0"} {
+		if got, ok := tree[name].(jsontext.Value); !ok || string(got) != want {
+			t.Errorf("%s = %#v, want the digits %s", name, tree[name], want)
+		}
+	}
+	encoded, err := json.Marshal(tree, json.Deterministic(true))
+	if err != nil || string(encoded) != `{"big":12345678901234567890,"exp":1E5,"neg":-0.0}` {
+		t.Errorf("the tree encodes as %s, %v", encoded, err)
+	}
+	if _, err := parseJSON([]byte(`{"a":1,"a":2}`)); err == nil || !strings.Contains(err.Error(), "duplicate key") {
+		t.Errorf("a duplicate member gave %v", err)
+	}
+	if _, err := parseJSON([]byte("{\"a\":\"x\xffy\"}")); err != nil {
+		t.Errorf("invalid UTF-8 in a string gave %v", err)
 	}
 }

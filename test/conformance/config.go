@@ -6,7 +6,7 @@ package conformance
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -143,7 +143,7 @@ func tokenSource(token, subject string, claims tokenClaims, issuerURL string) fu
 // with the subject and the audience the given token carries, so the
 // server accepts both alike.
 func mint(client *http.Client, issuerURL, sub string, aud []string) (string, error) {
-	body, err := json.Marshal(map[string]any{"sub": sub, "aud": aud})
+	body, err := json.Marshal(map[string]any{"sub": sub, "aud": aud}, json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}

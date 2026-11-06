@@ -39,12 +39,12 @@ type Limits struct {
 // string, whose absent case is the empty string. A money value is a
 // string, as a manifest writes one, and a duration is Go syntax.
 type WireLimits struct {
-	RequestsPerMinute       *int        `json:"requests_per_minute,omitempty"`
-	MaxKeyRequestsPerMinute *int        `json:"max_key_requests_per_minute,omitempty"`
-	MaxKeyTokensPerMinute   *int        `json:"max_key_tokens_per_minute,omitempty"`
-	MaxKeySpend             *v1.Money   `json:"max_key_spend,omitempty"`
+	RequestsPerMinute       *int        `json:"requests_per_minute,omitzero"`
+	MaxKeyRequestsPerMinute *int        `json:"max_key_requests_per_minute,omitzero"`
+	MaxKeyTokensPerMinute   *int        `json:"max_key_tokens_per_minute,omitzero"`
+	MaxKeySpend             *v1.Money   `json:"max_key_spend,omitzero"`
 	MaxKeyTTL               v1.Duration `json:"max_key_ttl,omitempty"`
-	MaxKeys                 *int        `json:"max_keys,omitempty"`
+	MaxKeys                 *int        `json:"max_keys,omitzero"`
 }
 
 // DecodeLimits reads a decision's limits object. A decision with no

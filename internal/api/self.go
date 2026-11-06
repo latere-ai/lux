@@ -26,19 +26,19 @@ type Self struct {
 	Sub     string         `json:"sub,omitempty"`
 	Claims  map[string]any `json:"claims,omitempty"`
 	Policy  auth.Policy    `json:"policy"`
-	Limits  *SelfLimits    `json:"limits,omitempty"`
-	Filter  *authz.Filter  `json:"filter,omitempty"`
+	Limits  *SelfLimits    `json:"limits,omitzero"`
+	Filter  *authz.Filter  `json:"filter,omitzero"`
 }
 
 // SelfLimits are the limits of the last allow in the wire names of spec
 // 006's limits object, a member absent when the allow did not name it.
 type SelfLimits struct {
-	RequestsPerMinute       int    `json:"requests_per_minute,omitempty"`
-	MaxKeyRequestsPerMinute int    `json:"max_key_requests_per_minute,omitempty"`
-	MaxKeyTokensPerMinute   int    `json:"max_key_tokens_per_minute,omitempty"`
+	RequestsPerMinute       int    `json:"requests_per_minute,omitzero"`
+	MaxKeyRequestsPerMinute int    `json:"max_key_requests_per_minute,omitzero"`
+	MaxKeyTokensPerMinute   int    `json:"max_key_tokens_per_minute,omitzero"`
 	MaxKeySpend             string `json:"max_key_spend,omitempty"`
 	MaxKeyTTL               string `json:"max_key_ttl,omitempty"`
-	MaxKeys                 int    `json:"max_keys,omitempty"`
+	MaxKeys                 int    `json:"max_keys,omitzero"`
 }
 
 // self asks no action: asking permission to see the identity the caller

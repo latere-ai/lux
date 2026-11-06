@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strings"
@@ -62,7 +62,7 @@ func (f Filter) canonical() []byte {
 		Provider string            `json:"provider,omitempty"`
 		IDs      []string          `json:"ids,omitempty"`
 		Budget   string            `json:"budget,omitempty"`
-	}{f.Owner, f.Labels, f.Source, f.Provider, ids, f.Budget})
+	}{f.Owner, f.Labels, f.Source, f.Provider, ids, f.Budget}, json.Deterministic(true))
 	if err != nil {
 		panic("store: a Filter of strings does not encode: " + err.Error())
 	}

@@ -5,7 +5,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"maps"
 	"net/http"
@@ -197,7 +197,7 @@ func TestCheckIsReadOnly(t *testing.T) {
 					delete(status, "health")
 				}
 			}
-			normalized, err := json.Marshal(list.Items)
+			normalized, err := json.Marshal(list.Items, json.Deterministic(true))
 			if err != nil {
 				t.Fatal(err)
 			}

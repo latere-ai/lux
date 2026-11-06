@@ -4,9 +4,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"maps"
@@ -1120,9 +1119,7 @@ func (c *call) redactUsage(ctx context.Context) *apiError {
 	var in struct {
 		Owner string `json:"owner"`
 	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
+	if err := json.Unmarshal(body, &in, json.RejectUnknownMembers(true)); err != nil {
 		return refuse("invalid_request", err.Error())
 	}
 	if issuer, subject, ok := authz.SplitSubject(in.Owner); !ok || issuer == "" || subject == "" {

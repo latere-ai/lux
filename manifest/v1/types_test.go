@@ -4,7 +4,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 )
@@ -80,7 +80,7 @@ func TestKinds(t *testing.T) {
 		if o.Kind() != kind || o.Owner() != "o" || o.ID() == "" || o.Name() == "" {
 			t.Errorf("%T: Kind %q ID %q Owner %q Name %q", o, o.Kind(), o.ID(), o.Owner(), o.Name())
 		}
-		out, err := json.Marshal(o)
+		out, err := json.Marshal(o, json.Deterministic(true))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestWriteOnlyValuesNeverEncode(t *testing.T) {
 	h := &Key{}
 	h.Spec.SetValueSHA256("canary0003" + strings.Repeat("0", 54))
 	for _, o := range []any{p, *p, k, *k, h, *h} {
-		out, err := json.Marshal(o)
+		out, err := json.Marshal(o, json.Deterministic(true))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -4,7 +4,8 @@
 package events
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/json/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -110,5 +111,24 @@ func TestAppendRefRequiresStableIdentity(t *testing.T) {
 	}
 	if err := AppendRef(t.Context(), st.Journal(), Event{}, ObjectRef{Kind: "KeyFence", ID: "key-fence/one"}); err == nil {
 		t.Fatal("missing type accepted")
+	}
+}
+
+// TestEncodeIsByteStable: the journalled payload is the same bytes for
+// the same record, whatever order the data map iterates in.
+func TestEncodeIsByteStable(t *testing.T) {
+	rec := Record{ID: "evt_1", Type: ProviderCreated, Data: map[string]any{"c": 3, "a": 1, "b": 2}, Object: ObjectRef{Kind: "Provider", ID: "prv_1", Labels: map[string]string{"z": "1", "y": "2"}}}
+	first, err := encode(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(first, []byte(`"data":{"a":1,"b":2,"c":3}`)) || !bytes.Contains(first, []byte(`"labels":{"y":"2","z":"1"}`)) {
+		t.Fatalf("members are not sorted: %s", first)
+	}
+	for range 20 {
+		again, err := encode(rec)
+		if err != nil || !bytes.Equal(first, again) {
+			t.Fatalf("encode differs: %s vs %s (%v)", first, again, err)
+		}
 	}
 }

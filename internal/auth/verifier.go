@@ -7,7 +7,8 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -232,6 +233,14 @@ func fetchIssuer(ctx context.Context, client *http.Client, iss string) (discover
 	return doc, nil
 }
 
+// foreignJSON reads JSON this process does not produce. Repeated names,
+// invalid UTF-8 and any letter case in a member name are accepted.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // fetchJSON reads one document into v: a 200 whose body is JSON, under
 // the size bound.
 func fetchJSON(ctx context.Context, client *http.Client, url string, v any) error {
@@ -252,7 +261,7 @@ func fetchJSON(ctx context.Context, client *http.Client, url string, v any) erro
 	if err != nil {
 		return fmt.Errorf("GET %s: reading the body: %w", url, err)
 	}
-	if err := json.Unmarshal(body, v); err != nil {
+	if err := json.Unmarshal(body, v, foreignJSON); err != nil {
 		return fmt.Errorf("GET %s: the body is not JSON: %w", url, err)
 	}
 	return nil

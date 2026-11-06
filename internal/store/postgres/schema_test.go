@@ -5,7 +5,8 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io/fs"
 	"net"
@@ -375,7 +376,7 @@ func TestObjectEncoding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.kind, err)
 		}
-		var got map[string]json.RawMessage
+		var got map[string]jsontext.Value
 		if err := json.Unmarshal(doc, &got); err != nil {
 			t.Fatalf("%s: %s: %v", tc.kind, doc, err)
 		}

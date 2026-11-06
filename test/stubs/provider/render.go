@@ -4,7 +4,7 @@
 package provider
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strconv"
@@ -265,7 +265,7 @@ func (s *streamer) piece(i int) string {
 // emit writes one frame: an SSE frame with the event name when the
 // dialect names its events, or one JSON array element.
 func (s *streamer) emit(event string, data any) {
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, json.Deterministic(true))
 	if err != nil {
 		return
 	}

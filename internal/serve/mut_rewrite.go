@@ -7,7 +7,7 @@ package serve
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strconv"
 )
@@ -23,7 +23,7 @@ func rewriteResponses(h http.Handler, edit func(r *http.Request, status int, bod
 		body := rec.body.Bytes()
 		var tree map[string]any
 		if json.Unmarshal(body, &tree) == nil && edit(r, rec.status, tree) {
-			body, _ = json.Marshal(tree)
+			body, _ = json.Marshal(tree, json.Deterministic(true))
 			body = append(body, '\n')
 		}
 		for k, v := range rec.header {

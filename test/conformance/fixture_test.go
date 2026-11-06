@@ -4,7 +4,7 @@
 package conformance
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"testing/fstest"
@@ -36,7 +36,7 @@ func TestFixtureGroupReadsAPreviousRelease(t *testing.T) {
 		Door: "openai", Route: "/openai/v1/chat/completions", Status: metering.StatusOK, Loss: []string{}, Attempts: []metering.Attempt{},
 		Tokens: metering.Tokens{Input: 10, Output: 2}, Cost: metering.Charge{Amount: 12, Currency: "USD", Priced: true},
 		Labels: map[string]string{}, RequestLabels: map[string]string{}}
-	line, err := json.Marshal(rec)
+	line, err := json.Marshal(rec, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,10 +4,11 @@
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,11 +157,11 @@ func (w *schemaWalk) value(path string, v any, t reflect.Type) error {
 		}
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, ok := v.(json.Number)
+		n, ok := v.(jsontext.Value)
 		if !ok {
 			return refuse(CodeInvalidField, "expected an integer", path)
 		}
-		i, err := n.Int64()
+		i, err := strconv.ParseInt(string(n), 10, 64)
 		if err != nil {
 			return refuse(CodeInvalidField, "expected an integer, not "+string(n), path)
 		}

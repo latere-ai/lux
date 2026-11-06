@@ -4,7 +4,7 @@
 package conformance
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io/fs"
 	"net/http"
 	"net/url"

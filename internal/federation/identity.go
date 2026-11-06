@@ -8,7 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -150,7 +150,7 @@ func (k *Kubernetes) post(ctx context.Context, path string, body any, out any, o
 	if err != nil {
 		return fmt.Errorf("the pod's service account token: %w", err)
 	}
-	b, err := json.Marshal(body)
+	b, err := json.Marshal(body, providerJSON)
 	if err != nil {
 		return err
 	}
@@ -174,10 +174,10 @@ func (k *Kubernetes) post(ctx context.Context, path string, body any, out any, o
 		var status struct {
 			Message string `json:"message"`
 		}
-		_ = json.Unmarshal(answer, &status)
+		_ = json.Unmarshal(answer, &status, foreignJSON)
 		return fmt.Errorf("the API server answered %d: %s", resp.StatusCode, status.Message)
 	}
-	return json.Unmarshal(answer, out)
+	return json.Unmarshal(answer, out, foreignJSON)
 }
 
 // tokenEndpoint is the TokenRequest route of the pod's own service

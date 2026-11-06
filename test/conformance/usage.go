@@ -4,7 +4,7 @@
 package conformance
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/url"
 	"slices"
@@ -204,7 +204,7 @@ func sumRequests(body map[string]any) int {
 // integral reports whether the number at a path was written without a
 // fraction.
 func integral(m any, path string) bool {
-	data, err := json.Marshal(field(m, path))
+	data, err := json.Marshal(field(m, path), json.Deterministic(true))
 	return err == nil && !strings.ContainsAny(string(data), ".eE")
 }
 

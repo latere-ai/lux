@@ -5,7 +5,7 @@ package serve
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"strings"
 	"testing"
@@ -262,5 +262,14 @@ func TestModelStatusFollowsHealth(t *testing.T) {
 	got, _ := c.Model(t.Context(), "m")
 	if got.Status.Targets[0].Provider != "a" || got.Status.Targets[1].Provider != b.Status.ID || got.Status.Targets[0].Model != "gpt-5" {
 		t.Fatalf("targets %+v", got.Status.Targets)
+	}
+}
+
+// TestParseListIsLenient: a provider's page is read as it wrote it, with
+// any letter case in a member name and a repeated name.
+func TestParseListIsLenient(t *testing.T) {
+	got, next, err := parseList(v1.DialectAnthropic, []byte(`{"Data":[{"ID":"a","id":"b"}],"has_more":false}`))
+	if err != nil || next != "" || len(got) != 1 || got[0].name != "b" {
+		t.Fatalf("parseList = %v, %q, %v", got, next, err)
 	}
 }

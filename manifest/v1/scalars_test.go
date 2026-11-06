@@ -4,7 +4,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -82,7 +82,7 @@ func TestMoneyJSON(t *testing.T) {
 	if p.Amount != 1_250_000 {
 		t.Errorf("decoded %d, want 1250000", p.Amount)
 	}
-	out, err := json.Marshal(p)
+	out, err := json.Marshal(p, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

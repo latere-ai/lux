@@ -4,7 +4,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"slices"
 	"time"
 )
@@ -29,13 +29,14 @@ func (k *Key) Owner() string { return k.Status.Owner }
 // Name implements Object.
 func (k *Key) Name() string { return k.Metadata.Name }
 
-// MarshalJSON writes the envelope before the object.
+// MarshalJSON writes the envelope before the object, with members of a
+// map in key order whatever options the caller holds.
 func (k Key) MarshalJSON() ([]byte, error) {
 	type plain Key
 	return json.Marshal(struct {
 		envelope
 		plain
-	}{envelope{APIVersion, KindKey}, plain(k)})
+	}{envelope{APIVersion, KindKey}, plain(k)}, json.Deterministic(true))
 }
 
 // KeySpec is the desired state of a Key. The two forms of a value a
@@ -61,7 +62,7 @@ type KeySpec struct {
 	Models        []string   `json:"models,omitempty"`
 	value         writeOnly  `writeonly:"value"`
 	valueSHA256   writeOnly  `writeonly:"valueSHA256"`
-	ValueFrom     *ValueFrom `json:"valueFrom,omitempty"`
+	ValueFrom     *ValueFrom `json:"valueFrom,omitzero"`
 	Limits        KeyLimits  `json:"limits,omitzero"`
 	Budget        string     `json:"budget,omitempty"`
 	Budgets       []string   `json:"budgets,omitempty"`
@@ -69,7 +70,7 @@ type KeySpec struct {
 	ExpiresAt     time.Time  `json:"expiresAt,omitzero"`
 	AllowUnpriced bool       `json:"allowUnpriced"`
 	Passthrough   bool       `json:"passthrough"`
-	ZeroRetention bool       `json:"zeroRetention,omitempty"`
+	ZeroRetention bool       `json:"zeroRetention,omitzero"`
 	Doors         []Dialect  `json:"doors,omitempty"`
 	Disabled      bool       `json:"disabled"`
 }
@@ -107,14 +108,14 @@ func (s *KeySpec) ClearValueSHA256() { s.valueSHA256.clear() }
 // explicit 0, no limit, differs from an absent rate, which takes the
 // operator's default.
 type KeyLimits struct {
-	RequestsPerMinute *int   `json:"requestsPerMinute,omitempty"`
-	TokensPerMinute   *int   `json:"tokensPerMinute,omitempty"`
-	Spend             *Spend `json:"spend,omitempty"`
+	RequestsPerMinute *int   `json:"requestsPerMinute,omitzero"`
+	TokensPerMinute   *int   `json:"tokensPerMinute,omitzero"`
+	Spend             *Spend `json:"spend,omitzero"`
 }
 
 // Spend is a spend limit on the Key itself: an amount per window.
 type Spend struct {
-	Amount   *Money `json:"amount,omitempty"`
+	Amount   *Money `json:"amount,omitzero"`
 	Currency string `json:"currency,omitempty"`
 	Window   Window `json:"window,omitempty"`
 }
@@ -123,15 +124,15 @@ type Spend struct {
 // Selectors, ExpiresAt, and Warnings; the API fills the rest.
 type KeyStatus struct {
 	ID         string           `json:"id,omitempty"`
-	Version    int64            `json:"version,omitempty"`
+	Version    int64            `json:"version,omitzero"`
 	Owner      string           `json:"owner,omitempty"`
 	Prefix     string           `json:"prefix,omitempty"`
 	Value      string           `json:"value,omitempty"`
 	State      KeyState         `json:"state,omitempty"`
 	Selectors  []SelectorStatus `json:"selectors,omitempty"`
-	Budget     *BudgetRef       `json:"budget,omitempty"`
+	Budget     *BudgetRef       `json:"budget,omitzero"`
 	Budgets    []BudgetRef      `json:"budgets,omitempty"`
-	Usage      *KeyUsage        `json:"usage,omitempty"`
+	Usage      *KeyUsage        `json:"usage,omitzero"`
 	LastUsedAt time.Time        `json:"lastUsedAt,omitzero"`
 	ExpiresAt  time.Time        `json:"expiresAt,omitzero"`
 	CreatedAt  time.Time        `json:"createdAt,omitzero"`
@@ -174,7 +175,7 @@ func KeyBudgets(k *Key) []BudgetRef {
 
 // KeyUsage is the Key's spending, rendered at read time.
 type KeyUsage struct {
-	Window *UsageWindow `json:"window,omitempty"`
+	Window *UsageWindow `json:"window,omitzero"`
 	Total  UsageTotal   `json:"total"`
 }
 

@@ -4,7 +4,7 @@
 package federation
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -57,7 +57,7 @@ func TestKubernetesIdentity(t *testing.T) {
 	user, refuse := "system:serviceaccount:latere:luxd-core", false
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.UnmarshalRead(r.Body, &body)
 		mu.Lock()
 		defer mu.Unlock()
 		switch r.URL.Path {

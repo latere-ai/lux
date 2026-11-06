@@ -6,7 +6,8 @@ package reqlog
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -195,7 +196,7 @@ func (e *Exporter) Flush(ctx context.Context) error {
 	// does not happen; the batch is dropped rather than retried into the
 	// same error for ever.
 	var body bytes.Buffer
-	enc := json.NewEncoder(&body)
+	enc := jsontext.NewEncoder(&body, json.Deterministic(true), jsontext.AllowInvalidUTF8(true))
 	// One object per partition, in the order the partitions first
 	// appear; the batch leaves the ring once every one is written, so a
 	// failure writes the whole batch again at the next flush and the
@@ -203,7 +204,7 @@ func (e *Exporter) Flush(ctx context.Context) error {
 	for _, part := range partitions(batch, e.o.PartitionLabel) {
 		body.Reset()
 		for _, r := range part.records {
-			if err := enc.Encode(r); err != nil {
+			if err := json.MarshalEncode(enc, r); err != nil {
 				e.ring.ack(through)
 				e.countDrops(len(batch))
 				return fmt.Errorf("encoding the batch: %w", err)

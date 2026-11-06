@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strconv"
@@ -131,9 +131,9 @@ func recordDigest(q metering.RecordQuery) string {
 		Labels    map[string]string `json:"labels,omitempty"`
 		Status    metering.Status   `json:"status,omitempty"`
 		Error     string            `json:"error,omitempty"`
-		Stream    *bool             `json:"stream,omitempty"`
+		Stream    *bool             `json:"stream,omitzero"`
 		Request   map[string]string `json:"requestLabels,omitempty"`
-	}{q.From.UTC(), q.To.UTC(), sorted(q.Keys), sorted(q.Models), sorted(q.Providers), sorted(q.Owners), q.Labels, q.Status, q.Error, q.Stream, q.RequestLabels})
+	}{q.From.UTC(), q.To.UTC(), sorted(q.Keys), sorted(q.Models), sorted(q.Providers), sorted(q.Owners), q.Labels, q.Status, q.Error, q.Stream, q.RequestLabels}, json.Deterministic(true))
 	if err != nil {
 		panic("store: a RecordQuery of strings and times does not encode: " + err.Error())
 	}

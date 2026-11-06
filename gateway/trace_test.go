@@ -5,7 +5,7 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"maps"
 	"net/http"
 	"slices"

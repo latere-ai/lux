@@ -5,7 +5,8 @@ package manifest
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"mime"
 	"reflect"
 	"strconv"
@@ -65,13 +66,11 @@ func Decode(body []byte, contentType string, hint Hint) (v1.Object, error) {
 	if err := checkName(tree, hint); err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(tree)
+	data, err := json.Marshal(tree, jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		return nil, refuse(CodeMalformedBody, "the tree does not encode: "+err.Error())
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(obj); err != nil {
+	if err := json.Unmarshal(data, obj, json.RejectUnknownMembers(true)); err != nil {
 		return nil, refuse(CodeInvalidField, "the body does not fit the schema: "+err.Error())
 	}
 	setWriteOnly(obj, w.writeOnly)

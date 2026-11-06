@@ -5,7 +5,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -66,7 +67,7 @@ func newIdentity(ctx context.Context, client *http.Client, issuer, audience stri
 		Issuer  string `json:"issuer"`
 		JWKSURI string `json:"jwks_uri"`
 	}
-	if err := json.Unmarshal(body, &doc); err != nil || doc.JWKSURI == "" {
+	if err := json.Unmarshal(body, &doc, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true), json.MatchCaseInsensitiveNames(true)); err != nil || doc.JWKSURI == "" {
 		return nil, fmt.Errorf("the issuer %s serves no jwks_uri", issuer)
 	}
 	return &identity{

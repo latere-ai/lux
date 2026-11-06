@@ -4,7 +4,7 @@
 package gateway
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -894,8 +894,8 @@ func TestRecordFields(t *testing.T) {
 	}
 	rec.At, rec.EndedAt, rec.Latency, rec.TTFB, rec.Attempts[0].Duration = w.now, w.now, 0, 0, 0
 	want.At, want.EndedAt = w.now, w.now
-	got, _ := json.Marshal(rec)
-	exp, _ := json.Marshal(want)
+	got, _ := json.Marshal(rec, json.Deterministic(true))
+	exp, _ := json.Marshal(want, json.Deterministic(true))
 	if string(got) != string(exp) {
 		t.Errorf("record\n got %s\nwant %s", got, exp)
 	}

@@ -24,7 +24,8 @@ package wire
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +82,7 @@ type Frame struct {
 	TTL     string `json:"ttl,omitempty"`
 	// Carriers is how many carriers the ready frame asks the agent to
 	// park.
-	Carriers int `json:"carriers,omitempty"`
+	Carriers int `json:"carriers,omitzero"`
 	// Token is a fresh bearer on a heartbeat from the agent.
 	Token string `json:"token,omitempty"`
 	// Reason is the close frame's.
@@ -109,14 +110,22 @@ type Request struct {
 // Error and nothing else, which the gateway reports as the transport
 // failure it is.
 type Response struct {
-	Status  int                 `json:"status,omitempty"`
+	Status  int                 `json:"status,omitzero"`
 	Headers map[string][]string `json:"headers,omitempty"`
 	Error   string              `json:"error,omitempty"`
 }
 
+// lineJSON is the encoding of a header line. Header values are bytes
+// the peers do not control, so invalid UTF-8 is replaced rather than
+// refused, and a repeated name is read as the last one.
+var lineJSON = json.JoinOptions(
+	jsontext.AllowInvalidUTF8(true),
+	jsontext.AllowDuplicateNames(true),
+)
+
 // WriteLine writes v as one line of JSON and flushes when w flushes.
 func WriteLine(w io.Writer, v any) error {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, lineJSON)
 	if err != nil {
 		return fmt.Errorf("tunnel wire: encoding a %T: %w", v, err)
 	}
@@ -147,7 +156,7 @@ func ReadLine(r *bufio.Reader, v any) error {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
-		if err := json.Unmarshal(line, v); err != nil {
+		if err := json.Unmarshal(line, v, lineJSON); err != nil {
 			return fmt.Errorf("tunnel wire: the line is not a %T: %w", v, err)
 		}
 		return nil

@@ -4,7 +4,8 @@
 package luxcli
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -156,15 +157,17 @@ func TestCredentialFromEnv(t *testing.T) {
 			var body struct {
 				APIVersion string `json:"apiVersion"`
 				Kind       string `json:"kind"`
-				Metadata   struct{ Name string }
-				Spec       struct {
+				Metadata   struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+				Spec struct {
 					Dialect    string `json:"dialect"`
 					Credential struct {
 						Value  string `json:"value"`
 						Header string `json:"header"`
 					} `json:"credential"`
 				} `json:"spec"`
-				Status *json.RawMessage `json:"status"`
+				Status *jsontext.Value `json:"status"`
 			}
 			first := reqs[0]
 			if first.Path != "/v1/providers/openai" || first.ContentType != "application/json" {

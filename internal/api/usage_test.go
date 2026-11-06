@@ -6,7 +6,8 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -596,7 +597,7 @@ func newArchiveHarness(t *testing.T) *harness {
 			if id == "req_B" {
 				r.Status, r.Error = metering.StatusRefused, "model_not_allowed"
 			}
-			if err := json.NewEncoder(&buf).Encode(r); err != nil {
+			if err := json.MarshalEncode(jsontext.NewEncoder(&buf), r); err != nil {
 				t.Fatal(err)
 			}
 		}

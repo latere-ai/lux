@@ -5,7 +5,8 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -393,7 +394,7 @@ func (h *Handler) count(code Code) {
 // writeJSON answers with one JSON body, in the Go struct order the
 // OpenAPI document records; version above zero is the ETag.
 func (c *call) writeJSON(status int, body any, version int64) *Error {
-	data, err := json.Marshal(body)
+	data, err := json.Marshal(body, jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		return refuse(CodeInternal, "")
 	}

@@ -6,7 +6,8 @@ package provider
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"slices"
 	"strings"
@@ -76,7 +77,7 @@ type parsed struct {
 func parseRequest(d v1.Dialect, rt routeKind, r *http.Request, body []byte) parsed {
 	var p parsed
 	var doc map[string]any
-	_ = json.Unmarshal(body, &doc)
+	_ = json.Unmarshal(body, &doc, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	if rt == routeGemini {
 		p.model, p.verb, _ = strings.CutLast(r.PathValue("model"), ":")
 		p.stream = p.verb == "streamGenerateContent"

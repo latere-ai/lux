@@ -7,7 +7,7 @@ package e2e
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 	"time"
@@ -30,7 +30,7 @@ func TestE2EKeyFenceLifecycle(t *testing.T) {
 	if got := s.chat(t, value, "fence-model", "before", false); got.status != http.StatusOK {
 		t.Fatal(got.status, string(got.body))
 	}
-	assertion, err := json.Marshal(map[string]any{"owner": status["owner"], "labels": map[string]string{}})
+	assertion, err := json.Marshal(map[string]any{"owner": status["owner"], "labels": map[string]string{}}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestE2EKeyFenceLifecycle(t *testing.T) {
 	current := do(t, http.MethodGet, s.gw.public+"/v1/keys/fenced", bearer(s.token), "").json(t)
 	spec := current["spec"].(map[string]any)
 	spec["disabled"] = true
-	raw, err := json.Marshal(map[string]any{"metadata": current["metadata"], "spec": spec})
+	raw, err := json.Marshal(map[string]any{"metadata": current["metadata"], "spec": spec}, json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
