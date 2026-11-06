@@ -6,6 +6,18 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Added
+
+- **`docs/local.md` runs Lux on one machine from a clone.** `make run`, a
+  request through each of the four doors, a streamed one, the control
+  plane, the usage and request records, and the events, each command
+  with what it prints, and what `make run-file` does differently.
+- **`docs/authorizer.md` is the contract for an authorization endpoint.**
+  The question `luxd` asks, every action and the routes that ask it, the
+  answer and how long it is kept, what fails closed, the built-in owner
+  policy, and the reserved probe. `docs/plane.md` keeps the runnable
+  program.
+
 ### Changed
 
 - **Lux reads and writes JSON with `encoding/json/v2`.** What it sends to
@@ -26,6 +38,20 @@ refused before it is pushed.
 - **A list cursor for a filter whose labels hold `<`, `>` or `&` is
   refused once.** The cursor's digest covers the filter's JSON, which no
   longer escapes them; ask for the first page again.
+- **`SECURITY.md` scopes its not-found commitment to references in a
+  manifest.** A reference in a manifest to an object its subject may not
+  see is `not_found` whether the object exists or not. A direct read of
+  an object that exists and that the subject may not read is
+  `forbidden`, as before; the sentence promised more than the gateway
+  does. Vulnerabilities are reported through GitHub's private
+  vulnerability reporting or by email, and the organization's security
+  policy sets the response times.
+- **`docs/security.md` says what the gateway sees, how long it keeps it,
+  and what it does not defend.** It now states that file mode's `/v1` on
+  the internal listener takes no token, that `POST /v1/usage/redact`
+  reaches neither archived request records nor another replica's memory,
+  and that nothing removes delivered events, deleted objects or expired
+  spend counters.
 - Requires `latere.ai/x/pkg` v0.113.0 and `latere.ai/x/sdk-go` v0.33.0.
 
 ## v0.21.1 - 2026-11-05
@@ -202,6 +228,17 @@ refused before it is pushed.
 
 ## v0.17.1 - 2026-10-17
 
+### Changed
+
+- The conformance suite waits out the control plane's rate. A
+  `rate_limited` refusal under `/v1` is sent again after its
+  `Retry-After`, for at most a minute of waiting per request, so a run
+  against a server at the default `LUX_REQUESTS_PER_MINUTE` of 600
+  passes where it failed once its requests passed the rate. A door's
+  `rate_limited` is still the answer `case007RateLimited` asserts and is
+  never sent again. The `fixture` group reads every release from v0.1.0
+  to v0.17.0 again.
+
 ### Fixed
 
 - An Anthropic model routed to an `openai` Provider that serves it under
@@ -218,17 +255,6 @@ refused before it is pushed.
 - The cache writes an `openai` Provider reports in
   `prompt_tokens_details.cache_write_tokens`, as OpenRouter does, are
   metered and priced as cache writes. They were counted as fresh input.
-
-### Changed
-
-- The conformance suite waits out the control plane's rate. A
-  `rate_limited` refusal under `/v1` is sent again after its
-  `Retry-After`, for at most a minute of waiting per request, so a run
-  against a server at the default `LUX_REQUESTS_PER_MINUTE` of 600
-  passes where it failed once its requests passed the rate. A door's
-  `rate_limited` is still the answer `case007RateLimited` asserts and is
-  never sent again. The `fixture` group reads every release from v0.1.0
-  to v0.17.0 again.
 
 ## v0.17.0 - 2026-10-10
 
@@ -803,7 +829,7 @@ refused before it is pushed.
 
 - A release no longer ends with a failed job. The last step of the
   pipeline used to open a pull request for the next conformance
-  fixture, which the GitHub organisation refuses to let an Action
+  fixture, which the GitHub organization refuses to let an Action
   create, so every release finished red with the work already done. The
   step now pushes the branch `conformance/fixture-<tag>` and stops: the
   fixture directory is on that branch, ready to merge, and the release
@@ -981,7 +1007,7 @@ refused before it is pushed.
   the other three, so `lux_provider_health{state="Unreachable"}` names
   the Providers whose targets are out of selection and the shipped
   `LuxProviderUnreachable` alert fires on them. A Provider deleted from
-  the catalogue leaves the metric at the health job's next tick.
+  the catalog leaves the metric at the health job's next tick.
 - `latere.ai/x/lux/authorizer`: the vocabulary an authorization endpoint
   is written against, importable. It carries the actions `luxd` asks,
   one constant each, the resource shape it sends per action with the
