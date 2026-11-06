@@ -3,7 +3,7 @@
 These are the objects of Latere's installation that the release pipeline
 never applies. `deploy/prod` is what a release applies, on every release, so
 everything in it must be applied again without harm; the objects here cannot
-be. [`deploy/bootstrap`](../bootstrap/README.md) is the Secret template for
+be. [`deploy/bootstrap`](../bootstrap/luxd-secrets.yaml) is the Secret template for
 anyone installing the core and is not this directory.
 
 | File | What it is | Why an operator applies it |
