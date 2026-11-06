@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.22.0 - 2026-11-06
+
 ### Added
 
 - **`docs/local.md` runs Lux on one machine from a clone.** `make run`, a
