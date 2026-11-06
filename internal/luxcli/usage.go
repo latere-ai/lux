@@ -37,7 +37,7 @@ func usageFilters(fs *flag.FlagSet) *usageOptions {
 func usageFlags(a *app, fs *flag.FlagSet) func([]string) error {
 	o := usageFilters(fs)
 	fs.Var(&o.by, "by", "a dimension to group by: key, model, provider, owner, door, status, or label:<k>; repeatable, at most three")
-	fs.StringVar(&o.interval, "interval", "", "the bucket: hour, day, month, or total")
+	fs.StringVar(&o.interval, "interval", "", "the bucket: none, hour, day, or month; none, the default, is one row over the whole range")
 	return func(args []string) error { return runUsage(a, o, args) }
 }
 

@@ -37,11 +37,16 @@ func (d Dimension) Label() (string, bool) {
 	return name, ok && name != ""
 }
 
+// Dimensions are the six named dimensions, in the order the usage API's
+// parameter table lists them.
+func Dimensions() []Dimension {
+	return []Dimension{DimensionKey, DimensionModel, DimensionProvider, DimensionOwner, DimensionDoor, DimensionStatus}
+}
+
 // Valid reports whether d is one of the six named dimensions or a
 // label dimension with a name.
 func (d Dimension) Valid() bool {
-	switch d {
-	case DimensionKey, DimensionModel, DimensionProvider, DimensionOwner, DimensionDoor, DimensionStatus:
+	if slices.Contains(Dimensions(), d) {
 		return true
 	}
 	_, ok := d.Label()
@@ -59,13 +64,15 @@ const (
 	IntervalMonth Interval = "month"
 )
 
+// Intervals are the four intervals, in the order the usage API's
+// parameter table lists them.
+func Intervals() []Interval {
+	return []Interval{IntervalNone, IntervalHour, IntervalDay, IntervalMonth}
+}
+
 // Valid reports whether i is one of the four intervals or empty.
 func (i Interval) Valid() bool {
-	switch i {
-	case "", IntervalNone, IntervalHour, IntervalDay, IntervalMonth:
-		return true
-	}
-	return false
+	return i == "" || slices.Contains(Intervals(), i)
 }
 
 // Bucket is the start of the bucket of i that holds at, in UTC, and

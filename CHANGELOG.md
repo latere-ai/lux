@@ -54,6 +54,12 @@ refused before it is pushed.
   spend counters.
 - Requires `latere.ai/x/pkg` v0.113.0 and `latere.ai/x/sdk-go` v0.33.0.
 
+### Fixed
+
+- **`lux usage -help` lists the intervals the server takes.** `-interval`
+  is `none`, the default, one row over the range, or `hour`, `day` or
+  `month`; the help offered `total`, which `GET /v1/usage` refused.
+
 ## v0.21.1 - 2026-11-05
 
 ### Fixed

@@ -203,7 +203,7 @@ Flags:
   -from string
     	the start of the range, RFC 3339
   -interval string
-    	the bucket: hour, day, month, or total
+    	the bucket: none, hour, day, or month; none, the default, is one row over the whole range
   -key value
     	a Key, by name or id; repeatable
   -label value

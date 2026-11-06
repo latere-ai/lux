@@ -8,7 +8,7 @@ depends_on:
 affects: [cmd/lux/, internal/luxcli/, client/, skills/lux/, docs/cli.md, .lateregate.yaml]
 effort: medium
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-11-06
 author: changkun
 ---
 
@@ -457,6 +457,7 @@ this command speaks to ([[018-conformance-suite]]).
 | `-o json` for one object is byte-identical to the response; a two-page list is one envelope with every item's bytes unchanged and `next_cursor` empty; `-o yaml` round-trips to the same value | `TestOutputFidelity` | passing, `internal/luxcli` |
 | Every column in the table renders for each kind, a tunneled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | passing, `internal/luxcli` |
 | A `/v1` command with only `LUX_KEY`, a door command with only `LUX_TOKEN`, and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | passing, `internal/luxcli` |
+| `lux usage -help` offers the intervals, the named dimensions, and the bound on `-by` that `GET /v1/usage` takes, and no other | `TestUsageFlagsListTheServersValues`, over `metering.Intervals` and `metering.Dimensions` | passing, `internal/luxcli` |
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | passing, `internal/luxcli` |
 | A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command | `TestSDKVariableFallbacks` | passing, `internal/luxcli` |
 | The binary contains no issuer URL, no OAuth client id, and no audience string, and no command performs a token exchange of any kind | `TestClientEmbedsNoIssuer`, over `go list -deps` and the string table of the built binary | passing, `cmd/lux`; the claim and parameter names are matched quoted, since a bare `id_token` is a substring of a libc symbol, and `login.example.com` is not among the canaries because `manifest` embeds its golden corpus, whose example owners carry it, into every importer |
