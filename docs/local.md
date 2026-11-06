@@ -124,7 +124,11 @@ The Models in `deploy/examples` are named `stub-openai`,
 stand-in provider of its dialect. A stand-in answers
 `stub:<dialect>:<model>:<digest>`, where the digest is the start of
 the SHA-256 of your last message, and reports 100 input tokens and 20
-output tokens, so every call has a known size and price.
+output tokens, so every call has a known size and price. Each Model
+also gives an input window of 200,000 tokens and an output limit of
+4,096, which the doors' model lists carry as they do for a real model.
+The stand-ins take a request of any length; the figures are there for a
+client that reads them from the list.
 
 ### One request through each door
 
@@ -240,7 +244,7 @@ curl -sS -H "$A" $LUX_URL/v1/models
 ```
 
 ```json
-{"items":[{"apiVersion":"lux.latere.ai/v1beta1","kind":"Model","metadata":{"name":"stub-anthropic"},"spec":{"targets":[{"provider":"anthropic","model":"stub-anthropic","weight":100,"priority":0}],"fallback":"onError","pricing":{"currency":"USD","per":1000000,"input":"3","output":"15","cachedInput":"3","cacheWrite":"3"},"modalities":{"input":["text"],"output":["text"]}},"status":{"id":"mdl_01M6PZ84G1QXQFEKHJ6WT9DYHN","version":1,"owner":"http://127.0.0.1:33731|dev","source":"declared","available":true,"targets":[{"provider":"anthropic","model":"stub-anthropic","health":"Healthy"}],"createdAt":"2026-11-06T00:03:36.193215+01:00","updatedAt":"2026-11-06T00:03:36.193504+01:00","warnings":[]}}, ...]}
+{"items":[{"apiVersion":"lux.latere.ai/v1beta1","kind":"Model","metadata":{"name":"stub-anthropic"},"spec":{"targets":[{"provider":"anthropic","model":"stub-anthropic","weight":100,"priority":0}],"fallback":"onError","pricing":{"currency":"USD","per":1000000,"input":"3","output":"15","cachedInput":"3","cacheWrite":"3"},"modalities":{"input":["text"],"output":["text"]},"contextWindow":200000,"maxOutputTokens":4096},"status":{"id":"mdl_01M6PZ84G1QXQFEKHJ6WT9DYHN","version":1,"owner":"http://127.0.0.1:33731|dev","source":"declared","available":true,"targets":[{"provider":"anthropic","model":"stub-anthropic","health":"Healthy"}],"createdAt":"2026-11-06T00:03:36.193215+01:00","updatedAt":"2026-11-06T00:03:36.193504+01:00","warnings":[]}}, ...]}
 ```
 
 Read the Key. Its `status` holds the first characters of its value,

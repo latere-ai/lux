@@ -6,6 +6,16 @@ refused before it is pushed.
 
 ## Unreleased
 
+### Changed
+
+- **The example Models give an input window and an output limit.**
+  `stub-openai`, `stub-anthropic`, `stub-gemini` and `stub-lux` in
+  `deploy/examples` carry `contextWindow` 200000 and `maxOutputTokens`
+  4096, so each door's model list gives them as it does for a real
+  model. A client that reads a model's figures from that list, such as
+  an agent runtime, can use the stand-ins without naming the figures
+  itself.
+
 ## v0.22.0 - 2026-11-06
 
 ### Added

@@ -7,6 +7,8 @@ spec:
   targets:
     - provider: gemini
       model: stub-gemini
+  contextWindow: 200000
+  maxOutputTokens: 4096
   pricing:
     input: "1.25"
     output: "5"
