@@ -31,7 +31,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -267,7 +267,7 @@ func requestBody(model string, stream bool) []byte {
 	if stream {
 		m["stream"] = true
 	}
-	b, _ := json.Marshal(m)
+	b, _ := json.Marshal(m, json.Deterministic(true))
 	return b
 }
 
