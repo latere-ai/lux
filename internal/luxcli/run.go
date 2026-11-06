@@ -67,6 +67,9 @@ type app struct {
 	output                     string
 	verbose                    bool
 	showVersion                bool
+	// bearerless records that the /v1 command sent no bearer, so an
+	// unauthenticated refusal names the two token variables.
+	bearerless bool
 	// set records which flags a FlagSet saw, so a flag whose zero value
 	// has a meaning can be told from one left out.
 	set map[string]bool

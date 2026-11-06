@@ -57,7 +57,7 @@ source serves the session's requests and its heartbeats.
 | Variable | Flag | Purpose |
 |---|---|---|
 | `LUX_URL` | `--url` | the gateway's public URL; the base of every route |
-| `LUX_TOKEN` | `--token` | a bearer from an issuer the gateway lists ([[006-identity]]); every `/v1` command sends it |
+| `LUX_TOKEN` | `--token` | a bearer from an issuer the gateway lists ([[006-identity]]); every `/v1` command sends it when it is set |
 | `LUX_TOKEN_FILE` | `--token-file` | a file holding the same, read per request rather than once, so a token a process refreshes on disk is picked up by a long `lux serve` |
 | `LUX_KEY` | `--key` | a Key value; the credential of the door commands, `lux models` today |
 
@@ -80,15 +80,25 @@ downloads. A person gets a token the way that issuer gives one out, an
 in a script, and puts it in `LUX_TOKEN`; a token that a helper
 refreshes on disk goes in `LUX_TOKEN_FILE`, which is read per request
 so a long `lux serve` picks the new one up without a restart.
-`LUX_TOKEN` and `LUX_TOKEN_FILE` together is a usage error; neither, on
-a `/v1` command, is a usage error naming both.
+`LUX_TOKEN` and `LUX_TOKEN_FILE` together is a usage error. Neither, on
+a `/v1` command, sends the request with no `Authorization` header and
+lets the server answer: a gateway in the file mode serves its read-only
+`/v1` on the internal listener and takes no bearer, so this is how the
+command reads it, and a gateway in the server mode answers
+`unauthenticated`, to which the command adds a line naming the two token
+variables. `lux serve` is the exception and refuses without a token,
+since a tunnel is served in the server mode alone.
 
-The two credentials never cross planes. A `/v1` command with `LUX_KEY`
-and no token is a usage error rather than a request, because the
-gateway would answer `unauthenticated` and the message would be about
-the server rather than about the mistake; a door command with a token
-and no Key is the same. That mirrors the boundary [[006-identity]]
-draws, one step earlier.
+The two credentials never cross planes. A `/v1` command never sends a
+Key: with `LUX_KEY` and no token it sends no bearer, as above, and the
+line it adds to an `unauthenticated` answer begins with `LUX_KEY opens a
+door, not /v1.`, so the message is about the mistake rather than about
+the server. The request is not refused before it is sent, because
+`make run-file` exports a Key beside the file mode's bearer-less `/v1`,
+and the shell that reads one holds the other. A door command with a
+token and no Key is a usage error rather than a request, since a door
+has no bearer-less mode. That mirrors the boundary [[006-identity]]
+draws.
 
 ### Commands
 
@@ -275,7 +285,7 @@ Three, and the rule that separates them is whether a request was made.
 |---|---|---|
 | 0 | the command did what it was asked | every 2xx |
 | 1 | the server refused, failed, or could not be reached | every response outside 2xx, and every dial, TLS, or timeout failure before one |
-| 2 | the command was wrong and nothing was sent | an unknown command, an unknown or missing flag, a file that does not exist or does not decode, a missing or conflicting credential variable, a `--credential-from-env` problem |
+| 2 | the command was wrong and nothing was sent | an unknown command, an unknown or missing flag, a file that does not exist or does not decode, a token and no Key on a door command, no Key on a door command, no token on `lux serve`, both token variables, a `--credential-from-env` problem |
 
 2 means fix the arguments; 1 means the arguments were understood and
 the answer was no. A caller that needs to know which no it was reads
@@ -298,13 +308,14 @@ detail: a loopback host needs LUX_UPSTREAM_ALLOW_PRIVATE
 request: req_01J9ZK2P7Q8R9S0T1U2V3W4X63
 ```
 
-Four codes get one line more than the sentence, because the next step
+Five codes get one line more than the sentence, because the next step
 is not in the sentence:
 
 | Code | The command adds |
 |---|---|
 | `rate_limited`, `spend_exceeded`, `budget_exhausted` | `retry after <Retry-After> seconds`, or `retry later` when the header is absent |
 | `conflict` | `read it again with lux get and re-apply` |
+| `unauthenticated` | `Set LUX_TOKEN or LUX_TOKEN_FILE to a token from your issuer.`, after `LUX_KEY opens a door, not /v1.` when a Key is set, and only when the command sent no bearer |
 | `unsupported_version` | `server: <version> serves <apiVersion>` from `GET /.well-known/lux`, and nothing when that document cannot be read |
 | `authorizer_unavailable`, `store_unavailable` | nothing; exit 1 and the sentence already says retry |
 
@@ -452,14 +463,15 @@ this command speaks to ([[018-conformance-suite]]).
 | `--credential-from-env` sends the variable's value as `spec.credential.value`; an unset variable, a document that already carries a credential, two Providers with the bare form, and a non-Provider document are each exit 2 with nothing sent | `TestCredentialFromEnv`, table-driven | passing, `internal/luxcli`, the named form and a `header`-only block among the rows |
 | Every code in [[011-api]]'s error table exits 1 with the table's sentence on stderr and nothing on stdout; every usage error exits 2 with no request made; an unknown code exits 1 | `TestErrorsBecomeExits`, table-driven over every code | passing, `internal/luxcli`, over `api.Codes()` |
 | The built binary carries the three exit codes through the process | `TestBinaryExitCodes`, running the binary as a subprocess for one case of each code | passing, `cmd/lux`; the binary is built into a temporary directory by the test rather than read from `out/lux`, so the gate's `tempdir` run leaves nothing behind |
-| The four codes in the extra-line table print their extra line and no other code does | `TestRefusalExtraLines` | passing, `internal/luxcli` |
+| The codes in the extra-line table print their extra line and no other code does | `TestRefusalExtraLines`, `TestNoCredentialSendsNoBearer` for `unauthenticated` | passing, `internal/luxcli` |
 | `LUX_TOKEN`, a token file's contents, a `--credential-from-env` value, and a Key value reach no stderr byte, `-v` included; a Key value reaches stdout exactly once per create and per rotate | `TestSecretsGoOneWay` with canaries | passing, `internal/luxcli`, under every output mode and both token sources |
 | `-o json` for one object is byte-identical to the response; a two-page list is one envelope with every item's bytes unchanged and `next_cursor` empty; `-o yaml` round-trips to the same value | `TestOutputFidelity` | passing, `internal/luxcli` |
 | Every column in the table renders for each kind, a tunneled Provider shows an empty `BASEURL` and its tunnel state, and no column in any mode carries a credential value | `TestColumns`, `TestNoColumnCarriesASecret` | passing, `internal/luxcli` |
-| A `/v1` command with only `LUX_KEY`, a door command with only `LUX_TOKEN`, and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | passing, `internal/luxcli` |
+| A door command with only `LUX_TOKEN` and both token variables together are each exit 2 naming the variables | `TestCredentialsDoNotCrossPlanes` | passing, `internal/luxcli` |
+| A `/v1` command with no token, with or without a Key, sends its request with no `Authorization` header and never the Key; an `unauthenticated` answer to it adds the line naming the token variables, after the boundary when a Key is set, and one to a command that sent a token does not; against `make run-file`, `lux list models` on the internal listener with the printed Key and no token succeeds | `TestNoCredentialSendsNoBearer`, `TestAgentWithOnlyTheSkill`, `TestE2EMakeRunFileMode` | passing, `internal/luxcli` and `test/e2e` |
 | `lux usage -help` offers the intervals, the named dimensions, and the bound on `-by` that `GET /v1/usage` takes, and no other | `TestUsageFlagsListTheServersValues`, over `metering.Intervals` and `metering.Dimensions` | passing, `internal/luxcli` |
 | With `LUX_TOKEN` unset and a token file that changes between two requests, each request sends the file's current bytes | `TestTokenFileIsReadPerRequest` | passing, `internal/luxcli` |
-| A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command | `TestSDKVariableFallbacks` | passing, `internal/luxcli` |
+| A door command with only `LUX_BASE_URL` and `LUX_API_KEY` set reaches the door with that Key; with `LUX_URL` and `LUX_KEY` also set those win; neither fallback is read on a `/v1` command, which with `LUX_API_KEY` alone sends no bearer | `TestSDKVariableFallbacks` | passing, `internal/luxcli` |
 | The binary contains no issuer URL, no OAuth client id, and no audience string, and no command performs a token exchange of any kind | `TestClientEmbedsNoIssuer`, over `go list -deps` and the string table of the built binary | passing, `cmd/lux`; the claim and parameter names are matched quoted, since a bare `id_token` is a substring of a libc symbol, and `login.example.com` is not among the canaries because `manifest` embeds its golden corpus, whose example owners carry it, into every importer |
 | With `HTTPS_PROXY` set to a refusing address the command fails to reach the server and exits 1, and with it unset it reaches it | `TestClientHonorsProxyVariables` | passing, `cmd/lux`, as a subprocess with `HTTP_PROXY`, because the standard transport reads the proxy variables once per process and never proxies loopback, so the target is a name off loopback the proxy answers for |
 | Each `create` flag form builds the manifest the table says, applies it through `PUT`, and prints it under `--dry-run` without a request; the manifest `lux keys create` builds resolves identically to the equivalent file | `TestFlagFormsBuildTheManifest`, `TestDryRunAppliesNothing` | passing, `internal/luxcli`; the built body and the equivalent file decode to equal objects, and the Budget pair resolves equally without a Lookup |

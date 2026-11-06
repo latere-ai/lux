@@ -75,7 +75,6 @@ func TestApplyRefusesBeforeSending(t *testing.T) {
 		{"a second document names the refusal", providerYAML + "---\nkind: [\n", nil, ": document 2: " + api.CodeMalformedBody.Message()},
 		{"if-match over several", providerYAML + "---\n" + modelYAML, []string{"apply", "-f", "FILE", "--if-match", "3"}, "-if-match names one version, and the files hold 2 manifests; apply them one at a time."},
 		{"bad if-match", providerYAML, []string{"apply", "-f", "FILE", "--if-match", "x"}, `-if-match takes a version above zero or *, not "x".`},
-		{"no token", providerYAML, []string{"apply", "-f", "FILE", "--token", ""}, "Set " + EnvToken},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -85,9 +84,6 @@ func TestApplyRefusesBeforeSending(t *testing.T) {
 				args = []string{"apply", "-f", "FILE"}
 			}
 			env := f.env(nil)
-			if tc.name == "no token" {
-				env = f.env(map[string]string{"LUX_TOKEN": ""})
-			}
 			for i, a := range args {
 				if a == "FILE" {
 					args[i] = write(t, "m.yaml", tc.file)

@@ -44,8 +44,12 @@ var root = &command{
 		"  " + EnvKey + "         a Key value, for lux models (-key)\n" +
 		"\n" +
 		EnvToken + " opens /v1 and " + EnvKey + " opens a door; neither works on the other\n" +
-		"side. A door command also reads " + EnvSDKURL + " and " + EnvSDKKey + ", an SDK's\n" +
-		"own two variables, when the four above are unset.",
+		"side, and a Key is never sent to /v1. A /v1 command with no token sends\n" +
+		"no bearer, which is how it reads a gateway in the file mode, whose /v1\n" +
+		"is read-only, on the internal listener, and takes none; any other\n" +
+		"gateway refuses it. lux serve always needs a token. A door command also\n" +
+		"reads " + EnvSDKURL + " and " + EnvSDKKey + ", an SDK's own two variables, when\n" +
+		"the four above are unset.",
 	plane: planeNone,
 }
 

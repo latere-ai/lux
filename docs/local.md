@@ -381,6 +381,26 @@ and read through the `STUB_DEV_KEY` variable the Key manifest names, so
 it is the same on every run. The doors work as above with the
 `LUX_KEY` it prints.
 
+The `lux` command reads this control plane as it is: with no token it
+sends no bearer, and it never sends the Key to `/v1`. Point `LUX_URL`
+at the address on the `# file mode` line `make run-file` printed,
+without `/v1`. On this run it was port 28604:
+
+```sh
+LUX_URL=http://127.0.0.1:28604 out/lux list models -o table
+```
+
+```
+NAME            SOURCE    TARGETS                   AVAILABLE  PRICED  AGE  OWNER
+stub-anthropic  declared  anthropic/stub-anthropic  true       yes     1s   file|manifest-dir
+stub-gemini     declared  gemini/stub-gemini        true       yes     1s   file|manifest-dir
+stub-lux        declared  lux/stub-lux              true       yes     1s   file|manifest-dir
+stub-openai     declared  openai/stub-openai        true       yes     1s   file|manifest-dir
+```
+
+A write such as `lux apply` exits 1 with "This server reads its
+manifests from a directory and cannot change them."
+
 ## Stop it
 
 ```sh

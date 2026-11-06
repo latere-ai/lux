@@ -52,6 +52,15 @@ refused before it is pushed.
   reaches neither archived request records nor another replica's memory,
   and that nothing removes delivered events, deleted objects or expired
   spend counters.
+- **`lux` reads the control plane of a gateway in the file mode.** A `/v1`
+  command with no `LUX_TOKEN` or `LUX_TOKEN_FILE` now sends no bearer
+  instead of stopping, so `lux list`, `lux get` and the other reads work
+  against the read-only `/v1` that `LUX_MANIFEST_DIR` serves on the
+  internal listener, in a shell that holds `LUX_KEY` too. A Key is never
+  sent to `/v1`. A gateway that wants a token refuses the request, exit 1
+  where it was 2, and `lux` adds a line naming `LUX_TOKEN` and
+  `LUX_TOKEN_FILE`, after `LUX_KEY opens a door, not /v1.` when a Key is
+  set. `lux serve` still needs a token.
 - Requires `latere.ai/x/pkg` v0.113.0 and `latere.ai/x/sdk-go` v0.33.0.
 
 ### Fixed

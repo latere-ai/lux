@@ -24,10 +24,13 @@ const (
 
 // bearerSource is where a /v1 command's bearer comes from: the flags
 // first and the environment after them, one of the two and never both.
-// A Key alone is a usage error naming the boundary, since the gateway's
-// answer would be about the server and not about the mistake.
-// refreshable reports a token file, whose bytes a long lux serve reads
-// again for every request and every heartbeat.
+// Neither is a nil source: the command sends no Authorization header
+// and the server answers, which a control plane in the file mode does,
+// since it takes no bearer. A Key is never the bearer here, so a shell
+// that exported one for the doors reads that control plane unchanged;
+// the refusal of a server that wants a token names the boundary
+// instead (noTokenLine). refreshable reports a token file, whose bytes
+// a long lux serve reads again for every request and every heartbeat.
 func (a *app) bearerSource() (source client.TokenSource, refreshable bool, err error) {
 	token, tokenFile := a.token, a.tokenFile
 	if token == "" && tokenFile == "" {
@@ -36,18 +39,28 @@ func (a *app) bearerSource() (source client.TokenSource, refreshable bool, err e
 	switch {
 	case token != "" && tokenFile != "":
 		return nil, false, &usageError{msg: "Set one of " + EnvToken + " and " + EnvTokenFile + ", not both."}
-	case token == "" && tokenFile == "" && first(a.key, a.o.Getenv(EnvKey)) != "":
-		return nil, false, &usageError{msg: EnvKey + " opens a door, not /v1. Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
 	case token == "" && tokenFile == "":
-		return nil, false, &usageError{msg: "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."}
+		return nil, false, nil
 	case tokenFile != "":
 		return client.FileToken(tokenFile), true, nil
 	}
 	return client.StaticToken(token), false, nil
 }
 
+// noTokenLine is what a /v1 command adds to an unauthenticated refusal
+// when it sent no bearer, and the usage error of lux serve, which always
+// needs one: the two token variables, after the boundary when a Key is
+// what the shell holds.
+func (a *app) noTokenLine() string {
+	line := "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."
+	if first(a.key, a.o.Getenv(EnvKey)) != "" {
+		return EnvKey + " opens a door, not /v1. " + line
+	}
+	return line
+}
+
 // controlClient is the client of a /v1 command: LUX_URL and the bearer
-// of bearerSource.
+// of bearerSource, or none.
 func (a *app) controlClient() (*client.Client, error) {
 	url := first(a.url, a.o.Getenv(EnvURL))
 	if url == "" {
@@ -57,6 +70,7 @@ func (a *app) controlClient() (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.bearerless = source == nil
 	c := a.client(url)
 	c.Token = source
 	// A LUX_URL with a path may name an installation whose base path

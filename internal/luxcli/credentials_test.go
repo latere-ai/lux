@@ -8,12 +8,15 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"latere.ai/x/lux/internal/api"
 )
 
-// TestCredentialsDoNotCrossPlanes is spec 014's row: a /v1 command with
-// only LUX_KEY, a door command with only LUX_TOKEN, and both token
-// variables together are each exit 2 naming the variables, with no
-// request made.
+// TestCredentialsDoNotCrossPlanes is spec 014's row: a door command with
+// only LUX_TOKEN and both token variables together are each exit 2
+// naming the variables, with no request made. A /v1 command with no
+// token, a Key or none, is not among them: it sends no bearer, and
+// TestNoCredentialSendsNoBearer has it.
 func TestCredentialsDoNotCrossPlanes(t *testing.T) {
 	f := newFake(t)
 	cases := []struct {
@@ -22,12 +25,10 @@ func TestCredentialsDoNotCrossPlanes(t *testing.T) {
 		args  []string
 		names []string
 	}{
-		{"a /v1 command with only a Key", map[string]string{"LUX_TOKEN": "", "LUX_KEY": "lux_x"}, []string{"get", "key", "x"}, []string{EnvKey, EnvToken, EnvTokenFile}},
 		{"a door command with only a token", nil, []string{"models"}, []string{EnvToken, EnvKey}},
 		{"a door command with only a token file", map[string]string{"LUX_TOKEN": "", "LUX_TOKEN_FILE": "/some/file"}, []string{"models"}, []string{EnvToken, EnvKey}},
 		{"both token variables", map[string]string{"LUX_TOKEN_FILE": "/some/file"}, []string{"whoami"}, []string{EnvToken, EnvTokenFile}},
 		{"both token flags", nil, []string{"whoami", "--token", "a", "--token-file", "b"}, []string{EnvToken, EnvTokenFile}},
-		{"no credential on /v1", map[string]string{"LUX_TOKEN": ""}, []string{"whoami"}, []string{EnvToken, EnvTokenFile}},
 		{"no credential on a door", map[string]string{"LUX_TOKEN": ""}, []string{"models"}, []string{EnvKey}},
 		{"no URL on /v1", map[string]string{"LUX_URL": ""}, []string{"whoami"}, []string{EnvURL}},
 		{"no URL on a door", map[string]string{"LUX_URL": "", "LUX_KEY": "lux_x"}, []string{"models"}, []string{EnvURL}},
@@ -60,6 +61,48 @@ func TestCredentialsDoNotCrossPlanes(t *testing.T) {
 	}
 	if r := run(t, f.env(map[string]string{"LUX_KEY": "lux_x"}), "whoami"); r.code != 0 || f.last(t).Auth != "Bearer "+canaryToken {
 		t.Fatalf("/v1 with both: exit %d stderr %q", r.code, r.stderr)
+	}
+}
+
+// TestNoCredentialSendsNoBearer is spec 014's row: a /v1 command with
+// no token sends its request with no Authorization header, a Key in the
+// environment or a flag included, so a control plane in the file mode,
+// which takes no bearer, answers it, and no Key ever reaches /v1. A
+// server that refuses it as unauthenticated gets the sentence and a
+// line naming the token variables, after the boundary when a Key is
+// set, exit 1. A command that sent a token gets no such line.
+func TestNoCredentialSendsNoBearer(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/v1/models", 200, `{"items":[{"apiVersion":"lux.latere.ai/v1beta1","kind":"Model","metadata":{"name":"stub-openai"}}]}`+"\n")
+	const tokens = "Set " + EnvToken + " or " + EnvTokenFile + " to a token from your issuer."
+	cases := []struct {
+		name string
+		env  map[string]string
+		args []string
+		line string
+	}{
+		{"no credential", map[string]string{"LUX_TOKEN": ""}, nil, tokens},
+		{"a Key in the environment", map[string]string{"LUX_TOKEN": "", "LUX_KEY": canaryKey}, nil, EnvKey + " opens a door, not /v1. " + tokens},
+		{"a Key flag", map[string]string{"LUX_TOKEN": ""}, []string{"--key", canaryKey}, EnvKey + " opens a door, not /v1. " + tokens},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f.reset()
+			r := run(t, f.env(tc.env), append([]string{"list", "models", "-o", "table"}, tc.args...)...)
+			if r.code != ExitOK || len(f.requests()) != 1 || f.last(t).Auth != "" || !strings.Contains(r.stdout, "stub-openai") {
+				t.Fatalf("list models: exit %d, %d requests, auth %q\nstdout %q\nstderr %q", r.code, len(f.requests()), f.last(t).Auth, r.stdout, r.stderr)
+			}
+			f.refuse("GET", "/v1/self", api.CodeUnauthenticated, "no bearer")
+			r = run(t, f.env(tc.env), append([]string{"whoami"}, tc.args...)...)
+			if want := api.CodeUnauthenticated.Message() + "\n" + tc.line + "\n"; r.code != ExitRefused || r.stderr != want || f.last(t).Auth != "" {
+				t.Fatalf("whoami refused: exit %d stderr %q, want %q, auth %q", r.code, r.stderr, want, f.last(t).Auth)
+			}
+		})
+	}
+	f.refuse("GET", "/v1/self", api.CodeUnauthenticated, "expired")
+	r := run(t, f.env(nil), "whoami")
+	if want := api.CodeUnauthenticated.Message() + "\n"; r.code != ExitRefused || r.stderr != want || f.last(t).Auth != "Bearer "+canaryToken {
+		t.Fatalf("whoami refused with a token: exit %d stderr %q, want %q", r.code, r.stderr, want)
 	}
 }
 
@@ -127,8 +170,11 @@ func TestSDKVariableFallbacks(t *testing.T) {
 	if r.code != 2 || !strings.Contains(r.stderr, EnvURL) || len(sdk.requests()) != 0 {
 		t.Fatalf("/v1 with the fallbacks: exit %d stderr %q, %d requests", r.code, r.stderr, len(sdk.requests()))
 	}
+	// With LUX_API_KEY alone a /v1 command has no credential, so it sends
+	// no bearer, and the refusal names the token variables.
+	sdk.refuse("GET", "/v1/self", api.CodeUnauthenticated, "no bearer")
 	r = run(t, map[string]string{"LUX_URL": sdk.srv.URL, "LUX_API_KEY": "lux_sdk"}, "whoami")
-	if r.code != 2 || !strings.Contains(r.stderr, EnvToken) || len(sdk.requests()) != 0 {
-		t.Fatalf("/v1 with the api key alone: exit %d stderr %q", r.code, r.stderr)
+	if r.code != ExitRefused || !strings.Contains(r.stderr, EnvToken) || len(sdk.requests()) != 1 || sdk.last(t).Auth != "" {
+		t.Fatalf("/v1 with the api key alone: exit %d stderr %q, %d requests", r.code, r.stderr, len(sdk.requests()))
 	}
 }

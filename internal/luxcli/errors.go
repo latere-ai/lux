@@ -70,8 +70,9 @@ func (a *app) renderFailure(err error) {
 	}
 }
 
-// extraLine is the one line more than the sentence that four codes get,
-// because their next step is not in the sentence.
+// extraLine is the one line more than the sentence that five codes get,
+// because their next step is not in the sentence; unauthenticated gets
+// it only when the command sent no bearer.
 func (a *app) extraLine(e *client.Error) {
 	switch e.Code {
 	case "rate_limited", "spend_exceeded", "budget_exhausted":
@@ -82,6 +83,10 @@ func (a *app) extraLine(e *client.Error) {
 		}
 	case "conflict":
 		_, _ = fmt.Fprintln(a.o.Stderr, "read it again with lux get and re-apply")
+	case "unauthenticated":
+		if a.bearerless {
+			_, _ = fmt.Fprintln(a.o.Stderr, a.noTokenLine())
+		}
 	case "unsupported_version":
 		if line := a.serverLine(); line != "" {
 			_, _ = fmt.Fprintln(a.o.Stderr, line)

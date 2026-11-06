@@ -24,8 +24,12 @@ Environment:
   LUX_KEY         a Key value, for lux models (-key)
 
 LUX_TOKEN opens /v1 and LUX_KEY opens a door; neither works on the other
-side. A door command also reads LUX_BASE_URL and LUX_API_KEY, an SDK's
-own two variables, when the four above are unset.
+side, and a Key is never sent to /v1. A /v1 command with no token sends
+no bearer, which is how it reads a gateway in the file mode, whose /v1
+is read-only, on the internal listener, and takes none; any other
+gateway refuses it. lux serve always needs a token. A door command also
+reads LUX_BASE_URL and LUX_API_KEY, an SDK's own two variables, when
+the four above are unset.
 
 Commands:
   apply             apply manifests from files

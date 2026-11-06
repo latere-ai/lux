@@ -96,6 +96,11 @@ func runServe(a *app, o *serveOptions, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The tunnel is served in the server mode alone, which takes a
+	// token on every request and on the session.
+	if token == nil {
+		return &usageError{msg: a.noTokenLine()}
+	}
 	c := a.client(base)
 	c.Token = token
 	// The Provider is applied through the control plane, which may sit in

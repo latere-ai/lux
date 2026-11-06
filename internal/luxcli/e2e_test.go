@@ -251,7 +251,9 @@ func TestAgentWithOnlyTheSkill(t *testing.T) {
 	if r := run(t, env, "models"); r.code != 2 || !strings.Contains(r.stderr, EnvKey) {
 		t.Fatalf("lux models with the token: exit %d %q", r.code, r.stderr)
 	}
-	if r := run(t, door, "get", "key", "research-agent"); r.code != 2 || !strings.Contains(r.stderr, EnvToken) {
+	// The Key on /v1 is never sent: the request goes with no bearer, the
+	// gateway refuses it, and the extra line names the boundary.
+	if r := run(t, door, "get", "key", "research-agent"); r.code != 1 || !strings.Contains(r.stderr, EnvKey+" opens a door, not /v1.") || !strings.Contains(r.stderr, EnvToken) {
 		t.Fatalf("lux get with the Key: exit %d %q", r.code, r.stderr)
 	}
 

@@ -152,8 +152,9 @@ func throughTheDoor(t *testing.T, url, key string) {
 
 // TestE2EMakeRunFileMode: make run-file serves the same door from the
 // manifest directory with the generated STUB_DEV_KEY, the control plane
-// on the internal listener refuses a PUT with read_only, and the public
-// listener answers not_found under /v1.
+// on the internal listener refuses a PUT with read_only and serves the
+// lux command with no token, and the public listener answers not_found
+// under /v1.
 func TestE2EMakeRunFileMode(t *testing.T) {
 	out, base := makeRun(t, "run-file")
 	env := exports(out)
@@ -171,6 +172,14 @@ func TestE2EMakeRunFileMode(t *testing.T) {
 	}
 	if resp := do(t, http.MethodGet, internal+"/v1/keys", nil, ""); resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"name":"dev"`) {
 		t.Fatalf("GET /v1/keys on the internal listener = %d %s", resp.status, resp.body)
+	}
+	// lux reads this control plane in the shell make run-file's exports
+	// leave: with no token it sends no bearer, which is what this
+	// control plane takes, and the exported Key stays off /v1.
+	lux := exec.CommandContext(t.Context(), luxBin, "list", "models", "-o", "table")
+	lux.Env = []string{"PATH=/usr/bin:/bin", "LUX_URL=" + internal, "LUX_KEY=" + env["LUX_KEY"]}
+	if data, err := lux.CombinedOutput(); err != nil || !strings.Contains(string(data), "stub-openai") {
+		t.Fatalf("lux list models on the internal listener with no token: %v\n%s", err, data)
 	}
 	if resp := do(t, http.MethodPut, env["LUX_URL"]+"/v1/providers/x", h, providerYAML("x", "openai", "https://api.example.com/v1", "k", false)); resp.status != http.StatusNotFound || resp.code() != "not_found" {
 		t.Fatalf("PUT under /v1 on the public listener = %d %s", resp.status, resp.code())
