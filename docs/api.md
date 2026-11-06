@@ -93,6 +93,141 @@ A request that names no door, such as `POST /v1/messages` from an SDK
 whose base URL left the door out, is refused with `door_not_found`, 404,
 and its message names the four doors.
 
+## The lux door
+
+The lux door is the gateway's own dialect: one request shape for every
+provider, with the content of each message in typed blocks. It takes the
+Key as `Authorization: Bearer`, or in `x-api-key`, and refuses with the
+[error envelope](#errors) of `/v1`.
+
+| Method | Path | Does |
+|---|---|---|
+| `POST` | `/lux/v1/generate` | one answer; with `"stream": true` it arrives as server-sent events |
+| `POST` | `/lux/v1/count_tokens` | the input tokens of a `generate` body, as `{"input_tokens": n}` |
+| `GET` | `/lux/v1/models` | the models the Key may call, in the list shape above |
+| `GET` | `/lux/v1/models/{model}` | one entry of that list |
+
+A request names a model and the conversation. Against the stand-ins of
+[`make run`](local.md):
+
+```sh
+curl -sS $LUX_URL/lux/v1/generate \
+  -H "Authorization: Bearer $LUX_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"stub-lux","max_tokens":64,"messages":[{"role":"user","blocks":[{"type":"text","text":"hello"}]}]}'
+```
+
+```json
+{"blocks":[{"text":"stub:lux:stub-lux:2cf24dba","type":"text"}],"id":"lux-stub","model":"stub-lux","stop_reason":"end_turn","usage":{"cache_read_input_tokens":0,"cache_write_input_tokens":0,"input_tokens":100,"output_tokens":20}}
+```
+
+| Member | Type | Means |
+|---|---|---|
+| `model` | string | a Model the Key may call; required |
+| `messages` | array | the conversation in order, each with a `role`, `user` or `assistant`, and its `blocks` |
+| `system` | array of blocks | the instructions, apart from the conversation |
+| `max_tokens` | integer | the most tokens the answer may take |
+| `temperature`, `top_p`, `top_k` | number | sampling |
+| `stop_sequences` | array of strings | text that ends the answer |
+| `stream` | boolean | answer as server-sent events |
+| `tools` | array | tools the model may call, each a `name`, a `description` and an `input_schema` (JSON Schema) |
+| `tool_choice` | object | `mode`: `auto`, `any` (some tool), `none`, or `tool` with the tool's `name` |
+| `reasoning` | object | extended thinking: an `effort` of `minimal`, `low`, `medium` or `high`, or `budget_tokens` |
+| `schema` | object | a JSON Schema the answer must match, as `schema`, with an optional `name` and `strict` |
+| `user_id` | string | a stable id of your end user, for the provider's abuse monitoring |
+| `cache_key` | string | a prompt-cache name, for providers that key their cache by name |
+| `logprobs`, `top_logprobs` | boolean, integer | each answer token's log probability, and that many alternatives |
+
+`server_tools`, `web_search` and `reasoning_replay` complete the list.
+When the gateway translates the request for another dialect, a member it
+does not read is named in the answer's `Lux-Loss` header rather than
+refused.
+
+Every block has a `type`, and any block but `thinking` and
+`redacted_thinking` may set `cache_hint: true` to end a prompt-cache
+prefix:
+
+| `type` | Carries |
+|---|---|
+| `text` | `text` |
+| `image` | `image`: a `media_type` with base64 `data`, or a `url` |
+| `tool_use` | `tool_use`: the `id`, `name` and `args` (a JSON object) of a call the model made |
+| `tool_result` | `tool_result`: the `tool_use_id` it answers, its `blocks`, and `is_error` |
+| `thinking` | `text`, and the `signature` the provider needs to take the block back |
+| `redacted_thinking` | `redacted`, which only the provider can read |
+| `opaque` | `opaque`: a block in a provider's own `dialect`, carried unread in `raw` |
+
+The answer carries `id`, `model`, `blocks`, a `stop_reason` of
+`end_turn`, `tool_use`, `max_tokens`, `stop_sequence` (with the
+`stop_sequence` that matched) or `refusal`, and `usage`:
+`input_tokens`, `output_tokens`, and, when the provider reports them,
+`cache_read_input_tokens`, `cache_write_input_tokens` and
+`reasoning_tokens`.
+
+With `"stream": true` each frame is an `event:` line and a `data:` line
+whose JSON repeats the `type`:
+
+```sh
+curl -sS -N $LUX_URL/lux/v1/generate \
+  -H "Authorization: Bearer $LUX_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"stub-lux","stream":true,"messages":[{"role":"user","blocks":[{"type":"text","text":"hello"}]}]}'
+```
+
+```
+event: message_start
+data: {"id":"lux-stub","model":"stub-lux","type":"message_start","usage":{"cache_read_input_tokens":0,"cache_write_input_tokens":0,"input_tokens":100,"output_tokens":0}}
+
+event: block_start
+data: {"block":{"type":"text"},"index":0,"type":"block_start"}
+
+event: text_delta
+data: {"delta":"stub:l","index":0,"type":"text_delta"}
+
+event: text_delta
+data: {"delta":"ux:stu","index":0,"type":"text_delta"}
+
+event: text_delta
+data: {"delta":"b-lux:","index":0,"type":"text_delta"}
+
+event: text_delta
+data: {"delta":"2cf24d","index":0,"type":"text_delta"}
+
+event: text_delta
+data: {"delta":"ba","index":0,"type":"text_delta"}
+
+event: block_stop
+data: {"index":0,"type":"block_stop"}
+
+event: message_delta
+data: {"stop_reason":"end_turn","type":"message_delta","usage":{"cache_read_input_tokens":0,"cache_write_input_tokens":0,"input_tokens":100,"output_tokens":20}}
+
+event: message_stop
+data: {"type":"message_stop"}
+```
+
+| Event | Carries |
+|---|---|
+| `message_start` | `id`, `model`, and `usage` so far |
+| `block_start` | the block's `index` and the `block`, without its content |
+| `text_delta`, `thinking_delta` | the next piece of the block's text, in `delta` |
+| `args_delta` | the next piece of a tool call's `args`, in `delta` |
+| `signature_delta` | the thinking block's `signature`, in `delta` |
+| `block_stop` | the `index` of the block that is complete |
+| `message_delta` | the `stop_reason` and the final `usage` |
+| `message_stop` | nothing; the answer is complete |
+
+A stream that fails after its first frame ends with `event: error` and
+the [error envelope](#errors) in `data`.
+
+`count_tokens` takes the same body as `generate`. For a Model on an
+Anthropic provider the provider counts; for any other the gateway
+estimates, and says so with `Lux-Estimated: true`.
+
+A Model joins `GET /lux/v1/models` once the health job has found its
+provider reachable, which is within `LUX_HEALTH_INTERVAL`, 30 seconds by
+default, of the Model being applied.
+
 ## Under a base path
 
 An installation that shares an origin with other services answers under

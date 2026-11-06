@@ -17,6 +17,9 @@ refused before it is pushed.
   answer and how long it is kept, what fails closed, the built-in owner
   policy, and the reserved probe. `docs/plane.md` keeps the runnable
   program.
+- **The lux door is documented.** `docs/api.md` gives the routes of
+  `/lux/v1`, the request and answer of `POST /lux/v1/generate`, its
+  stream's events, `count_tokens`, and when a Model joins the door's list.
 
 ### Changed
 
