@@ -16,13 +16,6 @@
 # ipBlock never matches a pod, so the base's 443 to 0.0.0.0/0 does not
 # reach it. platformd's side admits the core in its own tree.
 #
-# The telemetry collector the namespace's monitoring injects runs as a
-# DaemonSet in dash0-system, and the injected endpoint is the node's address
-# on the host port 40318. Cilium translates that to the collector's Pod on
-# its container port 4318 before policy is evaluated, so a rule admitting
-# 40318 matches nothing and drops every export. The collector's Pods on
-# 4318 are admitted, by namespace and by the DaemonSet's name label.
-#
 # The issuer is https://auth.latere.ai, whose address inside the cluster is
 # the load balancer's, and Cilium translates that to the ingress
 # controller's pods before policy: the base's 443 to 0.0.0.0/0 never
@@ -47,16 +40,6 @@ spec:
         - port: 25060
           protocol: TCP
         - port: 25061
-          protocol: TCP
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: dash0-system
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: opentelemetry-collector
-      ports:
-        - port: 4318
           protocol: TCP
     - to:
         - podSelector:

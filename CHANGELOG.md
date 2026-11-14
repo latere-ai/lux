@@ -8,6 +8,8 @@ refused before it is pushed.
 
 ### Changed
 
+- **The production egress policy no longer admits a telemetry collector.** Telemetry stays off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
 - **The example Models give an input window and an output limit.**
   `stub-openai`, `stub-anthropic`, `stub-gemini` and `stub-lux` in
   `deploy/examples` carry `contextWindow` 200000 and `maxOutputTokens`
