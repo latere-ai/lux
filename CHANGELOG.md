@@ -8,6 +8,8 @@ refused before it is pushed.
 
 ### Changed
 
+- Built with Go 1.27.4, which fixes GO-2026-6859.
+
 - **The production egress policy no longer admits a telemetry collector.** Telemetry stays off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 
 - **The example Models give an input window and an output limit.**
