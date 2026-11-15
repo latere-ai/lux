@@ -13,14 +13,6 @@ proves a server serves both. Spec 002 is the configuration reference:
 every `LUX_*` variable is in its table, owned by it or listed with its
 owner.
 
-- [029-reference-mutation-context](.archive/029-reference-mutation-context.md): complete. Bind reference checks and rotation to sanitized desired state.
-
-- [030-key-credential-admission](.archive/030-key-credential-admission.md): complete. Admit registered Key credentials without exposing their verifier.
-
-- [031-durable-key-fences](.archive/031-durable-key-fences.md): complete. Close Key names to delayed credential writes.
-
-- [032-key-fence-api](.archive/032-key-fence-api.md): complete. Authorize and expose durable Key fences.
-
 ## Layout
 
 Flat files `specs/NNN-name.md` in one number space with `track: core`
@@ -84,6 +76,9 @@ every spec in its `depends_on` is at `testing` or later, not `complete`.
 | [026](.archive/026-object-scoped-discovery.md) | Object-scoped model discovery and list authorization | medium | complete | 006, 011, 025 |
 | [027](.archive/027-disabled-key-provisioning.md) | Provision disabled keys before model access is assigned | small | complete | 003, 007 |
 | [028](.archive/028-public-tunnel-agent.md) | Public tunnel client for platform CLIs | small | complete | 013, 014 |
+| [029](.archive/029-reference-mutation-context.md) | Reference mutation context: reference checks and rotation bound to the sanitized desired state | small | complete | 006 |
+| [030](.archive/030-key-credential-admission.md) | Key credential admission: a registered Key credential admitted without exposing its verifier | small | complete | 025 |
+| [031](.archive/031-durable-key-fences.md) | Durable Key fences: Key names closed to delayed credential writes | medium | complete | 010 |
 | [032](.archive/032-key-fence-api.md) | Authorized Key fence endpoints and atomic audit events | medium | complete | 031, 022 |
 | [033](.archive/033-exact-key-disable.md) | Exact Key disable after authority withdrawal | small | complete | 032 |
 | [034](.archive/034-serving-behind-a-shared-origin.md) | Serving behind a shared origin: an audience list, a base path, trusted proxies | large | complete | 006, 011, 017, 018 |
