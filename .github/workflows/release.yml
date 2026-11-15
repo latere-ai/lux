@@ -297,7 +297,10 @@ jobs:
   install-release:
     name: the install document against the published artifacts
     needs: [build, publish]
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04's Docker keeps images in containerd's store, where a
+    # pulled multi-platform image has one platform's content, and kind's load
+    # imports every platform the index names, so it fails on the missing one.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
