@@ -15,7 +15,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"net/url"
 	"os"
 	"testing"
@@ -113,16 +112,4 @@ func Count(t testing.TB, dbURL, sql string, args ...any) int {
 		t.Fatalf("pgtest: %s: %v", sql, err)
 	}
 	return n
-}
-
-// Redacted is dbURL with its password replaced, for a log line.
-func Redacted(dbURL string) string {
-	u, err := url.Parse(dbURL)
-	if err != nil {
-		return "the database"
-	}
-	if _, has := u.User.Password(); has {
-		u.User = url.UserPassword(u.User.Username(), "redacted")
-	}
-	return fmt.Sprint(u)
 }
