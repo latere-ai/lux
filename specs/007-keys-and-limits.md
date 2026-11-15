@@ -229,9 +229,9 @@ request through any other. A change to `spec.zeroRetention` is not
 reread that way: it takes the journal's schedule, so a replica may send
 the Key's requests as it cached it until it consumes the row, and up to
 `LUX_KEY_CACHE_GRACE` past its window while the store does not answer
-([[047-zero-retention-keys]]). A change to `spec.doors` takes the same
+([047-zero-retention-keys](.archive/047-zero-retention-keys.md)). A change to `spec.doors` takes the same
 schedule, and a `door_not_allowed` refusal rereads nothing
-([[049-key-doors]]). The journal row is written for
+([049-key-doors](.archive/049-key-doors.md)). The journal row is written for
 every mutation whether or not a sink is configured, so the tail works
 in every installation with a store; in file mode the `SIGHUP` snapshot
 swap empties the cache ([[010-state]]). A negative entry protects the

@@ -1,6 +1,6 @@
 ---
 title: "Request-label filter: GET /v1/requests reads the records whose request labels match, under the read the caller already has"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/007-keys-and-limits.md
@@ -10,7 +10,7 @@ depends_on:
 affects: [metering/, internal/store/, internal/reqlog/, internal/api/, internal/luxcli/, gateway/, api/openapi.yaml, docs/, skills/lux/, test/conformance/, specs/009-usage-and-metering.md, specs/011-api.md]
 effort: small
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-11-15
 author: changkun
 ---
 

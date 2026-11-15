@@ -355,7 +355,7 @@ asserts the read-back's `spec` equals the fixture's, with a member a
 later release added at the default it renders, which the release did not
 carry, set to that default first (the same object defaults aside, as
 [[003-manifest-contract]] promises; a Key's `spec.zeroRetention`,
-[[047-zero-retention-keys]]), and decodes each
+[047-zero-retention-keys](.archive/047-zero-retention-keys.md)), and decodes each
 record with the current `metering.Record` and asserts every member the
 fixture carries is still present with the same value after a round
 trip. The prefix carries the version because a release seeds the names

@@ -1,6 +1,6 @@
 ---
 title: "Key doors: a Key may name the doors it opens, and a request on any other door is refused at the Key, without a store read"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -10,7 +10,7 @@ depends_on:
 affects: [manifest/, gateway/, authorizer/, internal/api/, internal/luxcli/, internal/store/, api/openapi.yaml, docs/, skills/lux/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md]
 effort: small
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-11-15
 author: changkun
 ---
 

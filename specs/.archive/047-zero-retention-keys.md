@@ -1,6 +1,6 @@
 ---
 title: "Zero-retention Keys: a Key that asks for zero retention reaches only Providers that declare how they keep nothing of a request, with the Provider's zero-retention request fields written into every request"
-status: testing
+status: complete
 track: core
 depends_on:
   - specs/003-manifest-contract.md
@@ -11,7 +11,7 @@ depends_on:
 affects: [manifest/, gateway/, metering/, authorizer/, internal/api/, internal/serve/, internal/store/, api/openapi.yaml, docs/, skills/lux/, deploy/catalog/, examples/plane/, test/conformance/, specs/003-manifest-contract.md, specs/004-request-path.md, specs/007-keys-and-limits.md, specs/011-api.md, specs/016-security-and-threat-model.md, specs/018-conformance-suite.md, specs/019-observability.md]
 effort: medium
 created: 2026-10-09
-updated: 2026-10-10
+updated: 2026-11-15
 author: changkun
 ---
 

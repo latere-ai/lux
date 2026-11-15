@@ -228,7 +228,7 @@ flowchart TD
    state, so a window that has reset serves again at once. Then a Key
    whose `spec.doors` does not name the door is `door_not_allowed`, 403,
    on every route of the door, read from the cached Key and the path
-   alone ([[049-key-doors]]).
+   alone ([049-key-doors](.archive/049-key-doors.md)).
 4. Class: an opaque route for a Key without `passthrough` is
    `route_not_allowed`, 403.
 5. Model: the name is read from the path, or from the body by a JSON
@@ -263,7 +263,7 @@ flowchart TD
    which can be tried now are `provider_unavailable`. An opaque route on
    such a Key is `zero_retention_unavailable` toward a Provider that
    declares nothing or declares `requestFields`, and served toward one
-   that declares `{}` ([[047-zero-retention-keys]]). This stage precedes
+   that declares `{}` ([047-zero-retention-keys](.archive/047-zero-retention-keys.md)). This stage precedes
    the limits so that a refusal no retry can fix, and one that needs no
    counter, is answered without touching a window: the counters are
    debited only for a request that has somewhere to go.
@@ -357,7 +357,7 @@ The outbound request toward the target's `baseURL`:
   `requestFields` by the same rule, winning on every member both name,
   and a body that is not a JSON object is `invalid_request` rather than
   sent without them. `decorate` refuses such a Key toward a Provider it
-  may not reach before it writes anything ([[047-zero-retention-keys]]).
+  may not reach before it writes anything ([047-zero-retention-keys](.archive/047-zero-retention-keys.md)).
 - Hop-by-hop headers are removed in both directions: `Connection`,
   `Keep-Alive`, `Proxy-Connection`, `Transfer-Encoding`, `TE`,
   `Trailer`, `Upgrade`, and every header `Connection` names. `Host` is
@@ -532,13 +532,13 @@ is the developer detail, truncated.
 | `unauthenticated` | 401 | no credential, or a credential whose hash names no Key |
 | `key_disabled` | 403 | `spec.disabled` |
 | `key_expired` | 403 | `status.expiresAt` has passed |
-| `door_not_allowed` | 403 | a Key whose `spec.doors` does not name the door ([[049-key-doors]]) |
+| `door_not_allowed` | 403 | a Key whose `spec.doors` does not name the door ([049-key-doors](.archive/049-key-doors.md)) |
 | `route_not_allowed` | 403 | an opaque route without `passthrough` |
 | `invalid_request` | 400 | a body that is not a JSON object or names no `model`; on translation, a body the door's codec cannot decode |
 | `model_not_found` | 404 | no Model of that name |
 | `model_not_allowed` | 403 | no selector matches |
 | `model_disabled` | 403 | the Model has `spec.disabled` true ([039-disabled-models](.archive/039-disabled-models.md)) |
-| `zero_retention_unavailable` | 403 | a Key with `spec.zeroRetention` and a Model none of whose targets names a Provider that declares `spec.zeroRetention`, or an opaque route toward a Provider that declares nothing or declares `requestFields` ([[047-zero-retention-keys]]) |
+| `zero_retention_unavailable` | 403 | a Key with `spec.zeroRetention` and a Model none of whose targets names a Provider that declares `spec.zeroRetention`, or an opaque route toward a Provider that declares nothing or declares `requestFields` ([047-zero-retention-keys](.archive/047-zero-retention-keys.md)) |
 | `provider_unavailable` | 503 | no admitted target, or the last attempt failed at the transport before a response line |
 | `dialect_unsupported` | 400 | the door and the target cannot be bridged |
 | `provider_required` | 400 | an opaque route with no `Lux-Provider` and more than one candidate |
