@@ -109,6 +109,17 @@ var stageOutputs = map[string]map[string]bool{
 
 // stageVersion is the reference a stage is called at: a full commit, or
 // one of latere-ai/ci's version tags, and never a branch.
+// hostedUbuntu is GitHub's hosted Ubuntu, by its moving label or one release
+// pinned, as a job pins it when the moving label lands on an image the job
+// cannot use.
+var hostedUbuntu = regexp.MustCompile(`^ubuntu-(latest|[0-9]{2}\.[0-9]{2})$`)
+
+// runsOn is a job's runs-on as one label, or "" for a list or a group.
+func runsOn(v any) string {
+	label, _ := v.(string)
+	return label
+}
+
 var stageVersion = regexp.MustCompile(`^([0-9a-f]{40}|v\d+(\.\d+\.\d+(-[0-9A-Za-z.]+)?)?)$`)
 
 // workflow is the part of a workflow file these tests read.
@@ -203,8 +214,8 @@ func TestReleaseWorkflowNeverPushesToTheDefaultBranch(t *testing.T) {
 			if job.Uses != "" {
 				t.Errorf("%s calls %s; build, deploy, publish, and verify are the stages", name, job.Uses)
 			}
-			if job.RunsOn != "ubuntu-latest" {
-				t.Errorf("%s runs on %v, want ubuntu-latest", name, job.RunsOn)
+			if !hostedUbuntu.MatchString(runsOn(job.RunsOn)) {
+				t.Errorf("%s runs on %v, want ubuntu-latest or a pinned ubuntu-YY.MM", name, job.RunsOn)
 			}
 			continue
 		}
