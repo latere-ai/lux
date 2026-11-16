@@ -12,6 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"latere.ai/x/pkg/statemachine"
+
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 )
 
@@ -73,6 +76,9 @@ func (j journal) Append(ctx context.Context, e store.Event) (int64, error) {
 	}
 	if e.NextAttemptAt.IsZero() {
 		e.NextAttemptAt = e.At
+	}
+	if err := lifecycle.EventTable.CheckStart(lifecycle.EventPending); err != nil {
+		return 0, fmt.Errorf("postgres: Journal.Append: %w", err)
 	}
 	var seq int64
 	err := j.s.write(ctx, func(q pgx.Tx) error {
@@ -140,9 +146,36 @@ func (j journal) update(ctx context.Context, what, sql string, args ...any) erro
 	return nil
 }
 
-// Acknowledge implements store.Journal.
+// Acknowledge implements store.Journal. It is the one writer of acked_at
+// and moves a pending row only: a row that is already acknowledged keeps the
+// time it was acknowledged at, and the call wraps
+// statemachine.ErrIllegalTransition.
 func (j journal) Acknowledge(ctx context.Context, id string) error {
-	return j.update(ctx, "Acknowledge", `UPDATE journal SET acked_at = $2 WHERE id = $1`, id, j.s.now())
+	err := j.s.read(ctx, func(q querier) error {
+		tag, err := q.Exec(ctx, `UPDATE journal SET acked_at = $2 WHERE id = $1 AND acked_at IS NULL`, id, j.s.now())
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 1 {
+			return nil
+		}
+		var acked bool
+		err = q.QueryRow(ctx, `SELECT acked_at IS NOT NULL FROM journal WHERE id = $1`, id).Scan(&acked)
+		switch {
+		case errors.Is(err, errNoRows):
+			return fmt.Errorf("%w: event %s is not in the journal", store.ErrNotFound, id)
+		case err != nil:
+			return err
+		}
+		return fmt.Errorf("event %s is already acknowledged: %w", id, lifecycle.EventTable.Check(lifecycle.EventAcknowledged, lifecycle.EventAcknowledged))
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) || errors.Is(err, statemachine.ErrIllegalTransition) {
+			return err
+		}
+		return fmt.Errorf("postgres: Journal.Acknowledge: %w", err)
+	}
+	return nil
 }
 
 // Defer implements store.Journal.

@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"latere.ai/x/pkg/metrics"
+	"latere.ai/x/pkg/statemachine"
 
 	v1 "latere.ai/x/lux/manifest/v1"
 	"latere.ai/x/lux/metering"
@@ -64,7 +65,8 @@ func resultOf(err error) string {
 	case err == nil, errors.Is(err, ErrNotFound):
 		return ResultOK
 	case errors.Is(err, ErrVersionConflict), errors.Is(err, ErrNameTaken), errors.Is(err, ErrHashTaken),
-		errors.Is(err, ErrReadOnly), errors.Is(err, ErrInvalidCursor), errors.Is(err, ErrKeyFenced), errors.Is(err, ErrFenceConflict):
+		errors.Is(err, ErrReadOnly), errors.Is(err, ErrInvalidCursor), errors.Is(err, ErrKeyFenced), errors.Is(err, ErrFenceConflict),
+		errors.Is(err, statemachine.ErrIllegalTransition):
 		return ResultConflict
 	default:
 		return ResultError

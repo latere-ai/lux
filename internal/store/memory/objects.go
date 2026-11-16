@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -66,6 +67,9 @@ func (o objects) Put(ctx context.Context, obj v1.Object, ifVersion int64) (int64
 		now := o.s.now()
 		row := objectRow{kind: kind, id: *f.id, name: name, owner: *f.owner, version: 1, createdAt: *f.createdAt, updatedAt: *f.updatedAt}
 		if ifVersion == 0 {
+			if err := lifecycle.ObjectTable.CheckStart(lifecycle.ObjectLive); err != nil {
+				return err
+			}
 			if _, used := st.objects[row.id]; used {
 				return fmt.Errorf("%w: id %s is already used", store.ErrVersionConflict, row.id)
 			}
@@ -244,7 +248,9 @@ func (o objects) Delete(ctx context.Context, kind, id string) error {
 	return o.s.write(ctx, func(st *state) error {
 		row, ok := st.objects[id]
 		if !ok || !row.live() || row.kind != kind {
-			return fmt.Errorf("%w: %s %s", store.ErrNotFound, kind, id)
+			// A row that is not live is absent or already deleted; either
+			// way the table has no step to deleted from it.
+			return fmt.Errorf("%w: %s %s: %w", store.ErrNotFound, kind, id, lifecycle.ObjectTable.Check(lifecycle.ObjectDeleted, lifecycle.ObjectDeleted))
 		}
 		row.deletedAt = o.s.now()
 		st.objects[id] = row

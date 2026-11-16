@@ -29,6 +29,7 @@ var tokenRole = struct {
 	module: []string{
 		module + "/internal/token",
 		module + "/internal/config",
+		module + "/internal/lifecycle",
 		module + "/internal/localissuer",
 		module + "/internal/secrets",
 		module + "/internal/store",
@@ -46,6 +47,9 @@ var tokenRole = struct {
 		"latere.ai/x/pkg/envutil",
 		"latere.ai/x/pkg/httpjson",
 		"latere.ai/x/pkg/metrics",
+		// The lifecycle tables internal/store's writers consult, which
+		// the role links but never runs.
+		"latere.ai/x/pkg/statemachine",
 		"go.opentelemetry.io/",
 		"github.com/go-logr/",
 		"github.com/cespare/xxhash",

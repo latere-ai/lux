@@ -129,7 +129,7 @@ func merge(kind string, current, incoming any) (any, error) {
 		}
 		cur := valueOf[store.ProviderObserved](current)
 		if in.Health != nil {
-			cur.Health = ptr(*in.Health)
+			cur.Health = mergeHealth(cur.Health, *in.Health)
 		}
 		if in.Discovered != nil {
 			cur.Discovered = ptr(*in.Discovered)
@@ -193,6 +193,21 @@ func merge(kind string, current, incoming any) (any, error) {
 		}
 		return &cur, nil
 	}
+}
+
+// mergeHealth is the stored health member after a write: the incoming
+// member, or, when it carries no state, the stored one with the incoming
+// lastError, the health job's state left as it was.
+func mergeHealth(cur *v1.HealthStatus, in v1.HealthStatus) *v1.HealthStatus {
+	if in.State.Valid() {
+		return ptr(in)
+	}
+	next := v1.HealthStatus{State: v1.HealthUnknown}
+	if cur != nil {
+		next = *cur
+	}
+	next.LastError = in.LastError
+	return &next
 }
 
 // as reads the observed argument as the kind's struct, by value or by

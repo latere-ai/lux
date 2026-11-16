@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 )
 
@@ -34,6 +35,9 @@ func (j journal) Append(ctx context.Context, e store.Event) (int64, error) {
 		return 0, fmt.Errorf("memory: Journal.Append of %s with no object id", e.ID)
 	}
 	err := j.s.write(ctx, func(st *state) error {
+		if err := lifecycle.EventTable.CheckStart(lifecycle.EventPending); err != nil {
+			return err
+		}
 		if _, dup := st.journal[e.ID]; dup {
 			return fmt.Errorf("memory: event %s is already in the journal", e.ID)
 		}
@@ -96,11 +100,21 @@ func (j journal) update(ctx context.Context, id string, fn func(e *store.Event) 
 	})
 }
 
-// Acknowledge implements store.Journal.
+// Acknowledge implements store.Journal: a pending row moves to
+// acknowledged, and a row that is already acknowledged keeps its time and
+// wraps statemachine.ErrIllegalTransition.
 func (j journal) Acknowledge(ctx context.Context, id string) error {
-	return j.update(ctx, id, func(e *store.Event) bool {
+	return j.s.write(ctx, func(st *state) error {
+		e, ok := st.journal[id]
+		if !ok {
+			return fmt.Errorf("%w: event %s is not in the journal", store.ErrNotFound, id)
+		}
+		if !e.AckedAt.IsZero() {
+			return fmt.Errorf("event %s is already acknowledged: %w", id, lifecycle.EventTable.Check(lifecycle.EventAcknowledged, lifecycle.EventAcknowledged))
+		}
 		e.AckedAt = j.s.now()
-		return true
+		st.journal[id] = e
+		return nil
 	})
 }
 

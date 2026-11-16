@@ -5,6 +5,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"latere.ai/x/pkg/metrics"
 	"latere.ai/x/pkg/retry"
+	"latere.ai/x/pkg/statemachine"
 
 	"latere.ai/x/lux/internal/store"
 )
@@ -40,9 +42,6 @@ var DeliveryPolicy = retry.Policy{Base: time.Second, Max: 5 * time.Minute, Jitte
 // unix seconds, so every holder after a restart acknowledges the same
 // rows unsent.
 const sinceKey = "events:sink:since"
-
-// leaseRenew is how often the holder renews: a third of the TTL.
-const leaseRenew = store.LeaseTTL / 3
 
 // WorkerOptions is what the Worker runs under.
 type WorkerOptions struct {
@@ -128,7 +127,7 @@ func NewWorker(o WorkerOptions) *Worker {
 func (w *Worker) Run(ctx context.Context) {
 	w.acquire(ctx)
 	w.Tick(ctx)
-	renew := time.NewTicker(leaseRenew)
+	renew := time.NewTicker(store.LeaseRenew)
 	defer renew.Stop()
 	poll := time.NewTicker(w.o.Poll)
 	defer poll.Stop()
@@ -229,7 +228,11 @@ func (w *Worker) deliver(ctx context.Context, row store.Event, since time.Time) 
 	}
 	err := w.o.Sink.Deliver(ctx, row.Payload)
 	if err == nil {
-		if err := j.Acknowledge(ctx, row.ID); err != nil {
+		if err := j.Acknowledge(ctx, row.ID); errors.Is(err, statemachine.ErrIllegalTransition) {
+			// Another holder delivered and acknowledged the row first, while
+			// this one's lease had lapsed; the row is settled.
+			w.o.Logger.WarnContext(ctx, "events: a delivered event was already acknowledged", "id", row.ID, "type", row.Type, "err", err)
+		} else if err != nil {
 			w.o.Logger.ErrorContext(ctx, "events: acknowledging a delivered event; it is delivered again", "id", row.ID, "type", row.Type, "err", err)
 		}
 		return

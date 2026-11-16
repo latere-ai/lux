@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -95,6 +96,9 @@ func (o objects) Put(ctx context.Context, obj v1.Object, ifVersion int64) (int64
 // a live row of the kind and name is ErrNameTaken unless a declared
 // Model lands on a discovered one, which is replaced in place.
 func (o objects) create(ctx context.Context, q pgx.Tx, e *encoded, id string, createdAt, updatedAt, now time.Time) (string, int64, time.Time, error) {
+	if err := lifecycle.ObjectTable.CheckStart(lifecycle.ObjectLive); err != nil {
+		return "", 0, time.Time{}, err
+	}
 	var used bool
 	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM objects WHERE id = $1)`, id).Scan(&used); err != nil {
 		return "", 0, time.Time{}, err
@@ -331,7 +335,9 @@ func (o objects) Delete(ctx context.Context, kind, id string) error {
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return fmt.Errorf("%w: %s %s", store.ErrNotFound, kind, id)
+			// A row that is not live is absent or already deleted; either
+			// way the table has no step to deleted from it.
+			return fmt.Errorf("%w: %s %s: %w", store.ErrNotFound, kind, id, lifecycle.ObjectTable.Check(lifecycle.ObjectDeleted, lifecycle.ObjectDeleted))
 		}
 		return nil
 	})
@@ -350,7 +356,17 @@ func (o objects) PutStatus(ctx context.Context, kind, id string, observed any) e
 		return err
 	}
 	err = o.s.read(ctx, func(q querier) error {
-		tag, err := q.Exec(ctx, `UPDATE objects SET observed = observed || $3::jsonb WHERE kind = $1 AND id = $2 AND deleted_at IS NULL`, kind, id, string(doc))
+		// A health member with no state is the job that writes
+		// lastError alone: it lands on the stored health in this
+		// statement, so it never writes back a state it read earlier.
+		tag, err := q.Exec(ctx, `
+			UPDATE objects SET observed = CASE
+				WHEN $3::jsonb #>> '{health,state}' = '' THEN
+					observed || ($3::jsonb - 'health') || jsonb_build_object('health',
+						COALESCE(observed->'health', '{"state":"Unknown"}'::jsonb) ||
+						jsonb_build_object('lastError', $3::jsonb #> '{health,lastError}'))
+				ELSE observed || $3::jsonb END
+			WHERE kind = $1 AND id = $2 AND deleted_at IS NULL`, kind, id, string(doc))
 		if err != nil {
 			return err
 		}

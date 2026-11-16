@@ -89,8 +89,11 @@ type Objects interface {
 	// was, so the health and discovery jobs each write their own members
 	// without reading the other's. It takes no version and never
 	// conflicts: every observed member has one writer, the lease holder
-	// of its job, and Put never writes one. A row that is not live is
-	// ErrNotFound.
+	// of its job, and Put never writes one. The one exception is lastError
+	// of a Provider's health, which discovery writes when a model list
+	// fails: a Health member with no State replaces lastError and leaves
+	// the stored state and times as they were, in the same write. A row
+	// that is not live is ErrNotFound.
 	PutStatus(ctx context.Context, kind, id string, observed any) error
 	// Prune removes deleted rows whose deletion is at or before before
 	// and whose journal rows are all acknowledged or dropped.
@@ -239,6 +242,8 @@ const (
 	LeaseJournal   = "journal"
 	LeaseUsage     = "usage"
 	LeaseTTL       = 15 * time.Second
+	// LeaseRenew is how often a holder renews, a third of the TTL.
+	LeaseRenew = LeaseTTL / 3
 )
 
 // Event is the journal row of one event of spec 012. Payload is the body
@@ -268,7 +273,10 @@ type Journal interface {
 	// whose oldest row is not yet due holds its later rows back.
 	Pending(ctx context.Context, limit int) ([]Event, error)
 	// Acknowledge, Defer, and Drop act on one row by id; a row that is
-	// not in the journal is ErrNotFound. Drop removes the row.
+	// not in the journal is ErrNotFound. Drop removes the row. Acknowledge
+	// moves a pending row only: a row that is already acknowledged keeps
+	// the time it was acknowledged at, and the call wraps
+	// statemachine.ErrIllegalTransition.
 	Acknowledge(ctx context.Context, id string) error
 	Defer(ctx context.Context, id string, attempts int, next time.Time) error
 	Drop(ctx context.Context, id string) error
