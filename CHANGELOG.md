@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.25.0 - 2026-11-16
+
 ### Changed
 
 - **Provider health and tunnel status tables use the published states.** The lifecycle tables for status.health.state and status.tunnel.state are now written over the values the Provider status carries ("Healthy", "Connected", and so on), without a second lower-case spelling and converters between them. Published values are unchanged. The formal models spell the states the same way. The converters `HealthPhaseOf`, `HealthStateOf` and `TunnelPhaseOf` and the types `HealthPhase` and `TunnelPhase` are removed from the internal lifecycle package; nothing outside the module could import them.
