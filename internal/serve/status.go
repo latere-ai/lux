@@ -43,7 +43,7 @@ func (m *machine) move(to v1.HealthState) (bool, error) {
 		m.state = from
 		return false, nil
 	}
-	if err := lifecycle.HealthTable.Check(lifecycle.HealthPhaseOf(from), lifecycle.HealthPhaseOf(to)); err != nil {
+	if err := lifecycle.HealthTable.Check(from, to); err != nil {
 		return false, err
 	}
 	m.state = to

@@ -83,37 +83,37 @@ func settle(what string, changed bool) error {
 // (unknown). The state read back is the one the job published to the store.
 func TestHealthWriters(t *testing.T) {
 	recs := &healthRecords{}
-	d := statemachinetest.Driver[lifecycle.HealthPhase]{
-		Enter: func(t *testing.T, phase lifecycle.HealthPhase) string {
+	d := statemachinetest.Driver[v1.HealthState]{
+		Enter: func(t *testing.T, phase v1.HealthState) string {
 			return recs.enter(t, func(rec *healthRecord, st store.Store) {
-				if phase == lifecycle.HealthUnknown {
+				if phase == v1.HealthUnknown {
 					return
 				}
-				health := v1.HealthStatus{State: lifecycle.HealthStateOf(phase), Since: time.Now().UTC()}
+				health := v1.HealthStatus{State: phase, Since: time.Now().UTC()}
 				if err := st.Objects().PutStatus(t.Context(), v1.KindProvider, rec.p.Status.ID, store.ProviderObserved{Health: &health}); err != nil {
 					t.Fatalf("publish %s: %v", phase, err)
 				}
 				rec.h.published[rec.p.Status.ID] = health
 			})
 		},
-		Move: func(key string, to lifecycle.HealthPhase) error {
+		Move: func(key string, to v1.HealthState) error {
 			rec := recs.get(key)
 			ctx := context.Background()
 			rec.h.mu.Lock()
 			defer rec.h.mu.Unlock()
 			switch to {
-			case lifecycle.HealthHealthy:
+			case v1.HealthHealthy:
 				return settle("success", rec.h.record(ctx, rec.p, false, "", true))
-			case lifecycle.HealthDegraded:
+			case v1.HealthDegraded:
 				return settle("failure", rec.h.record(ctx, rec.p, true, "refused", true))
-			case lifecycle.HealthUnreachable:
+			case v1.HealthUnreachable:
 				return settle("registry verdict", rec.h.recordUnreachable(ctx, rec.p, "no live tunnel session"))
-			case lifecycle.HealthUnknown:
+			case v1.HealthUnknown:
 				return settle("reset", rec.h.resetToUnknown(ctx, rec.p))
 			}
 			return fmt.Errorf("health %s: no writer: %w", to, statemachine.ErrIllegalTransition)
 		},
-		State: func(t *testing.T, key string) lifecycle.HealthPhase {
+		State: func(t *testing.T, key string) v1.HealthState {
 			rec := recs.get(key)
 			obj, _, err := rec.h.o.Store.Objects().Get(t.Context(), v1.KindProvider, rec.p.Status.ID)
 			if err != nil {
@@ -124,9 +124,9 @@ func TestHealthWriters(t *testing.T) {
 				t.Fatalf("read %T, want a Provider", obj)
 			}
 			if p.Status.Health == nil {
-				return lifecycle.HealthUnknown
+				return v1.HealthUnknown
 			}
-			return lifecycle.HealthPhaseOf(p.Status.Health.State)
+			return p.Status.Health.State
 		},
 	}
 	statemachinetest.Exhaustive(t, lifecycle.HealthTable, d)
@@ -156,13 +156,13 @@ func TestTunnelWriters(t *testing.T) {
 	// The same row every time, so a second writer of one state finds the
 	// status already as it would write it.
 	connectedAt := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
-	d := statemachinetest.Driver[lifecycle.TunnelPhase]{
-		Enter: func(t *testing.T, phase lifecycle.TunnelPhase) string {
+	d := statemachinetest.Driver[v1.TunnelState]{
+		Enter: func(t *testing.T, phase v1.TunnelState) string {
 			return recs.enter(t, func(rec *healthRecord, _ store.Store) {
 				rec.h.mu.Lock()
 				defer rec.h.mu.Unlock()
 				row := &store.Tunnel{ProviderID: rec.p.Status.ID, Session: "tun_1", ConnectedAt: connectedAt, ExpiresAt: connectedAt.Add(time.Minute)}
-				if phase == lifecycle.TunnelDisconnected {
+				if phase == v1.TunnelDisconnected {
 					row = nil
 				}
 				if !rec.h.publishTunnel(t.Context(), rec.p, row) {
@@ -170,17 +170,17 @@ func TestTunnelWriters(t *testing.T) {
 				}
 			})
 		},
-		Move: func(key string, to lifecycle.TunnelPhase) error {
+		Move: func(key string, to v1.TunnelState) error {
 			rec := recs.get(key)
 			rec.h.mu.Lock()
 			defer rec.h.mu.Unlock()
 			var row *store.Tunnel
-			if to == lifecycle.TunnelConnected {
+			if to == v1.TunnelConnected {
 				row = &store.Tunnel{ProviderID: rec.p.Status.ID, Session: "tun_2", ConnectedAt: connectedAt, ExpiresAt: connectedAt.Add(time.Minute)}
 			}
 			return settle("publish "+string(to), rec.h.publishTunnel(context.Background(), rec.p, row))
 		},
-		State: func(t *testing.T, key string) lifecycle.TunnelPhase {
+		State: func(t *testing.T, key string) v1.TunnelState {
 			rec := recs.get(key)
 			obj, _, err := rec.h.o.Store.Objects().Get(t.Context(), v1.KindProvider, rec.p.Status.ID)
 			if err != nil {
@@ -190,7 +190,7 @@ func TestTunnelWriters(t *testing.T) {
 			if !ok || p.Status.Tunnel == nil {
 				t.Fatalf("read %T with no tunnel status", obj)
 			}
-			return lifecycle.TunnelPhaseOf(p.Status.Tunnel.State)
+			return p.Status.Tunnel.State
 		},
 	}
 	statemachinetest.Exhaustive(t, lifecycle.TunnelTable, d)

@@ -8,21 +8,21 @@ Claims about the Provider health table, proved over the table that
 namespace Proofs.Health
 open Machines.Health Statemachine
 
-/-- A failure never softens an unreachable Provider: `unreachable` has no
-step to `degraded`, only to `healthy` by a success or `unknown` by a reset. -/
+/-- A failure never softens an unreachable Provider: `Unreachable` has no
+step to `Degraded`, only to `Healthy` by a success or `Unknown` by a reset. -/
 theorem unreachable_never_degraded_directly :
-    State.degraded ∉ machine.next .unreachable := by
+    State.«Degraded» ∉ machine.next .«Unreachable» := by
   decide
 
 /-- Degraded is entered only from unknown or healthy, by a failure. -/
 theorem degraded_only_from_unknown_or_healthy :
-    ∀ s ∈ machine.states, State.degraded ∈ machine.next s →
-      s = .unknown ∨ s = .healthy := by
+    ∀ s ∈ machine.states, State.«Degraded» ∈ machine.next s →
+      s = .«Unknown» ∨ s = .«Healthy» := by
   decide
 
 /-- A success reaches healthy from every other state. -/
 theorem healthy_reached_from_every_state :
-    ∀ s ∈ machine.states, s ≠ .healthy → State.healthy ∈ machine.next s := by
+    ∀ s ∈ machine.states, s ≠ .«Healthy» → State.«Healthy» ∈ machine.next s := by
   decide
 
 /-- Concurrent writers that check the state they land on keep the table,

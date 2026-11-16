@@ -291,8 +291,6 @@ enums:
     types:
       - internal/lifecycle.ObjectState
       - internal/lifecycle.EventState
-      - internal/lifecycle.HealthPhase
-      - internal/lifecycle.TunnelPhase
       - internal/lifecycle.SessionState
       - manifest/v1.HealthState
       - manifest/v1.TunnelState

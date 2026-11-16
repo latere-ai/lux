@@ -7,20 +7,20 @@ import Statemachine
 namespace Machines.Health
 
 inductive State where
-  | «degraded»
-  | «healthy»
-  | «unknown»
-  | «unreachable»
+  | «Degraded»
+  | «Healthy»
+  | «Unknown»
+  | «Unreachable»
   deriving DecidableEq, Repr
 
 def machine : Statemachine.Machine State where
-  states := [.«degraded», .«healthy», .«unknown», .«unreachable»]
-  initial := [.«unknown»]
+  states := [.«Degraded», .«Healthy», .«Unknown», .«Unreachable»]
+  initial := [.«Unknown»]
   next
-    | .«degraded» => [.«healthy», .«unknown», .«unreachable»]
-    | .«healthy» => [.«degraded», .«unknown», .«unreachable»]
-    | .«unknown» => [.«degraded», .«healthy», .«unreachable»]
-    | .«unreachable» => [.«healthy», .«unknown»]
+    | .«Degraded» => [.«Healthy», .«Unknown», .«Unreachable»]
+    | .«Healthy» => [.«Degraded», .«Unknown», .«Unreachable»]
+    | .«Unknown» => [.«Degraded», .«Healthy», .«Unreachable»]
+    | .«Unreachable» => [.«Healthy», .«Unknown»]
 
 /-- Every state is reached from an initial state. -/
 theorem all_reachable : machine.AllReachable := by decide

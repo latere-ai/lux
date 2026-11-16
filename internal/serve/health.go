@@ -486,13 +486,14 @@ func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.T
 	}
 	prev := p.Status.Tunnel
 	switch {
-	case prev == nil:
-		if err := lifecycle.TunnelTable.CheckStart(lifecycle.TunnelPhaseOf(next.State)); err != nil {
+	case prev == nil || !prev.State.Valid():
+		// A status with no valid state is a first write.
+		if err := lifecycle.TunnelTable.CheckStart(next.State); err != nil {
 			h.o.Logger.ErrorContext(ctx, "health: the table refused a tunnel state", "provider", p.Status.ID, "err", err)
 			return false
 		}
 	case prev.State != next.State:
-		if err := lifecycle.TunnelTable.Check(lifecycle.TunnelPhaseOf(prev.State), lifecycle.TunnelPhaseOf(next.State)); err != nil {
+		if err := lifecycle.TunnelTable.Check(prev.State, next.State); err != nil {
 			h.o.Logger.ErrorContext(ctx, "health: the table refused a tunnel step", "provider", p.Status.ID, "err", err)
 			return false
 		}
@@ -519,10 +520,10 @@ func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.T
 func (h *Health) resetToUnknown(ctx context.Context, p *v1.Provider) (changed bool) {
 	id := p.Status.ID
 	prev, stored := h.published[id]
-	if !stored || lifecycle.HealthPhaseOf(prev.State) == lifecycle.HealthUnknown {
+	if !stored || !prev.State.Valid() || prev.State == v1.HealthUnknown {
 		return false
 	}
-	if err := lifecycle.HealthTable.Check(lifecycle.HealthPhaseOf(prev.State), lifecycle.HealthUnknown); err != nil {
+	if err := lifecycle.HealthTable.Check(prev.State, v1.HealthUnknown); err != nil {
 		h.o.Logger.ErrorContext(ctx, "health: the table refused a reset", "provider", id, "err", err)
 		return false
 	}

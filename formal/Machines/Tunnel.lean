@@ -7,16 +7,16 @@ import Statemachine
 namespace Machines.Tunnel
 
 inductive State where
-  | «connected»
-  | «disconnected»
+  | «Connected»
+  | «Disconnected»
   deriving DecidableEq, Repr
 
 def machine : Statemachine.Machine State where
-  states := [.«connected», .«disconnected»]
-  initial := [.«connected», .«disconnected»]
+  states := [.«Connected», .«Disconnected»]
+  initial := [.«Connected», .«Disconnected»]
   next
-    | .«connected» => [.«disconnected»]
-    | .«disconnected» => [.«connected»]
+    | .«Connected» => [.«Disconnected»]
+    | .«Disconnected» => [.«Connected»]
 
 /-- Every state is reached from an initial state. -/
 theorem all_reachable : machine.AllReachable := by decide

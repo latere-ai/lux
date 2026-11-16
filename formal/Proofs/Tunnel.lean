@@ -11,7 +11,7 @@ open Machines.Tunnel Statemachine
 /-- A Provider that is connected can disconnect and one that is disconnected
 can connect: neither state is final. -/
 theorem neither_state_is_final :
-    ¬ machine.Terminal .connected ∧ ¬ machine.Terminal .disconnected := by
+    ¬ machine.Terminal .«Connected» ∧ ¬ machine.Terminal .«Disconnected» := by
   decide
 
 /-- Concurrent writers that check the state they land on keep the table,

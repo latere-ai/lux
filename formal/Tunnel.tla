@@ -3,10 +3,10 @@
 (* The Tunnel table, for the writers of Transition.tla. *)
 EXTENDS Transition
 
-MCStates == {"connected", "disconnected"}
-MCInitial == {"connected", "disconnected"}
+MCStates == {"Connected", "Disconnected"}
+MCInitial == {"Connected", "Disconnected"}
 MCSucc == [s \in MCStates |->
-    CASE s = "connected" -> {"disconnected"}
-      [] s = "disconnected" -> {"connected"}
+    CASE s = "Connected" -> {"Disconnected"}
+      [] s = "Disconnected" -> {"Connected"}
       [] OTHER -> {}]
 =============================================================================

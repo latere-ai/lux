@@ -3,12 +3,12 @@
 (* The Health table, for the writers of Transition.tla. *)
 EXTENDS Transition
 
-MCStates == {"degraded", "healthy", "unknown", "unreachable"}
-MCInitial == {"unknown"}
+MCStates == {"Degraded", "Healthy", "Unknown", "Unreachable"}
+MCInitial == {"Unknown"}
 MCSucc == [s \in MCStates |->
-    CASE s = "degraded" -> {"healthy", "unknown", "unreachable"}
-      [] s = "healthy" -> {"degraded", "unknown", "unreachable"}
-      [] s = "unknown" -> {"degraded", "healthy", "unreachable"}
-      [] s = "unreachable" -> {"healthy", "unknown"}
+    CASE s = "Degraded" -> {"Healthy", "Unknown", "Unreachable"}
+      [] s = "Healthy" -> {"Degraded", "Unknown", "Unreachable"}
+      [] s = "Unknown" -> {"Degraded", "Healthy", "Unreachable"}
+      [] s = "Unreachable" -> {"Healthy", "Unknown"}
       [] OTHER -> {}]
 =============================================================================
