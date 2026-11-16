@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"latere.ai/x/lux/internal/auth"
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 	"latere.ai/x/lux/internal/tunnel/wire"
 	v1 "latere.ai/x/lux/manifest/v1"
@@ -48,7 +49,7 @@ type session struct {
 	mu        sync.Mutex
 	expiresAt time.Time // the bearer's exp
 	lastBeat  time.Time // the connect, then every heartbeat
-	closed    bool
+	state     lifecycle.SessionState
 	reason    string // the close frame's reason, "" for a stream that ended
 }
 
@@ -75,8 +76,9 @@ func (g *Gateway) ServeSession(w http.ResponseWriter, r *http.Request, sr Sessio
 	s := &session{
 		g: g, id: g.o.NewID(v1.PrefixTunnel), provider: p, subject: sr.Subject, agent: sr.Agent,
 		parked: make(chan *carrier, MaxParked), outbox: make(chan wire.Frame, 16), done: make(chan struct{}),
-		ctx: ctx, cancel: cancel, expiresAt: sr.ExpiresAt, lastBeat: now,
+		ctx: ctx, cancel: cancel, expiresAt: sr.ExpiresAt, lastBeat: now, state: lifecycle.SessionLive,
 	}
+
 	row := store.Tunnel{ProviderID: p.Status.ID, Session: s.id, Replica: g.o.Replica, Subject: sr.Subject, Agent: sr.Agent, ConnectedAt: now}
 	if err := g.o.Store.Tunnels().Register(r.Context(), row, g.ttl); err != nil {
 		cancel()
@@ -231,13 +233,15 @@ func expiryOf(c auth.Caller) time.Time {
 // immediately rather than at the TTL. The row's removal runs on ctx's
 // values with its cancellation lifted, because the caller's context may
 // be the very stream that just ended.
-func (s *session) close(ctx context.Context, reason string) {
+func (s *session) close(ctx context.Context, reason string) (closed bool) {
 	s.mu.Lock()
-	if s.closed {
+	if err := lifecycle.SessionTable.Check(s.state, lifecycle.SessionClosed); err != nil {
+		// The table has no step out of closed: the close that came first
+		// ended the session, and this one has nothing left to end.
 		s.mu.Unlock()
-		return
+		return false
 	}
-	s.closed = true
+	s.state = lifecycle.SessionClosed
 	s.reason = reason
 	s.mu.Unlock()
 	s.g.detach(s)
@@ -249,6 +253,7 @@ func (s *session) close(ctx context.Context, reason string) {
 	}
 	s.cancel()
 	s.g.logger.InfoContext(ctx, "tunnel: session closed", "session", s.id, "provider", s.provider.Status.ID, "reason", reason)
+	return true
 }
 
 // closeReason is the reason the session closed with.

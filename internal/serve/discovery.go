@@ -98,7 +98,7 @@ func NewDiscovery(o DiscoveryOptions) *Discovery {
 func (d *Discovery) Run(ctx context.Context) {
 	d.acquire(ctx)
 	d.Tick(ctx)
-	renew := time.NewTicker(leaseRenew)
+	renew := time.NewTicker(store.LeaseRenew)
 	defer renew.Stop()
 	tail := time.NewTicker(d.o.Tail)
 	defer tail.Stop()
@@ -516,23 +516,12 @@ func shapeOf(m *v1.Model) string {
 	return string(data)
 }
 
-// recordFailure writes the list's failure to status.health.lastError,
-// leaving the rest of the health block as the health job wrote it.
+// recordFailure writes the list's failure to status.health.lastError.
+// The write carries no state, so the store replaces lastError alone and the
+// state and times the health job wrote stay as they are, however the job
+// moved them since this replica read the Provider.
 func (d *Discovery) recordFailure(ctx context.Context, p *v1.Provider, cause error) {
-	obj, _, err := d.o.Store.Objects().Get(ctx, v1.KindProvider, p.Status.ID)
-	if err != nil {
-		d.o.Logger.ErrorContext(ctx, "discovery: reading the Provider", "provider", p.Status.ID, "err", err)
-		return
-	}
-	current, ok := obj.(*v1.Provider)
-	if !ok {
-		return
-	}
-	next := v1.HealthStatus{State: v1.HealthUnknown}
-	if current.Status.Health != nil {
-		next = *current.Status.Health
-	}
-	next.LastError = "model list: " + cause.Error()
+	next := v1.HealthStatus{LastError: "model list: " + cause.Error()}
 	if err := d.o.Store.Objects().PutStatus(ctx, v1.KindProvider, p.Status.ID, store.ProviderObserved{Health: &next}); err != nil {
 		d.o.Logger.ErrorContext(ctx, "discovery: writing status.health.lastError", "provider", p.Status.ID, "err", err)
 	}

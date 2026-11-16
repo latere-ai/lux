@@ -407,7 +407,11 @@ func TestMachineAndWorse(t *testing.T) {
 		{true, v1.HealthDegraded, true}, {false, v1.HealthHealthy, true},
 	}
 	for i, s := range steps {
-		if changed := m.step(s.failed); m.state != s.want || changed != s.changed {
+		changed, err := m.step(s.failed)
+		if err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+		if m.state != s.want || changed != s.changed {
 			t.Fatalf("step %d: %s, %v; want %s, %v", i, m.state, changed, s.want, s.changed)
 		}
 	}

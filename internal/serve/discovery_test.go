@@ -520,7 +520,7 @@ func TestDiscoveryStoreFailures(t *testing.T) {
 	if len(h.models(t, "")) != 0 {
 		t.Fatal("an ended context wrote a Model")
 	}
-	for _, want := range []string{"discovery: reading the Providers", "discovery: reading the journal", "discovery: the list failed", "discovery: reading the Provider"} {
+	for _, want := range []string{"discovery: reading the Providers", "discovery: reading the journal", "discovery: the list failed", "discovery: writing status.health.lastError"} {
 		if !strings.Contains(h.logged(), want) {
 			t.Errorf("log lacks %q:\n%s", want, h.logged())
 		}
@@ -608,5 +608,28 @@ func TestDiscoveryStartsDisabled(t *testing.T) {
 	d.Tick(t.Context())
 	if m := h.models(t, "")["openai/gpt-5"]; m == nil || m.Status.Source != v1.SourceDiscovered || !m.Spec.Disabled {
 		t.Fatalf("restored = %+v", m)
+	}
+}
+
+// TestDiscoveryFailureKeepsTheHealthState: the list's failure replaces
+// lastError and leaves the state the health job published, so a failure
+// recorded after the job moved the state never writes the old one back.
+func TestDiscoveryFailureKeepsTheHealthState(t *testing.T) {
+	h := newHarness(t)
+	up := &stub{pages: map[string]string{"": openaiList("gpt-5")}}
+	p := h.provider(t, "openai", v1.DialectOpenAI, serveStub(t, up), nil)
+	since := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	published := v1.HealthStatus{State: v1.HealthUnreachable, Since: since, LastError: "probe failed"}
+	if err := h.st.Objects().PutStatus(t.Context(), v1.KindProvider, p.Status.ID, store.ProviderObserved{Health: &published}); err != nil {
+		t.Fatal(err)
+	}
+	// The Provider the list ran against was read before the job moved the
+	// state: it still says Healthy.
+	p.Status.Health = &v1.HealthStatus{State: v1.HealthHealthy}
+	d := h.discovery("a")
+	d.recordFailure(t.Context(), p, fmt.Errorf("refused"))
+	got := h.get(t, p.Status.ID).Status.Health
+	if got == nil || got.State != v1.HealthUnreachable || !got.Since.Equal(since) || got.LastError != "model list: refused" {
+		t.Fatalf("health after the failure = %+v", got)
 	}
 }

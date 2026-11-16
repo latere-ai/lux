@@ -18,6 +18,7 @@ import (
 	"latere.ai/x/pkg/metrics"
 
 	"latere.ai/x/lux/gateway"
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -149,7 +150,7 @@ const defaultTunnelTTL = 30 * time.Second
 func (h *Health) Run(ctx context.Context) {
 	h.acquire(ctx)
 	h.Tick(ctx)
-	renew := time.NewTicker(leaseRenew)
+	renew := time.NewTicker(store.LeaseRenew)
 	defer renew.Stop()
 	probe := time.NewTicker(h.o.Interval)
 	defer probe.Stop()
@@ -318,7 +319,9 @@ func (h *Health) observeLocal(providerID string, failed bool) {
 		m = &machine{state: v1.HealthUnknown}
 		h.local[providerID] = m
 	}
-	m.step(failed)
+	if _, err := m.step(failed); err != nil {
+		h.o.Logger.Error("health: this replica's view refused a step", "provider", providerID, "err", err)
+	}
 }
 
 // View is the state this replica acts on for a Provider: the worse of
@@ -332,7 +335,7 @@ func (h *Health) View(providerID string) v1.HealthState {
 // viewOf is View with the lock held.
 func (h *Health) viewOf(providerID string) v1.HealthState {
 	published := v1.HealthUnknown
-	if s, ok := h.published[providerID]; ok && s.State != "" {
+	if s, ok := h.published[providerID]; ok && s.State.Valid() {
 		published = s.State
 	}
 	local := v1.HealthUnknown
@@ -348,17 +351,27 @@ func (h *Health) viewOf(providerID string) v1.HealthState {
 // which stamps lastProbeAt and writes lastError; a passive outcome moves
 // the state and leaves the probe's detail alone. The caller holds the
 // lock.
-func (h *Health) record(ctx context.Context, p *v1.Provider, failed bool, lastError string, probed bool) {
-	changed := h.machineFor(p.Status.ID).step(failed)
+func (h *Health) record(ctx context.Context, p *v1.Provider, failed bool, lastError string, probed bool) (changed bool) {
+	changed, err := h.machineFor(p.Status.ID).step(failed)
+	if err != nil {
+		h.o.Logger.ErrorContext(ctx, "health: the table refused a step", "provider", p.Status.ID, "err", err)
+		return false
+	}
 	h.publish(ctx, p, changed, lastError, probed)
+	return changed
 }
 
 // recordUnreachable is the registry's verdict on a tunneled Provider
 // with no live session: Unreachable at once, without the probe counter,
 // published exactly as a counted transition is.
-func (h *Health) recordUnreachable(ctx context.Context, p *v1.Provider, lastError string) {
-	changed := h.machineFor(p.Status.ID).force(v1.HealthUnreachable)
+func (h *Health) recordUnreachable(ctx context.Context, p *v1.Provider, lastError string) (changed bool) {
+	changed, err := h.machineFor(p.Status.ID).force(v1.HealthUnreachable)
+	if err != nil {
+		h.o.Logger.ErrorContext(ctx, "health: the table refused a step", "provider", p.Status.ID, "err", err)
+		return false
+	}
 	h.publish(ctx, p, changed, lastError, true)
+	return changed
 }
 
 // machineFor is the holder's counter for a Provider, started at the
@@ -416,6 +429,8 @@ func (h *Health) publish(ctx context.Context, p *v1.Provider, changed bool, last
 		if err := appendEvent(ctx, h.o.Store.Journal(), eventProviderHealthy, reasonProbe, p, data, now, h.o.NewID); err != nil {
 			h.o.Logger.ErrorContext(ctx, "health: raising the event", "provider", id, "err", err)
 		}
+	case v1.HealthDegraded, v1.HealthUnknown:
+		// Only reaching and leaving Unreachable raise an event.
 	}
 }
 
@@ -443,7 +458,13 @@ func (h *Health) tunnelTick(ctx context.Context, p *v1.Provider) (live bool) {
 	h.publishTunnel(ctx, p, &row)
 	if p.Spec.Health.Mode != v1.HealthProbe {
 		switch h.machineFor(p.Status.ID).state {
-		case v1.HealthUnknown, v1.HealthUnreachable, "":
+		case v1.HealthUnknown, v1.HealthUnreachable:
+			h.record(ctx, p, false, "", true)
+		case v1.HealthHealthy, v1.HealthDegraded:
+			// A Provider the machine already counts as reachable needs
+			// no success folded in to leave selection.
+		default:
+			// A machine that has no state yet is Unknown.
 			h.record(ctx, p, false, "", true)
 		}
 	}
@@ -452,9 +473,9 @@ func (h *Health) tunnelTick(ctx context.Context, p *v1.Provider) (live bool) {
 
 // publishTunnel writes status.tunnel when it differs from what is
 // stored: Connected with the row's session, subject, agent, connect
-// time, and last heartbeat, or Disconnected since this tick. The caller
-// holds the lock.
-func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.Tunnel) {
+// time, and last heartbeat, or Disconnected since this tick, and reports
+// whether it wrote. The caller holds the lock.
+func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.Tunnel) (wrote bool) {
 	now := h.o.Now().UTC()
 	next := v1.TunnelStatus{State: v1.TunnelDisconnected, Since: now}
 	if row != nil {
@@ -463,40 +484,59 @@ func (h *Health) publishTunnel(ctx context.Context, p *v1.Provider, row *store.T
 			Since: row.ConnectedAt.UTC(), LastHeartbeatAt: row.ExpiresAt.Add(-h.o.TunnelTTL).UTC(),
 		}
 	}
-	if prev := p.Status.Tunnel; prev != nil {
+	prev := p.Status.Tunnel
+	switch {
+	case prev == nil:
+		if err := lifecycle.TunnelTable.CheckStart(lifecycle.TunnelPhaseOf(next.State)); err != nil {
+			h.o.Logger.ErrorContext(ctx, "health: the table refused a tunnel state", "provider", p.Status.ID, "err", err)
+			return false
+		}
+	case prev.State != next.State:
+		if err := lifecycle.TunnelTable.Check(lifecycle.TunnelPhaseOf(prev.State), lifecycle.TunnelPhaseOf(next.State)); err != nil {
+			h.o.Logger.ErrorContext(ctx, "health: the table refused a tunnel step", "provider", p.Status.ID, "err", err)
+			return false
+		}
+	}
+	if prev != nil {
 		if prev.State == v1.TunnelDisconnected && next.State == v1.TunnelDisconnected {
-			return
+			return false
 		}
 		if prev.State == v1.TunnelConnected && next.State == v1.TunnelConnected && prev.Session == next.Session && prev.LastHeartbeatAt.Equal(next.LastHeartbeatAt) {
-			return
+			return false
 		}
 	}
 	if err := h.o.Store.Objects().PutStatus(ctx, v1.KindProvider, p.Status.ID, store.ProviderObserved{Tunnel: &next}); err != nil {
 		h.o.Logger.ErrorContext(ctx, "health: writing status.tunnel", "provider", p.Status.ID, "state", next.State, "err", err)
-		return
+		return false
 	}
 	p.Status.Tunnel = &next
+	return true
 }
 
 // resetToUnknown writes Unknown once for a Provider whose mode is none
 // and whose stored state says otherwise, which is what turning the probe
 // off leaves behind. The caller holds the lock.
-func (h *Health) resetToUnknown(ctx context.Context, p *v1.Provider) {
+func (h *Health) resetToUnknown(ctx context.Context, p *v1.Provider) (changed bool) {
 	id := p.Status.ID
 	prev, stored := h.published[id]
-	if !stored || prev.State == v1.HealthUnknown {
-		return
+	if !stored || lifecycle.HealthPhaseOf(prev.State) == lifecycle.HealthUnknown {
+		return false
+	}
+	if err := lifecycle.HealthTable.Check(lifecycle.HealthPhaseOf(prev.State), lifecycle.HealthUnknown); err != nil {
+		h.o.Logger.ErrorContext(ctx, "health: the table refused a reset", "provider", id, "err", err)
+		return false
 	}
 	next := v1.HealthStatus{State: v1.HealthUnknown, Since: h.o.Now().UTC(), LastProbeAt: prev.LastProbeAt}
 	if err := h.o.Store.Objects().PutStatus(ctx, v1.KindProvider, id, store.ProviderObserved{Health: &next}); err != nil {
 		h.o.Logger.ErrorContext(ctx, "health: writing status.health", "provider", id, "state", next.State, "err", err)
-		return
+		return false
 	}
 	h.published[id] = next
 	delete(h.machines, id)
 	if _, err := refreshModels(ctx, h.o.Store, p, h.stateOf); err != nil {
 		h.o.Logger.ErrorContext(ctx, "health: refreshing the Models", "provider", id, "err", err)
 	}
+	return true
 }
 
 // stateOf is the published state of the Provider a target names, by id
@@ -507,7 +547,7 @@ func (h *Health) stateOf(ref string) v1.HealthState {
 	if p == nil {
 		return v1.HealthUnknown
 	}
-	if s, ok := h.published[p.Status.ID]; ok && s.State != "" {
+	if s, ok := h.published[p.Status.ID]; ok && s.State.Valid() {
 		return s.State
 	}
 	return v1.HealthUnknown

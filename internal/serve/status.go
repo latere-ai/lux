@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"latere.ai/x/lux/internal/lifecycle"
 	"latere.ai/x/lux/internal/store"
 	v1 "latere.ai/x/lux/manifest/v1"
 )
@@ -29,30 +30,51 @@ type machine struct {
 	failures int
 }
 
+// move takes the machine to state when HealthTable has the step from the
+// state it is in, and reports whether the state changed. A move to the
+// state the machine is already in is no step and changes nothing; a move the
+// table lacks leaves the machine where it was and returns the table's error.
+func (m *machine) move(to v1.HealthState) (bool, error) {
+	from := m.state
+	if !from.Valid() {
+		from = v1.HealthUnknown
+	}
+	if from == to {
+		m.state = from
+		return false, nil
+	}
+	if err := lifecycle.HealthTable.Check(lifecycle.HealthPhaseOf(from), lifecycle.HealthPhaseOf(to)); err != nil {
+		return false, err
+	}
+	m.state = to
+	return true, nil
+}
+
 // step folds one outcome in and reports whether the state changed. One
 // failure moves Unknown or Healthy to Degraded, the third consecutive
 // failure moves Degraded to Unreachable, and one success returns any
-// state to Healthy and resets the count.
-func (m *machine) step(failed bool) bool {
-	if m.state == "" {
+// state to Healthy and resets the count. An Unreachable machine stays
+// Unreachable under failures until a success.
+func (m *machine) step(failed bool) (bool, error) {
+	if !m.state.Valid() {
 		m.state = v1.HealthUnknown
 	}
-	prev := m.state
-	if failed {
-		m.failures++
-		switch m.state {
-		case v1.HealthUnknown, v1.HealthHealthy:
-			m.state = v1.HealthDegraded
-		case v1.HealthDegraded:
-			if m.failures >= unreachableAfter {
-				m.state = v1.HealthUnreachable
-			}
-		}
-	} else {
+	if !failed {
 		m.failures = 0
-		m.state = v1.HealthHealthy
+		return m.move(v1.HealthHealthy)
 	}
-	return m.state != prev
+	m.failures++
+	switch m.state {
+	case v1.HealthUnknown, v1.HealthHealthy:
+		return m.move(v1.HealthDegraded)
+	case v1.HealthDegraded:
+		if m.failures >= unreachableAfter {
+			return m.move(v1.HealthUnreachable)
+		}
+	case v1.HealthUnreachable:
+		// Failures against an Unreachable Provider keep it Unreachable.
+	}
+	return false, nil
 }
 
 // force moves the machine to state without counting, the registry's
@@ -60,13 +82,15 @@ func (m *machine) step(failed bool) bool {
 // state changed. Unreachable carries the count that would have reached
 // it, so the next success returns to Healthy as after any run of
 // failures.
-func (m *machine) force(state v1.HealthState) bool {
-	prev := m.state
-	m.state = state
+func (m *machine) force(state v1.HealthState) (bool, error) {
+	changed, err := m.move(state)
+	if err != nil {
+		return false, err
+	}
 	if state == v1.HealthUnreachable {
 		m.failures = unreachableAfter
 	}
-	return m.state != prev
+	return changed, nil
 }
 
 // rank orders the states so worse can pick: Unknown carries no
@@ -79,6 +103,8 @@ func rank(s v1.HealthState) int {
 		return 2
 	case v1.HealthUnreachable:
 		return 3
+	case v1.HealthUnknown:
+		return 0
 	default:
 		return 0
 	}
@@ -91,7 +117,7 @@ func worse(a, b v1.HealthState) v1.HealthState {
 	if rank(b) > rank(a) {
 		return b
 	}
-	if a == "" {
+	if !a.Valid() {
 		return v1.HealthUnknown
 	}
 	return a
@@ -105,7 +131,7 @@ func observedModel(m *v1.Model, stateOf func(ref string) v1.HealthState) store.M
 	available := false
 	for _, t := range m.Spec.Targets {
 		state := stateOf(t.Provider)
-		if state == "" {
+		if !state.Valid() {
 			state = v1.HealthUnknown
 		}
 		if state != v1.HealthUnreachable {
@@ -175,9 +201,6 @@ func defaultHolder() string {
 	}
 	return host + ":" + strconv.Itoa(os.Getpid())
 }
-
-// leaseRenew is how often a holder renews: a third of the TTL.
-const leaseRenew = store.LeaseTTL / 3
 
 // newEventID mints an evt_ id.
 func newEventID(now func() time.Time) func() string {
