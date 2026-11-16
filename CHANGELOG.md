@@ -6,6 +6,8 @@ refused before it is pushed.
 
 ## Unreleased
 
+## v0.24.0 - 2026-11-16
+
 ### Changed
 
 - **Records refuse steps their lifecycle does not have.** An object row is live, then deleted, then pruned. A journal event is pending, then acknowledged, then removed. A Provider's health, its tunnel status and each tunnel session follow a written table of states too. Every writer checks its table, and a step the table lacks changes nothing and is refused. Tests drive each writer through every pair of states and every pair of racing writers, on the memory store and on Postgres. The tables are rendered into Lean proofs and TLA+ models that the quality gate checks, together with a model of the lease that keeps health, discovery, event delivery and usage on one replica.

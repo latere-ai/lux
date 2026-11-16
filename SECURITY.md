@@ -103,7 +103,7 @@ check the release's files and the images. The release workflow runs the
 same checks against every release it publishes.
 
 ```sh
-TAG=v0.23.0
+TAG=v0.24.0
 OWNER=latere-ai   # a fork's release: the fork's owner
 ISSUER=https://token.actions.githubusercontent.com
 
