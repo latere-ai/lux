@@ -282,3 +282,20 @@ e2e:
       - go.sum
       - tools/docs
     timeout: 30m
+
+# Every status type, so a switch over one lists every state. The lifecycle
+# types are the states of the tables in internal/lifecycle; the manifest types
+# are what status members carry on the wire.
+enums:
+  go:
+    types:
+      - internal/lifecycle.ObjectState
+      - internal/lifecycle.EventState
+      - internal/lifecycle.HealthPhase
+      - internal/lifecycle.TunnelPhase
+      - internal/lifecycle.SessionState
+      - manifest/v1.HealthState
+      - manifest/v1.TunnelState
+    fields:
+      manifest/v1.HealthStatus.State: manifest/v1.HealthState
+      manifest/v1.TunnelStatus.State: manifest/v1.TunnelState
